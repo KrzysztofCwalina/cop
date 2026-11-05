@@ -1,3 +1,6 @@
+// Source provenance is deliberately separate from ProviderQuery and its wire/cache
+// identity.
+
 namespace Cop.Lang.Interpreter;
 
 using Cop.Core;
@@ -8,15 +11,6 @@ using LiteralExpr = Cop.Lang.Ast.LiteralExpr;
 using BinaryExpr = Cop.Lang.Ast.BinaryExpr;
 using UnaryExpr = Cop.Lang.Ast.UnaryExpr;
 using CallExpr = Cop.Lang.Ast.CallExpr;
-
-internal sealed record QueryStep(Expression Predicate, IReadOnlyList<FunctionDecl> Definitions,
-    bool Negated = false, string? Property = null, string? Method = null)
-{
-    public Expression Apply(Expression source, Expression predicate) => Method is not null
-        ? new CallExpr(new MemberExpr(source, Method), [predicate])
-        : new FilterExpr(Property is null ? source : new FilterExpr(source, new IdentifierExpr(Property)),
-            predicate, Negated);
-}
 
 /// <summary>Source provenance is deliberately separate from ProviderQuery and its wire/cache identity.</summary>
 internal sealed class QuerySource
@@ -85,9 +79,13 @@ internal sealed class QuerySource
         Expression? Combine(IReadOnlyList<FilterExpression> conditions, BinaryOp op)
         {
             Expression? result = null;
-            foreach (var condition in conditions)
+            foreach (FilterExpression condition in conditions)
             {
-                if (Convert(condition) is not { } expression) return null;
+                if (Convert(condition) is not { } expression)
+                {
+                    return null;
+                }
+
                 result = result is null ? expression : new BinaryExpr(result, op, expression);
             }
             return result ?? new LiteralExpr(op == BinaryOp.And);
@@ -101,7 +99,7 @@ internal sealed class QuerySource
     {
         get
         {
-            var (expression, definitions) = Build();
+            (Expression? expression, IReadOnlyList<FunctionDecl>? definitions) = Build();
             return string.Join("\n", definitions.Select(QuerySourceWriter.Predicate)
                 .Append("command MAIN = " + QuerySourceWriter.Render(expression)));
         }
@@ -111,8 +109,8 @@ internal sealed class QuerySource
 
     public QuerySource Local(Func<Expression, Expression> operation, string reason)
     {
-        var (expression, definitions) = Build();
-        var local = operation(expression);
+        (Expression? expression, IReadOnlyList<FunctionDecl>? definitions) = Build();
+        Expression local = operation(expression);
         // Local expressions may be arbitrary Cop, not the portable/pushable source subset.
         _log?.Invoke($"[query-local] {_context}: {reason}\n{(QuerySourceWriter.CanRender(local)
             ? QuerySourceWriter.Render(local) : $"Local {local.GetType().Name} at line {local.Line}; not a portable provider query")}");
@@ -130,8 +128,12 @@ internal sealed class QuerySource
 
     public static CopValue TrackLocal(CopValue input, CopValue result, Func<Expression, Expression> operation, string reason)
     {
-        if (Of(input) is not { } source) return result;
-        var local = source.Local(operation, reason);
+        if (Of(input) is not { } source)
+        {
+            return result;
+        }
+
+        QuerySource local = source.Local(operation, reason);
         switch (result)
         {
             case CopLazyCollection lazy: lazy.Source = local; break;
@@ -142,26 +144,33 @@ internal sealed class QuerySource
 
     public static QuerySource? Concat(CopValue left, CopValue right)
     {
-        var leftSource = Of(left);
-        var rightSource = Of(right);
-        var context = leftSource ?? rightSource;
-        if (context is null) return null;
-        var roots = new HashSet<string>((leftSource?._roots.AsEnumerable() ?? [])
+        QuerySource? leftSource = Of(left);
+        QuerySource? rightSource = Of(right);
+        QuerySource? context = leftSource ?? rightSource;
+        if (context is null)
+        {
+            return null;
+        }
+
+        HashSet<string> roots = new HashSet<string>((leftSource?._roots.AsEnumerable() ?? [])
             .Concat(rightSource?._roots.AsEnumerable() ?? []));
-        var builder = new Builder(roots);
-        var a = leftSource?.Build() ?? (new IdentifierExpr("local"), (IReadOnlyList<FunctionDecl>)[]);
-        var b = rightSource?.Build() ?? (new IdentifierExpr("local"), (IReadOnlyList<FunctionDecl>)[]);
-        var expression = new BinaryExpr(builder.Import(a.Item1, a.Item2), BinaryOp.Add,
+        Builder builder = new Builder(roots);
+        (Expression, IReadOnlyList<FunctionDecl>) a = leftSource?.Build() ?? (new IdentifierExpr("local"), (IReadOnlyList<FunctionDecl>)[]);
+        (Expression, IReadOnlyList<FunctionDecl>) b = rightSource?.Build() ?? (new IdentifierExpr("local"), (IReadOnlyList<FunctionDecl>)[]);
+        BinaryExpr expression = new BinaryExpr(builder.Import(a.Item1, a.Item2), BinaryOp.Add,
             builder.Import(b.Item1, b.Item2));
         return new(expression, builder.Definitions.ToArray(), [], context._context, context._log, roots);
     }
 
     private (Expression, IReadOnlyList<FunctionDecl>) Build()
     {
-        var builder = new Builder(_roots);
+        Builder builder = new Builder(_roots);
         Expression expression = builder.Import(_root, _rootDefinitions);
-        foreach (var step in Steps)
+        foreach (QueryStep step in Steps)
+        {
             expression = step.Apply(expression, builder.Import(step.Predicate, step.Definitions));
+        }
+
         return (expression, builder.Definitions);
     }
 
@@ -171,30 +180,35 @@ internal sealed class QuerySource
 
         public Expression Import(Expression expression, IReadOnlyList<FunctionDecl> definitions)
         {
-            var names = new Dictionary<string, string>(StringComparer.Ordinal);
-            foreach (var definition in definitions)
+            Dictionary<string, string> names = new Dictionary<string, string>(StringComparer.Ordinal);
+            foreach (FunctionDecl definition in definitions)
             {
-                var body = Rewrite(((ExpressionBody)definition.Body).Expr, id =>
-                    names.TryGetValue(id.Name, out var name) ? id with { Name = name } : id,
+                Expression body = Rewrite(((ExpressionBody)definition.Body).Expr, id =>
+                    names.TryGetValue(id.Name, out string? name) ? id with { Name = name } : id,
                     definition.Params.Select(p => p.Name));
-                var candidate = definition with { Body = new ExpressionBody(body) };
+                FunctionDecl candidate = definition with { Body = new ExpressionBody(body) };
                 string name = definition.Name;
                 int suffix = 2;
                 while (roots.Contains(name) || Definitions.FirstOrDefault(d => d.Name == name) is { } existing
                     && QuerySourceWriter.Predicate(existing) != QuerySourceWriter.Predicate(candidate with { Name = name }))
+                {
                     name = definition.Name + "__" + suffix++;
+                }
+
                 names[definition.Name] = name;
                 if (Definitions.All(d => d.Name != name))
+                {
                     Definitions.Add(candidate with { Name = name });
+                }
             }
-            return Rewrite(expression, id => names.TryGetValue(id.Name, out var name) ? id with { Name = name } : id);
+            return Rewrite(expression, id => names.TryGetValue(id.Name, out string? name) ? id with { Name = name } : id);
         }
     }
 
     internal static Expression Rewrite(Expression expression, Func<IdentifierExpr, Expression> identifier,
         IEnumerable<string>? bound = null, Func<Expression, Expression>? transform = null)
     {
-        var parameters = new HashSet<string>(bound ?? [], StringComparer.OrdinalIgnoreCase);
+        HashSet<string> parameters = new HashSet<string>(bound ?? [], StringComparer.OrdinalIgnoreCase);
         Expression Visit(Expression node)
         {
             Expression result = node switch
@@ -216,68 +230,5 @@ internal sealed class QuerySource
             return transform?.Invoke(result) ?? result;
         }
         return Visit(expression);
-    }
-}
-
-internal sealed record ResolvedQueryPredicate(Expression Expression, Environment Environment,
-    IReadOnlyList<FunctionDecl> Definitions)
-{
-    public static ResolvedQueryPredicate Resolve(Expression expression, Environment environment, string? itemType,
-        bool element = false)
-    {
-        var definitions = new List<FunctionDecl>();
-        var names = new Dictionary<CopFunction, string>();
-        var scope = environment.Extend();
-
-        Expression ResolveExpression(Expression node, Environment closure, IEnumerable<string>? bound = null) =>
-            QuerySource.Rewrite(node, id =>
-            {
-                if (TryLiteral(id, closure, new HashSet<CopThunk>()) is { } literal) return literal;
-                if (PredicateCompiler.FindPredicate(id.Name, closure, itemType) is not { } function) return id;
-                if (names.TryGetValue(function, out var existingName)) return id with { Name = existingName };
-                string name = id.Name;
-                int suffix = 2;
-                while (names.Values.Contains(name, StringComparer.Ordinal))
-                    name = id.Name + "__" + suffix++;
-                names.Add(function, name);
-                var declaration = function.Declaration;
-                var body = ResolveExpression(((ExpressionBody)declaration.Body).Expr, function.Closure,
-                    declaration.Params.Select(p => p.Name));
-                var resolved = declaration with { Name = name, Body = new ExpressionBody(body) };
-                definitions.Add(resolved);
-                scope.Define(name, new CopFunction(resolved, scope));
-                return id with { Name = name };
-            }, bound, node => node switch
-            {
-                UnaryExpr { Op: UnaryOp.Negate, Operand: LiteralExpr { Value: int integer } } => new LiteralExpr(-integer),
-                UnaryExpr { Op: UnaryOp.Negate, Operand: LiteralExpr { Value: double number } } => new LiteralExpr(-number),
-                _ => node
-            });
-
-        var resolvedExpression = ResolveExpression(expression, environment, element ? ["item"] : []);
-        return new(resolvedExpression, scope, definitions);
-    }
-
-    private static LiteralExpr? TryLiteral(IdentifierExpr identifier, Environment environment, HashSet<CopThunk> expanding)
-    {
-        if (!environment.TryLookup(identifier.Name, out var value)) return null;
-        if (value is CopThunk thunk)
-        {
-            if (!expanding.Add(thunk)) return null;
-            if (thunk.ForcedValue is { } forced) value = forced;
-            else if (thunk.ConstantExpression is LiteralExpr literal) return literal;
-            else if (thunk.ConstantExpression is IdentifierExpr alias && thunk.ConstantEnvironment is { } closure)
-                return TryLiteral(alias, closure, expanding);
-            else return null;
-        }
-        return value switch
-        {
-            CopString text => new LiteralExpr(text.Value),
-            CopInt integer => new LiteralExpr(integer.Value),
-            CopNumber number when double.IsFinite(number.Value) => new LiteralExpr(number.Value),
-            CopBool boolean => new LiteralExpr(boolean.Value),
-            CopNull => new LiteralExpr(null),
-            _ => null
-        };
     }
 }

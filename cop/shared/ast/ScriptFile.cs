@@ -1,5 +1,10 @@
+// Groups the declarations and commands parsed from a Cop source file.
+
 namespace Cop.Lang;
 
+/// <summary>
+/// Collects the declarations, imports, and commands belonging to one source file.
+/// </summary>
 public record ScriptFile(
     string FilePath,
     List<string> Imports,

@@ -1,3 +1,5 @@
+// Extracts shell commands and strict-mode settings from Bash source.
+
 using System.Text;
 
 namespace Cop.Providers.Bash;
@@ -8,6 +10,9 @@ namespace Cop.Providers.Bash;
 /// </summary>
 public static class BashParser
 {
+    /// <summary>
+    /// Contains parsed shell commands and script-wide execution settings.
+    /// </summary>
     public record BashParseResult(List<ShellCommandInfo> Commands, ShellScriptInfo Script);
 
     private static readonly HashSet<string> ShellKeywords = new(StringComparer.Ordinal)
@@ -16,61 +21,81 @@ public static class BashParser
         "for", "function", "if", "in", "select", "then", "time", "until", "while"
     };
 
+    /// <summary>
+    /// Extracts commands and strict-mode settings from shell source text.
+    /// </summary>
     public static BashParseResult Parse(string text)
     {
-        var commands = new List<ShellCommandInfo>();
-        var lines = text.Split('\n');
+        List<ShellCommandInfo> commands = new List<ShellCommandInfo>();
+        string[] lines = text.Split('\n');
 
-        var logical = new StringBuilder();
+        StringBuilder logical = new StringBuilder();
         int logicalStartLine = 1;
         bool hasPendingContinuation = false;
 
         for (int i = 0; i < lines.Length; i++)
         {
             int lineNo = i + 1;
-            var raw = lines[i].TrimEnd('\r');
-            var stripped = StripComment(raw, lineNo);
+            string raw = lines[i].TrimEnd('\r');
+            string stripped = StripComment(raw, lineNo);
 
             if (!hasPendingContinuation)
+            {
                 logicalStartLine = lineNo;
+            }
 
-            var working = stripped.TrimEnd();
+            string working = stripped.TrimEnd();
             bool continued = EndsWithContinuation(working);
             if (continued)
+            {
                 working = working[..^1].TrimEnd();
+            }
 
             if (logical.Length > 0 && working.Length > 0)
+            {
                 logical.Append(' ');
+            }
+
             logical.Append(working);
 
             hasPendingContinuation = continued;
             if (continued)
+            {
                 continue;
+            }
 
             AddCommands(commands, logical.ToString(), logicalStartLine);
             logical.Clear();
         }
 
         if (logical.Length > 0)
+        {
             AddCommands(commands, logical.ToString(), logicalStartLine);
+        }
 
         return new BashParseResult(commands, new ShellScriptInfo(HasStrictMode(lines)));
     }
 
     private static void AddCommands(List<ShellCommandInfo> commands, string logicalLine, int line)
     {
-        var text = logicalLine.Trim();
+        string text = logicalLine.Trim();
         if (text.Length == 0)
+        {
             return;
+        }
 
         if (line == 1 && text.StartsWith("#!", StringComparison.Ordinal))
-            return;
-
-        foreach (var segment in SplitSimpleCommands(text))
         {
-            var name = GetCommandName(segment);
+            return;
+        }
+
+        foreach (string segment in SplitSimpleCommands(text))
+        {
+            string name = GetCommandName(segment);
             if (name.Length == 0 || ShellKeywords.Contains(name))
+            {
                 continue;
+            }
 
             commands.Add(new ShellCommandInfo(name, text, line));
         }
@@ -82,29 +107,58 @@ public static class BashParser
         for (int i = 0; i < lines.Length; i++)
         {
             int lineNo = i + 1;
-            var trimmed = StripComment(lines[i].TrimEnd('\r'), lineNo).Trim();
+            string trimmed = StripComment(lines[i].TrimEnd('\r'), lineNo).Trim();
             if (trimmed.Length == 0 || (lineNo == 1 && trimmed.StartsWith("#!", StringComparison.Ordinal)))
-                continue;
-
-            foreach (var segment in SplitSimpleCommands(trimmed))
             {
-                var tokens = Tokenize(segment);
-                if (tokens.Count == 0 || tokens[0] != "set") continue;
+                continue;
+            }
+
+            foreach (string segment in SplitSimpleCommands(trimmed))
+            {
+                List<string> tokens = Tokenize(segment);
+                if (tokens.Count == 0 || tokens[0] != "set")
+                {
+                    continue;
+                }
+
                 for (int j = 1; j < tokens.Count; j++)
                 {
-                    var option = tokens[j];
-                    if (option.Length < 2 || option[0] is not ('-' or '+')) continue;
+                    string option = tokens[j];
+                    if (option.Length < 2 || option[0] is not ('-' or '+'))
+                    {
+                        continue;
+                    }
+
                     bool enabled = option[0] == '-';
                     foreach (char flag in option[1..])
                     {
-                        if (flag == 'e') errexit = enabled;
-                        if (flag == 'u') nounset = enabled;
+                        if (flag == 'e')
+                        {
+                            errexit = enabled;
+                        }
+
+                        if (flag == 'u')
+                        {
+                            nounset = enabled;
+                        }
+
                         if (flag == 'o' && j + 1 < tokens.Count)
                         {
-                            var longOption = tokens[++j];
-                            if (longOption == "errexit") errexit = enabled;
-                            if (longOption == "nounset") nounset = enabled;
-                            if (longOption == "pipefail") pipefail = enabled;
+                            string longOption = tokens[++j];
+                            if (longOption == "errexit")
+                            {
+                                errexit = enabled;
+                            }
+
+                            if (longOption == "nounset")
+                            {
+                                nounset = enabled;
+                            }
+
+                            if (longOption == "pipefail")
+                            {
+                                pipefail = enabled;
+                            }
                         }
                     }
                 }
@@ -115,7 +169,7 @@ public static class BashParser
 
     private static List<string> SplitSimpleCommands(string text)
     {
-        var parts = new List<string>();
+        List<string> parts = new List<string>();
         int start = 0;
         char quote = '\0';
         bool escaped = false;
@@ -139,7 +193,10 @@ public static class BashParser
             if (quote != '\0')
             {
                 if (c == quote)
+                {
                     quote = '\0';
+                }
+
                 continue;
             }
 
@@ -151,12 +208,18 @@ public static class BashParser
 
             int separatorLength = 0;
             if (c == ';' || c == '|')
+            {
                 separatorLength = (c == '|' && i + 1 < text.Length && text[i + 1] == '|') ? 2 : 1;
+            }
             else if (c == '&' && i + 1 < text.Length && text[i + 1] == '&')
+            {
                 separatorLength = 2;
+            }
 
             if (separatorLength == 0)
+            {
                 continue;
+            }
 
             AddPart(parts, text[start..i]);
             i += separatorLength - 1;
@@ -169,46 +232,60 @@ public static class BashParser
 
     private static void AddPart(List<string> parts, string part)
     {
-        var trimmed = part.Trim();
+        string trimmed = part.Trim();
         if (trimmed.Length > 0)
+        {
             parts.Add(trimmed);
+        }
     }
 
     private static string GetCommandName(string segment)
     {
-        var tokens = Tokenize(segment);
+        List<string> tokens = Tokenize(segment);
         int i = 0;
 
         while (i < tokens.Count && tokens[i] is "if" or "elif" or "then" or "else" or "do" or "while" or "until" or "!" or "time" or "{")
+        {
             i++;
+        }
 
         while (i < tokens.Count && IsEnvironmentAssignment(tokens[i]))
+        {
             i++;
+        }
 
         if (i < tokens.Count && tokens[i] == "sudo")
+        {
             i++;
+        }
 
         if (i < tokens.Count && tokens[i] == "env")
         {
             i++;
             while (i < tokens.Count && (IsEnvironmentAssignment(tokens[i]) || tokens[i].StartsWith("-", StringComparison.Ordinal)))
+            {
                 i++;
+            }
         }
 
         if (i >= tokens.Count)
+        {
             return "";
+        }
 
-        var name = tokens[i];
+        string name = tokens[i];
         if (name.EndsWith("()", StringComparison.Ordinal))
+        {
             return "";
+        }
 
         return name;
     }
 
     private static List<string> Tokenize(string segment)
     {
-        var tokens = new List<string>();
-        var current = new StringBuilder();
+        List<string> tokens = new List<string>();
+        StringBuilder current = new StringBuilder();
         char quote = '\0';
         bool escaped = false;
 
@@ -230,9 +307,14 @@ public static class BashParser
             if (quote != '\0')
             {
                 if (c == quote)
+                {
                     quote = '\0';
+                }
                 else
+                {
                     current.Append(c);
+                }
+
                 continue;
             }
 
@@ -256,7 +338,9 @@ public static class BashParser
         }
 
         if (current.Length > 0)
+        {
             tokens.Add(current.ToString());
+        }
 
         return tokens;
     }
@@ -265,13 +349,17 @@ public static class BashParser
     {
         int equals = token.IndexOf('=');
         if (equals <= 0)
+        {
             return false;
+        }
 
         for (int i = 0; i < equals; i++)
         {
             char c = token[i];
             if (!(char.IsLetterOrDigit(c) || c == '_') || (i == 0 && char.IsDigit(c)))
+            {
                 return false;
+            }
         }
 
         return true;
@@ -280,7 +368,9 @@ public static class BashParser
     private static string StripComment(string line, int lineNo)
     {
         if (lineNo == 1 && line.StartsWith("#!", StringComparison.Ordinal))
+        {
             return line;
+        }
 
         char quote = '\0';
         bool escaped = false;
@@ -303,7 +393,10 @@ public static class BashParser
             if (quote != '\0')
             {
                 if (c == quote)
+                {
                     quote = '\0';
+                }
+
                 continue;
             }
 
@@ -314,7 +407,9 @@ public static class BashParser
             }
 
             if (c == '#' && (i == 0 || char.IsWhiteSpace(line[i - 1]) || line[i - 1] is ';' or '|' or '&'))
+            {
                 return line[..i];
+            }
         }
 
         return line;
@@ -324,7 +419,9 @@ public static class BashParser
     {
         int backslashCount = 0;
         for (int i = line.Length - 1; i >= 0 && line[i] == '\\'; i--)
+        {
             backslashCount++;
+        }
 
         return backslashCount % 2 == 1 && !EndsInsideQuote(line);
     }
@@ -350,12 +447,17 @@ public static class BashParser
             if (quote != '\0')
             {
                 if (c == quote)
+                {
                     quote = '\0';
+                }
+
                 continue;
             }
 
             if (c == '\'' || c == '"')
+            {
                 quote = c;
+            }
         }
 
         return quote != '\0';

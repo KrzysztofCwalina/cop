@@ -1,3 +1,5 @@
+// Wraps syntax-tree expressions for consumers of the public expression model.
+
 namespace Cop.Lang;
 
 /// <summary>

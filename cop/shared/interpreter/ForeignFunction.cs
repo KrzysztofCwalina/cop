@@ -1,3 +1,5 @@
+// Describes host functions callable from Cop expressions.
+
 namespace Cop.Lang.Interpreter;
 
 /// <summary>
@@ -45,8 +47,10 @@ public sealed class ForeignFunctionRegistry
     /// </summary>
     public void Alias(string alias, string canonical)
     {
-        if (!_functions.ContainsKey(alias) && _functions.TryGetValue(canonical, out var fn))
+        if (!_functions.ContainsKey(alias) && _functions.TryGetValue(canonical, out CopExternalFunction? fn))
+        {
             _functions[alias] = fn;
+        }
     }
 
     /// <summary>
@@ -55,7 +59,7 @@ public sealed class ForeignFunctionRegistry
     /// </summary>
     public CopExternalFunction? Resolve(string name)
     {
-        _functions.TryGetValue(name, out var fn);
+        _functions.TryGetValue(name, out CopExternalFunction? fn);
         return fn;
     }
 
@@ -69,7 +73,9 @@ public sealed class ForeignFunctionRegistry
     /// </summary>
     public void PopulateEnvironment(Environment env)
     {
-        foreach (var (name, fn) in _functions)
+        foreach ((string? name, CopExternalFunction? fn) in _functions)
+        {
             env.Define(name, fn);
+        }
     }
 }

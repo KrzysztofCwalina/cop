@@ -1,3 +1,5 @@
+// Adds C#-specific type facts to the shared source model.
+
 namespace Cop.Providers.SourceModel;
 
 /// <summary>

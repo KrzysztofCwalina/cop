@@ -1,3 +1,5 @@
+// Exposes C#-specific source facts to the Cop interpreter.
+
 using Cop.Core;
 using Cop.Providers.SourceModel;
 
@@ -17,14 +19,14 @@ public static class CSharpBindings
 {
     public static RuntimeBindings Build()
     {
-        var bindings = CodeBindings.Build();
+        RuntimeBindings bindings = CodeBindings.Build();
 
         // Only C# emits CSharpTypeDeclaration, so this mapping never affects other languages.
         bindings.ClrTypeMappings[typeof(CSharpTypeDeclaration)] = "CSharpType";
 
         // CSharpType accessors = all base Type accessors (which cast to the TypeDeclaration
         // base, so they work on the subclass too) + the C#-only fields.
-        var csharpAccessors = new Dictionary<string, Func<object, object?>>(bindings.Accessors["Type"])
+        Dictionary<string, Func<object, object?>> csharpAccessors = new Dictionary<string, Func<object, object?>>(bindings.Accessors["Type"])
         {
             ["IsRecord"] = o => (object)((CSharpTypeDeclaration)o).IsRecord,
             ["IsRecordStruct"] = o => (object)((CSharpTypeDeclaration)o).IsRecordStruct,
@@ -40,7 +42,7 @@ public static class CSharpBindings
         // Only C# emits CSharpMethodDeclaration, so this mapping never affects other languages.
         bindings.ClrTypeMappings[typeof(CSharpMethodDeclaration)] = "CSharpMethod";
 
-        var csharpMethodAccessors = new Dictionary<string, Func<object, object?>>(bindings.Accessors["Method"])
+        Dictionary<string, Func<object, object?>> csharpMethodAccessors = new Dictionary<string, Func<object, object?>>(bindings.Accessors["Method"])
         {
             ["IsExtension"] = o => (object)((CSharpMethodDeclaration)o).IsExtension,
             ["IsPartial"] = o => (object)((CSharpMethodDeclaration)o).IsPartial,
@@ -54,7 +56,7 @@ public static class CSharpBindings
         // Only C# emits CSharpStatementInfo, so this mapping never affects other languages.
         bindings.ClrTypeMappings[typeof(CSharpStatementInfo)] = "CSharpStatement";
 
-        var csharpStatementAccessors = new Dictionary<string, Func<object, object?>>(bindings.Accessors["Statement"])
+        Dictionary<string, Func<object, object?>> csharpStatementAccessors = new Dictionary<string, Func<object, object?>>(bindings.Accessors["Statement"])
         {
             ["IsLock"] = o => (object)((CSharpStatementInfo)o).IsLock,
             ["IsUnsafe"] = o => (object)((CSharpStatementInfo)o).IsUnsafe,
@@ -65,6 +67,7 @@ public static class CSharpBindings
             ["IsGoto"] = o => (object)((CSharpStatementInfo)o).IsGoto,
             ["IsAwaitForeach"] = o => (object)((CSharpStatementInfo)o).IsAwaitForeach,
             ["HasCatchFilter"] = o => (object)((CSharpStatementInfo)o).HasCatchFilter,
+            ["IsUsingResource"] = o => (object)((CSharpStatementInfo)o).IsUsingResource,
         };
         bindings.Accessors["CSharpStatement"] = csharpStatementAccessors;
 

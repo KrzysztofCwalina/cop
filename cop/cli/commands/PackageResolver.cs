@@ -1,3 +1,5 @@
+// Resolves package names and prepares their dependencies for CLI execution.
+
 using Cop.Lang;
 
 namespace Cop.Cli.Commands;
@@ -25,22 +27,27 @@ internal static class PackageResolver
     /// </summary>
     public static List<string> GetFeedPaths(string? startDir = null)
     {
-        var paths = new List<string>();
+        List<string> paths = new List<string>();
 
         // 1. Local packages/ dirs take precedence.
-        var dir = startDir ?? Directory.GetCurrentDirectory();
+        string? dir = startDir ?? Directory.GetCurrentDirectory();
         while (dir is not null)
         {
-            var packagesDir = Path.Combine(dir, "packages");
+            string packagesDir = Path.Combine(dir, "packages");
             if (Directory.Exists(packagesDir))
+            {
                 paths.Add(packagesDir);
+            }
+
             dir = Path.GetDirectoryName(dir);
         }
 
         // 2. Global cache is the fallback.
-        var cachePath = GlobalCachePath;
+        string cachePath = GlobalCachePath;
         if (Directory.Exists(cachePath))
+        {
             paths.Add(cachePath);
+        }
 
         return paths;
     }
@@ -54,11 +61,13 @@ internal static class PackageResolver
     {
         feedPaths ??= GetFeedPaths();
 
-        foreach (var feed in feedPaths)
+        foreach (string feed in feedPaths)
         {
-            var dir = ImportResolver.FindPackageDir(Path.GetFullPath(feed), packageName, incompatibleProvider);
+            string? dir = ImportResolver.FindPackageDir(Path.GetFullPath(feed), packageName, incompatibleProvider);
             if (dir != null)
+            {
                 return dir;
+            }
         }
 
         return null;
@@ -71,14 +80,19 @@ internal static class PackageResolver
     {
         feedPaths ??= GetFeedPaths();
 
-        var dir = FindPackageDir(packageName, feedPaths);
-        if (dir != null) return dir;
+        string? dir = FindPackageDir(packageName, feedPaths);
+        if (dir != null)
+        {
+            return dir;
+        }
 
         // Auto-restore from configured feeds
-        var cachePath = GlobalCachePath;
-        var restored = RunCommand.AutoRestorePackagesAsync([packageName], cachePath).GetAwaiter().GetResult();
+        string cachePath = GlobalCachePath;
+        bool restored = RunCommand.AutoRestorePackagesAsync([packageName], cachePath).GetAwaiter().GetResult();
         if (restored)
+        {
             return ImportResolver.FindPackageDir(cachePath, packageName);
+        }
 
         return null;
     }

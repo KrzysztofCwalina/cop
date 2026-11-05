@@ -1,3 +1,5 @@
+// Supplies completion candidates for interactive Cop expressions and commands.
+
 using Cop.Providers;
 
 namespace Cop.Repl;
@@ -30,14 +32,16 @@ public class ReplCompleter
     public (List<string> Candidates, int ReplacementStart) GetCompletions(string input, int cursorPos)
     {
         if (string.IsNullOrEmpty(input) || cursorPos == 0)
+        {
             return (_evaluator.GetCompletionCandidates(), 0);
+        }
 
         string textUpToCursor = input[..cursorPos];
 
         // Determine context based on the character before cursor
-        var (context, prefix, start) = DetermineContext(textUpToCursor);
+        (CompletionContext context, string? prefix, int start) = DetermineContext(textUpToCursor);
 
-        var candidates = context switch
+        List<string> candidates = context switch
         {
             CompletionContext.Start => _evaluator.GetCompletionCandidates(),
             CompletionContext.AfterColon => GetPredicateCandidates(),
@@ -64,13 +68,17 @@ public class ReplCompleter
 
         // Collect the current word (prefix)
         while (i >= 0 && IsIdentifierChar(text[i]))
+        {
             i--;
+        }
 
         string prefix = text[(i + 1)..];
         int start = i + 1;
 
         if (i < 0)
+        {
             return (CompletionContext.Start, prefix, start);
+        }
 
         char contextChar = text[i];
         return contextChar switch
@@ -84,7 +92,7 @@ public class ReplCompleter
 
     private List<string> GetPredicateCandidates()
     {
-        var candidates = new List<string>(BuiltinPredicates);
+        List<string> candidates = new List<string>(BuiltinPredicates);
         candidates.AddRange(_evaluator.GetPredicateNames());
         return candidates.Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(s => s).ToList();
     }
@@ -97,26 +105,31 @@ public class ReplCompleter
         {
             int identStart = dotPos - 1;
             while (identStart >= 0 && IsIdentifierChar(textUpToCursor[identStart]))
+            {
                 identStart--;
+            }
+
             identStart++;
 
             string beforeDot = textUpToCursor[identStart..dotPos];
             if (!string.IsNullOrEmpty(beforeDot))
             {
-                var nsCandidates = _evaluator.GetNamespaceCollections(beforeDot);
+                List<string> nsCandidates = _evaluator.GetNamespaceCollections(beforeDot);
                 if (nsCandidates.Count > 0)
+                {
                     return nsCandidates;
+                }
             }
         }
 
-        var candidates = new List<string>(BuiltinTransforms);
+        List<string> candidates = new List<string>(BuiltinTransforms);
         candidates.AddRange(BuiltinProperties);
 
         // Try to determine the type from context
         string? typeName = InferTypeFromContext(textUpToCursor);
         if (typeName is not null)
         {
-            var props = _evaluator.GetPropertyNames(typeName);
+            List<string> props = _evaluator.GetPropertyNames(typeName);
             candidates.AddRange(props);
         }
 
@@ -133,17 +146,26 @@ public class ReplCompleter
     {
         // Extract the full expression before the trailing dot
         int trailingDot = text.LastIndexOf('.');
-        if (trailingDot < 0) return null;
+        if (trailingDot < 0)
+        {
+            return null;
+        }
 
         string fullExpr = text[..trailingDot];
 
         // Strip all parenthesized args: "csharp.Types('path')" → "csharp.Types"
         fullExpr = StripParenArgs(fullExpr);
-        if (string.IsNullOrEmpty(fullExpr)) return null;
+        if (string.IsNullOrEmpty(fullExpr))
+        {
+            return null;
+        }
 
         // Split by dots and walk the chain
-        var parts = fullExpr.Split('.');
-        if (parts.Length == 0) return null;
+        string[] parts = fullExpr.Split('.');
+        if (parts.Length == 0)
+        {
+            return null;
+        }
 
         // Try progressively longer prefixes as the base collection
         // e.g., for ["csharp", "Types", "First"]:  try "csharp.Types" then "csharp"
@@ -161,7 +183,10 @@ public class ReplCompleter
             }
         }
 
-        if (itemType is null) return null;
+        if (itemType is null)
+        {
+            return null;
+        }
 
         // Walk remaining parts as property/transform steps
         for (int i = chainStart; i < parts.Length; i++)
@@ -169,13 +194,17 @@ public class ReplCompleter
             string step = parts[i];
 
             if (ElementTransforms.Contains(step))
+            {
                 continue; // still the same item type, just unwrapped
+            }
 
             if (step.Equals("Count", StringComparison.OrdinalIgnoreCase))
+            {
                 return "Int"; // numeric, no properties to show
+            }
 
             // Look up as a property on the current type
-            var props = _evaluator.GetPropertyNames(itemType);
+            List<string> props = _evaluator.GetPropertyNames(itemType);
             if (props.Contains(step))
             {
                 // We'd need the property's type to continue — for now just return the item type
@@ -193,9 +222,17 @@ public class ReplCompleter
         while (true)
         {
             int open = expr.IndexOf('(');
-            if (open < 0) break;
+            if (open < 0)
+            {
+                break;
+            }
+
             int close = expr.IndexOf(')', open);
-            if (close < 0) break;
+            if (close < 0)
+            {
+                break;
+            }
+
             expr = expr[..open] + expr[(close + 1)..];
         }
         return expr;

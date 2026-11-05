@@ -1,41 +1,55 @@
+// Selects pinned frontend or source-only Rust parsing for the shared code model.
+
 using Cop.Providers.SourceModel;
 
 namespace Cop.Providers.SourceParsers;
 
+/// <summary>Parses Rust using the pinned frontend with a structural fallback.</summary>
 public class RustSourceParser : ISourceParser
 {
     private readonly Lazy<RustFrontend?> _frontend;
+    /// <summary>
+    /// Configures frontend deployment, project context, and standard libraries.
+    /// </summary>
     public RustSourceParser(string? frontendPath = null, string? projectRoot = null, string? standardLibraryDirectory = null,
         Func<Stream?>? bundleFactory = null, string? cacheDirectory = null)
     {
         _frontend = new(() =>
         {
-            var deployment = frontendPath is not null ? new RustFrontendDeployment(frontendPath)
+            RustFrontendDeployment? deployment = frontendPath is not null ? new RustFrontendDeployment(frontendPath)
                 : RustFrontendBundle.Find(bundleFactory, cacheDirectory);
             return deployment is not null ? new(deployment.Executable, projectRoot ?? Directory.GetCurrentDirectory(),
                 standardLibraryDirectory, deployment.PrepareStandardLibrary) : null;
         });
     }
 
+    /// <inheritdoc />
     public override IReadOnlyList<string> Extensions => [".rs"];
+    /// <inheritdoc />
     public override string Language => "rust";
+    /// <inheritdoc />
     public override bool CanCache(string filePath) => _frontend.Value is null;
+    /// <inheritdoc />
     public override string GetCacheIdentity(string filePath) =>
         base.GetCacheIdentity(filePath) + ":" + (_frontend.Value?.Executable ?? "structural-fallback");
 
+    /// <inheritdoc />
     public override SourceFile? Parse(string filePath, string sourceText)
     {
         try
         {
-            if (_frontend.Value is { } frontend) return frontend.Parse(filePath, sourceText);
+            if (_frontend.Value is { } frontend)
+            {
+                return frontend.Parse(filePath, sourceText);
+            }
         }
         catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException or System.Text.Json.JsonException)
         {
             return new(filePath, "rust", [], [], sourceText) { ParseErrors = [$"{filePath}: error: {ex.Message}"] };
         }
-        var lexer = new RustLexer(sourceText);
-        var tokens = lexer.Tokenize();
-        var parser = new RustParser(tokens, sourceText, lexer.Errors);
+        RustLexer lexer = new RustLexer(sourceText);
+        List<RustToken> tokens = lexer.Tokenize();
+        RustParser parser = new RustParser(tokens, sourceText, lexer.Errors);
         return parser.Parse(filePath);
     }
 }
@@ -55,13 +69,17 @@ internal class RustLexer(string source)
     private int _pos;
     private int _line = 1;
     private readonly List<(int line, int col, string msg)> _errors = [];
+    /// <summary>Gets lexical or parse diagnostics with their source locations.</summary>
     public IReadOnlyList<(int line, int col, string msg)> Errors => _errors;
 
     private int ColAt(int pos)
     {
         int c = 1;
         for (int i = pos - 1; i >= 0 && source[i] != '\n'; i--)
+        {
             c++;
+        }
+
         return c;
     }
 
@@ -74,13 +92,17 @@ internal class RustLexer(string source)
         "unsafe", "use", "where", "while", "yield"
     ];
 
+    /// <summary>Reads Rust tokens with source offsets and line numbers.</summary>
     public List<RustToken> Tokenize()
     {
-        var tokens = new List<RustToken>();
+        List<RustToken> tokens = new List<RustToken>();
         while (_pos < source.Length)
         {
             SkipWhitespace();
-            if (_pos >= source.Length) break;
+            if (_pos >= source.Length)
+            {
+                break;
+            }
 
             char c = source[_pos];
 
@@ -89,13 +111,13 @@ internal class RustLexer(string source)
             {
                 if (source[_pos + 1] == '/')
                 {
-                    var token = ReadLineComment();
+                    RustToken token = ReadLineComment();
                     tokens.Add(token);
                     continue;
                 }
                 if (source[_pos + 1] == '*')
                 {
-                    var token = ReadBlockComment();
+                    RustToken token = ReadBlockComment();
                     tokens.Add(token);
                     continue;
                 }
@@ -112,7 +134,7 @@ internal class RustLexer(string source)
             if ((c is 'b' or 'c') && _pos + 1 < source.Length && source[_pos + 1] == '"')
             {
                 int start = _pos++;
-                var literal = ReadStringLiteral();
+                RustToken literal = ReadStringLiteral();
                 tokens.Add(literal with { Value = source[start.._pos], Start = start });
                 continue;
             }
@@ -120,14 +142,14 @@ internal class RustLexer(string source)
                 && source[_pos + 2] is '"' or '#')
             {
                 int start = _pos++;
-                var literal = ReadRawString();
+                RustToken literal = ReadRawString();
                 tokens.Add(literal with { Value = source[start.._pos], Start = start });
                 continue;
             }
             if (c == 'b' && _pos + 1 < source.Length && source[_pos + 1] == '\'')
             {
                 int start = _pos++;
-                var literal = ReadCharLiteral();
+                RustToken literal = ReadCharLiteral();
                 tokens.Add(literal with { Value = source[start.._pos], Start = start });
                 continue;
             }
@@ -148,7 +170,11 @@ internal class RustLexer(string source)
                 // A raw string has a '"' after the run of '#'; a raw identifier (r#ident)
                 // has an identifier char there instead.
                 int k = _pos + 1;
-                while (k < source.Length && source[k] == '#') k++;
+                while (k < source.Length && source[k] == '#')
+                {
+                    k++;
+                }
+
                 if (k < source.Length && source[k] == '"')
                 {
                     tokens.Add(ReadRawString());
@@ -201,7 +227,10 @@ internal class RustLexer(string source)
             char ch = source[_pos];
             if (ch is ' ' or '\t' or '\r') { _pos++; }
             else if (ch == '\n') { _line++; _pos++; }
-            else break;
+            else
+            {
+                break;
+            }
         }
     }
 
@@ -215,12 +244,21 @@ internal class RustLexer(string source)
         if (_pos < source.Length)
         {
             char c3 = source[_pos];
-            if (c3 == '!') isDoc = true;
-            else if (c3 == '/' && (_pos + 1 >= source.Length || source[_pos + 1] != '/')) isDoc = true;
+            if (c3 == '!')
+            {
+                isDoc = true;
+            }
+            else if (c3 == '/' && (_pos + 1 >= source.Length || source[_pos + 1] != '/'))
+            {
+                isDoc = true;
+            }
         }
         while (_pos < source.Length && source[_pos] != '\n')
+        {
             _pos++;
-        var value = source[start.._pos];
+        }
+
+        string value = source[start.._pos];
         return new RustToken(isDoc ? RustTokenKind.DocComment : RustTokenKind.LineComment, value, line, start, _pos);
     }
 
@@ -234,23 +272,39 @@ internal class RustLexer(string source)
             if (source[_pos] == '/' && _pos + 1 < source.Length && source[_pos + 1] == '*')
             { depth++; _pos += 2; }
             else if (source[_pos] == '*' && _pos + 1 < source.Length && source[_pos + 1] == '/')
-            { depth--; _pos += 2; if (depth == 0) break; }
+            { depth--; _pos += 2; if (depth == 0)
+                {
+                    break;
+                }
+            }
             else
             {
-                if (source[_pos] == '\n') _line++;
+                if (source[_pos] == '\n')
+                {
+                    _line++;
+                }
+
                 _pos++;
             }
         }
-        if (depth > 0) _errors.Add((line, ColAt(start), "unterminated block comment"));
-        var value = source[start.._pos];
+        if (depth > 0)
+        {
+            _errors.Add((line, ColAt(start), "unterminated block comment"));
+        }
+
+        string value = source[start.._pos];
         // /** ... */ is an outer doc and /*! ... */ an inner doc; /**/ and /*** ... */ are not.
         RustTokenKind kind = RustTokenKind.BlockComment;
         if (value.Length >= 3 && value[1] == '*')
         {
             if (value[2] == '!')
+            {
                 kind = RustTokenKind.DocComment;
+            }
             else if (value[2] == '*' && (value.Length < 4 || (value[3] != '*' && value[3] != '/')))
+            {
                 kind = RustTokenKind.DocComment;
+            }
         }
         return new RustToken(kind, value, line, start, _pos);
     }
@@ -260,7 +314,11 @@ internal class RustLexer(string source)
         int start = _pos;
         int line = _line;
         _pos++; // skip #
-        if (_pos < source.Length && source[_pos] == '!') _pos++;
+        if (_pos < source.Length && source[_pos] == '!')
+        {
+            _pos++;
+        }
+
         if (_pos < source.Length && source[_pos] == '[')
         {
             int depth = 0;
@@ -271,12 +329,22 @@ internal class RustLexer(string source)
                 { ReadRawString(); continue; }
                 if (source[_pos] == '/' && _pos + 1 < source.Length && source[_pos + 1] == '*')
                 { ReadBlockComment(); continue; }
-                if (source[_pos] == '[') depth++;
+                if (source[_pos] == '[')
+                {
+                    depth++;
+                }
                 else if (source[_pos] == ']') { depth--; if (depth == 0) { _pos++; break; } }
-                else if (source[_pos] == '\n') _line++;
+                else if (source[_pos] == '\n')
+                {
+                    _line++;
+                }
+
                 _pos++;
             }
-            if (depth > 0) _errors.Add((line, ColAt(start), "unterminated attribute"));
+            if (depth > 0)
+            {
+                _errors.Add((line, ColAt(start), "unterminated attribute"));
+            }
         }
         return new RustToken(RustTokenKind.Attribute, source[start.._pos], line, start, _pos);
     }
@@ -288,12 +356,27 @@ internal class RustLexer(string source)
         _pos++; // skip opening "
         while (_pos < source.Length && source[_pos] != '"')
         {
-            if (source[_pos] == '\\' && _pos + 1 < source.Length) _pos++; // skip escape
-            if (_pos < source.Length && source[_pos] == '\n') _line++;
+            if (source[_pos] == '\\' && _pos + 1 < source.Length)
+            {
+                _pos++; // skip escape
+            }
+
+            if (_pos < source.Length && source[_pos] == '\n')
+            {
+                _line++;
+            }
+
             _pos++;
         }
-        if (_pos < source.Length) _pos++; // skip closing "
-        else _errors.Add((line, ColAt(start), "unterminated string literal"));
+        if (_pos < source.Length)
+        {
+            _pos++; // skip closing "
+        }
+        else
+        {
+            _errors.Add((line, ColAt(start), "unterminated string literal"));
+        }
+
         return new RustToken(RustTokenKind.StringLiteral, source[start.._pos], line, start, _pos);
     }
 
@@ -305,7 +388,10 @@ internal class RustLexer(string source)
         int hashes = 0;
         bool closed = false;
         while (_pos < source.Length && source[_pos] == '#') { hashes++; _pos++; }
-        if (_pos < source.Length && source[_pos] == '"') _pos++; // skip "
+        if (_pos < source.Length && source[_pos] == '"')
+        {
+            _pos++; // skip "
+        }
         // Find closing "###
         while (_pos < source.Length)
         {
@@ -318,12 +404,19 @@ internal class RustLexer(string source)
             }
             else
             {
-                if (source[_pos] == '\n') _line++;
+                if (source[_pos] == '\n')
+                {
+                    _line++;
+                }
+
                 _pos++;
             }
         }
         if (!closed)
+        {
             _errors.Add((line, ColAt(start), "unterminated raw string literal"));
+        }
+
         return new RustToken(RustTokenKind.StringLiteral, source[start.._pos], line, start, _pos);
     }
 
@@ -334,11 +427,22 @@ internal class RustLexer(string source)
         _pos++; // skip '
         while (_pos < source.Length && source[_pos] != '\'' && source[_pos] != '\n')
         {
-            if (source[_pos] == '\\' && _pos + 1 < source.Length) _pos++;
+            if (source[_pos] == '\\' && _pos + 1 < source.Length)
+            {
+                _pos++;
+            }
+
             _pos++;
         }
-        if (_pos < source.Length && source[_pos] == '\'') _pos++;
-        else _errors.Add((line, ColAt(start), "unterminated character literal"));
+        if (_pos < source.Length && source[_pos] == '\'')
+        {
+            _pos++;
+        }
+        else
+        {
+            _errors.Add((line, ColAt(start), "unterminated character literal"));
+        }
+
         return new RustToken(RustTokenKind.StringLiteral, source[start.._pos], line, start, _pos);
     }
 
@@ -348,7 +452,10 @@ internal class RustLexer(string source)
         int line = _line;
         _pos++; // skip '
         while (_pos < source.Length && (char.IsLetterOrDigit(source[_pos]) || source[_pos] == '_'))
+        {
             _pos++;
+        }
+
         return new RustToken(RustTokenKind.Lifetime, source[start.._pos], line, start, _pos);
     }
 
@@ -359,7 +466,9 @@ internal class RustLexer(string source)
         _pos += 2; // skip r#
         int nameStart = _pos;
         while (_pos < source.Length && (char.IsLetterOrDigit(source[_pos]) || source[_pos] == '_'))
+        {
             _pos++;
+        }
         // A raw identifier is always an identifier (never a keyword) — that is its purpose.
         return new RustToken(RustTokenKind.Identifier, source[nameStart.._pos], line, start, _pos);
     }
@@ -387,16 +496,23 @@ internal class RustLexer(string source)
         int start = _pos;
         int line = _line;
         while (_pos < source.Length && (char.IsLetterOrDigit(source[_pos]) || source[_pos] == '_'))
+        {
             _pos++;
-        var value = source[start.._pos];
-        var kind = Keywords.Contains(value) ? RustTokenKind.Keyword : RustTokenKind.Identifier;
+        }
+
+        string value = source[start.._pos];
+        RustTokenKind kind = Keywords.Contains(value) ? RustTokenKind.Keyword : RustTokenKind.Identifier;
         return new RustToken(kind, value, line, start, _pos);
     }
 
     private bool IsRawStringStart(int start)
     {
         int position = start + 1;
-        while (position < source.Length && source[position] == '#') position++;
+        while (position < source.Length && source[position] == '#')
+        {
+            position++;
+        }
+
         return position < source.Length && source[position] == '"';
     }
 
@@ -407,7 +523,7 @@ internal class RustLexer(string source)
         // Multi-char operators
         if (_pos + 1 < source.Length)
         {
-            var two = source.Substring(_pos, 2);
+            string two = source.Substring(_pos, 2);
             if (two == ".." && _pos + 2 < source.Length && source[_pos + 2] is '.' or '=')
             {
                 _pos += 3;
@@ -446,7 +562,10 @@ internal class RustParser(List<RustToken> tokens, string sourceText, IReadOnlyLi
     {
         int c = 1;
         for (int i = charPos - 1; i >= 0 && sourceText[i] != '\n'; i--)
+        {
             c++;
+        }
+
         return c;
     }
 
@@ -458,49 +577,80 @@ internal class RustParser(List<RustToken> tokens, string sourceText, IReadOnlyLi
     // without false positives on valid Rust (whose () [] {} token trees are always balanced).
     private void CheckDelimiterBalance()
     {
-        var stack = new Stack<RustToken>();
-        foreach (var t in tokens)
+        Stack<RustToken> stack = new Stack<RustToken>();
+        foreach (RustToken t in tokens)
         {
-            if (t.Kind != RustTokenKind.Punctuation) continue;
-            if (t.Value is "(" or "[" or "{") stack.Push(t);
+            if (t.Kind != RustTokenKind.Punctuation)
+            {
+                continue;
+            }
+
+            if (t.Value is "(" or "[" or "{")
+            {
+                stack.Push(t);
+            }
             else if (t.Value is ")" or "]" or "}")
             {
-                if (stack.Count == 0) AddError(t.Line, ColAt(t.Start), $"unmatched '{t.Value}'");
+                if (stack.Count == 0)
+                {
+                    AddError(t.Line, ColAt(t.Start), $"unmatched '{t.Value}'");
+                }
                 else
                 {
-                    var open = stack.Pop();
+                    RustToken open = stack.Pop();
                     if ((open.Value, t.Value) is not ("(", ")") and not ("[", "]") and not ("{", "}"))
+                    {
                         AddError(t.Line, ColAt(t.Start), $"mismatched '{t.Value}' for '{open.Value}' at line {open.Line}");
+                    }
                 }
             }
         }
-        foreach (var open in stack)
+        foreach (RustToken open in stack)
+        {
             AddError(open.Line, ColAt(open.Start), $"unclosed '{open.Value}'");
+        }
     }
 
+    /// <summary>Projects tokenized Rust source into a file-scoped code model.</summary>
     public SourceFile Parse(string filePath)
     {
-        var types = new List<TypeDeclaration>();
-        var statements = new List<StatementInfo>();
-        var usings = new List<string>();
-        var freeFunctions = new List<MethodDeclaration>();
-        var typeScopes = new Dictionary<TypeDeclaration, string>(ReferenceEqualityComparer.Instance);
-        var functionScopes = new Dictionary<MethodDeclaration, string>(ReferenceEqualityComparer.Instance);
-        var modules = new Stack<(string path, int end)>();
+        List<TypeDeclaration> types = new List<TypeDeclaration>();
+        List<StatementInfo> statements = new List<StatementInfo>();
+        List<string> usings = new List<string>();
+        List<MethodDeclaration> freeFunctions = new List<MethodDeclaration>();
+        Dictionary<TypeDeclaration, string> typeScopes = new Dictionary<TypeDeclaration, string>(ReferenceEqualityComparer.Instance);
+        Dictionary<MethodDeclaration, string> functionScopes = new Dictionary<MethodDeclaration, string>(ReferenceEqualityComparer.Instance);
+        Stack<(string path, int end)> modules = new Stack<(string path, int end)>();
 
         while (!IsAtEnd())
         {
-            while (modules.TryPeek(out var module) && _pos >= module.end) modules.Pop();
-            while (_externBlocks.TryPeek(out int externEnd) && _pos >= externEnd) _externBlocks.Pop();
-            string scope = _scope = modules.TryPeek(out var currentModule) ? currentModule.path : "";
+            while (modules.TryPeek(out (string path, int end) module) && _pos >= module.end)
+            {
+                modules.Pop();
+            }
+
+            while (_externBlocks.TryPeek(out int externEnd) && _pos >= externEnd)
+            {
+                _externBlocks.Pop();
+            }
+
+            string scope = _scope = modules.TryPeek(out (string path, int end) currentModule) ? currentModule.path : "";
             int loopStart = _pos;
             int functionStart = freeFunctions.Count;
             SkipCommentsAndAttributes();
-            if (IsAtEnd()) break;
+            if (IsAtEnd())
+            {
+                break;
+            }
+
             int itemStart = _pos;
 
             // Skip `#[cfg(test)] mod tests { ... }` — its contents are test code, not production.
-            if (TryEnterExternBlock()) continue;
+            if (TryEnterExternBlock())
+            {
+                continue;
+            }
+
             if (CheckKeyword("mod") && PrecededByCfgTest())
             {
                 SkipModuleBody();
@@ -524,16 +674,30 @@ internal class RustParser(List<RustToken> tokens, string sourceText, IReadOnlyLi
                         modules.Push((scope.Length > 0 ? scope + "::" + name : name, close));
                     }
                 }
-                else if (Check(";")) Advance();
+                else if (Check(";"))
+                {
+                    Advance();
+                }
             }
             // Skip `macro_rules! name { ... }` — its body is a template, not real code.
             else if (CheckIdent("macro_rules") && Peek().Value == "!")
             {
                 Advance(); Advance();        // macro_rules !
                 ConsumeIdentifier();         // macro name
-                if (Check("{")) SkipBraces();
-                else if (Check("(")) { SkipParens(); if (Check(";")) Advance(); }
-                else if (Check("[")) { SkipBrackets(); if (Check(";")) Advance(); }
+                if (Check("{"))
+                {
+                    SkipBraces();
+                }
+                else if (Check("(")) { SkipParens(); if (Check(";"))
+                    {
+                        Advance();
+                    }
+                }
+                else if (Check("[")) { SkipBrackets(); if (Check(";"))
+                    {
+                        Advance();
+                    }
+                }
             }
             else if (MatchKeyword("use"))
             {
@@ -543,7 +707,7 @@ internal class RustParser(List<RustToken> tokens, string sourceText, IReadOnlyLi
                 || CheckKeyword("impl") || CheckKeyword("pub") || CheckKeyword("unsafe")
                 || (CheckIdent("union") && Peek().Kind == RustTokenKind.Identifier))
             {
-                var type = TryParseTypeOrImpl(statements, freeFunctions);
+                TypeDeclaration? type = TryParseTypeOrImpl(statements, freeFunctions);
                 if (type != null)
                 {
                     type = type with
@@ -564,15 +728,23 @@ internal class RustParser(List<RustToken> tokens, string sourceText, IReadOnlyLi
             else if ((CheckKeyword("fn") || CheckKeyword("async") || CheckKeyword("const")
                 || CheckKeyword("extern")) && IsFnAhead())
             {
-                var (m, _) = ParseFn(statements);
-                if (m != null) freeFunctions.Add(m);
+                (MethodDeclaration? m, string? _) = ParseFn(statements);
+                if (m != null)
+                {
+                    freeFunctions.Add(m);
+                }
             }
 
             for (int i = functionStart; i < freeFunctions.Count; i++)
+            {
                 functionScopes[freeFunctions[i]] = scope;
+            }
             // Guarantee forward progress on every iteration — never spin on a token that
             // no branch consumed (stray punctuation, top-level const/mod/type, etc.).
-            if (_pos == loopStart) Advance();
+            if (_pos == loopStart)
+            {
+                Advance();
+            }
         }
 
         // Surface unbalanced delimiters (a missing/stray ( [ { } ] )) — a common malformed-source
@@ -581,7 +753,7 @@ internal class RustParser(List<RustToken> tokens, string sourceText, IReadOnlyLi
 
         statements.AddRange(_nestedStatements);
         statements = statements.OrderBy(s => s.Line).ThenBy(s => s.Column).ToList();
-        foreach (var (method, scope) in _nestedFunctions)
+        foreach ((MethodDeclaration? method, string? scope) in _nestedFunctions)
         {
             freeFunctions.Add(method);
             functionScopes[method] = scope;
@@ -591,17 +763,23 @@ internal class RustParser(List<RustToken> tokens, string sourceText, IReadOnlyLi
         // type-level naming/doc checks deliberately skip).
         if (freeFunctions.Count > 0)
         {
-            foreach (var group in freeFunctions.GroupBy(m => functionScopes[m]))
+            foreach (IGrouping<string, MethodDeclaration> group in freeFunctions.GroupBy(m => functionScopes[m]))
             {
-                var moduleName = (group.Key.Length > 0 ? group.Key : System.IO.Path.GetFileNameWithoutExtension(filePath)) + " (functions)";
+                string moduleName = (group.Key.Length > 0 ? group.Key : System.IO.Path.GetFileNameWithoutExtension(filePath)) + " (functions)";
                 types.Add(new TypeDeclaration(moduleName, TypeKind.Class, Modifier.Public, [], [], [], group.ToList(), [], [], group.First().Line)
                 { Namespace = group.Key.Length > 0 ? group.Key : null }.AsRust());
             }
         }
 
         AttachImplMethods(types, typeScopes);
-        foreach (var method in types.SelectMany(t => t.Methods))
-            foreach (var statement in method.Statements) statement.Method = method;
+        foreach (MethodDeclaration? method in types.SelectMany(t => t.Methods))
+        {
+            foreach (StatementInfo statement in method.Statements)
+            {
+                statement.Method = method;
+            }
+        }
+
         return new SourceFile(filePath, "rust", types, statements, sourceText)
         {
             Usings = usings,
@@ -619,7 +797,11 @@ internal class RustParser(List<RustToken> tokens, string sourceText, IReadOnlyLi
         MatchKeyword("unsafe");
         if (MatchKeyword("extern"))
         {
-            if (Current().Kind == RustTokenKind.StringLiteral) Advance();
+            if (Current().Kind == RustTokenKind.StringLiteral)
+            {
+                Advance();
+            }
+
             if (Check("{") && _delimiterPairs.TryGetValue(_pos, out int end))
             {
                 _externBlocks.Push(end);
@@ -633,29 +815,47 @@ internal class RustParser(List<RustToken> tokens, string sourceText, IReadOnlyLi
 
     private static void AttachImplMethods(List<TypeDeclaration> types, Dictionary<TypeDeclaration, string> scopes)
     {
-        foreach (var impl in types.OfType<RustTypeDeclaration>().Where(t => t.IsImpl))
+        foreach (RustTypeDeclaration? impl in types.OfType<RustTypeDeclaration>().Where(t => t.IsImpl))
         {
             string target = impl.Name[..impl.Name.IndexOf(" (impl", StringComparison.Ordinal)];
             int generic = target.IndexOf('<');
-            if (generic >= 0) target = target[..generic];
+            if (generic >= 0)
+            {
+                target = target[..generic];
+            }
+
             string scope = scopes[impl];
-            if (target.StartsWith("crate::", StringComparison.Ordinal)) target = target[7..];
+            if (target.StartsWith("crate::", StringComparison.Ordinal))
+            {
+                target = target[7..];
+            }
             else
             {
-                if (target.StartsWith("self::", StringComparison.Ordinal)) target = target[6..];
+                if (target.StartsWith("self::", StringComparison.Ordinal))
+                {
+                    target = target[6..];
+                }
+
                 while (target.StartsWith("super::", StringComparison.Ordinal))
                 {
                     target = target[7..];
                     int split = scope.LastIndexOf("::", StringComparison.Ordinal);
                     scope = split >= 0 ? scope[..split] : "";
                 }
-                if (scope.Length > 0) target = scope + "::" + target;
+                if (scope.Length > 0)
+                {
+                    target = scope + "::" + target;
+                }
             }
-            var owners = types.Where(t => t is RustTypeDeclaration { IsImpl: false }
+            List<TypeDeclaration> owners = types.Where(t => t is RustTypeDeclaration { IsImpl: false }
                 && t.Kind is TypeKind.Struct or TypeKind.Enum
-                && scopes.TryGetValue(t, out var ownerScope)
+                && scopes.TryGetValue(t, out string? ownerScope)
                 && (ownerScope.Length > 0 ? ownerScope + "::" + t.Name : t.Name) == target).ToList();
-            if (owners.Count != 1) continue;
+            if (owners.Count != 1)
+            {
+                continue;
+            }
+
             owners[0].Methods.AddRange(impl.Methods);
             impl.Methods.Clear();
         }
@@ -664,7 +864,7 @@ internal class RustParser(List<RustToken> tokens, string sourceText, IReadOnlyLi
     private TypeDeclaration? TryParseTypeOrImpl(List<StatementInfo> statements, List<MethodDeclaration> freeFunctions)
     {
         int savedPos = _pos;
-        var attributes = CollectPrecedingAttributes();
+        List<string> attributes = CollectPrecedingAttributes();
         bool hasDoc = HasPrecedingDocComment();
 
         Modifier vis = ReadVisibility();
@@ -673,19 +873,33 @@ internal class RustParser(List<RustToken> tokens, string sourceText, IReadOnlyLi
 
         if (CheckKeyword("struct"))
         {
-            return ParseStruct(vis, attributes, hasDoc, out var isTupleStruct, out var isUnitStruct)
+            return ParseStruct(vis, attributes, hasDoc, out bool isTupleStruct, out bool isUnitStruct)
                 .AsRust(isTupleStruct: isTupleStruct, isUnitStruct: isUnitStruct, isUnsafe: isUnsafe);
         }
-        if (CheckKeyword("enum")) return ParseEnum(vis, attributes, hasDoc).AsRust(isUnsafe: isUnsafe);
-        if (CheckKeyword("type")) return ParseAlias(vis, attributes, hasDoc);
-        if (CheckKeyword("trait")) return ParseTrait(vis, attributes, hasDoc, statements).AsRust(isTrait: true, isUnsafe: isUnsafe);
+        if (CheckKeyword("enum"))
+        {
+            return ParseEnum(vis, attributes, hasDoc).AsRust(isUnsafe: isUnsafe);
+        }
+
+        if (CheckKeyword("type"))
+        {
+            return ParseAlias(vis, attributes, hasDoc);
+        }
+
+        if (CheckKeyword("trait"))
+        {
+            return ParseTrait(vis, attributes, hasDoc, statements).AsRust(isTrait: true, isUnsafe: isUnsafe);
+        }
+
         if (CheckKeyword("impl"))
         {
-            return ParseImpl(statements, out var isNegativeImpl)
+            return ParseImpl(statements, out bool isNegativeImpl)
                 ?.AsRust(isImpl: true, isNegativeImpl: isNegativeImpl, isUnsafe: isUnsafe);
         }
         if (CheckIdent("union") && Peek().Kind == RustTokenKind.Identifier)
+        {
             return ParseUnion(vis, attributes, hasDoc).AsRust(isUnion: true, isUnsafe: isUnsafe);
+        }
 
         // A free function (possibly pub/const/async/extern/unsafe fn). Parse it here exactly
         // once with its real visibility and collect it; the main loop's fn branch only runs
@@ -693,7 +907,7 @@ internal class RustParser(List<RustToken> tokens, string sourceText, IReadOnlyLi
         if (CheckKeyword("fn") || CheckKeyword("async") || CheckKeyword("const")
             || CheckKeyword("extern"))
         {
-            var (m, _) = ParseFn(statements);
+            (MethodDeclaration? m, string? _) = ParseFn(statements);
             if (m != null)
             {
                 m = m with
@@ -701,10 +915,17 @@ internal class RustParser(List<RustToken> tokens, string sourceText, IReadOnlyLi
                     Line = tokens[savedPos].Line, Column = ColAt(tokens[savedPos].Start),
                     HasDocComment = hasDoc, DocComment = DocumentationAt(tokens[savedPos].Line), Decorators = attributes
                 };
-                if (vis != Modifier.Private) m = m with { Modifiers = (m.Modifiers & ~Modifier.Private) | vis };
+                if (vis != Modifier.Private)
+                {
+                    m = m with { Modifiers = (m.Modifiers & ~Modifier.Private) | vis };
+                }
                 // `unsafe` was consumed by the item-level dispatch above (for unsafe trait/impl);
                 // propagate it onto a free `unsafe fn` so RustMethod.IsUnsafe is correct.
-                if (isUnsafe && m is RustMethodDeclaration rm) m = rm with { IsUnsafe = true };
+                if (isUnsafe && m is RustMethodDeclaration rm)
+                {
+                    m = rm with { IsUnsafe = true };
+                }
+
                 freeFunctions.Add(m);
             }
             return null;
@@ -716,7 +937,11 @@ internal class RustParser(List<RustToken> tokens, string sourceText, IReadOnlyLi
 
     private Modifier ReadVisibility()
     {
-        if (!MatchKeyword("pub")) return Modifier.Private;
+        if (!MatchKeyword("pub"))
+        {
+            return Modifier.Private;
+        }
+
         if (Check("(")) { SkipParens(); return Modifier.Internal; } // pub(crate)/pub(super)/pub(in path)
         return Modifier.Public;
     }
@@ -724,7 +949,10 @@ internal class RustParser(List<RustToken> tokens, string sourceText, IReadOnlyLi
     private void SkipWhereClause()
     {
         // A where clause runs until the item body `{` or a terminating `;` (body-less items).
-        while (!IsAtEnd() && !Check("{") && !Check(";")) Advance();
+        while (!IsAtEnd() && !Check("{") && !Check(";"))
+        {
+            Advance();
+        }
     }
 
     private TypeDeclaration ParseUnion(Modifier vis, List<string> attributes, bool hasDoc)
@@ -732,10 +960,18 @@ internal class RustParser(List<RustToken> tokens, string sourceText, IReadOnlyLi
         int line = CurrentLine();
         Advance(); // skip 'union' (a contextual keyword, lexed as an identifier)
         string name = ConsumeIdentifier();
-        var generics = ReadTypeParameters();
-        if (CheckKeyword("where")) SkipWhereClause();
-        var fields = new List<FieldDeclaration>();
-        if (Check("{")) fields = ParseStructFields();
+        List<string> generics = ReadTypeParameters();
+        if (CheckKeyword("where"))
+        {
+            SkipWhereClause();
+        }
+
+        List<FieldDeclaration> fields = new List<FieldDeclaration>();
+        if (Check("{"))
+        {
+            fields = ParseStructFields();
+        }
+
         return new TypeDeclaration(name, TypeKind.Struct, vis, [], attributes, [], [], [], [], line)
         { HasDocComment = hasDoc, Fields = fields, TypeParameters = generics, DocComment = DocumentationAt(line) };
     }
@@ -745,11 +981,19 @@ internal class RustParser(List<RustToken> tokens, string sourceText, IReadOnlyLi
         int line = CurrentLine();
         Advance();
         string name = ConsumeIdentifier();
-        var generics = ReadTypeParameters();
-        while (!IsAtEnd() && !Check("=") && !Check(";")) Advance();
+        List<string> generics = ReadTypeParameters();
+        while (!IsAtEnd() && !Check("=") && !Check(";"))
+        {
+            Advance();
+        }
+
         TypeReference? target = null;
         if (Check("=")) { Advance(); target = ParseTypeReference(ConsumeType()); }
-        if (Check(";")) Advance();
+        if (Check(";"))
+        {
+            Advance();
+        }
+
         return new TypeDeclaration(name, TypeKind.Alias, vis, [], attributes, [], [], [], [], line)
         { AliasTarget = target, TypeParameters = generics, HasDocComment = hasDoc, DocComment = DocumentationAt(line) }.AsRust();
     }
@@ -766,22 +1010,37 @@ internal class RustParser(List<RustToken> tokens, string sourceText, IReadOnlyLi
         int line = CurrentLine();
         Advance(); // skip 'struct'
         string name = ConsumeIdentifier();
-        if (name == "") AddError(line, ColAt(Current().Start), "expected struct name after 'struct'");
-        var generics = ReadTypeParameters();
+        if (name == "")
+        {
+            AddError(line, ColAt(Current().Start), "expected struct name after 'struct'");
+        }
 
-        var fields = new List<FieldDeclaration>();
+        List<string> generics = ReadTypeParameters();
+
+        List<FieldDeclaration> fields = new List<FieldDeclaration>();
 
         if (Check("("))
         {
             isTupleStruct = true;
             // tuple struct: `struct S(T);` or `struct S(T) where T: X;`
             fields = ParseTupleFields();
-            if (CheckKeyword("where")) SkipWhereClause();
-            if (Check(";")) Advance();
+            if (CheckKeyword("where"))
+            {
+                SkipWhereClause();
+            }
+
+            if (Check(";"))
+            {
+                Advance();
+            }
         }
         else
         {
-            if (CheckKeyword("where")) SkipWhereClause();
+            if (CheckKeyword("where"))
+            {
+                SkipWhereClause();
+            }
+
             if (Check(";")) { isUnitStruct = true; Advance(); } // unit struct (optionally with where)
             else if (Check("{")) { fields = ParseStructFields(); }
         }
@@ -792,46 +1051,74 @@ internal class RustParser(List<RustToken> tokens, string sourceText, IReadOnlyLi
 
     private List<FieldDeclaration> ParseTupleFields()
     {
-        var fields = new List<FieldDeclaration>();
+        List<FieldDeclaration> fields = new List<FieldDeclaration>();
         Advance();
         while (!IsAtEnd() && !Check(")"))
         {
             int start = _pos;
             SkipCommentsAndAttributes();
             int line = CurrentLine();
-            var visibility = ReadVisibility();
+            Modifier visibility = ReadVisibility();
             string text = ConsumeType();
             if (text.Length > 0)
+            {
                 fields.Add(new FieldDeclaration(fields.Count.ToString(System.Globalization.CultureInfo.InvariantCulture),
                     ParseTypeReference(text), visibility, line));
-            if (Check(",")) Advance();
-            if (_pos == start) Advance();
+            }
+
+            if (Check(","))
+            {
+                Advance();
+            }
+
+            if (_pos == start)
+            {
+                Advance();
+            }
         }
-        if (Check(")")) Advance();
+        if (Check(")"))
+        {
+            Advance();
+        }
+
         return fields;
     }
 
     private List<FieldDeclaration> ParseStructFields()
     {
-        var fields = new List<FieldDeclaration>();
+        List<FieldDeclaration> fields = new List<FieldDeclaration>();
         Advance(); // skip {
         while (!IsAtEnd() && !Check("}"))
         {
             SkipCommentsAndAttributes();
-            if (Check("}")) break;
+            if (Check("}"))
+            {
+                break;
+            }
 
-            var vis = ReadVisibility();
+            Modifier vis = ReadVisibility();
 
-            if (Check("}")) break;
+            if (Check("}"))
+            {
+                break;
+            }
+
             int line = CurrentLine();
             string fieldName = ConsumeIdentifier();
             if (fieldName == "" || !Check(":")) { SkipUntilCommaOrBrace(); continue; }
             Advance(); // skip :
             string fieldType = ConsumeType();
             fields.Add(new FieldDeclaration(fieldName, ParseTypeReference(fieldType), vis, line));
-            if (Check(",")) Advance();
+            if (Check(","))
+            {
+                Advance();
+            }
         }
-        if (Check("}")) Advance();
+        if (Check("}"))
+        {
+            Advance();
+        }
+
         return fields;
     }
 
@@ -840,13 +1127,20 @@ internal class RustParser(List<RustToken> tokens, string sourceText, IReadOnlyLi
         int line = CurrentLine();
         Advance(); // skip 'enum'
         string name = ConsumeIdentifier();
-        if (name == "") AddError(line, ColAt(Current().Start), "expected enum name after 'enum'");
-        var generics = ReadTypeParameters();
-        if (CheckKeyword("where")) SkipWhereClause();
+        if (name == "")
+        {
+            AddError(line, ColAt(Current().Start), "expected enum name after 'enum'");
+        }
 
-        var modifiers = vis;
-        var variants = new List<string>();
-        var payloads = new List<TypeDeclaration>();
+        List<string> generics = ReadTypeParameters();
+        if (CheckKeyword("where"))
+        {
+            SkipWhereClause();
+        }
+
+        Modifier modifiers = vis;
+        List<string> variants = new List<string>();
+        List<TypeDeclaration> payloads = new List<TypeDeclaration>();
 
         if (Check("{"))
         {
@@ -855,26 +1149,59 @@ internal class RustParser(List<RustToken> tokens, string sourceText, IReadOnlyLi
             {
                 int loopStart = _pos;
                 SkipCommentsAndAttributes();
-                if (Check("}")) break;
+                if (Check("}"))
+                {
+                    break;
+                }
+
                 int variantStart = _pos;
                 int variantLine = CurrentLine();
                 string variantName = ConsumeIdentifier();
-                if (variantName != "") variants.Add(variantName);
+                if (variantName != "")
+                {
+                    variants.Add(variantName);
+                }
+
                 List<FieldDeclaration>? fields = null;
                 bool tuple = Check("(");
-                if (tuple) fields = ParseTupleFields();
-                if (Check("{")) fields = ParseStructFields();
+                if (tuple)
+                {
+                    fields = ParseTupleFields();
+                }
+
+                if (Check("{"))
+                {
+                    fields = ParseStructFields();
+                }
+
                 if (fields is not null && variantName != "")
+                {
                     payloads.Add(new TypeDeclaration(variantName, TypeKind.Struct, vis, [], [], [], [], [], [], variantLine)
                     {
                         Fields = fields, Column = ColAt(tokens[variantStart].Start),
                         EndLine = PreviousLine(), EndColumn = ColAt(tokens[Math.Max(variantStart, _pos - 1)].End)
                     }.AsRust());
-                if (Check("=")) { Advance(); while (!IsAtEnd() && !Check(",") && !Check("}")) Advance(); }
-                if (Check(",")) Advance();
-                if (_pos == loopStart) Advance();
+                }
+
+                if (Check("=")) { Advance(); while (!IsAtEnd() && !Check(",") && !Check("}"))
+                    {
+                        Advance();
+                    }
+                }
+                if (Check(","))
+                {
+                    Advance();
+                }
+
+                if (_pos == loopStart)
+                {
+                    Advance();
+                }
             }
-            if (Check("}")) Advance();
+            if (Check("}"))
+            {
+                Advance();
+            }
         }
 
         return new TypeDeclaration(name, TypeKind.Enum, modifiers, [], attributes, [], [], payloads, variants, line)
@@ -886,55 +1213,92 @@ internal class RustParser(List<RustToken> tokens, string sourceText, IReadOnlyLi
         int line = CurrentLine();
         Advance(); // skip 'trait'
         string name = ConsumeIdentifier();
-        if (name == "") AddError(line, ColAt(Current().Start), "expected trait name after 'trait'");
-        var generics = ReadTypeParameters();
+        if (name == "")
+        {
+            AddError(line, ColAt(Current().Start), "expected trait name after 'trait'");
+        }
 
-        var baseTypes = new List<string>();
+        List<string> generics = ReadTypeParameters();
+
+        List<string> baseTypes = new List<string>();
         if (Check(":"))
         {
             Advance();
             int start = _pos, depth = 0;
             while (!IsAtEnd() && !Check("{") && !CheckKeyword("where"))
             {
-                if (Check("<") || Check("(")) depth++;
-                if (Check(">") || Check(")")) depth--;
+                if (Check("<") || Check("("))
+                {
+                    depth++;
+                }
+
+                if (Check(">") || Check(")"))
+                {
+                    depth--;
+                }
+
                 if (depth == 0 && Check("+"))
                 {
                     if (start < _pos && tokens[start].Kind != RustTokenKind.Lifetime)
+                    {
                         baseTypes.Add(TokenText(start, _pos));
+                    }
+
                     Advance();
                     start = _pos;
                 }
-                else Advance();
+                else
+                {
+                    Advance();
+                }
             }
             if (start < _pos && tokens[start].Kind != RustTokenKind.Lifetime)
+            {
                 baseTypes.Add(TokenText(start, _pos));
+            }
         }
-        if (CheckKeyword("where")) SkipWhereClause();
+        if (CheckKeyword("where"))
+        {
+            SkipWhereClause();
+        }
 
-        var methods = new List<MethodDeclaration>();
+        List<MethodDeclaration> methods = new List<MethodDeclaration>();
         if (Check("{"))
         {
             Advance();
             while (!IsAtEnd() && !Check("}"))
             {
                 SkipCommentsAndAttributes();
-                if (Check("}")) break;
+                if (Check("}"))
+                {
+                    break;
+                }
+
                 if (CheckKeyword("fn") || CheckKeyword("async") || CheckKeyword("unsafe")
                     || CheckKeyword("const") || CheckKeyword("extern"))
                 {
-                    var (m, _) = ParseFn(statements);
+                    (MethodDeclaration? m, string? _) = ParseFn(statements);
                     // Trait items inherit the trait's visibility (a pub trait's methods are
                     // public API), so doc/visibility checks can see them.
                     if (m != null)
                     {
-                        if (vis != Modifier.Private) m = m with { Modifiers = (m.Modifiers & ~Modifier.Private) | vis };
+                        if (vis != Modifier.Private)
+                        {
+                            m = m with { Modifiers = (m.Modifiers & ~Modifier.Private) | vis };
+                        }
+
                         methods.Add(m);
                     }
                 }
-                else Advance();
+                else
+                {
+                    Advance();
+                }
             }
-            if (Check("}")) Advance();
+            if (Check("}"))
+            {
+                Advance();
+            }
         }
 
         return new TypeDeclaration(name, TypeKind.Interface, vis, baseTypes, attributes, [], methods, [], [], line)
@@ -945,29 +1309,35 @@ internal class RustParser(List<RustToken> tokens, string sourceText, IReadOnlyLi
     {
         int line = CurrentLine();
         Advance(); // skip 'impl'
-        var generics = ReadTypeParameters();
+        List<string> generics = ReadTypeParameters();
 
         // Read the first type/trait path (handles std::fmt::Debug, &T, [T], (A,B), dyn X, generics).
         isNegativeImpl = Check("!");
         string first = ConsumeImplTypeName();
 
         string typeName;
-        var baseTypes = new List<string>();
+        List<string> baseTypes = new List<string>();
 
         if (MatchKeyword("for"))
         {
             // impl Trait for Type
             typeName = ConsumeImplTypeName();
-            if (first != "") baseTypes.Add(first);
+            if (first != "")
+            {
+                baseTypes.Add(first);
+            }
         }
         else
         {
             typeName = first;
         }
 
-        if (CheckKeyword("where")) SkipWhereClause();
+        if (CheckKeyword("where"))
+        {
+            SkipWhereClause();
+        }
 
-        var methods = new List<MethodDeclaration>();
+        List<MethodDeclaration> methods = new List<MethodDeclaration>();
         if (Check("{"))
         {
             Advance();
@@ -975,19 +1345,26 @@ internal class RustParser(List<RustToken> tokens, string sourceText, IReadOnlyLi
             {
                 int loopStart = _pos;
                 SkipCommentsAndAttributes();
-                if (Check("}")) break;
+                if (Check("}"))
+                {
+                    break;
+                }
+
                 int methodStart = _pos;
                 bool methodHasDoc = HasPrecedingDocComment();
-                var methodAttributes = CollectPrecedingAttributes();
-                var methodVisibility = ReadVisibility();
+                List<string> methodAttributes = CollectPrecedingAttributes();
+                Modifier methodVisibility = ReadVisibility();
                 if (CheckKeyword("fn") || CheckKeyword("async") || CheckKeyword("unsafe")
                     || CheckKeyword("const") || CheckKeyword("extern") || CheckKeyword("default"))
                 {
-                    var (m, _) = ParseFn(statements);
+                    (MethodDeclaration? m, string? _) = ParseFn(statements);
                     if (m != null)
                     {
                         if (methodVisibility != Modifier.Private)
+                        {
                             m = m with { Modifiers = (m.Modifiers & ~Modifier.Private) | methodVisibility };
+                        }
+
                         methods.Add(m with
                         {
                             ReceiverType = typeName, Line = tokens[methodStart].Line,
@@ -996,13 +1373,27 @@ internal class RustParser(List<RustToken> tokens, string sourceText, IReadOnlyLi
                         });
                     }
                 }
-                else Advance();
-                if (_pos == loopStart) Advance(); // progress guard
+                else
+                {
+                    Advance();
+                }
+
+                if (_pos == loopStart)
+                {
+                    Advance(); // progress guard
+                }
             }
-            if (Check("}")) Advance();
+            if (Check("}"))
+            {
+                Advance();
+            }
         }
 
-        if (typeName == "") typeName = "?";
+        if (typeName == "")
+        {
+            typeName = "?";
+        }
+
         string displayName = baseTypes.Count > 0 ? $"{typeName} (impl {baseTypes[0]})" : $"{typeName} (impl)";
         return new TypeDeclaration(displayName, TypeKind.Class, Modifier.Public, baseTypes, [], [], methods, [], [], line)
         { TypeParameters = generics };
@@ -1015,13 +1406,21 @@ internal class RustParser(List<RustToken> tokens, string sourceText, IReadOnlyLi
     /// </summary>
     private string ConsumeImplTypeName()
     {
-        if (Check("!")) Advance();
+        if (Check("!"))
+        {
+            Advance();
+        }
+
         int start = _pos;
         int angle = 0, paren = 0, bracket = 0;
         while (!IsAtEnd())
         {
             if (angle == 0 && paren == 0 && bracket == 0
-                && (Check("{") || CheckKeyword("for") || CheckKeyword("where"))) break;
+                && (Check("{") || CheckKeyword("for") || CheckKeyword("where")))
+            {
+                break;
+            }
+
             switch (Current().Value)
             {
                 case "<": angle++; break;
@@ -1040,8 +1439,8 @@ internal class RustParser(List<RustToken> tokens, string sourceText, IReadOnlyLi
     {
         int declarationStart = _pos;
         bool hasDoc = HasPrecedingDocComment();
-        var decorators = CollectPrecedingAttributes();
-        var modifiers = Modifier.Private;
+        List<string> decorators = CollectPrecedingAttributes();
+        Modifier modifiers = Modifier.Private;
         bool isUnsafe = false, isConst = false, isExtern = _externBlocks.Count > 0;
 
         // Consume fn modifiers in any order: async, const, unsafe, default, extern "C".
@@ -1050,20 +1449,31 @@ internal class RustParser(List<RustToken> tokens, string sourceText, IReadOnlyLi
             if (MatchKeyword("async")) { modifiers |= Modifier.Async; continue; }
             if (MatchKeyword("const")) { isConst = true; continue; }
             if (MatchKeyword("unsafe")) { isUnsafe = true; continue; }
-            if (MatchKeyword("default")) continue;
-            if (MatchKeyword("extern")) { isExtern = true; if (Current().Kind == RustTokenKind.StringLiteral) Advance(); continue; }
+            if (MatchKeyword("default"))
+            {
+                continue;
+            }
+
+            if (MatchKeyword("extern")) { isExtern = true; if (Current().Kind == RustTokenKind.StringLiteral) { Advance(); } continue; }
             break;
         }
 
-        if (!MatchKeyword("fn")) return (null, null);
+        if (!MatchKeyword("fn"))
+        {
+            return (null, null);
+        }
 
         int line = tokens[declarationStart].Line;
         string name = ConsumeIdentifier();
-        if (name == "") AddError(line, ColAt(Current().Start), "expected function name after 'fn'");
-        var generics = ReadTypeParameters();
+        if (name == "")
+        {
+            AddError(line, ColAt(Current().Start), "expected function name after 'fn'");
+        }
+
+        List<string> generics = ReadTypeParameters();
 
         // Parameters
-        var parameters = new List<ParameterDeclaration>();
+        List<ParameterDeclaration> parameters = new List<ParameterDeclaration>();
         if (Check("("))
         {
             Advance();
@@ -1071,16 +1481,31 @@ internal class RustParser(List<RustToken> tokens, string sourceText, IReadOnlyLi
             {
                 int loopStart = _pos;
                 SkipCommentsAndAttributes();
-                if (Check(")")) break;
+                if (Check(")"))
+                {
+                    break;
+                }
 
                 int parameterStart = _pos;
                 int parameterLine = CurrentLine();
                 while (!IsAtEnd() && !Check(":") && !Check(",") && !Check(")"))
                 {
-                    if (Check("(")) SkipParens();
-                    else if (Check("[")) SkipBrackets();
-                    else if (Check("{")) SkipBraces();
-                    else Advance();
+                    if (Check("("))
+                    {
+                        SkipParens();
+                    }
+                    else if (Check("["))
+                    {
+                        SkipBrackets();
+                    }
+                    else if (Check("{"))
+                    {
+                        SkipBraces();
+                    }
+                    else
+                    {
+                        Advance();
+                    }
                 }
                 string pattern = TokenText(parameterStart, _pos);
                 int patternEnd = _pos;
@@ -1091,7 +1516,11 @@ internal class RustParser(List<RustToken> tokens, string sourceText, IReadOnlyLi
                     if (!tokens[parameterStart..patternEnd].Any(t => t.Value == "self"))
                     {
                         string paramName = pattern.StartsWith("mut ", StringComparison.Ordinal) ? pattern[4..] : pattern;
-                        if (paramName.StartsWith("ref ", StringComparison.Ordinal)) paramName = paramName[4..];
+                        if (paramName.StartsWith("ref ", StringComparison.Ordinal))
+                        {
+                            paramName = paramName[4..];
+                        }
+
                         parameters.Add(new ParameterDeclaration(paramName, ParseTypeReference(paramType),
                             false, false, false, parameterLine)
                         {
@@ -1102,13 +1531,25 @@ internal class RustParser(List<RustToken> tokens, string sourceText, IReadOnlyLi
                     }
                 }
                 else if (pattern == "...")
+                {
                     parameters.Add(new ParameterDeclaration("...", null, true, false, false, parameterLine));
-                if (Check(",")) Advance();
+                }
+
+                if (Check(","))
+                {
+                    Advance();
+                }
 
                 // Guaranteed forward progress: never spin on an unexpected token.
-                if (_pos == loopStart) Advance();
+                if (_pos == loopStart)
+                {
+                    Advance();
+                }
             }
-            if (Check(")")) Advance();
+            if (Check(")"))
+            {
+                Advance();
+            }
         }
 
         // Return type
@@ -1118,33 +1559,49 @@ internal class RustParser(List<RustToken> tokens, string sourceText, IReadOnlyLi
             Advance();
             string retType = ConsumeType();
             if (retType != "")
+            {
                 returnType = ParseTypeReference(retType);
+            }
         }
 
-        if (CheckKeyword("where")) SkipWhereClause();
+        if (CheckKeyword("where"))
+        {
+            SkipWhereClause();
+        }
 
         // Body
-        var methodStatements = new List<StatementInfo>();
+        List<StatementInfo> methodStatements = new List<StatementInfo>();
         if (Check("{"))
         {
             ParseBlock(methodStatements);
         }
-        else if (Check(";")) Advance();
+        else if (Check(";"))
+        {
+            Advance();
+        }
 
         statements.AddRange(methodStatements);
-        var method = new MethodDeclaration(name, modifiers, decorators, returnType, parameters, line)
+        RustMethodDeclaration method = new MethodDeclaration(name, modifiers, decorators, returnType, parameters, line)
         {
             Statements = methodStatements, HasDocComment = hasDoc, DocComment = DocumentationAt(line),
             TypeParameters = generics, Column = ColAt(tokens[declarationStart].Start),
             EndLine = PreviousLine(), EndColumn = ColAt(tokens[Math.Max(declarationStart, _pos - 1)].End)
         }.AsRust(isUnsafe, isConst, isExtern);
-        foreach (var statement in methodStatements) statement.Method = method;
+        foreach (StatementInfo statement in methodStatements)
+        {
+            statement.Method = method;
+        }
+
         return (method, null);
     }
 
     private void ParseBlock(List<StatementInfo> statements)
     {
-        if (!Check("{")) return;
+        if (!Check("{"))
+        {
+            return;
+        }
+
         int start = _pos;
         SkipBraces();
         new RustBodyParser(tokens, sourceText, statements,
@@ -1160,15 +1617,25 @@ internal class RustParser(List<RustToken> tokens, string sourceText, IReadOnlyLi
         if (_functionDepth >= 128)
         {
             AddError(CurrentLine(), ColAt(Current().Start), "structural analysis nested function limit (128) exceeded");
-            while (!IsAtEnd() && !Check("{") && !Check(";")) Advance();
-            if (Check("{")) SkipBraces();
+            while (!IsAtEnd() && !Check("{") && !Check(";"))
+            {
+                Advance();
+            }
+
+            if (Check("{"))
+            {
+                SkipBraces();
+            }
         }
         else
         {
             _functionDepth++;
-            var (method, _) = ParseFn(_nestedStatements);
+            (MethodDeclaration? method, string? _) = ParseFn(_nestedStatements);
             _functionDepth--;
-            if (method is not null) _nestedFunctions.Add((method, _scope));
+            if (method is not null)
+            {
+                _nestedFunctions.Add((method, _scope));
+            }
         }
         int end = _pos;
         _pos = saved;
@@ -1179,7 +1646,10 @@ internal class RustParser(List<RustToken> tokens, string sourceText, IReadOnlyLi
     private void ParseUse(List<string> usings)
     {
         ParseUseTree("", usings, 0);
-        if (Check(";")) Advance();
+        if (Check(";"))
+        {
+            Advance();
+        }
     }
 
     private void ParseUseTree(string prefix, List<string> usings, int depth)
@@ -1187,7 +1657,11 @@ internal class RustParser(List<RustToken> tokens, string sourceText, IReadOnlyLi
         if (depth > 128)
         {
             AddError(CurrentLine(), ColAt(Current().Start), "use-tree nesting limit (128) exceeded");
-            if (Check("{")) SkipBraces();
+            if (Check("{"))
+            {
+                SkipBraces();
+            }
+
             return;
         }
         int start = _pos;
@@ -1202,10 +1676,21 @@ internal class RustParser(List<RustToken> tokens, string sourceText, IReadOnlyLi
                 {
                     int before = _pos;
                     ParseUseTree(path, usings, depth + 1);
-                    if (Check(",")) Advance();
-                    if (_pos == before) Advance();
+                    if (Check(","))
+                    {
+                        Advance();
+                    }
+
+                    if (_pos == before)
+                    {
+                        Advance();
+                    }
                 }
-                if (Check("}")) Advance();
+                if (Check("}"))
+                {
+                    Advance();
+                }
+
                 return;
             }
             if (MatchKeyword("as"))
@@ -1217,7 +1702,9 @@ internal class RustParser(List<RustToken> tokens, string sourceText, IReadOnlyLi
             {
                 string part = Current().Value;
                 if (part != "self" || path.Length == 0)
+                {
                     path = path.Length == 0 ? part : path + "::" + part;
+                }
             }
             Advance();
         }
@@ -1243,7 +1730,11 @@ internal class RustParser(List<RustToken> tokens, string sourceText, IReadOnlyLi
     private int CurrentLine() => Current().Line;
     private int PreviousLine() => _pos > 0 ? tokens[_pos - 1].Line : 1;
     private bool IsAtEnd() => _pos >= tokens.Count || Current().Kind == RustTokenKind.Eof;
-    private void Advance() { if (!IsAtEnd()) _pos++; }
+    private void Advance() { if (!IsAtEnd())
+        {
+            _pos++;
+        }
+    }
 
     private bool Check(string value) => !IsAtEnd() && Current().Value == value;
     private bool CheckKeyword(string kw) => !IsAtEnd() && Current().Kind == RustTokenKind.Keyword && Current().Value == kw;
@@ -1255,11 +1746,14 @@ internal class RustParser(List<RustToken> tokens, string sourceText, IReadOnlyLi
     {
         for (int i = _pos - 1; i >= 0 && i >= _pos - 8; i--)
         {
-            var t = tokens[i];
+            RustToken t = tokens[i];
             if (t.Kind == RustTokenKind.Attribute)
             {
-                var v = t.Value.Replace(" ", "");
-                if (v.Contains("cfg(test)") || v.Contains("cfg(all(test") || v.Contains(",test)") || v.Contains("(test,")) return true;
+                string v = t.Value.Replace(" ", "");
+                if (v.Contains("cfg(test)") || v.Contains("cfg(all(test") || v.Contains(",test)") || v.Contains("(test,"))
+                {
+                    return true;
+                }
             }
             else if (t.Kind is not RustTokenKind.DocComment and not RustTokenKind.LineComment and not RustTokenKind.BlockComment)
             {
@@ -1274,14 +1768,20 @@ internal class RustParser(List<RustToken> tokens, string sourceText, IReadOnlyLi
     {
         Advance();           // mod
         ConsumeIdentifier(); // name
-        if (Check("{")) SkipBraces();
-        else if (Check(";")) Advance();
+        if (Check("{"))
+        {
+            SkipBraces();
+        }
+        else if (Check(";"))
+        {
+            Advance();
+        }
     }
 
     private string ConsumeIdentifier()
     {
         if (!IsAtEnd() && Current().Kind == RustTokenKind.Identifier)
-        { var v = Current().Value; Advance(); return v; }
+        { string v = Current().Value; Advance(); return v; }
         if (!IsAtEnd() && Current().Kind == RustTokenKind.Keyword && Current().Value == "Self")
         { Advance(); return "Self"; }
         return "";
@@ -1297,47 +1797,74 @@ internal class RustParser(List<RustToken> tokens, string sourceText, IReadOnlyLi
         while (!IsAtEnd())
         {
             if (Check("<")) { angle++; Advance(); continue; }
-            if (Check(">")) { if (angle == 0) break; angle--; Advance(); continue; }
+            if (Check(">")) { if (angle == 0) { break; } angle--; Advance(); continue; }
             if (Check("(")) { paren++; Advance(); continue; }
-            if (Check(")")) { if (paren == 0) break; paren--; Advance(); continue; }
+            if (Check(")")) { if (paren == 0) { break; } paren--; Advance(); continue; }
             if (Check("[")) { bracket++; Advance(); continue; }
-            if (Check("]")) { if (bracket == 0) break; bracket--; Advance(); continue; }
+            if (Check("]")) { if (bracket == 0) { break; } bracket--; Advance(); continue; }
             if (angle == 0 && paren == 0 && bracket == 0
-                && (Check(",") || Check(";") || Check("{") || Check("}") || CheckKeyword("where"))) break;
+                && (Check(",") || Check(";") || Check("{") || Check("}") || CheckKeyword("where")))
+            {
+                break;
+            }
+
             Advance();
         }
-        if (_pos == start) return "";
+        if (_pos == start)
+        {
+            return "";
+        }
+
         return TokenText(start, _pos);
     }
 
     private void SkipGenerics()
     {
-        if (!Check("<")) return;
+        if (!Check("<"))
+        {
+            return;
+        }
+
         int depth = 0;
         while (!IsAtEnd())
         {
             if (Check("<")) { depth++; Advance(); }
-            else if (Check(">")) { depth--; Advance(); if (depth == 0) break; }
-            else Advance();
+            else if (Check(">")) { depth--; Advance(); if (depth == 0)
+                {
+                    break;
+                }
+            }
+            else
+            {
+                Advance();
+            }
         }
 
     }
 
     private List<string> ReadTypeParameters()
     {
-        if (!Check("<")) return [];
+        if (!Check("<"))
+        {
+            return [];
+        }
+
         int start = _pos;
         SkipGenerics();
         int end = _pos - 1;
-        var names = new List<string>();
+        List<string> names = new List<string>();
         int depth = 0;
         bool parameter = true;
         for (int i = start + 1; i < end; i++)
         {
-            var token = tokens[i];
+            RustToken token = tokens[i];
             if (token.Value is "<" or "(" or "[" or "{") { depth++; continue; }
             if (token.Value is ">" or ")" or "]" or "}") { depth--; continue; }
-            if (depth != 0) continue;
+            if (depth != 0)
+            {
+                continue;
+            }
+
             if (token.Value == ",") { parameter = true; continue; }
             if (parameter && (token.Kind is RustTokenKind.Identifier or RustTokenKind.Lifetime))
             { names.Add(token.Value); parameter = false; }
@@ -1347,66 +1874,120 @@ internal class RustParser(List<RustToken> tokens, string sourceText, IReadOnlyLi
 
     private void SkipParens()
     {
-        if (!Check("(")) return;
+        if (!Check("("))
+        {
+            return;
+        }
+
         int depth = 0;
         while (!IsAtEnd())
         {
             if (Check("(")) { depth++; Advance(); }
-            else if (Check(")")) { depth--; Advance(); if (depth == 0) break; }
-            else Advance();
+            else if (Check(")")) { depth--; Advance(); if (depth == 0)
+                {
+                    break;
+                }
+            }
+            else
+            {
+                Advance();
+            }
         }
     }
 
     private void SkipBraces()
     {
-        if (!Check("{")) return;
+        if (!Check("{"))
+        {
+            return;
+        }
+
         int depth = 0;
         while (!IsAtEnd())
         {
             if (Check("{")) { depth++; Advance(); }
-            else if (Check("}")) { depth--; Advance(); if (depth == 0) break; }
-            else Advance();
+            else if (Check("}")) { depth--; Advance(); if (depth == 0)
+                {
+                    break;
+                }
+            }
+            else
+            {
+                Advance();
+            }
         }
     }
 
     private void SkipBrackets()
     {
-        if (!Check("[")) return;
+        if (!Check("["))
+        {
+            return;
+        }
+
         int depth = 0;
         while (!IsAtEnd())
         {
             if (Check("[")) { depth++; Advance(); }
-            else if (Check("]")) { depth--; Advance(); if (depth == 0) break; }
-            else Advance();
+            else if (Check("]")) { depth--; Advance(); if (depth == 0)
+                {
+                    break;
+                }
+            }
+            else
+            {
+                Advance();
+            }
         }
     }
 
     private void SkipUntil(string value)
     {
-        while (!IsAtEnd() && !Check(value)) Advance();
+        while (!IsAtEnd() && !Check(value))
+        {
+            Advance();
+        }
     }
 
     private void SkipUntilCommaOrBrace()
     {
-        while (!IsAtEnd() && !Check(",") && !Check("}")) Advance();
-        if (Check(",")) Advance();
+        while (!IsAtEnd() && !Check(",") && !Check("}"))
+        {
+            Advance();
+        }
+
+        if (Check(","))
+        {
+            Advance();
+        }
     }
 
     private void SkipUntilCommaOrParen()
     {
-        while (!IsAtEnd() && !Check(",") && !Check(")")) Advance();
+        while (!IsAtEnd() && !Check(",") && !Check(")"))
+        {
+            Advance();
+        }
     }
 
     private void SkipCommentsAndAttributes()
     {
         while (!IsAtEnd() && Current().Kind is RustTokenKind.LineComment or RustTokenKind.DocComment or RustTokenKind.BlockComment or RustTokenKind.Attribute)
+        {
             Advance();
+        }
     }
 
     private bool IsFnAhead()
     {
         for (int i = _pos; i < Math.Min(_pos + 5, tokens.Count); i++)
-            if (tokens[i].Kind == RustTokenKind.Keyword && tokens[i].Value == "fn") return true;
+        {
+            if (tokens[i].Kind == RustTokenKind.Keyword && tokens[i].Value == "fn")
+            {
+                return true;
+            }
+        }
+
         return false;
     }
 
@@ -1414,12 +1995,26 @@ internal class RustParser(List<RustToken> tokens, string sourceText, IReadOnlyLi
     {
         for (int i = _pos - 1; i >= 0 && i >= _pos - 10; i--)
         {
-            if (tokens[i].Kind == RustTokenKind.DocComment) return true;
-            if (tokens[i].Kind is RustTokenKind.Attribute or RustTokenKind.LineComment or RustTokenKind.BlockComment) continue;
+            if (tokens[i].Kind == RustTokenKind.DocComment)
+            {
+                return true;
+            }
+
+            if (tokens[i].Kind is RustTokenKind.Attribute or RustTokenKind.LineComment or RustTokenKind.BlockComment)
+            {
+                continue;
+            }
             // Skip visibility/modifier keywords consumed by the caller (e.g., pub, async, unsafe)
-            if (tokens[i].Kind == RustTokenKind.Keyword && tokens[i].Value is "pub" or "async" or "unsafe") continue;
+            if (tokens[i].Kind == RustTokenKind.Keyword && tokens[i].Value is "pub" or "async" or "unsafe")
+            {
+                continue;
+            }
             // Skip pub(crate) parenthesized visibility
-            if (tokens[i].Kind == RustTokenKind.Punctuation && tokens[i].Value is ")" or "(" or "crate") continue;
+            if (tokens[i].Kind == RustTokenKind.Punctuation && tokens[i].Value is ")" or "(" or "crate")
+            {
+                continue;
+            }
+
             break;
         }
         return false;
@@ -1427,25 +2022,39 @@ internal class RustParser(List<RustToken> tokens, string sourceText, IReadOnlyLi
 
     private List<string> CollectPrecedingAttributes()
     {
-        var attrs = new List<string>();
+        List<string> attrs = new List<string>();
         for (int i = _pos - 1; i >= 0; i--)
         {
             if (tokens[i].Kind == RustTokenKind.Attribute)
+            {
                 attrs.Insert(0, tokens[i].Value.Trim('#', '[', ']'));
+            }
             else if (tokens[i].Kind is RustTokenKind.DocComment or RustTokenKind.LineComment or RustTokenKind.BlockComment)
+            {
                 continue;
-            else break;
+            }
+            else
+            {
+                break;
+            }
         }
         return attrs;
     }
 
     private HashSet<int> ExtractCommentLines()
     {
-        var lines = new HashSet<int>();
-        foreach (var t in tokens)
+        HashSet<int> lines = new HashSet<int>();
+        foreach (RustToken t in tokens)
+        {
             if (t.Kind is RustTokenKind.LineComment or RustTokenKind.DocComment or RustTokenKind.BlockComment)
+            {
                 for (int line = t.Line; line <= t.Line + t.Value.Count(c => c == '\n'); line++)
+                {
                     lines.Add(line);
+                }
+            }
+        }
+
         return lines;
     }
 
@@ -1455,16 +2064,29 @@ internal class RustParser(List<RustToken> tokens, string sourceText, IReadOnlyLi
     private string? DocumentationAt(int line)
     {
         int index = tokens.FindIndex(t => t.Line == line && t.Kind != RustTokenKind.DocComment);
-        if (index < 0) return null;
-        var docs = new List<string>();
+        if (index < 0)
+        {
+            return null;
+        }
+
+        List<string> docs = new List<string>();
         for (int i = index - 1; i >= 0; i--)
         {
-            var token = tokens[i];
-            if (token.Kind == RustTokenKind.DocComment) docs.Insert(0, token.Value);
+            RustToken token = tokens[i];
+            if (token.Kind == RustTokenKind.DocComment)
+            {
+                docs.Insert(0, token.Value);
+            }
             else if (token.Kind is RustTokenKind.Attribute or RustTokenKind.LineComment or RustTokenKind.BlockComment
                 || token.Value is "pub" or "(" or ")" or "crate" or "unsafe" or "async" or "const" or "extern"
-                || token.Kind == RustTokenKind.StringLiteral) continue;
-            else break;
+                || token.Kind == RustTokenKind.StringLiteral)
+            {
+                continue;
+            }
+            else
+            {
+                break;
+            }
         }
         return docs.Count > 0 ? string.Join("\n", docs) : null;
     }

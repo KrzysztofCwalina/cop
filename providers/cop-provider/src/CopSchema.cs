@@ -1,16 +1,20 @@
+// Declares the provider schema for Cop-specific function facts.
+
 using Cop.Core;
 
 namespace Cop.Providers;
 
+/// <summary>Describes the runtime schema for Cop-specific source declarations.</summary>
 public static class CopSchema
 {
     private static readonly ProviderSchema _schema = Build();
 
+    /// <summary>Serializes the Cop provider schema as UTF-8 JSON.</summary>
     public static ReadOnlyMemory<byte> GetJson() => _schema.ToJson();
 
     private static ProviderSchema Build()
     {
-        var schema = CodeSchema.Get();
+        ProviderSchema schema = CodeSchema.Get();
         return new ProviderSchema
         {
             Types =

@@ -27,7 +27,10 @@ public class PythonCodebaseRegressionTests
                 let cb = python.parse()
                 command MAIN = print('{cb.Files.Count}:{cb.Types.Count}')
                 """);
-            var result = Engine.Run(scripts, target, additionalFeedPaths: [Path.Combine(repo!, "packages")]);
+            var result = Engine.Run(scripts, target, new EngineRunOptions
+            {
+                AdditionalFeedPaths = [Path.Combine(repo!, "packages")],
+            });
             Assert.That(result.ParseErrors, Is.Empty);
             Assert.That(result.Errors, Is.Empty);
             Assert.That(result.Outputs.Select(output => output.Message), Is.EqualTo(new[] { "1:1" }));
@@ -56,7 +59,10 @@ public class PythonCodebaseRegressionTests
                 let cb = python.parse()
                 command MAIN = print('{cb.Types.Count}:{cb.Types[0].Name}:{cb.Types[0].Methods[0].Name}:{cb.Calls.Count}')
                 """);
-            var execution = Task.Run(() => Engine.Run(checks, target, additionalFeedPaths: [Path.Combine(repo, "packages")]));
+            var execution = Task.Run(() => Engine.Run(checks, target, new EngineRunOptions
+            {
+                AdditionalFeedPaths = [Path.Combine(repo, "packages")],
+            }));
             Assert.That(execution.Wait(TimeSpan.FromSeconds(15)), Is.True, "Valid class-level control flow must never hang parsing.");
             var result = execution.Result;
             Assert.That(result.ParseErrors, Is.Empty);

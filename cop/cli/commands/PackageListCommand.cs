@@ -1,7 +1,10 @@
+// Displays packages available from configured feeds.
+
 using System;
 using System.Collections.Generic;
 using System.CommandLine;
 using System.CommandLine.Parsing;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Net.Http;
@@ -16,10 +19,11 @@ namespace Cop.Cli.Commands;
 /// </summary>
 public static class PackageListCommand
 {
+    /// <summary>Creates the feed package-list command and its display options.</summary>
     public static Command Create()
     {
-        var feedOption = new Option<string?>("--feed") { Description = "List packages from a specific feed only" };
-        var command = new Command("list", "List all available packages across feeds")
+        Option<string?> feedOption = new Option<string?>("--feed") { Description = "List packages from a specific feed only" };
+        Command command = new Command("list", "List all available packages across feeds")
         {
             feedOption
         };
@@ -44,12 +48,12 @@ public static class PackageListCommand
 
     private static async Task<int> ExecuteAsync(string? feedFilter)
     {
-        var feedManager = new FeedManager();
-        var feeds = feedManager.GetFeeds();
+        FeedManager feedManager = new FeedManager();
+        List<string> feeds = feedManager.GetFeeds();
 
         if (!string.IsNullOrEmpty(feedFilter))
         {
-            var matched = feeds.Where(f => f.Equals(feedFilter, StringComparison.OrdinalIgnoreCase)).ToList();
+            List<string> matched = feeds.Where(f => f.Equals(feedFilter, StringComparison.OrdinalIgnoreCase)).ToList();
             if (matched.Count == 0)
             {
                 // Allow `--feed <local dir>` to list an ad-hoc local feed that isn't configured.
@@ -70,46 +74,54 @@ public static class PackageListCommand
             }
         }
 
-        using var httpClient = new HttpClient();
+        using HttpClient httpClient = new HttpClient();
         httpClient.DefaultRequestHeaders.Add("User-Agent", "cop-cli");
-        var localSource = new LocalPackageSource();
+        LocalPackageSource localSource = new LocalPackageSource();
 
         bool first = true;
-        foreach (var feed in feeds)
+        foreach (string feed in feeds)
         {
-            if (!first) Console.WriteLine();
+            if (!first)
+            {
+                Console.WriteLine();
+            }
+
             first = false;
 
             Console.WriteLine(feed);
 
             if (FeedManager.IsLocalFeed(feed))
             {
-                var packages = localSource.ListPackages(feed);
+                List<string> packages = localSource.ListPackages(feed);
                 if (packages.Count == 0)
                 {
                     Console.WriteLine("  (no packages found)");
                     continue;
                 }
-                foreach (var p in packages)
+                foreach (string p in packages)
+                {
                     Console.WriteLine($"  {p}");
+                }
             }
             else
             {
-                var feedParts = feed.Split('/', StringSplitOptions.RemoveEmptyEntries);
+                string[] feedParts = feed.Split('/', StringSplitOptions.RemoveEmptyEntries);
                 if (feedParts.Length != 3 || !feedParts[0].Equals("github.com", StringComparison.OrdinalIgnoreCase))
                 {
                     Console.Error.WriteLine($"  (invalid feed format — skipping)");
                     continue;
                 }
 
-                var packages = await ListPackagesViaTreeAsync(httpClient, feedParts[1], feedParts[2]);
+                List<string> packages = await ListPackagesViaTreeAsync(httpClient, feedParts[1], feedParts[2]);
                 if (packages.Count == 0)
                 {
                     Console.WriteLine("  (no packages found)");
                     continue;
                 }
-                foreach (var p in packages)
+                foreach (string p in packages)
+                {
                     Console.WriteLine($"  {p}");
+                }
             }
         }
 
@@ -124,10 +136,12 @@ public static class PackageListCommand
         HttpClient httpClient, string owner, string repo)
     {
         // Try master first (most common for existing repos), fall back to main
-        var token = GetGhToken();
-        var packages = await TryListFromBranch(httpClient, owner, repo, "master", token);
+        string? token = GetGhToken();
+        List<string>? packages = await TryListFromBranch(httpClient, owner, repo, "master", token);
         if (packages == null)
+        {
             packages = await TryListFromBranch(httpClient, owner, repo, "main", token);
+        }
 
         return packages ?? new List<string>();
     }
@@ -135,12 +149,12 @@ public static class PackageListCommand
     private static async Task<List<string>?> TryListFromBranch(
         HttpClient httpClient, string owner, string repo, string branch, string? token)
     {
-        var url = $"https://api.github.com/repos/{owner}/{repo}/git/trees/{branch}?recursive=1";
+        string url = $"https://api.github.com/repos/{owner}/{repo}/git/trees/{branch}?recursive=1";
 
         HttpResponseMessage response;
         if (token != null)
         {
-            var request = new HttpRequestMessage(HttpMethod.Get, url);
+            HttpRequestMessage request = new HttpRequestMessage(HttpMethod.Get, url);
             request.Headers.Add("Authorization", $"Bearer {token}");
             response = await httpClient.SendAsync(request);
         }
@@ -153,7 +167,7 @@ public static class PackageListCommand
                 token = GetGhToken();
                 if (token != null)
                 {
-                    var request = new HttpRequestMessage(HttpMethod.Get, url);
+                    HttpRequestMessage request = new HttpRequestMessage(HttpMethod.Get, url);
                     request.Headers.Add("Authorization", $"Bearer {token}");
                     response = await httpClient.SendAsync(request);
                 }
@@ -161,7 +175,9 @@ public static class PackageListCommand
         }
 
         if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+        {
             return null; // Branch doesn't exist — caller will try another
+        }
 
         if (!response.IsSuccessStatusCode)
         {
@@ -169,20 +185,23 @@ public static class PackageListCommand
             return new List<string>();
         }
 
-        var json = await response.Content.ReadAsStringAsync();
-        using var doc = JsonDocument.Parse(json);
-        var tree = doc.RootElement.GetProperty("tree");
+        string json = await response.Content.ReadAsStringAsync();
+        using JsonDocument doc = JsonDocument.Parse(json);
+        JsonElement tree = doc.RootElement.GetProperty("tree");
 
-        var packages = new List<string>();
-        foreach (var item in tree.EnumerateArray())
+        List<string> packages = new List<string>();
+        foreach (JsonElement item in tree.EnumerateArray())
         {
-            var path = item.GetProperty("path").GetString();
-            if (path == null) continue;
+            string? path = item.GetProperty("path").GetString();
+            if (path == null)
+            {
+                continue;
+            }
 
             if (path.StartsWith("packages/") && path.EndsWith("/" + PackageMetadata.MetadataFileName))
             {
-                var segments = path.Split('/');
-                var packageName = segments[segments.Length - 2];
+                string[] segments = path.Split('/');
+                string packageName = segments[segments.Length - 2];
                 packages.Add(packageName);
             }
         }
@@ -192,25 +211,30 @@ public static class PackageListCommand
 
     private static string? GetGhToken()
     {
-        var envToken = Environment.GetEnvironmentVariable("GITHUB_TOKEN");
-        if (!string.IsNullOrWhiteSpace(envToken)) return envToken;
+        string? envToken = Environment.GetEnvironmentVariable("GITHUB_TOKEN");
+        if (!string.IsNullOrWhiteSpace(envToken))
+        {
+            return envToken;
+        }
 
         try
         {
-            var psi = new System.Diagnostics.ProcessStartInfo("gh", "auth token")
+            ProcessStartInfo psi = new System.Diagnostics.ProcessStartInfo("gh", "auth token")
             {
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
                 UseShellExecute = false,
                 CreateNoWindow = true
             };
-            using var process = System.Diagnostics.Process.Start(psi);
+            using Process? process = System.Diagnostics.Process.Start(psi);
             if (process != null)
             {
-                var output = process.StandardOutput.ReadToEnd().Trim();
+                string output = process.StandardOutput.ReadToEnd().Trim();
                 process.WaitForExit(5000);
                 if (process.ExitCode == 0 && !string.IsNullOrEmpty(output))
+                {
                     return output;
+                }
             }
         }
         catch { }
@@ -218,4 +242,3 @@ public static class PackageListCommand
         return null;
     }
 }
-

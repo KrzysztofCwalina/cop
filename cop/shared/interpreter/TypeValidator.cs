@@ -1,3 +1,5 @@
+// Validates declared type shapes and reports incompatible definitions.
+
 namespace Cop.Lang.Interpreter;
 
 using Cop.Lang.Ast;
@@ -18,7 +20,7 @@ public static class TypeValidator
         // Arity check: too many arguments (unless last param is a collection = param array)
         if (args.Count > decl.Params.Count && decl.Params.Count > 0)
         {
-            var lastParam = decl.Params[^1];
+            Parameter lastParam = decl.Params[^1];
             if (lastParam.Type is null || !lastParam.Type.IsCollection)
             {
                 throw new CopEvaluationException(
@@ -35,17 +37,22 @@ public static class TypeValidator
         }
 
         // Non-generic: standard parameter type checks
-        var isParamArray = decl.Params.Count > 0 && decl.Params[^1].Type is { IsCollection: true };
+        bool isParamArray = decl.Params.Count > 0 && decl.Params[^1].Type is { IsCollection: true };
         for (int i = 0; i < args.Count && i < decl.Params.Count; i++)
         {
-            var param = decl.Params[i];
-            if (param.Type is null) continue; // untyped parameter — no check
+            Parameter param = decl.Params[i];
+            if (param.Type is null)
+            {
+                continue; // untyped parameter — no check
+            }
 
             // Skip type check for last param when acting as param array (individual args will be collected)
             if (isParamArray && i == decl.Params.Count - 1 && args.Count >= decl.Params.Count)
+            {
                 continue;
+            }
 
-            var arg = ForceValue(args[i]);
+            CopValue arg = ForceValue(args[i]);
             if (!IsCompatible(arg, param.Type, registry))
             {
                 throw new CopEvaluationException(
@@ -62,29 +69,44 @@ public static class TypeValidator
     /// </summary>
     private static void ValidateGenericArguments(FunctionDecl decl, IReadOnlyList<CopValue> args, TypeRegistry? registry)
     {
-        var bindings = GenericInference.InferBindings(decl, args);
+        Dictionary<string, string> bindings = GenericInference.InferBindings(decl, args);
 
         // Validate trait constraints if a registry is available
         if (registry is not null)
         {
-            var constraintError = GenericInference.ValidateConstraints(decl, bindings, registry);
+            string? constraintError = GenericInference.ValidateConstraints(decl, bindings, registry);
             if (constraintError is not null)
+            {
                 throw new CopEvaluationException(constraintError, decl.Line);
+            }
         }
 
         for (int i = 0; i < args.Count && i < decl.Params.Count; i++)
         {
-            var param = decl.Params[i];
-            if (param.Type is null) continue;
+            Parameter param = decl.Params[i];
+            if (param.Type is null)
+            {
+                continue;
+            }
 
             // Skip callable/lambda parameters — validated at invocation time
-            var substituted = GenericInference.SubstituteTypeRef(param.Type, bindings);
-            if (substituted.Name.Contains("=>")) continue;
-            if (substituted.Name is "lambda" or "function") continue;
+            TypeRef substituted = GenericInference.SubstituteTypeRef(param.Type, bindings);
+            if (substituted.Name.Contains("=>"))
+            {
+                continue;
+            }
 
-            var arg = ForceValue(args[i]);
+            if (substituted.Name is "lambda" or "function")
+            {
+                continue;
+            }
+
+            CopValue arg = ForceValue(args[i]);
             // Skip lambda values — they're validated at invocation time
-            if (arg is ICopCallable) continue;
+            if (arg is ICopCallable)
+            {
+                continue;
+            }
 
             if (!IsCompatible(arg, substituted))
             {
@@ -103,22 +125,32 @@ public static class TypeValidator
     /// </summary>
     public static void ValidateReturn(FunctionDecl decl, CopValue result)
     {
-        if (decl.ReturnType is null) return; // no declared return type — no check
+        if (decl.ReturnType is null)
+        {
+            return; // no declared return type — no check
+        }
 
         // Predicates implicitly return bool; any `: Type` annotation is a narrowing type
         // (e.g. `predicate asCSharp(Type) : CSharpType`), not a runtime return type. The
         // body evaluates to a bool test result, so there is nothing to validate here.
-        if (decl.IsPredicate) return;
+        if (decl.IsPredicate)
+        {
+            return;
+        }
 
         // Skip validation for generic return types — inference handles consistency
         if (GenericInference.IsTypeVariable(decl.ReturnType.Name))
+        {
             return;
+        }
 
         // For non-generic return types, check as before
         if (decl.ReturnType.IsCollection && GenericInference.IsTypeVariable(decl.ReturnType.Name))
+        {
             return;
+        }
 
-        var value = ForceValue(result);
+        CopValue value = ForceValue(result);
         if (!IsCompatible(value, decl.ReturnType))
         {
             throw new CopEvaluationException(
@@ -135,15 +167,21 @@ public static class TypeValidator
     {
         // Type variables are always compatible (validated through inference)
         if (GenericInference.IsTypeVariable(typeRef.Name))
+        {
             return true;
+        }
 
         // Function type signatures are compatible with callables
         if (typeRef.Name.Contains("=>"))
+        {
             return value is ICopCallable;
+        }
 
         // Collection type: [T]
         if (typeRef.IsCollection)
+        {
             return value is CopList or CopLazyCollection or CopQueryable;
+        }
 
         // Primitive and named types
         return typeRef.Name.ToLowerInvariant() switch
@@ -189,7 +227,10 @@ public static class TypeValidator
     private static CopValue ForceValue(CopValue value)
     {
         while (value is CopThunk thunk)
+        {
             value = thunk.Force();
+        }
+
         return value;
     }
 
@@ -201,22 +242,35 @@ public static class TypeValidator
     private static bool IsNamedTypeCompatible(CopValue value, string typeName, TypeRegistry? registry = null)
     {
         // CopNull is NOT compatible with named types
-        if (value is CopNull) return false;
+        if (value is CopNull)
+        {
+            return false;
+        }
 
         // CopObject with matching TypeName
         if (value is CopObject obj)
         {
             // Anonymous object literals (no TypeName) are structurally typed — compatible with any named type
             if (obj.TypeName is null)
+            {
                 return true;
+            }
+
             if (string.Equals(obj.TypeName, typeName, StringComparison.OrdinalIgnoreCase))
+            {
                 return true;
+            }
             // A declared subtype satisfies its base type (e.g. CSharpType where Type is expected)
             if (registry is not null && registry.IsSubtypeOf(obj.TypeName, typeName))
+            {
                 return true;
+            }
             // Check trait conformance
             if (registry is not null && registry.ConformsTo(obj.TypeName, typeName))
+            {
                 return true;
+            }
+
             return false;
         }
 
@@ -224,13 +278,20 @@ public static class TypeValidator
         if (value is CopDynamicObject dyn)
         {
             if (string.Equals(dyn.TypeName, typeName, StringComparison.OrdinalIgnoreCase))
+            {
                 return true;
+            }
             // A declared subtype satisfies its base type (e.g. CSharpType where Type is expected)
             if (registry is not null && dyn.TypeName is not null && registry.IsSubtypeOf(dyn.TypeName, typeName))
+            {
                 return true;
+            }
             // Check trait conformance
             if (registry is not null && dyn.TypeName is not null && registry.ConformsTo(dyn.TypeName, typeName))
+            {
                 return true;
+            }
+
             return false;
         }
 
@@ -242,7 +303,9 @@ public static class TypeValidator
         if (value is CopProviderProxy)
         {
             if (TypeRegistry.IsCorePrimitive(typeName))
+            {
                 return false;
+            }
             // A provider proxy resolves its fields on demand, so it is assignable to any
             // registered (non-primitive) type. When no registry is available we cannot verify
             // the type, so we accept it rather than produce a false positive.

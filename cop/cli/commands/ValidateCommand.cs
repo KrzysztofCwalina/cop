@@ -1,3 +1,5 @@
+// Validates package layout and metadata from the CLI.
+
 using System;
 using System.CommandLine;
 using System.CommandLine.Parsing;
@@ -19,13 +21,31 @@ public static class ValidateCommand
     // True if version is exactly three dot-separated numeric parts (X.Y.Z).
     private static bool IsSemVer3(string? version)
     {
-        if (string.IsNullOrEmpty(version)) return false;
-        var parts = version.Split('.');
-        if (parts.Length != 3) return false;
-        foreach (var p in parts)
+        if (string.IsNullOrEmpty(version))
         {
-            if (p.Length == 0) return false;
-            foreach (var c in p) if (c is < '0' or > '9') return false;
+            return false;
+        }
+
+        string[] parts = version.Split('.');
+        if (parts.Length != 3)
+        {
+            return false;
+        }
+
+        foreach (string p in parts)
+        {
+            if (p.Length == 0)
+            {
+                return false;
+            }
+
+            foreach (char c in p)
+            {
+                if (c is < '0' or > '9')
+                {
+                    return false;
+                }
+            }
         }
         return true;
     }
@@ -34,13 +54,14 @@ public static class ValidateCommand
     /// Creates the validate command.
     /// </summary>
     /// <returns>A System.CommandLine.Command configured for the validate subcommand.</returns>
+    /// <summary>Creates the command for validating a package directory.</summary>
     public static Command Create()
     {
-        var pathArgument = new Argument<string>("path")
+        Argument<string> pathArgument = new Argument<string>("path")
         {
             Description = "Package directory path or package name"
         };
-        var command = new Command("validate", "Validate a package structure, source, and samples")
+        Command command = new Command("validate", "Validate a package structure, source, and samples")
         {
             pathArgument
         };
@@ -68,8 +89,8 @@ public static class ValidateCommand
                 ?? Path.Combine("packages", path);
         }
 
-        var name = Path.GetFileName(packagePath);
-        var results = new List<ValidationResult>();
+        string name = Path.GetFileName(packagePath);
+        List<ValidationResult> results = new List<ValidationResult>();
 
         // Step 1: Directory exists
         results.Add(new ValidationResult(
@@ -83,7 +104,7 @@ public static class ValidateCommand
             return 1;
         }
 
-        var metadataFile = Path.Combine(packagePath, PackageMetadata.MetadataFileName);
+        string metadataFile = Path.Combine(packagePath, PackageMetadata.MetadataFileName);
 
         // Step 2: Metadata file exists
         results.Add(new ValidationResult(
@@ -159,28 +180,28 @@ public static class ValidateCommand
         ));
 
         // Step 7: instructions/ directory exists
-        var instructionsPath = Path.Combine(packagePath, "instructions");
+        string instructionsPath = Path.Combine(packagePath, "instructions");
         results.Add(new ValidationResult(
             "instructions/ directory exists",
             Directory.Exists(instructionsPath)
         ));
 
         // Step 8: skills/ directory exists
-        var skillsPath = Path.Combine(packagePath, "skills");
+        string skillsPath = Path.Combine(packagePath, "skills");
         results.Add(new ValidationResult(
             "skills/ directory exists",
             Directory.Exists(skillsPath)
         ));
 
         // Step 9: src/ directory exists
-        var srcPath = Path.Combine(packagePath, "src");
+        string srcPath = Path.Combine(packagePath, "src");
         results.Add(new ValidationResult(
             "src/ directory exists",
             Directory.Exists(srcPath)
         ));
 
         // Step 10: tests/ directory exists
-        var testsPath = Path.Combine(packagePath, "tests");
+        string testsPath = Path.Combine(packagePath, "tests");
         results.Add(new ValidationResult(
             "tests/ directory exists",
             Directory.Exists(testsPath)
@@ -191,7 +212,7 @@ public static class ValidateCommand
         string? dependencyError = null;
         if (metadata != null && metadata.Dependencies.Count > 0)
         {
-            foreach (var dep in metadata.Dependencies)
+            foreach (string dep in metadata.Dependencies)
             {
                 try
                 {
@@ -216,11 +237,11 @@ public static class ValidateCommand
         string? circularError = null;
         if (metadata != null && metadata.Dependencies.Count > 0)
         {
-            foreach (var dep in metadata.Dependencies)
+            foreach (string dep in metadata.Dependencies)
             {
                 try
                 {
-                    var packageRef = PackageReference.Parse(dep);
+                    PackageReference packageRef = PackageReference.Parse(dep);
                     if (packageRef.PackageName == name)
                     {
                         noCircularDeps = false;
@@ -243,13 +264,13 @@ public static class ValidateCommand
         // Step 13: Source files parse (src/*.cop)
         if (Directory.Exists(srcPath))
         {
-            var srcFiles = Directory.GetFiles(srcPath, "*.cop");
-            var srcErrors = new List<string>();
-            foreach (var file in srcFiles)
+            string[] srcFiles = Directory.GetFiles(srcPath, "*.cop");
+            List<string> srcErrors = new List<string>();
+            foreach (string file in srcFiles)
             {
                 try
                 {
-                    var source = File.ReadAllText(file);
+                    string source = File.ReadAllText(file);
                     CopParser.Parse(source, file);
                 }
                 catch (ParseException ex)
@@ -269,22 +290,24 @@ public static class ValidateCommand
         }
 
         // Step 14: Samples compile (samples/*.cop)
-        var samplesPath = Path.Combine(packagePath, "samples");
+        string samplesPath = Path.Combine(packagePath, "samples");
         if (Directory.Exists(samplesPath))
         {
-            var sampleFiles = Directory.GetFiles(samplesPath, "*.cop");
-            var sampleErrors = new List<string>();
+            string[] sampleFiles = Directory.GetFiles(samplesPath, "*.cop");
+            List<string> sampleErrors = new List<string>();
 
             // Find packages directory for import resolution
-            var packagesDir = FindPackagesDir(packagePath);
+            string? packagesDir = FindPackagesDir(packagePath);
 
-            foreach (var file in sampleFiles)
+            foreach (string file in sampleFiles)
             {
-                var sampleSource = File.ReadAllText(file);
+                string sampleSource = File.ReadAllText(file);
 
-                var sampleResult = ValidateSample(file, sampleSource, packagesDir);
+                string? sampleResult = ValidateSample(file, sampleSource, packagesDir);
                 if (sampleResult != null)
+                {
                     sampleErrors.Add(sampleResult);
+                }
             }
 
             results.Add(new ValidationResult(
@@ -305,7 +328,7 @@ public static class ValidateCommand
     /// </summary>
     private static void PrintResults(List<ValidationResult> results)
     {
-        foreach (var result in results)
+        foreach (ValidationResult result in results)
         {
             string status = result.Passed ? "✓ PASS" : "✗ FAIL";
             Console.WriteLine($"{status}: {result.Name}");
@@ -356,29 +379,43 @@ public static class ValidateCommand
         }
 
         // Run through engine to validate imports and bindings
-        var tempDir = Path.Combine(Path.GetTempPath(), "cop-validate", Path.GetFileNameWithoutExtension(filePath));
-        if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
+        string tempDir = Path.Combine(Path.GetTempPath(), "cop-validate", Path.GetFileNameWithoutExtension(filePath));
+        if (Directory.Exists(tempDir))
+        {
+            Directory.Delete(tempDir, true);
+        }
+
         Directory.CreateDirectory(tempDir);
         try
         {
             // Copy all files from the sample's directory (includes data files)
-            var sampleDir = Path.GetDirectoryName(filePath)!;
-            foreach (var file in Directory.GetFiles(sampleDir))
+            string sampleDir = Path.GetDirectoryName(filePath)!;
+            foreach (string file in Directory.GetFiles(sampleDir))
+            {
                 File.Copy(file, Path.Combine(tempDir, Path.GetFileName(file)), true);
+            }
 
-            var feedPaths = packagesDir != null ? new[] { packagesDir } : null;
-            var result = Engine.Run(tempDir, tempDir, additionalFeedPaths: feedPaths);
+            string[]? feedPaths = packagesDir != null ? new[] { packagesDir } : null;
+            EngineResult result = Engine.Run(tempDir, tempDir, new EngineRunOptions
+            {
+                AdditionalFeedPaths = feedPaths,
+            });
 
             if (result.HasParseErrors)
+            {
                 return $"{Path.GetFileName(filePath)}: {string.Join("; ", result.ParseErrors)}";
+            }
+
             if (result.HasFatalErrors)
             {
                 // "Command 'main' not found" is expected for snippet-style samples
-                var realErrors = result.Errors
+                List<string> realErrors = result.Errors
                     .Where(e => !e.Contains("Command 'main' not found"))
                     .ToList();
                 if (realErrors.Count > 0)
+                {
                     return $"{Path.GetFileName(filePath)}: {string.Join("; ", realErrors)}";
+                }
             }
 
             return null;
@@ -394,16 +431,21 @@ public static class ValidateCommand
     /// </summary>
     private static string? FindPackagesDir(string packagePath)
     {
-        var dir = Path.GetDirectoryName(packagePath);
+        string? dir = Path.GetDirectoryName(packagePath);
         while (dir != null)
         {
             // Check if this is a packages directory (contains multiple package dirs with src/)
             if (Path.GetFileName(dir).Equals("packages", StringComparison.OrdinalIgnoreCase))
+            {
                 return dir;
+            }
             // Also check if parent is packages
-            var parent = Path.GetDirectoryName(dir);
+            string? parent = Path.GetDirectoryName(dir);
             if (parent != null && Path.GetFileName(parent).Equals("packages", StringComparison.OrdinalIgnoreCase))
+            {
                 return parent;
+            }
+
             dir = parent;
         }
         return null;

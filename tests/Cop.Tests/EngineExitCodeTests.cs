@@ -45,7 +45,10 @@ public class EngineExitCodeTests
                 "let violations = filesystem.Folders:isTarget:toError('V {item.Path}')\n" +
                 "command MAIN = violations\n");
 
-            var result = Engine.Run(scriptsDir, codebaseDir, additionalFeedPaths: [PackagesDir]);
+            var result = Engine.Run(scriptsDir, codebaseDir, new EngineRunOptions
+            {
+                AdditionalFeedPaths = [PackagesDir],
+            });
 
             Assert.That(result.HasFatalErrors, Is.False, string.Join("; ", result.Errors));
             // P3: the routed result yields a STRUCTURAL exit code (CHECK's count), not a null that
@@ -75,7 +78,10 @@ public class EngineExitCodeTests
                 "let violations = filesystem.Folders:isTarget:toError('V {item.Path}')\n" +
                 "command MAIN = violations\n");
 
-            var result = Engine.Run(scriptsDir, codebaseDir, additionalFeedPaths: [PackagesDir]);
+            var result = Engine.Run(scriptsDir, codebaseDir, new EngineRunOptions
+            {
+                AdditionalFeedPaths = [PackagesDir],
+            });
 
             Assert.That(result.HasFatalErrors, Is.False, string.Join("; ", result.Errors));
             // An empty violation list is not routed → clean exit.

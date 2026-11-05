@@ -274,8 +274,11 @@ public class AiChangeReviewTests
             """);
         var root = _root;
         while (!File.Exists(Path.Combine(root, "cop.sln"))) root = Path.GetDirectoryName(root)!;
-        var result = Engine.Run(scripts, _repo, additionalFeedPaths: [Path.Combine(root, "packages")],
-            reviewOptions: new ReviewOptions { Scope = "branch", Base = "HEAD", AiConfigPath = _config });
+        var result = Engine.Run(scripts, _repo, new EngineRunOptions
+        {
+            AdditionalFeedPaths = [Path.Combine(root, "packages")],
+            ReviewOptions = new ReviewOptions { Scope = "branch", Base = "HEAD", AiConfigPath = _config },
+        });
 
         Assert.That(result.ParseErrors, Is.Empty);
         Assert.That(result.Errors, Is.Empty, string.Join("\n", result.Errors));
@@ -292,8 +295,11 @@ public class AiChangeReviewTests
             Is.EqualTo(new[] { first, second }.OrderBy(path => path)));
         Assert.That(model.Requests[1], Does.Contain("int Total"));
 
-        var full = Engine.Run(scripts, _repo, additionalFeedPaths: [Path.Combine(root, "packages")],
-            reviewOptions: new ReviewOptions { Scope = "full", AiConfigPath = _config });
+        var full = Engine.Run(scripts, _repo, new EngineRunOptions
+        {
+            AdditionalFeedPaths = [Path.Combine(root, "packages")],
+            ReviewOptions = new ReviewOptions { Scope = "full", AiConfigPath = _config },
+        });
         Assert.That(full.Errors, Is.Empty);
         Assert.That(full.Outputs.Select(output => output.Message), Is.EqualTo(new[]
         {
@@ -340,7 +346,9 @@ public class AiChangeReviewTests
         if (!File.Exists(exe)) Assert.Ignore("Publish win-x64 before running CLI integration tests.");
         var start = new ProcessStartInfo(exe)
         {
-            WorkingDirectory = root, RedirectStandardOutput = true, RedirectStandardError = true,
+            WorkingDirectory = root,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
             UseShellExecute = false
         };
         foreach (var arg in new[] { script, "-t", _repo, "--scope", "branch", "--base", "HEAD",
@@ -489,15 +497,21 @@ public class AiChangeReviewTests
         while (!File.Exists(Path.Combine(root, "cop.sln"))) root = Path.GetDirectoryName(root)!;
         if (!publishedCli)
         {
-            var normal = Engine.Run(scripts, _repo, commandName: "MAIN",
-                additionalFeedPaths: [Path.Combine(root, "packages")]);
+            var normal = Engine.Run(scripts, _repo, new EngineRunOptions
+            {
+                CommandName = "MAIN",
+                AdditionalFeedPaths = [Path.Combine(root, "packages")],
+            });
             Assert.That(normal.Errors, Is.Empty, string.Join("\n", normal.Errors));
             Assert.That(normal.Outputs, Is.Empty);
             Assert.That(normal.ExitCode, Is.EqualTo(0));
             Assert.That(model.Requests, Is.Empty, "The default command must not execute AI checks.");
-            var result = Engine.Run(scripts, _repo, commandName: "AI",
-                additionalFeedPaths: [Path.Combine(root, "packages")],
-                reviewOptions: new ReviewOptions { Scope = "branch", Base = "HEAD", AiConfigPath = _config });
+            var result = Engine.Run(scripts, _repo, new EngineRunOptions
+            {
+                CommandName = "AI",
+                AdditionalFeedPaths = [Path.Combine(root, "packages")],
+                ReviewOptions = new ReviewOptions { Scope = "branch", Base = "HEAD", AiConfigPath = _config },
+            });
             Assert.That(result.ParseErrors, Is.Empty);
             Assert.That(result.Errors, Is.Empty, string.Join("\n", result.Errors));
             Assert.That(result.ExitCode, Is.EqualTo(1));
@@ -510,7 +524,9 @@ public class AiChangeReviewTests
             Assert.That(File.Exists(exe), Is.True, "Publish win-x64 before running this functional test.");
             var start = new ProcessStartInfo(exe)
             {
-                WorkingDirectory = root, RedirectStandardOutput = true, RedirectStandardError = true,
+                WorkingDirectory = root,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
                 UseShellExecute = false
             };
             foreach (var arg in new[] { script, "-t", _repo, "-c", "ai", "--scope", "branch", "--base", "HEAD",
@@ -583,7 +599,9 @@ public class AiChangeReviewTests
     {
         var start = new ProcessStartInfo("git")
         {
-            WorkingDirectory = _repo, RedirectStandardOutput = true, RedirectStandardError = true,
+            WorkingDirectory = _repo,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
             UseShellExecute = false
         };
         foreach (var argument in args) start.ArgumentList.Add(argument);
@@ -676,9 +694,15 @@ public class AiChangeReviewTests
         public void Dispose()
         {
             _stop.Cancel();
-            _listener.Stop();
-            _server.GetAwaiter().GetResult();
-            _stop.Dispose();
+            try
+            {
+                _server.GetAwaiter().GetResult();
+            }
+            finally
+            {
+                _listener.Stop();
+                _stop.Dispose();
+            }
         }
     }
 }

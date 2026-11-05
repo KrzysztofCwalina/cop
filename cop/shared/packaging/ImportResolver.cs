@@ -1,3 +1,5 @@
+// Resolves source imports to package locations for program loading.
+
 using Cop.Core;
 
 namespace Cop.Lang;
@@ -22,37 +24,46 @@ public class ImportResolver
     /// </summary>
     public ScriptFile? Resolve(string packageName, List<string> errors)
     {
-        var incompatibleProviders = new List<string>();
-        foreach (var feedPath in _feedPaths)
+        List<string> incompatibleProviders = new List<string>();
+        foreach (string feedPath in _feedPaths)
         {
-            var packageDir = FindPackageDir(feedPath, packageName, incompatibleProviders.Add);
-            if (packageDir is null) continue;
+            string? packageDir = FindPackageDir(feedPath, packageName, incompatibleProviders.Add);
+            if (packageDir is null)
+            {
+                continue;
+            }
 
-            var copDir = Path.Combine(packageDir, "src");
-            if (!Directory.Exists(copDir)) continue;
+            string copDir = Path.Combine(packageDir, "src");
+            if (!Directory.Exists(copDir))
+            {
+                continue;
+            }
 
-            var copFiles = Directory.GetFiles(copDir, "*.cop");
+            string[] copFiles = Directory.GetFiles(copDir, "*.cop");
             Array.Sort(copFiles, StringComparer.Ordinal); // deterministic order across platforms
-            if (copFiles.Length == 0) continue;
+            if (copFiles.Length == 0)
+            {
+                continue;
+            }
 
-            var allTypes = new List<TypeDefinition>();
-            var allCollections = new List<CollectionDeclaration>();
-            var allLets = new List<LetDeclaration>();
-            var allPredicates = new List<PredicateDefinition>();
-            var allFunctions = new List<FunctionDefinition>();
-            var allCommands = new List<CommandBlock>();
-            var allImports = new List<string>();
-            var allFlags = new List<FlagsDefinition>();
-            var allEnums = new List<EnumDefinition>();
-            var allTypeImports = new List<TypeImportDeclaration>();
+            List<TypeDefinition> allTypes = new List<TypeDefinition>();
+            List<CollectionDeclaration> allCollections = new List<CollectionDeclaration>();
+            List<LetDeclaration> allLets = new List<LetDeclaration>();
+            List<PredicateDefinition> allPredicates = new List<PredicateDefinition>();
+            List<FunctionDefinition> allFunctions = new List<FunctionDefinition>();
+            List<CommandBlock> allCommands = new List<CommandBlock>();
+            List<string> allImports = new List<string>();
+            List<FlagsDefinition> allFlags = new List<FlagsDefinition>();
+            List<EnumDefinition> allEnums = new List<EnumDefinition>();
+            List<TypeImportDeclaration> allTypeImports = new List<TypeImportDeclaration>();
             bool hasErrors = false;
 
-            foreach (var file in copFiles)
+            foreach (string file in copFiles)
             {
                 try
                 {
-                    var source = File.ReadAllText(file);
-                    var parsed = Cop.Lang.Parser.CopParser.ParseFile(source, file);
+                    string source = File.ReadAllText(file);
+                    ScriptFile parsed = Cop.Lang.Parser.CopParser.ParseFile(source, file);
                     allTypes.AddRange(parsed.TypeDefinitions);
                     allCollections.AddRange(parsed.CollectionDeclarations);
                     allLets.AddRange(parsed.LetDeclarations);
@@ -61,11 +72,19 @@ public class ImportResolver
                     allCommands.AddRange(parsed.Commands);
                     allImports.AddRange(parsed.Imports);
                     if (parsed.FlagsDefinitions != null)
+                    {
                         allFlags.AddRange(parsed.FlagsDefinitions);
+                    }
+
                     if (parsed.EnumDefinitions != null)
+                    {
                         allEnums.AddRange(parsed.EnumDefinitions);
+                    }
+
                     if (parsed.TypeImports != null)
+                    {
                         allTypeImports.AddRange(parsed.TypeImports.Where(ti => ti.IsExported));
+                    }
                 }
                 catch (ParseException ex)
                 {
@@ -79,19 +98,22 @@ public class ImportResolver
                 }
             }
 
-            if (hasErrors) return null;
+            if (hasErrors)
+            {
+                return null;
+            }
 
             // Only exported symbols are visible to importers
-            var exportedTypes = allTypes.Where(t => t.IsExported).ToList();
-            var exportedCollections = allCollections.Where(c => c.IsExported).ToList();
-            var exportedPredicates = allPredicates.Where(p => p.IsExported).ToList();
-            var exportedFunctions = allFunctions.Where(f => f.IsExported).ToList();
-            var exportedCommands = allCommands.Where(c => c.IsExported).ToList();
-            var exportedFlags = allFlags.Where(f => f.IsExported).ToList();
-            var exportedEnums = allEnums.Where(e => e.IsExported).ToList();
+            List<TypeDefinition> exportedTypes = allTypes.Where(t => t.IsExported).ToList();
+            List<CollectionDeclaration> exportedCollections = allCollections.Where(c => c.IsExported).ToList();
+            List<PredicateDefinition> exportedPredicates = allPredicates.Where(p => p.IsExported).ToList();
+            List<FunctionDefinition> exportedFunctions = allFunctions.Where(f => f.IsExported).ToList();
+            List<CommandBlock> exportedCommands = allCommands.Where(c => c.IsExported).ToList();
+            List<FlagsDefinition> exportedFlags = allFlags.Where(f => f.IsExported).ToList();
+            List<EnumDefinition> exportedEnums = allEnums.Where(e => e.IsExported).ToList();
 
             // Exported lets + transitive non-exported let dependencies
-            var exportedLets = IncludeLetDependencies(allLets);
+            List<LetDeclaration> exportedLets = IncludeLetDependencies(allLets);
 
             return new ScriptFile(
                 copDir,
@@ -118,33 +140,40 @@ public class ImportResolver
     /// </summary>
     private static List<LetDeclaration> IncludeLetDependencies(List<LetDeclaration> allLets)
     {
-        var exported = allLets.Where(l => l.IsExported).ToList();
-        var nonExported = allLets.Where(l => !l.IsExported).ToDictionary(l => l.Name);
-        var included = new HashSet<string>(exported.Select(l => l.Name));
+        List<LetDeclaration> exported = allLets.Where(l => l.IsExported).ToList();
+        Dictionary<string, LetDeclaration> nonExported = allLets.Where(l => !l.IsExported).ToDictionary(l => l.Name);
+        HashSet<string> included = new HashSet<string>(exported.Select(l => l.Name));
 
-        foreach (var let in exported)
+        foreach (LetDeclaration? let in exported)
+        {
             IncludeDeps(let, nonExported, included);
+        }
 
         // Add any non-exported lets that were pulled in as dependencies
-        var result = new List<LetDeclaration>(exported);
-        foreach (var kvp in nonExported)
+        List<LetDeclaration> result = new List<LetDeclaration>(exported);
+        foreach (KeyValuePair<string, LetDeclaration> kvp in nonExported)
         {
             if (included.Contains(kvp.Key))
+            {
                 result.Add(kvp.Value);
+            }
         }
         return result;
     }
 
     private static void IncludeDeps(LetDeclaration let, Dictionary<string, LetDeclaration> nonExported, HashSet<string> included)
     {
-        var baseCol = let.BaseCollection;
-        if (string.IsNullOrEmpty(baseCol)) return;
+        string baseCol = let.BaseCollection;
+        if (string.IsNullOrEmpty(baseCol))
+        {
+            return;
+        }
 
         // Extract the name before the first dot (e.g., "cb" from "cb.Statements")
-        var dotIdx = baseCol.IndexOf('.');
-        var refName = dotIdx > 0 ? baseCol[..dotIdx] : baseCol;
+        int dotIdx = baseCol.IndexOf('.');
+        string refName = dotIdx > 0 ? baseCol[..dotIdx] : baseCol;
 
-        if (!included.Contains(refName) && nonExported.TryGetValue(refName, out var dep))
+        if (!included.Contains(refName) && nonExported.TryGetValue(refName, out LetDeclaration? dep))
         {
             included.Add(refName);
             IncludeDeps(dep, nonExported, included);
@@ -160,35 +189,60 @@ public class ImportResolver
 
     public static string? FindPackageDir(string feedPath, string packageName, Action<string>? incompatibleProvider)
     {
-        if (!Directory.Exists(feedPath)) return null;
-        var pending = new Stack<(string Path, int Depth)>();
+        if (!Directory.Exists(feedPath))
+        {
+            return null;
+        }
+
+        Stack<(string Path, int Depth)> pending = new Stack<(string Path, int Depth)>();
         pending.Push((feedPath, 0));
         int visited = 0;
-        while (pending.TryPop(out var folder))
+        while (pending.TryPop(out (string Path, int Depth) folder))
         {
             if (++visited > 4096 || folder.Depth > 64)
+            {
                 throw new IOException("Local package discovery exceeded its 4096-directory / 64-level safety limit.");
-            var direct = Path.Combine(folder.Path, packageName);
+            }
+
+            string direct = Path.Combine(folder.Path, packageName);
             if (Directory.Exists(direct)
                 && (File.GetAttributes(direct) & FileAttributes.ReparsePoint) == 0 && IsPackageDir(direct))
             {
-                var metadata = PackageMetadata.TryLoadFromDirectory(direct);
+                PackageMetadata? metadata = PackageMetadata.TryLoadFromDirectory(direct);
                 if (metadata is not null && ProviderCompatibility.GetError(direct, metadata) is { } error)
+                {
                     incompatibleProvider?.Invoke(error);
+                }
                 else
+                {
                     return direct;
+                }
             }
-            var directories = Directory.EnumerateDirectories(folder.Path).Take(4097).ToArray();
+            string[] directories = Directory.EnumerateDirectories(folder.Path).Take(4097).ToArray();
             if (directories.Length > 4096)
+            {
                 throw new IOException("Local package discovery exceeded its 4096-directory / 64-level safety limit.");
+            }
+
             for (int i = directories.Length - 1; i >= 0; i--)
             {
-                var subDir = directories[i];
-                var dirName = Path.GetFileName(subDir);
-                if (string.IsNullOrEmpty(dirName) || dirName.StartsWith('.')) continue;
-                if ((File.GetAttributes(subDir) & FileAttributes.ReparsePoint) != 0 || IsPackageDir(subDir)) continue;
+                string subDir = directories[i];
+                string dirName = Path.GetFileName(subDir);
+                if (string.IsNullOrEmpty(dirName) || dirName.StartsWith('.'))
+                {
+                    continue;
+                }
+
+                if ((File.GetAttributes(subDir) & FileAttributes.ReparsePoint) != 0 || IsPackageDir(subDir))
+                {
+                    continue;
+                }
+
                 if (pending.Count + visited >= 4096)
+                {
                     throw new IOException("Local package discovery exceeded its 4096-directory / 64-level safety limit.");
+                }
+
                 pending.Push((subDir, folder.Depth + 1));
             }
         }

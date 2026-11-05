@@ -1,3 +1,5 @@
+// Translates supported predicate expressions into provider filter expressions.
+
 using Cop.Core;
 using AstExpr = Cop.Lang.Ast.Expression;
 using Cop.Lang.Ast;
@@ -29,45 +31,66 @@ public static class PredicateCompiler
     /// </summary>
     public static FilterExpression? TryCompile(AstExpr predicate, bool negated = false, string? propertyContext = null)
     {
-        var result = CompileCore(predicate, propertyContext);
-        if (result is null) return null;
+        FilterExpression? result = CompileCore(predicate, propertyContext);
+        if (result is null)
+        {
+            return null;
+        }
+
         return negated ? new NotFilter(result) : result;
     }
 
     /// <summary>Expands unambiguous, pure predicate bodies; unsupported expressions stay local.</summary>
     public static FilterExpression? TryCompileBound(AstExpr predicate, Environment environment, string? itemType = null)
     {
-        var expanding = new HashSet<string>(StringComparer.Ordinal);
+        HashSet<string> expanding = new HashSet<string>(StringComparer.Ordinal);
         return Expand(predicate, environment, null);
 
         FilterExpression? Expand(AstExpr expression, Environment scope, string? parameter)
         {
             if (expression is Ast.IdentifierExpr id && scope.TryLookup(id.Name, out _))
             {
-                var function = FindPredicate(id.Name, scope, itemType);
+                CopFunction? function = FindPredicate(id.Name, scope, itemType);
                 if (function is null || !expanding.Add(id.Name))
+                {
                     return null;
-                var result = Expand(((ExpressionBody)function.Declaration.Body).Expr,
+                }
+
+                FilterExpression? result = Expand(((ExpressionBody)function.Declaration.Body).Expr,
                     function.Closure, function.Declaration.Params[0].Name);
                 expanding.Remove(id.Name);
                 return result;
             }
 
-            if (parameter is null) return null;
+            if (parameter is null)
+            {
+                return null;
+            }
+
             if (expression is Ast.BinaryExpr { Op: BinaryOp.And or BinaryOp.Or } logical)
             {
-                var left = Expand(logical.Left, scope, parameter);
-                var right = Expand(logical.Right, scope, parameter);
-                if (left is null || right is null) return null;
+                FilterExpression? left = Expand(logical.Left, scope, parameter);
+                FilterExpression? right = Expand(logical.Right, scope, parameter);
+                if (left is null || right is null)
+                {
+                    return null;
+                }
+
                 return logical.Op == BinaryOp.And ? FilterExpression.And(left, right) : FilterExpression.Or(left, right);
             }
             if (expression is Ast.UnaryExpr { Op: UnaryOp.Not } not)
+            {
                 return Expand(not.Operand, scope, parameter) is { } inner ? new NotFilter(inner) : null;
+            }
+
             if (expression is MemberExpr member && Property(member, parameter) is { } boolProperty)
+            {
                 return new PropertyFilter(boolProperty, true);
+            }
+
             if (expression is FilterExpr filter && Property(filter.Collection, parameter) is { } property)
             {
-                var compiled = TryCompile(filter.Predicate, filter.Negated, property);
+                FilterExpression? compiled = TryCompile(filter.Predicate, filter.Negated, property);
                 return compiled;
             }
             if (expression is Ast.BinaryExpr comparison && Property(comparison.Left, parameter) is { } name
@@ -75,12 +98,12 @@ public static class PredicateCompiler
             {
                 if (literal.Value is bool boolean && comparison.Op is BinaryOp.Equal or BinaryOp.NotEqual)
                 {
-                    var equal = new PropertyFilter(name, boolean);
+                    PropertyFilter equal = new PropertyFilter(name, boolean);
                     return comparison.Op == BinaryOp.Equal ? equal : new NotFilter(equal);
                 }
                 if (literal.Value is string text && comparison.Op is BinaryOp.Equal or BinaryOp.NotEqual)
                 {
-                    var equal = new StringOpFilter(name, StringOp.ExactEquals, text);
+                    StringOpFilter equal = new StringOpFilter(name, StringOp.ExactEquals, text);
                     return comparison.Op == BinaryOp.Equal ? equal : new NotFilter(equal);
                 }
                 double? number = literal.Value switch { int i => i, long l => l, double d => d, _ => null };
@@ -95,7 +118,7 @@ public static class PredicateCompiler
                 };
                 if (number is not null && op is not null)
                 {
-                    var numeric = new ComparisonFilter(name, op.Value, number.Value);
+                    ComparisonFilter numeric = new ComparisonFilter(name, op.Value, number.Value);
                     return comparison.Op == BinaryOp.NotEqual ? new NotFilter(numeric) : numeric;
                 }
             }
@@ -110,33 +133,45 @@ public static class PredicateCompiler
 
     internal static CopFunction? FindPredicate(string name, Environment scope, string? itemType)
     {
-        if (!scope.TryLookup(name, out var binding)) return null;
-        var functions = binding switch
+        if (!scope.TryLookup(name, out CopValue? binding))
+        {
+            return null;
+        }
+
+        CopFunction[] functions = binding switch
         {
             CopFunction function => new[] { function },
             CopFunctionGroup group => group.Functions.ToArray(),
             _ => []
         };
-        var candidates = functions.Where(f => f.Declaration.IsPredicate && f.Arity == 1
+        CopFunction[] candidates = functions.Where(f => f.Declaration.IsPredicate && f.Arity == 1
             && f.Declaration.Guard is null && f.Declaration.Params[0].Type?.Constraint is null
             && f.Declaration.Body is ExpressionBody).ToArray();
-        var exact = candidates.Where(f => f.Declaration.Params[0].Type?.Name == itemType).ToArray();
-        if (exact.Length == 1) candidates = exact;
-        if (candidates.Length != 1 || functions.Length > 1 && exact.Length != 1) return null;
-        var selected = candidates[0];
+        CopFunction[] exact = candidates.Where(f => f.Declaration.Params[0].Type?.Name == itemType).ToArray();
+        if (exact.Length == 1)
+        {
+            candidates = exact;
+        }
+
+        if (candidates.Length != 1 || functions.Length > 1 && exact.Length != 1)
+        {
+            return null;
+        }
+
+        CopFunction selected = candidates[0];
         return itemType is not null && selected.Declaration.Params[0].Type is { } type && type.Name != itemType
             ? null : selected;
     }
 
     public static FilterExpression? TryCompileElement(AstExpr expression, Environment environment, string? itemType)
     {
-        var parameter = new Parameter("item", null);
+        Parameter parameter = new Parameter("item", null);
         if (expression is LambdaExpr { Params.Count: 1 } lambda)
         {
             parameter = lambda.Params[0];
             expression = lambda.Body;
         }
-        var scope = environment.Extend();
+        Environment scope = environment.Extend();
         scope.Define("$query", new CopFunction(new FunctionDecl("$query", [parameter], null,
             new ExpressionBody(expression), IsPredicate: true), environment));
         return TryCompileBound(new Ast.IdentifierExpr("$query"), scope, itemType);
@@ -150,10 +185,14 @@ public static class PredicateCompiler
     public static string? TryExtractPropertyAccess(AstExpr predicate)
     {
         if (predicate is Ast.IdentifierExpr id && !CollectionFunctions.Contains(id.Name))
+        {
             return id.Name;
+        }
 
         if (predicate is Ast.MemberExpr { Object: Ast.IdentifierExpr } mem)
+        {
             return mem.Member;
+        }
 
         return null;
     }
@@ -172,29 +211,45 @@ public static class PredicateCompiler
 
             // Binary AND: pred1 && pred2
             case Ast.BinaryExpr { Op: BinaryOp.And } bin:
-                var leftFilter = CompileCore(bin.Left, propertyContext);
-                var rightFilter = CompileCore(bin.Right, propertyContext);
-                if (leftFilter is null || rightFilter is null) return null;
+                FilterExpression? leftFilter = CompileCore(bin.Left, propertyContext);
+                FilterExpression? rightFilter = CompileCore(bin.Right, propertyContext);
+                if (leftFilter is null || rightFilter is null)
+                {
+                    return null;
+                }
+
                 return FilterExpression.And(leftFilter, rightFilter);
 
             // Binary OR: pred1 || pred2
             case Ast.BinaryExpr { Op: BinaryOp.Or } bin2:
-                var leftOr = CompileCore(bin2.Left, propertyContext);
-                var rightOr = CompileCore(bin2.Right, propertyContext);
-                if (leftOr is null || rightOr is null) return null;
+                FilterExpression? leftOr = CompileCore(bin2.Left, propertyContext);
+                FilterExpression? rightOr = CompileCore(bin2.Right, propertyContext);
+                if (leftOr is null || rightOr is null)
+                {
+                    return null;
+                }
+
                 return FilterExpression.Or(leftOr, rightOr);
 
             // Unary NOT: !pred
             case Ast.UnaryExpr { Op: UnaryOp.Not } un:
-                var inner = CompileCore(un.Operand, propertyContext);
-                if (inner is null) return null;
+                FilterExpression? inner = CompileCore(un.Operand, propertyContext);
+                if (inner is null)
+                {
+                    return null;
+                }
+
                 return new NotFilter(inner);
 
             // Nested filter: Property:op(value) — compound pattern
             case Ast.FilterExpr { Collection: Ast.IdentifierExpr propId } filt
                 when !CollectionFunctions.Contains(propId.Name):
-                var compiled = CompileCore(filt.Predicate, propId.Name);
-                if (compiled is null) return null;
+                FilterExpression? compiled = CompileCore(filt.Predicate, propId.Name);
+                if (compiled is null)
+                {
+                    return null;
+                }
+
                 return filt.Negated ? new NotFilter(compiled) : compiled;
 
             default:
@@ -205,14 +260,24 @@ public static class PredicateCompiler
     private static FilterExpression? CompileCall(string methodName, List<AstExpr> args, string? propertyContext)
     {
         // Without property context, we can't compile a call (no property to filter on)
-        if (propertyContext is null) return null;
-        if (args.Count < 1) return null;
+        if (propertyContext is null)
+        {
+            return null;
+        }
+
+        if (args.Count < 1)
+        {
+            return null;
+        }
 
         // equals/eq: polymorphic — string or numeric
         if (methodName is "equals" or "eq")
         {
             if (args[0] is Ast.LiteralExpr { Value: string sv })
+            {
                 return new StringOpFilter(propertyContext, StringOp.Equals, sv);
+            }
+
             double? nv = args[0] switch
             {
                 Ast.LiteralExpr { Value: int i } => i,
@@ -221,7 +286,10 @@ public static class PredicateCompiler
                 _ => null
             };
             if (nv is not null)
+            {
                 return new ComparisonFilter(propertyContext, CompareOp.Equals, nv.Value);
+            }
+
             return null;
         }
 
@@ -229,9 +297,16 @@ public static class PredicateCompiler
         if (StringOps.Contains(methodName))
         {
             if (args[0] is not Ast.LiteralExpr { Value: string strVal })
+            {
                 return null;
-            var op = NormalizeStringOp(methodName);
-            if (op is null) return null;
+            }
+
+            StringOp? op = NormalizeStringOp(methodName);
+            if (op is null)
+            {
+                return null;
+            }
+
             return new StringOpFilter(propertyContext, op.Value, strVal);
         }
 
@@ -245,22 +320,34 @@ public static class PredicateCompiler
                 Ast.LiteralExpr { Value: long l } => l,
                 _ => null
             };
-            if (numVal is null) return null;
-            var op = NormalizeCompareOp(methodName);
-            if (op is null) return null;
+            if (numVal is null)
+            {
+                return null;
+            }
+
+            CompareOp? op = NormalizeCompareOp(methodName);
+            if (op is null)
+            {
+                return null;
+            }
+
             return new ComparisonFilter(propertyContext, op.Value, numVal.Value);
         }
 
         // Membership test: property:in([...])
         if (methodName == "in" && args.Count == 1 && args[0] is Ast.ListExpr listLit)
         {
-            var values = new List<string>();
-            foreach (var elem in listLit.Elements)
+            List<string> values = new List<string>();
+            foreach (AstExpr elem in listLit.Elements)
             {
                 if (elem is Ast.LiteralExpr { Value: string sv })
+                {
                     values.Add(sv);
+                }
                 else
+                {
                     return null;
+                }
             }
             return new InFilter(propertyContext, values);
         }

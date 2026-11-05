@@ -1,3 +1,5 @@
+// Tokenizes Python source for the provider's source-only parser.
+
 namespace Cop.Providers.SourceParsers;
 
 /// <summary>
@@ -25,6 +27,7 @@ internal sealed class PythonLexer
     /// <summary>Lex errors in the standard parse-error format.</summary>
     public List<string> LexErrors { get; } = [];
 
+    /// <summary>Creates a lexer for Python text and its diagnostic file path.</summary>
     public PythonLexer(string src, string filePath = "")
     {
         _src = src;
@@ -38,14 +41,20 @@ internal sealed class PythonLexer
     // Public API
     // ─────────────────────────────────────────────────────────────────────────
 
+    /// <summary>
+    /// Reads Python tokens, including indentation and source positions.
+    /// </summary>
     public List<Tok> Tokenize()
     {
-        var toks = new List<Tok>();
+        List<Tok> toks = new List<Tok>();
         while (true)
         {
-            var t = Next();
+            Tok t = Next();
             toks.Add(t);
-            if (t.Kind == TK.Eof) break;
+            if (t.Kind == TK.Eof)
+            {
+                break;
+            }
         }
         return toks;
     }
@@ -56,7 +65,10 @@ internal sealed class PythonLexer
 
     private Tok Next()
     {
-        if (_pending.Count > 0) return _pending.Dequeue();
+        if (_pending.Count > 0)
+        {
+            return _pending.Dequeue();
+        }
 
     Top:
         // ── Handle beginning of physical line ──────────────────────────────
@@ -66,7 +78,10 @@ internal sealed class PythonLexer
             int bolLine = _line;
             int indent = ScanLeadingWhitespace();
 
-            if (AtEnd()) goto Eof;
+            if (AtEnd())
+            {
+                goto Eof;
+            }
 
             char fc = Cur();
 
@@ -83,7 +98,11 @@ internal sealed class PythonLexer
             {
                 CommentLines.Add(_line);
                 SkipRestOfLine();
-                if (!AtEnd()) AdvanceNewline();
+                if (!AtEnd())
+                {
+                    AdvanceNewline();
+                }
+
                 _atBol = true;
                 goto Top;
             }
@@ -109,7 +128,11 @@ internal sealed class PythonLexer
                     if (_indentStack.Peek() != indent)
                     {
                         LexErrors.Add($"{_filePath}({bolLine},1): error: unindent does not match any outer indentation level");
-                        while (_indentStack.Count > 1) _indentStack.Pop();
+                        while (_indentStack.Count > 1)
+                        {
+                            _indentStack.Pop();
+                        }
+
                         _indentStack.Push(indent); // recover
                     }
                     return new Tok(TK.Dedent, "", bolLine, 1);
@@ -120,9 +143,14 @@ internal sealed class PythonLexer
 
         // ── Skip horizontal whitespace ──────────────────────────────────────
         while (!AtEnd() && (Cur() == ' ' || Cur() == '\t'))
+        {
             Advance();
+        }
 
-        if (AtEnd()) goto Eof;
+        if (AtEnd())
+        {
+            goto Eof;
+        }
 
         {
             char c = Cur();
@@ -133,7 +161,11 @@ internal sealed class PythonLexer
             {
                 AdvanceNewline();
                 _atBol = true;
-                if (_bracketDepth > 0) goto Top;   // implicit continuation
+                if (_bracketDepth > 0)
+                {
+                    goto Top;   // implicit continuation
+                }
+
                 return new Tok(TK.Newline, "\n", tl, tc);
             }
 
@@ -158,15 +190,21 @@ internal sealed class PythonLexer
 
             // String literal (checked before identifier to handle r"..." etc.)
             if (TryStringStart(out int pfxLen, out bool isTriple, out char qChar))
+            {
                 return LexString(tl, tc, pfxLen, isTriple, qChar);
+            }
 
             // Number literal
             if (char.IsDigit(c) || (c == '.' && _pos + 1 < _src.Length && char.IsDigit(_src[_pos + 1])))
+            {
                 return LexNumber(tl, tc);
+            }
 
             // Identifier / keyword
             if (char.IsLetter(c) || c == '_')
+            {
                 return LexIdent(tl, tc);
+            }
 
             // Punctuation / operators
             return LexPunct(tl, tc);
@@ -193,10 +231,21 @@ internal sealed class PythonLexer
         int i = _pos;
         // Up to 2 string-prefix chars (r/R/b/B/f/F/u/U and two-char combos like rb, fr, …)
         while (i < _src.Length && i - _pos < 2 && "rRbBfFuU".Contains(_src[i]))
+        {
             i++;
-        if (i >= _src.Length) return false;
+        }
+
+        if (i >= _src.Length)
+        {
+            return false;
+        }
+
         char q = _src[i];
-        if (q != '"' && q != '\'') return false;
+        if (q != '"' && q != '\'')
+        {
+            return false;
+        }
+
         prefixLen = i - _pos;
         quoteChar = q;
         isTriple = i + 2 < _src.Length && _src[i + 1] == q && _src[i + 2] == q;
@@ -205,13 +254,21 @@ internal sealed class PythonLexer
 
     private Tok LexString(int tl, int tc, int prefixLen, bool isTriple, char q)
     {
-        var start = _pos;
+        int start = _pos;
         bool isRaw = false, isFStr = false;
         for (int k = 0; k < prefixLen; k++)
         {
             char p = char.ToLower(Cur());
-            if (p == 'r') isRaw = true;
-            if (p == 'f') isFStr = true;
+            if (p == 'r')
+            {
+                isRaw = true;
+            }
+
+            if (p == 'f')
+            {
+                isFStr = true;
+            }
+
             Advance();
         }
 
@@ -224,7 +281,15 @@ internal sealed class PythonLexer
                 if (!isRaw && c == '\\')
                 {
                     Advance();
-                    if (!AtEnd()) { if (Cur() == '\n' || Cur() == '\r') AdvanceNewline(); else Advance(); }
+                    if (!AtEnd()) { if (Cur() == '\n' || Cur() == '\r')
+                        {
+                            AdvanceNewline();
+                        }
+                        else
+                        {
+                            Advance();
+                        }
+                    }
                     continue;
                 }
                 if (c == q && Peek(1) == q && Peek(2) == q)
@@ -232,8 +297,14 @@ internal sealed class PythonLexer
                     Advance(); Advance(); Advance();
                     return new Tok(TK.Str, _src[start.._pos], tl, tc);
                 }
-                if (c == '\n' || c == '\r') AdvanceNewline();
-                else Advance();
+                if (c == '\n' || c == '\r')
+                {
+                    AdvanceNewline();
+                }
+                else
+                {
+                    Advance();
+                }
             }
             LexErrors.Add($"{_filePath}({tl},{tc}): error: unterminated triple-quoted string");
             return new Tok(TK.Str, _src[start.._pos], tl, tc);
@@ -245,11 +316,19 @@ internal sealed class PythonLexer
         while (!AtEnd())
         {
             char c = Cur();
-            if (c == '\n' || c == '\r') break; // unterminated
+            if (c == '\n' || c == '\r')
+            {
+                break; // unterminated
+            }
+
             if (!isRaw && c == '\\')
             {
                 Advance();
-                if (!AtEnd() && Cur() != '\n' && Cur() != '\r') Advance();
+                if (!AtEnd() && Cur() != '\n' && Cur() != '\r')
+                {
+                    Advance();
+                }
+
                 continue;
             }
             if (isFStr && c == '{')
@@ -271,7 +350,7 @@ internal sealed class PythonLexer
 
     private Tok LexNumber(int tl, int tc)
     {
-        var start = _pos;
+        int start = _pos;
         // Hex / octal / binary literals
         if (!AtEnd() && Cur() == '0' && _pos + 1 < _src.Length)
         {
@@ -279,25 +358,51 @@ internal sealed class PythonLexer
             if (nx is 'x' or 'o' or 'b')
             {
                 Advance(); Advance();
-                while (!AtEnd() && (IsHexDigitOrUnderscore(Cur()))) Advance();
-                if (!AtEnd() && (Cur() is 'j' or 'J')) Advance();
+                while (!AtEnd() && (IsHexDigitOrUnderscore(Cur())))
+                {
+                    Advance();
+                }
+
+                if (!AtEnd() && (Cur() is 'j' or 'J'))
+                {
+                    Advance();
+                }
+
                 return new Tok(TK.Number, _src[start.._pos], tl, tc);
             }
         }
         // Decimal / float (also handles leading '.')
-        while (!AtEnd() && (char.IsDigit(Cur()) || Cur() == '_')) Advance();
+        while (!AtEnd() && (char.IsDigit(Cur()) || Cur() == '_'))
+        {
+            Advance();
+        }
+
         if (!AtEnd() && Cur() == '.' && (_pos + 1 >= _src.Length || _src[_pos + 1] != '.'))
         {
             Advance();
-            while (!AtEnd() && (char.IsDigit(Cur()) || Cur() == '_')) Advance();
+            while (!AtEnd() && (char.IsDigit(Cur()) || Cur() == '_'))
+            {
+                Advance();
+            }
         }
         if (!AtEnd() && (Cur() is 'e' or 'E'))
         {
             Advance();
-            if (!AtEnd() && (Cur() is '+' or '-')) Advance();
-            while (!AtEnd() && (char.IsDigit(Cur()) || Cur() == '_')) Advance();
+            if (!AtEnd() && (Cur() is '+' or '-'))
+            {
+                Advance();
+            }
+
+            while (!AtEnd() && (char.IsDigit(Cur()) || Cur() == '_'))
+            {
+                Advance();
+            }
         }
-        if (!AtEnd() && (Cur() is 'j' or 'J')) Advance();
+        if (!AtEnd() && (Cur() is 'j' or 'J'))
+        {
+            Advance();
+        }
+
         return new Tok(TK.Number, _src[start.._pos], tl, tc);
     }
 
@@ -312,7 +417,10 @@ internal sealed class PythonLexer
     {
         int start = _pos;
         while (!AtEnd() && (char.IsLetterOrDigit(Cur()) || Cur() == '_'))
+        {
             Advance();
+        }
+
         return new Tok(TK.Name, _src[start.._pos], tl, tc);
     }
 
@@ -327,11 +435,11 @@ internal sealed class PythonLexer
         switch (c)
         {
             case '(': _bracketDepth++; return new Tok(TK.LParen,  "(", tl, tc);
-            case ')': if (_bracketDepth > 0) _bracketDepth--; return new Tok(TK.RParen, ")", tl, tc);
+            case ')': if (_bracketDepth > 0) { _bracketDepth--; } return new Tok(TK.RParen, ")", tl, tc);
             case '[': _bracketDepth++; return new Tok(TK.LBrack,  "[", tl, tc);
-            case ']': if (_bracketDepth > 0) _bracketDepth--; return new Tok(TK.RBrack, "]", tl, tc);
+            case ']': if (_bracketDepth > 0) { _bracketDepth--; } return new Tok(TK.RBrack, "]", tl, tc);
             case '{': _bracketDepth++; return new Tok(TK.LBrace,  "{", tl, tc);
-            case '}': if (_bracketDepth > 0) _bracketDepth--; return new Tok(TK.RBrace, "}", tl, tc);
+            case '}': if (_bracketDepth > 0) { _bracketDepth--; } return new Tok(TK.RBrace, "}", tl, tc);
             case ',': return new Tok(TK.Comma, ",", tl, tc);
             case ';': return new Tok(TK.Semi,  ";", tl, tc);
             case '.':
@@ -389,7 +497,10 @@ internal sealed class PythonLexer
     {
         char c = _src[_pos++];
         if (c == '\n') { _line++; _col = 1; }
-        else _col++;
+        else
+        {
+            _col++;
+        }
     }
 
     private void AdvanceNewline()
@@ -401,7 +512,9 @@ internal sealed class PythonLexer
     private void SkipRestOfLine()
     {
         while (!AtEnd() && Cur() != '\n' && Cur() != '\r')
+        {
             Advance();
+        }
     }
 
     private int ScanLeadingWhitespace()
@@ -409,8 +522,15 @@ internal sealed class PythonLexer
         int indent = 0;
         while (!AtEnd() && (Cur() == ' ' || Cur() == '\t'))
         {
-            if (Cur() == '\t') indent = (indent / 8 + 1) * 8;
-            else indent++;
+            if (Cur() == '\t')
+            {
+                indent = (indent / 8 + 1) * 8;
+            }
+            else
+            {
+                indent++;
+            }
+
             _pos++; _col++;
         }
         return indent;

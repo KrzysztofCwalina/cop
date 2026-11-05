@@ -1,3 +1,5 @@
+// Carries Java type-category and modifier facts through the shared source cache.
+
 namespace Cop.Providers.SourceModel;
 
 /// <summary>
@@ -9,6 +11,7 @@ namespace Cop.Providers.SourceModel;
 /// </summary>
 public sealed record JavaTypeDeclaration : TypeDeclaration
 {
+    /// <summary>Copies a shared type and adds Java category and modifier facts.</summary>
     public JavaTypeDeclaration(
         TypeDeclaration source,
         bool isRecord,
@@ -45,8 +48,10 @@ public sealed record JavaTypeDeclaration : TypeDeclaration
     /// <summary>True for Java generic type declarations.</summary>
     public bool IsGeneric { get; init; }
 
+    /// <inheritdoc />
     public override string? LanguageTag => "java";
 
+    /// <inheritdoc />
     public override IReadOnlyList<KeyValuePair<string, bool>>? LanguageFlags =>
     [
         new("IsRecord", IsRecord),
@@ -57,17 +62,21 @@ public sealed record JavaTypeDeclaration : TypeDeclaration
         new("IsGeneric", IsGeneric),
     ];
 
+    /// <summary>
+    /// Registers reconstruction of Java type flags from cached declarations.
+    /// </summary>
     public static void RegisterCacheFactory() =>
         LanguageTypeRegistry.Register("java", (baseDecl, flags) => new JavaTypeDeclaration(
             baseDecl,
-            isRecord: flags.TryGetValue("IsRecord", out var r) && r,
-            isEnum: flags.TryGetValue("IsEnum", out var e) && e,
-            isSealed: flags.TryGetValue("IsSealed", out var s) && s,
-            isNonSealed: flags.TryGetValue("IsNonSealed", out var ns) && ns,
-            isFinal: flags.TryGetValue("IsFinal", out var f) && f,
-            isGeneric: flags.TryGetValue("IsGeneric", out var g) && g));
+            isRecord: flags.TryGetValue("IsRecord", out bool r) && r,
+            isEnum: flags.TryGetValue("IsEnum", out bool e) && e,
+            isSealed: flags.TryGetValue("IsSealed", out bool s) && s,
+            isNonSealed: flags.TryGetValue("IsNonSealed", out bool ns) && ns,
+            isFinal: flags.TryGetValue("IsFinal", out bool f) && f,
+            isGeneric: flags.TryGetValue("IsGeneric", out bool g) && g));
 }
 
+/// <summary>Converts shared type declarations to Java-specific declarations.</summary>
 public static class JavaTypeDeclarationExtensions
 {
     /// <summary>Wraps a common <see cref="TypeDeclaration"/> as a Java-specific one.</summary>

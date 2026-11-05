@@ -1,3 +1,5 @@
+// Preserves Python generator facts in shared method declarations and source caches.
+
 namespace Cop.Providers.SourceModel;
 
 /// <summary>
@@ -6,6 +8,9 @@ namespace Cop.Providers.SourceModel;
 /// </summary>
 public sealed record PythonMethodDeclaration : MethodDeclaration
 {
+    /// <summary>
+    /// Copies a shared method and records whether it is a Python generator.
+    /// </summary>
     public PythonMethodDeclaration(MethodDeclaration source, bool isGenerator = false)
         : base(source)
     {
@@ -30,17 +35,22 @@ public sealed record PythonMethodDeclaration : MethodDeclaration
     /// <summary>True for Python dunder methods such as <c>__str__</c>.</summary>
     public bool IsDunder => Name.Length > 4 && Name.StartsWith("__") && Name.EndsWith("__");
 
+    /// <inheritdoc />
     public override string? LanguageTag => "python";
 
+    /// <inheritdoc />
     public override IReadOnlyList<KeyValuePair<string, bool>>? LanguageFlags =>
     [
         new("IsGenerator", IsGenerator),
     ];
 
+    /// <summary>
+    /// Registers restoration of Python method facts from source caches.
+    /// </summary>
     public static void RegisterCacheFactory() =>
         MethodTypeRegistry.Register("python", (baseDecl, flags) => new PythonMethodDeclaration(
             baseDecl,
-            isGenerator: flags.TryGetValue("IsGenerator", out var g) ? g : ContainsYield(baseDecl)));
+            isGenerator: flags.TryGetValue("IsGenerator", out bool g) ? g : ContainsYield(baseDecl)));
 
     private bool HasDecorator(string name) => Decorators.Exists(d => IsDecorator(d, name));
 
@@ -51,8 +61,12 @@ public sealed record PythonMethodDeclaration : MethodDeclaration
         method.Statements.Exists(s => s.Kind == "yield");
 }
 
+/// <summary>
+/// Converts shared method declarations to Python-specific declarations.
+/// </summary>
 public static class PythonMethodDeclarationExtensions
 {
+    /// <summary>Wraps a shared method with its Python generator classification.</summary>
     public static PythonMethodDeclaration AsPython(this MethodDeclaration source, bool isGenerator = false)
         => new(source, isGenerator);
 }

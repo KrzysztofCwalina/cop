@@ -152,7 +152,7 @@ public class CSharpSemanticFactsTests
         }
 
         var eager = (Dictionary<string, List<object>>)new CSharpProvider().Query(new()
-            { RootPath = _root, Collection = "Files" })!;
+        { RootPath = _root, Collection = "Files" })!;
         var eagerFiles = eager["Files"].Cast<Cop.Providers.SourceModel.SourceFile>().ToDictionary(file => file.Path);
         Assert.That(eagerFiles["App/Caller.cs"].Projects, Is.EqualTo(new[] { "App" }));
         Assert.That(eagerFiles["Shared/Linked.cs"].Projects, Is.EqualTo(new[] { "App" }));
@@ -264,7 +264,10 @@ public class CSharpSemanticFactsTests
         var repository = TestContext.CurrentContext.TestDirectory;
         while (!File.Exists(Path.Combine(repository, "cop.sln")))
             repository = Path.GetDirectoryName(repository) ?? throw new AssertionException("Cannot locate package source.");
-        var result = Engine.Run(program, _root, additionalFeedPaths: [Path.Combine(repository, "packages")]);
+        var result = Engine.Run(program, _root, new EngineRunOptions
+        {
+            AdditionalFeedPaths = [Path.Combine(repository, "packages")],
+        });
         Assert.That(result.HasFatalErrors, Is.False, string.Join("; ", result.Errors));
         Assert.That(result.Outputs.Select(output => output.Message), Is.EqualTo(new[]
         {

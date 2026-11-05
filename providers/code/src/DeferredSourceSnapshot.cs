@@ -1,3 +1,5 @@
+// Discovers source inputs and parses only the files demanded by queries.
+
 using Cop.Core;
 using Cop.Providers.SourceModel;
 using Cop.Providers.SourceParsers;
@@ -26,57 +28,75 @@ public sealed class DeferredSourceSnapshot
         _root = Path.GetFullPath(query.RootPath!);
         _paths = new(() =>
         {
-            var paths = new List<string>();
+            List<string> paths = new List<string>();
             CodeCollectionBuilder.CollectSourceFiles(_root, parsers, query.ExcludedDirectories, paths);
             paths.Sort(StringComparer.Ordinal);
             return paths;
         });
         _parse = parse ?? (path => ParseFile(parsers, path));
         if (parse is null && OperatingSystem.IsWindows())
+        {
             _cache = new(_root + "\n" + parsers.CacheAssembly.ManifestModule.ModuleVersionId + "\n" +
                 string.Join("\n", (query.ExcludedDirectories ?? new HashSet<string>()).Order(StringComparer.Ordinal)));
+        }
+
         _projects = discoverProjects is null ? null : new(discoverProjects);
         if (_projects is not null)
+        {
             _projectDirectories = new(() => _projects.Value.Select(project =>
             {
-                var directory = Path.GetDirectoryName(Path.GetFullPath(project.Path, _root))!;
-                var files = project.SourceFiles is null ? null : new HashSet<string>(
+                string directory = Path.GetDirectoryName(Path.GetFullPath(project.Path, _root))!;
+                HashSet<string>? files = project.SourceFiles is null ? null : new HashSet<string>(
                     project.SourceFiles.Select(path => Path.GetFullPath(path, directory)),
                     OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
                 return (project.Name, Path.EndsInDirectorySeparator(directory)
                     ? directory : directory + Path.DirectorySeparatorChar, files);
             }).ToList());
+        }
     }
 
     private SourceFile? ParseFile(SourceParserRegistry parsers, string path)
     {
-        var parser = parsers.GetParser(Path.GetExtension(path))!;
+        ISourceParser parser = parsers.GetParser(Path.GetExtension(path))!;
         if (_cache is not null)
         {
-            var source = _cache.Read(path, parser);
+            SourceFile? source = _cache.Read(path, parser);
             if (_files.Count == Paths.Count)
+            {
                 _cache.Save(Paths);
+            }
+
             return source;
         }
-        var info = new FileInfo(path);
-        var fingerprint = System.Text.Encoding.UTF8.GetBytes(
+        FileInfo info = new FileInfo(path);
+        byte[] fingerprint = System.Text.Encoding.UTF8.GetBytes(
             $"{info.Length}:{info.LastWriteTimeUtc.Ticks}:{parser.GetCacheIdentity(path)}");
-        var canCache = parser.CanCache(path);
-        var cachePath = CodeCollectionBuilder.GetCachePath(_root + "\nfile\n" + path + "\n"
+        bool canCache = parser.CanCache(path);
+        string cachePath = CodeCollectionBuilder.GetCachePath(_root + "\nfile\n" + path + "\n"
             + parser.GetType().Assembly.ManifestModule.ModuleVersionId);
-        var cached = canCache ? SourceCacheSerializer.TryLoad(cachePath, fingerprint, parser.GetType().Assembly) : null;
+        List<SourceFile>? cached = canCache ? SourceCacheSerializer.TryLoad(cachePath, fingerprint, parser.GetType().Assembly) : null;
         if (cached is { Count: 1 })
         {
             if (CopDiagnostics.Timing)
+            {
                 Console.Error.WriteLine($"[provider-cache] {cached[0].Language} {Path.GetRelativePath(_root, path)}");
+            }
+
             return cached[0];
         }
-        using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
-        using var reader = new StreamReader(stream);
-        var parsed = parser.Parse(path, reader.ReadToEnd());
-        if (parsed is null) return null;
+        using FileStream stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+        using StreamReader reader = new StreamReader(stream);
+        SourceFile? parsed = parser.Parse(path, reader.ReadToEnd());
+        if (parsed is null)
+        {
+            return null;
+        }
+
         if (CopDiagnostics.Timing)
+        {
             Console.Error.WriteLine($"[provider-parse] {parsed.Language} {Path.GetRelativePath(_root, path)}");
+        }
+
         if (canCache && parsed.ParseErrors.Count == 0)
         {
             try { SourceCacheSerializer.Save(cachePath, fingerprint, [parsed]); }
@@ -90,13 +110,17 @@ public sealed class DeferredSourceSnapshot
 
     private SourceFile? ReadFile(string path)
     {
-        if (!_files.TryGetValue(path, out var file))
+        if (!_files.TryGetValue(path, out Lazy<SourceFile?>? file))
         {
             file = new(() =>
             {
-                var parsed = _parse(path);
-                if (parsed is null) return null;
-                var normalized = parsed with
+                SourceFile? parsed = _parse(path);
+                if (parsed is null)
+                {
+                    return null;
+                }
+
+                SourceFile normalized = parsed with
                 {
                     Path = Path.GetRelativePath(_root, path).Replace('\\', '/'),
                     FullPath = Path.GetFullPath(path),
@@ -106,37 +130,58 @@ public sealed class DeferredSourceSnapshot
                 void DeferMembers(TypeDeclaration type)
                 {
                     type.DeferMembers(() => ResolveMembers(type, normalized));
-                    foreach (var nested in type.NestedTypes) DeferMembers(nested);
+                    foreach (TypeDeclaration nested in type.NestedTypes)
+                    {
+                        DeferMembers(nested);
+                    }
                 }
                 if (_parsers.GetParser(Path.GetExtension(path))!.SupportsCrossFileMembers)
-                    foreach (var type in normalized.Types) DeferMembers(type);
+                {
+                    foreach (TypeDeclaration type in normalized.Types)
+                    {
+                        DeferMembers(type);
+                    }
+                }
+
                 if (_projectDirectories is not null)
+                {
                     normalized.DeferProjects(() => _projectDirectories.Value
                         .Where(project => project.Files is not null
                             ? project.Files.Contains(normalized.FullPath)
                             : normalized.FullPath.StartsWith(project.Directory,
                                 OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal))
                         .Select(project => project.Name).ToList());
-                foreach (var error in normalized.ParseErrors)
+                }
+
+                foreach (string error in normalized.ParseErrors)
+                {
                     ProviderErrors.Report(error);
+                }
+
                 if (CopDiagnostics.Timing)
+                {
                     Console.Error.WriteLine($"[provider-model] {normalized.Language} {normalized.Path}");
+                }
+
                 return normalized;
             });
             _files.Add(path, file);
         }
-        var result = file.Value;
+        SourceFile? result = file.Value;
         if (result is not null)
+        {
             ExecutionStatistics.RecordInputFile(path);
+        }
+
         return result;
     }
 
     private List<MethodDeclaration> ResolveMembers(TypeDeclaration type, SourceFile owner)
     {
-        var comparer = OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
-        var directory = Path.GetDirectoryName(owner.FullPath);
-        var extension = Path.GetExtension(owner.FullPath);
-        var files = Paths.Where(path => comparer.Equals(Path.GetDirectoryName(path), directory)
+        StringComparer comparer = OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
+        string? directory = Path.GetDirectoryName(owner.FullPath);
+        string extension = Path.GetExtension(owner.FullPath);
+        List<SourceFile> files = Paths.Where(path => comparer.Equals(Path.GetDirectoryName(path), directory)
                 && comparer.Equals(Path.GetExtension(path), extension))
             .Select(ReadFile).OfType<SourceFile>()
             .Where(file => file.Language == owner.Language).ToList();
@@ -145,24 +190,31 @@ public sealed class DeferredSourceSnapshot
 
     public DeferredProviderResult Query(ProviderQuery query, RuntimeBindings? bindings = null)
     {
-        var collections = new Dictionary<string, IEnumerable<object>>(StringComparer.Ordinal);
-        var extractors = CodeBindings.BuildExtractors();
-        var accessors = bindings?.Accessors ?? CodeBindings.BuildAccessors();
-        var itemTypes = CodeCollectionBuilder.GetCollectionItemTypes();
-        foreach (var (name, extractor) in extractors)
+        Dictionary<string, IEnumerable<object>> collections = new Dictionary<string, IEnumerable<object>>(StringComparer.Ordinal);
+        Dictionary<string, Func<object, List<object>>> extractors = CodeBindings.BuildExtractors();
+        Dictionary<string, Dictionary<string, Func<object, object?>>> accessors = bindings?.Accessors ?? CodeBindings.BuildAccessors();
+        Dictionary<string, string> itemTypes = CodeCollectionBuilder.GetCollectionItemTypes();
+        foreach ((string? name, Func<object, List<object>>? extractor) in extractors)
         {
-            if (query.Collection is not null && query.Collection != name) continue;
+            if (query.Collection is not null && query.Collection != name)
+            {
+                continue;
+            }
+
             Func<object, bool>? predicate = null;
-            var filter = query.CollectionFilters?.GetValueOrDefault(name) ?? query.Filter;
-            if (filter is not null && itemTypes.TryGetValue(name, out var type)
-                && accessors.TryGetValue(type, out var fields))
+            FilterExpression? filter = query.CollectionFilters?.GetValueOrDefault(name) ?? query.Filter;
+            if (filter is not null && itemTypes.TryGetValue(name, out string? type)
+                && accessors.TryGetValue(type, out Dictionary<string, Func<object, object?>>? fields))
+            {
                 predicate = Cop.Lang.FilterCompiler.Compile(filter, fields);
+            }
+
             collections[name] = Enumerate(name, extractor, predicate);
         }
         if (_projects is not null && (query.Collection is null or "Projects"))
         {
-            var filter = query.CollectionFilters?.GetValueOrDefault("Projects") ?? query.Filter;
-            var predicate = filter is null ? null : Cop.Lang.FilterCompiler.Compile(filter, accessors["Project"]);
+            FilterExpression? filter = query.CollectionFilters?.GetValueOrDefault("Projects") ?? query.Filter;
+            Func<object, bool>? predicate = filter is null ? null : Cop.Lang.FilterCompiler.Compile(filter, accessors["Project"]);
             collections["Projects"] = Projects(predicate);
         }
         return new(collections);
@@ -170,37 +222,55 @@ public sealed class DeferredSourceSnapshot
 
     private IEnumerable<object> Enumerate(string collection, Func<object, List<object>> extract, Func<object, bool>? predicate)
     {
-        foreach (var path in Paths)
+        foreach (string path in Paths)
         {
-            var file = ReadFile(path);
-            if (file is null) continue;
+            SourceFile? file = ReadFile(path);
+            if (file is null)
+            {
+                continue;
+            }
+
             IEnumerable<object> items;
             if (collection == "Types")
+            {
                 items = file.Types;
+            }
             else if (collection == "Statements")
+            {
                 items = file.Statements;
+            }
             else if (collection == "Calls")
+            {
                 items = file.Statements.Where(static statement => statement.Kind == "call");
+            }
             else
             {
-                var key = (path, collection);
-                if (!_collections.TryGetValue(key, out var projected))
+                (string path, string collection) key = (path, collection);
+                if (!_collections.TryGetValue(key, out List<object>? projected))
                 {
                     projected = extract(file);
                     _collections.Add(key, projected);
                 }
                 items = projected;
             }
-            foreach (var item in items)
+            foreach (object item in items)
+            {
                 if (predicate is null || predicate(item))
+                {
                     yield return item;
+                }
+            }
         }
     }
 
     private IEnumerable<object> Projects(Func<object, bool>? predicate)
     {
-        foreach (var project in _projects!.Value)
+        foreach (ProjectInfo project in _projects!.Value)
+        {
             if (predicate is null || predicate(project))
+            {
                 yield return project;
+            }
+        }
     }
 }

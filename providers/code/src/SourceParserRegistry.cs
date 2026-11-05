@@ -1,3 +1,5 @@
+// Selects registered source parsers by file extension.
+
 namespace Cop.Providers.SourceParsers;
 
 public class SourceParserRegistry
@@ -8,10 +10,12 @@ public class SourceParserRegistry
 
     public void Register(ISourceParser parser)
     {
-        foreach (var ext in parser.Extensions)
+        foreach (string ext in parser.Extensions)
+        {
             _parsers[ext] = parser;
+        }
     }
 
     public ISourceParser? GetParser(string fileExtension) =>
-        _parsers.TryGetValue(fileExtension, out var parser) ? parser : null;
+        _parsers.TryGetValue(fileExtension, out ISourceParser? parser) ? parser : null;
 }

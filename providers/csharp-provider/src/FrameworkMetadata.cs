@@ -1,3 +1,5 @@
+// Supplies bundled framework reference metadata for source and assembly analysis.
+
 using System.Collections.Immutable;
 using System.Reflection;
 using Microsoft.CodeAnalysis;
@@ -21,18 +23,21 @@ internal static class FrameworkMetadata
 
     private static ImmutableDictionary<string, ImmutableArray<byte>> ReadImages()
     {
-        var assembly = typeof(FrameworkMetadata).Assembly;
-        var images = ImmutableDictionary.CreateBuilder<string, ImmutableArray<byte>>(StringComparer.OrdinalIgnoreCase);
-        foreach (var name in assembly.GetManifestResourceNames().Where(name => name.StartsWith(Prefix, StringComparison.Ordinal)))
+        Assembly assembly = typeof(FrameworkMetadata).Assembly;
+        ImmutableDictionary<string, ImmutableArray<byte>>.Builder images = ImmutableDictionary.CreateBuilder<string, ImmutableArray<byte>>(StringComparer.OrdinalIgnoreCase);
+        foreach (string? name in assembly.GetManifestResourceNames().Where(name => name.StartsWith(Prefix, StringComparison.Ordinal)))
         {
-            using var stream = assembly.GetManifestResourceStream(name)
+            using Stream stream = assembly.GetManifestResourceStream(name)
                 ?? throw new InvalidOperationException($"Bundled C# framework metadata '{name}' is missing.");
-            using var buffer = new MemoryStream();
+            using MemoryStream buffer = new MemoryStream();
             stream.CopyTo(buffer);
             images.Add(Path.GetFileNameWithoutExtension(name[Prefix.Length..]), ImmutableArray.CreateRange(buffer.ToArray()));
         }
         if (!images.ContainsKey("System.Runtime") || !images.ContainsKey("mscorlib"))
+        {
             throw new InvalidOperationException("Bundled C# framework reference metadata is incomplete; rebuild the C# provider with the .NET SDK.");
+        }
+
         return images.ToImmutable();
     }
 
@@ -45,12 +50,17 @@ internal static class FrameworkMetadata
         {
             // Framework references must come from one coherent pack, never implementation DLLs
             // incidentally adjacent to the inspected library.
-            if (assemblyName.Name is { } name && Images.Value.TryGetValue(name, out var image))
+            if (assemblyName.Name is { } name && Images.Value.TryGetValue(name, out ImmutableArray<byte> image))
+            {
                 return context.LoadFromByteArray(image.ToArray());
+            }
             // Direct implementation-core references need the pack's forwarding facade:
             // core-library APIs are split across System.Runtime, System.Collections, etc.
             if (assemblyName.Name == "System.Private.CoreLib")
+            {
                 return context.LoadFromByteArray(Images.Value["mscorlib"].ToArray());
+            }
+
             return _local.Resolve(context, assemblyName);
         }
     }

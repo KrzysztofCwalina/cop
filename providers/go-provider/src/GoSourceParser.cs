@@ -1,22 +1,34 @@
+// Tokenizes Go source and projects declarations and statements into the code model.
+
 using Cop.Providers.SourceModel;
 
 namespace Cop.Providers.SourceParsers;
 
+/// <summary>
+/// Parses Go source and enriches it with available native compiler facts.
+/// </summary>
 public class GoSourceParser(string? toolchainSearchPath = null, Func<string, Cop.Core.ToolchainResult>? nativeRequest = null) : ISourceParser
 {
+    /// <summary>Creates a Go parser using the default toolchain discovery path.</summary>
     public GoSourceParser() : this(null, null) { }
+    /// <inheritdoc />
     public override IReadOnlyList<string> Extensions => [".go"];
+    /// <inheritdoc />
     public override string Language => "go";
+    /// <inheritdoc />
     public override bool CanCache(string filePath) => false;
+    /// <inheritdoc />
     public override bool SupportsCrossFileMembers => true;
+    /// <inheritdoc />
     public override string GetCacheIdentity(string filePath) =>
         base.GetCacheIdentity(filePath) + ":" + GoNativeAnalysis.Identity(toolchainSearchPath, nativeRequest is not null);
 
+    /// <inheritdoc />
     public override SourceFile? Parse(string filePath, string sourceText)
     {
-        var lexer = new GoLexer(sourceText);
-        var tokens = lexer.Tokenize();
-        var parser = new GoParser(tokens, sourceText, filePath, lexer.LexErrors);
+        GoLexer lexer = new GoLexer(sourceText);
+        List<GoToken> tokens = lexer.Tokenize();
+        GoParser parser = new GoParser(tokens, sourceText, filePath, lexer.LexErrors);
         return GoNativeAnalysis.Enrich(parser.Parse(filePath), toolchainSearchPath, nativeRequest);
     }
 }
@@ -53,13 +65,17 @@ internal class GoLexer(string source)
 
     private int ColAt(int pos) => pos - _lineStart + 1;
 
+    /// <summary>Reads Go tokens with their source positions.</summary>
     public List<GoToken> Tokenize()
     {
-        var tokens = new List<GoToken>();
+        List<GoToken> tokens = new List<GoToken>();
         while (_pos < source.Length)
         {
             SkipWhitespace();
-            if (_pos >= source.Length) break;
+            if (_pos >= source.Length)
+            {
+                break;
+            }
 
             char c = source[_pos];
 
@@ -128,25 +144,35 @@ internal class GoLexer(string source)
     /// </summary>
     private static List<GoToken> InsertSemicolons(List<GoToken> raw)
     {
-        var result = new List<GoToken>(raw.Count + 32);
+        List<GoToken> result = new List<GoToken>(raw.Count + 32);
         for (int i = 0; i < raw.Count; i++)
         {
-            var cur = raw[i];
+            GoToken cur = raw[i];
             result.Add(cur);
 
             // Comments are transparent to ASI — skip them when finding the next real token.
-            if (cur.Kind is GoTokenKind.LineComment or GoTokenKind.BlockComment) continue;
+            if (cur.Kind is GoTokenKind.LineComment or GoTokenKind.BlockComment)
+            {
+                continue;
+            }
 
-            if (!NeedsAutoSemicolon(cur)) continue;
+            if (!NeedsAutoSemicolon(cur))
+            {
+                continue;
+            }
 
             // Find the next non-comment token to check if it's on a later line.
             int j = i + 1;
             while (j < raw.Count && raw[j].Kind is GoTokenKind.LineComment or GoTokenKind.BlockComment)
+            {
                 j++;
+            }
 
             bool nextIsLaterLine = j >= raw.Count || raw[j].Line > cur.Line;
             if (nextIsLaterLine)
+            {
                 result.Add(new GoToken(GoTokenKind.Punctuation, ";", cur.Line, cur.Col + cur.Value.Length, cur.End, cur.End));
+            }
         }
         return result;
     }
@@ -154,11 +180,20 @@ internal class GoLexer(string source)
     private static bool NeedsAutoSemicolon(GoToken t)
     {
         if (t.Kind is GoTokenKind.Identifier or GoTokenKind.StringLiteral or GoTokenKind.NumberLiteral)
+        {
             return true;
+        }
+
         if (t.Kind == GoTokenKind.Keyword && t.Value is "break" or "continue" or "fallthrough" or "return")
+        {
             return true;
+        }
+
         if (t.Kind == GoTokenKind.Punctuation && t.Value is "++" or "--" or ")" or "]" or "}")
+        {
             return true;
+        }
+
         return false;
     }
 
@@ -168,8 +203,14 @@ internal class GoLexer(string source)
         {
             char c = source[_pos];
             if (c == '\n') { _pos++; _line++; _lineStart = _pos; }
-            else if (c is ' ' or '\t' or '\r') _pos++;
-            else break;
+            else if (c is ' ' or '\t' or '\r')
+            {
+                _pos++;
+            }
+            else
+            {
+                break;
+            }
         }
     }
 
@@ -178,7 +219,11 @@ internal class GoLexer(string source)
         int start = _pos;
         int line = _line;
         int col = ColAt(start);
-        while (_pos < source.Length && source[_pos] != '\n') _pos++;
+        while (_pos < source.Length && source[_pos] != '\n')
+        {
+            _pos++;
+        }
+
         return new GoToken(GoTokenKind.LineComment, source[start.._pos], line, col, start, _pos);
     }
 
@@ -194,10 +239,16 @@ internal class GoLexer(string source)
             if (source[_pos] == '*' && _pos + 1 < source.Length && source[_pos + 1] == '/')
             { _pos += 2; closed = true; break; }
             if (source[_pos] == '\n') { _pos++; _line++; _lineStart = _pos; }
-            else _pos++;
+            else
+            {
+                _pos++;
+            }
         }
         if (!closed)
+        {
             _lexErrors.Add((line, col, "unterminated block comment"));
+        }
+
         return new GoToken(GoTokenKind.BlockComment, source[start.._pos], line, col, start, _pos);
     }
 
@@ -212,12 +263,26 @@ internal class GoLexer(string source)
         {
             char c = source[_pos];
             if (c == '"') { _pos++; closed = true; break; }
-            if (c == '\n') break; // Go interpreted strings must not span lines
-            if (c == '\\') { _pos++; if (_pos < source.Length) _pos++; }
-            else _pos++;
+            if (c == '\n')
+            {
+                break; // Go interpreted strings must not span lines
+            }
+
+            if (c == '\\') { _pos++; if (_pos < source.Length)
+                {
+                    _pos++;
+                }
+            }
+            else
+            {
+                _pos++;
+            }
         }
         if (!closed)
+        {
             _lexErrors.Add((line, col, "unterminated string literal"));
+        }
+
         return new GoToken(GoTokenKind.StringLiteral, source[start.._pos], line, col, start, _pos);
     }
 
@@ -232,10 +297,16 @@ internal class GoLexer(string source)
         {
             if (source[_pos] == '`') { _pos++; closed = true; break; }
             if (source[_pos] == '\n') { _pos++; _line++; _lineStart = _pos; }
-            else _pos++;
+            else
+            {
+                _pos++;
+            }
         }
         if (!closed)
+        {
             _lexErrors.Add((line, col, "unterminated raw string literal"));
+        }
+
         return new GoToken(GoTokenKind.StringLiteral, source[start.._pos], line, col, start, _pos);
     }
 
@@ -245,9 +316,21 @@ internal class GoLexer(string source)
         int line = _line;
         int col = ColAt(start);
         _pos++; // skip '
-        if (_pos < source.Length && source[_pos] == '\\') { _pos++; if (_pos < source.Length) _pos++; }
-        else if (_pos < source.Length) _pos++;
-        if (_pos < source.Length && source[_pos] == '\'') _pos++;
+        if (_pos < source.Length && source[_pos] == '\\') { _pos++; if (_pos < source.Length)
+            {
+                _pos++;
+            }
+        }
+        else if (_pos < source.Length)
+        {
+            _pos++;
+        }
+
+        if (_pos < source.Length && source[_pos] == '\'')
+        {
+            _pos++;
+        }
+
         return new GoToken(GoTokenKind.StringLiteral, source[start.._pos], line, col, start, _pos);
     }
 
@@ -257,7 +340,10 @@ internal class GoLexer(string source)
         int line = _line;
         int col = ColAt(start);
         while (_pos < source.Length && (char.IsLetterOrDigit(source[_pos]) || source[_pos] is '.' or '_' or 'x' or 'X'))
+        {
             _pos++;
+        }
+
         return new GoToken(GoTokenKind.NumberLiteral, source[start.._pos], line, col, start, _pos);
     }
 
@@ -267,9 +353,12 @@ internal class GoLexer(string source)
         int line = _line;
         int col = ColAt(start);
         while (_pos < source.Length && (char.IsLetterOrDigit(source[_pos]) || source[_pos] == '_'))
+        {
             _pos++;
-        var value = source[start.._pos];
-        var kind = Keywords.Contains(value) ? GoTokenKind.Keyword : GoTokenKind.Identifier;
+        }
+
+        string value = source[start.._pos];
+        GoTokenKind kind = Keywords.Contains(value) ? GoTokenKind.Keyword : GoTokenKind.Identifier;
         return new GoToken(kind, value, line, col, start, _pos);
     }
 
@@ -280,13 +369,13 @@ internal class GoLexer(string source)
         int col = ColAt(start);
         if (_pos + 2 < source.Length)
         {
-            var three = source.Substring(_pos, 3);
+            string three = source.Substring(_pos, 3);
             if (three is "..." or "<<=" or ">>=")
             { _pos += 3; return new GoToken(GoTokenKind.Punctuation, three, line, col, start, _pos); }
         }
         if (_pos + 1 < source.Length)
         {
-            var two = source.Substring(_pos, 2);
+            string two = source.Substring(_pos, 2);
             if (two is ":=" or "==" or "!=" or "<=" or ">=" or "&&" or "||" or "<-" or "++" or "--" or "+=" or "-=" or "*=" or "/=" or "<<" or ">>")
             { _pos += 2; return new GoToken(GoTokenKind.Punctuation, two, line, col, start, _pos); }
         }
@@ -308,24 +397,30 @@ internal class GoParser(List<GoToken> tokens, string sourceText, string filePath
     private void AddError(string message, int line, int col) =>
         _errors.Add($"{filePath}({line},{col}): error: {message}");
 
+    /// <summary>Projects the tokenized Go source into a file-scoped code model.</summary>
     public SourceFile Parse(string filePath)
     {
         // Seed errors from the lex phase (unterminated strings / block comments)
-        foreach (var (line, col, msg) in lexErrors)
+        foreach ((int line, int col, string? msg) in lexErrors)
+        {
             AddError(msg, line, col);
+        }
 
-        var types = new List<TypeDeclaration>();
-        var statements = new List<StatementInfo>();
-        var receiverMethods = new List<(string Receiver, MethodDeclaration Method)>();
-        var freeFunctions = new List<MethodDeclaration>();
-        var usings = new List<string>();
-        var imports = new List<ImportInfo>();
+        List<TypeDeclaration> types = new List<TypeDeclaration>();
+        List<StatementInfo> statements = new List<StatementInfo>();
+        List<(string Receiver, MethodDeclaration Method)> receiverMethods = new List<(string Receiver, MethodDeclaration Method)>();
+        List<MethodDeclaration> freeFunctions = new List<MethodDeclaration>();
+        List<string> usings = new List<string>();
+        List<ImportInfo> imports = new List<ImportInfo>();
         string? ns = null;
 
         while (!IsAtEnd())
         {
             SkipComments();
-            if (IsAtEnd()) break;
+            if (IsAtEnd())
+            {
+                break;
+            }
 
             if (MatchKeyword("package"))
             {
@@ -341,20 +436,24 @@ internal class GoParser(List<GoToken> tokens, string sourceText, string filePath
             }
             else if (CheckKeyword("func"))
             {
-                var method = ParseFunc(statements);
+                (MethodDeclaration? method, string? receiver)? method = ParseFunc(statements);
                 if (method is { } parsed && parsed.method != null)
                 {
                     if (parsed.receiver != null)
+                    {
                         receiverMethods.Add((parsed.receiver, parsed.method));
+                    }
                     else
+                    {
                         freeFunctions.Add(parsed.method);
+                    }
                 }
             }
             else if (CheckKeyword("var") || CheckKeyword("const"))
             {
                 int start = _pos;
                 SkipVarOrConst();
-                var initializers = new List<StatementInfo>();
+                List<StatementInfo> initializers = new List<StatementInfo>();
                 GoStructuralFacts.Enrich(tokens, start + 1, _pos, initializers, inMethod: false);
                 statements.AddRange(initializers);
             }
@@ -364,13 +463,17 @@ internal class GoParser(List<GoToken> tokens, string sourceText, string filePath
             }
         }
 
-        foreach (var (receiver, method) in receiverMethods)
+        foreach ((string? receiver, MethodDeclaration? method) in receiverMethods)
         {
-            var type = types.FirstOrDefault(t => t.Name == receiver);
+            TypeDeclaration? type = types.FirstOrDefault(t => t.Name == receiver);
             if (type is null)
+            {
                 continue;
+            }
             else
+            {
                 type.Methods.Add(method);
+            }
         }
 
         // Go free functions (no receiver) aren't members of any type. Surface them as methods of a
@@ -378,17 +481,21 @@ internal class GoParser(List<GoToken> tokens, string sourceText, string filePath
         // flat Methods collection and can be narrowed with :asGo.
         if (freeFunctions.Count > 0)
         {
-            var moduleName = System.IO.Path.GetFileNameWithoutExtension(filePath) + " (functions)";
+            string moduleName = System.IO.Path.GetFileNameWithoutExtension(filePath) + " (functions)";
             types.Add(new TypeDeclaration(moduleName, TypeKind.Class, Modifier.Public, [], [], [], freeFunctions, [], [], 0).AsGo());
         }
 
         // Detect missing package clause — every non-empty Go file must declare one.
         if (ns == null && HasSubstantialContent())
+        {
             AddError("missing package clause", 1, 1);
+        }
 
         // Check bracket balance only when no lex errors (lex errors truncate the token stream).
         if (lexErrors.Count == 0)
+        {
             CheckBracketBalance();
+        }
 
         return new SourceFile(filePath, "go", types, statements, sourceText)
         {
@@ -415,11 +522,15 @@ internal class GoParser(List<GoToken> tokens, string sourceText, string filePath
     private void CheckBracketBalance()
     {
         int braces = 0, parens = 0, brackets = 0;
-        foreach (var t in tokens)
+        foreach (GoToken t in tokens)
         {
             if (t.Kind is GoTokenKind.LineComment or GoTokenKind.BlockComment
                        or GoTokenKind.StringLiteral or GoTokenKind.NumberLiteral
-                       or GoTokenKind.Eof) continue;
+                       or GoTokenKind.Eof)
+            {
+                continue;
+            }
+
             switch (t.Value)
             {
                 case "{": braces++; break;
@@ -436,10 +547,21 @@ internal class GoParser(List<GoToken> tokens, string sourceText, string filePath
                     break;
             }
         }
-        var eof = tokens[^1];
-        if (braces > 0) AddError("expected closing '}'", eof.Line, eof.Col);
-        if (parens > 0) AddError("expected closing ')'", eof.Line, eof.Col);
-        if (brackets > 0) AddError("expected closing ']'", eof.Line, eof.Col);
+        GoToken eof = tokens[^1];
+        if (braces > 0)
+        {
+            AddError("expected closing '}'", eof.Line, eof.Col);
+        }
+
+        if (parens > 0)
+        {
+            AddError("expected closing ')'", eof.Line, eof.Col);
+        }
+
+        if (brackets > 0)
+        {
+            AddError("expected closing ']'", eof.Line, eof.Col);
+        }
     }
 
     private void ParseImports(List<string> usings, List<ImportInfo> imports)
@@ -451,7 +573,10 @@ internal class GoParser(List<GoToken> tokens, string sourceText, string filePath
             while (!IsAtEnd() && !Check(")"))
             {
                 SkipComments();
-                if (Check(")")) break;
+                if (Check(")"))
+                {
+                    break;
+                }
                 // optional alias
                 string? alias = null;
                 if (Current().Kind == GoTokenKind.Identifier || Check(".") || Check("_"))
@@ -463,9 +588,15 @@ internal class GoParser(List<GoToken> tokens, string sourceText, string filePath
                         { Alias = alias, IsWildcard = alias == ".", Column = Current().Col });
                     Advance();
                 }
-                else Advance();
+                else
+                {
+                    Advance();
+                }
             }
-            if (Check(")")) Advance();
+            if (Check(")"))
+            {
+                Advance();
+            }
         }
         else if (Current().Kind == GoTokenKind.StringLiteral)
         {
@@ -500,17 +631,34 @@ internal class GoParser(List<GoToken> tokens, string sourceText, string filePath
                 int before = _pos;
                 SkipComments();
                 if (Check(";")) { Advance(); continue; }
-                if (Check(")")) break;
-                var t = ParseSingleType(statements);
-                if (t != null) types.Add(t);
-                if (_pos == before) Advance();
+                if (Check(")"))
+                {
+                    break;
+                }
+
+                TypeDeclaration? t = ParseSingleType(statements);
+                if (t != null)
+                {
+                    types.Add(t);
+                }
+
+                if (_pos == before)
+                {
+                    Advance();
+                }
             }
-            if (Check(")")) Advance();
+            if (Check(")"))
+            {
+                Advance();
+            }
         }
         else
         {
-            var t = ParseSingleType(statements);
-            if (t != null) types.Add(t);
+            TypeDeclaration? t = ParseSingleType(statements);
+            if (t != null)
+            {
+                types.Add(t);
+            }
         }
     }
 
@@ -522,21 +670,27 @@ internal class GoParser(List<GoToken> tokens, string sourceText, string filePath
         if (Current().Kind != GoTokenKind.Identifier)
         {
             if (!IsAtEnd())
+            {
                 AddError($"expected type name, got '{Current().Value}'", Current().Line, Current().Col);
+            }
+
             return null;
         }
 
         int line = CurrentLine();
         string name = ConsumeIdentifier();
-        if (name == "") return null;
+        if (name == "")
+        {
+            return null;
+        }
 
         bool isExported = char.IsUpper(name[0]);
-        var modifiers = isExported ? Modifier.Public : Modifier.Private;
+        Modifier modifiers = isExported ? Modifier.Public : Modifier.Private;
 
         // Skip optional type parameters [T any] so we can still see 'struct'/'interface'
         int genericStart = _pos;
         SkipGenerics();
-        var typeParameters = genericStart < _pos
+        List<string> typeParameters = genericStart < _pos
             ? new List<string> { string.Join(" ", tokens[(genericStart + 1)..(_pos - 1)].Select(t => t.Value)) } : [];
 
         if (CheckKeyword("struct"))
@@ -551,7 +705,11 @@ internal class GoParser(List<GoToken> tokens, string sourceText, string filePath
         {
             // type alias or other
             bool isAlias = Check("=");
-            if (isAlias) Advance();
+            if (isAlias)
+            {
+                Advance();
+            }
+
             string aliasType = ConsumeType();
             return new TypeDeclaration(name, isAlias ? TypeKind.Alias : TypeKind.Struct, modifiers,
                 aliasType.Length > 0 ? [aliasType] : [], [], [], [], [], [], line)
@@ -565,8 +723,8 @@ internal class GoParser(List<GoToken> tokens, string sourceText, string filePath
     private TypeDeclaration ParseStructType(string name, Modifier modifiers, bool hasDoc, int line)
     {
         Advance(); // skip 'struct'
-        var fields = new List<FieldDeclaration>();
-        var embedded = new List<string>();
+        List<FieldDeclaration> fields = new List<FieldDeclaration>();
+        List<string> embedded = new List<string>();
         bool hasStructTags = false;
 
         if (Check("{"))
@@ -575,7 +733,10 @@ internal class GoParser(List<GoToken> tokens, string sourceText, string filePath
             while (!IsAtEnd() && !Check("}"))
             {
                 SkipComments();
-                if (Check("}")) break;
+                if (Check("}"))
+                {
+                    break;
+                }
 
                 // Could be an embedded type or field(s)
                 string fieldName = "";
@@ -585,7 +746,7 @@ internal class GoParser(List<GoToken> tokens, string sourceText, string filePath
                 {
                     string first = Current().Value;
                     Advance();
-                    var fieldNames = new List<string> { first };
+                    List<string> fieldNames = new List<string> { first };
                     while (Check(",") && Peek().Kind == GoTokenKind.Identifier)
                     {
                         Advance();
@@ -598,10 +759,12 @@ internal class GoParser(List<GoToken> tokens, string sourceText, string filePath
                         fieldName = first;
                         string fieldType = ConsumeType(includeBraces: true);
                         bool fieldExported = char.IsUpper(fieldName[0]);
-                        foreach (var n in fieldNames)
+                        foreach (string n in fieldNames)
+                        {
                             fields.Add(new FieldDeclaration(n,
                                 new TypeReference(fieldType, null, [], fieldType),
                                 char.IsUpper(n[0]) ? Modifier.Public : Modifier.Private, fieldLine));
+                        }
                     }
                     else
                     {
@@ -622,7 +785,10 @@ internal class GoParser(List<GoToken> tokens, string sourceText, string filePath
                 {
                     Advance(); // skip ASI semicolons between fields
                 }
-                else Advance();
+                else
+                {
+                    Advance();
+                }
 
                 // Skip struct tags
                 if (Current().Kind == GoTokenKind.StringLiteral)
@@ -631,7 +797,10 @@ internal class GoParser(List<GoToken> tokens, string sourceText, string filePath
                     Advance();
                 }
             }
-            if (Check("}")) Advance();
+            if (Check("}"))
+            {
+                Advance();
+            }
         }
 
         return new TypeDeclaration(name, TypeKind.Struct, modifiers, embedded, [], [], [], [], [], line)
@@ -641,8 +810,8 @@ internal class GoParser(List<GoToken> tokens, string sourceText, string filePath
     private TypeDeclaration ParseInterfaceType(string name, Modifier modifiers, bool hasDoc, int line, List<StatementInfo> statements)
     {
         Advance(); // skip 'interface'
-        var methods = new List<MethodDeclaration>();
-        var embedded = new List<string>();
+        List<MethodDeclaration> methods = new List<MethodDeclaration>();
+        List<string> embedded = new List<string>();
         bool hasUnion = false;
         bool hasUnderlying = false;
 
@@ -652,9 +821,20 @@ internal class GoParser(List<GoToken> tokens, string sourceText, string filePath
             while (!IsAtEnd() && !Check("}"))
             {
                 SkipComments();
-                if (Check("}")) break;
-                if (Check("|")) hasUnion = true;
-                if (Check("~")) hasUnderlying = true;
+                if (Check("}"))
+                {
+                    break;
+                }
+
+                if (Check("|"))
+                {
+                    hasUnion = true;
+                }
+
+                if (Check("~"))
+                {
+                    hasUnderlying = true;
+                }
 
                 if (Current().Kind == GoTokenKind.Identifier)
                 {
@@ -665,7 +845,7 @@ internal class GoParser(List<GoToken> tokens, string sourceText, string filePath
                     if (Check("("))
                     {
                         // Method signature
-                        var parameters = ParseParamList();
+                        List<ParameterDeclaration> parameters = ParseParamList();
                         TypeReference? returnType = ParseReturnType(out bool hasNamedReturns);
                         bool exported = char.IsUpper(methodOrType[0]);
                         methods.Add(new MethodDeclaration(methodOrType,
@@ -680,9 +860,15 @@ internal class GoParser(List<GoToken> tokens, string sourceText, string filePath
                         embedded.Add(methodOrType);
                     }
                 }
-                else Advance();
+                else
+                {
+                    Advance();
+                }
             }
-            if (Check("}")) Advance();
+            if (Check("}"))
+            {
+                Advance();
+            }
         }
 
         return new TypeDeclaration(name, TypeKind.Interface, modifiers, embedded, [], [], methods, [], [], line)
@@ -718,14 +904,20 @@ internal class GoParser(List<GoToken> tokens, string sourceText, string filePath
                 Advance();
             }
             SkipGenerics();
-            if (Check(")")) Advance();
+            if (Check(")"))
+            {
+                Advance();
+            }
         }
 
         if (Current().Kind != GoTokenKind.Identifier)
         {
             // func keyword not followed by a name — report the error and skip the body
             if (!IsAtEnd())
+            {
                 AddError($"expected function name, got '{Current().Value}'", Current().Line, Current().Col);
+            }
+
             SkipBraces();
             return null;
         }
@@ -736,20 +928,20 @@ internal class GoParser(List<GoToken> tokens, string sourceText, string filePath
         bool isGeneric = Check("[");
         SkipGenerics();
 
-        var parameters = ParseParamList();
+        List<ParameterDeclaration> parameters = ParseParamList();
         TypeReference? returnType = ParseReturnType(out bool hasNamedReturns);
 
         bool isExported = char.IsUpper(name[0]);
-        var modifiers = isExported ? Modifier.Public : Modifier.Private;
+        Modifier modifiers = isExported ? Modifier.Public : Modifier.Private;
 
-        var methodStatements = new List<StatementInfo>();
+        List<StatementInfo> methodStatements = new List<StatementInfo>();
         if (Check("{"))
         {
             ParseBlock(methodStatements);
         }
         statements.AddRange(methodStatements);
 
-        var method = new MethodDeclaration(name, modifiers, [], returnType, parameters, line)
+        GoMethodDeclaration method = new MethodDeclaration(name, modifiers, [], returnType, parameters, line)
         { Statements = methodStatements, HasDocComment = hasDoc, ReceiverType = receiverType }
             .AsGo(
                 isPointerReceiver: isPointerReceiver,
@@ -757,62 +949,123 @@ internal class GoParser(List<GoToken> tokens, string sourceText, string filePath
                 isVariadic: parameters.Any(p => p.IsVariadic),
                 isGeneric: isGeneric);
 
-        foreach (var statement in methodStatements) statement.Method = method;
+        foreach (StatementInfo statement in methodStatements)
+        {
+            statement.Method = method;
+        }
+
         return (method, receiverType);
     }
 
     private List<ParameterDeclaration> ParseParamList()
     {
-        var parameters = new List<ParameterDeclaration>();
-        if (!Check("(")) return parameters;
+        List<ParameterDeclaration> parameters = new List<ParameterDeclaration>();
+        if (!Check("("))
+        {
+            return parameters;
+        }
+
         Advance();
-        var pending = new List<GoToken>();
+        List<GoToken> pending = new List<GoToken>();
         while (!IsAtEnd() && !Check(")"))
         {
             SkipComments();
-            if (Check(")")) break;
+            if (Check(")"))
+            {
+                break;
+            }
+
             int start = _pos, depth = 0;
             while (!IsAtEnd())
             {
-                if (depth == 0 && (Check(",") || Check(")"))) break;
-                if (Check("(") || Check("[") || Check("{")) depth++;
-                if (Check(")") || Check("]") || Check("}")) depth--;
+                if (depth == 0 && (Check(",") || Check(")")))
+                {
+                    break;
+                }
+
+                if (Check("(") || Check("[") || Check("{"))
+                {
+                    depth++;
+                }
+
+                if (Check(")") || Check("]") || Check("}"))
+                {
+                    depth--;
+                }
+
                 Advance();
             }
-            var group = tokens[start.._pos].Where(t => t.Kind is not GoTokenKind.LineComment and not GoTokenKind.BlockComment).ToList();
+            List<GoToken> group = tokens[start.._pos].Where(t => t.Kind is not GoTokenKind.LineComment and not GoTokenKind.BlockComment).ToList();
             if (group.Count == 1 && group[0].Kind == GoTokenKind.Identifier)
+            {
                 pending.Add(group[0]);
+            }
             else if (group.Count > 0)
             {
                 int bracketDepth = 0, bracketEnd = -1;
                 if (group.Count > 1 && group[1].Value == "[")
+                {
                     for (int i = 1; i < group.Count; i++)
                     {
-                        if (group[i].Value == "[") bracketDepth++;
+                        if (group[i].Value == "[")
+                        {
+                            bracketDepth++;
+                        }
                         else if (group[i].Value == "]" && --bracketDepth == 0) { bracketEnd = i; break; }
                     }
+                }
+
                 bool named = group.Count > 1 && group[0].Kind == GoTokenKind.Identifier &&
                     (group[1].Kind is GoTokenKind.Identifier or GoTokenKind.Keyword || group[1].Value is "*" or "[" or "...")
                     && bracketEnd != group.Count - 1;
-                var nameTokens = named ? pending.Append(group[0]).ToList() : new List<GoToken>();
+                List<GoToken> nameTokens = named ? pending.Append(group[0]).ToList() : new List<GoToken>();
                 if (!named)
                 {
-                    foreach (var token in pending) AddParameter("", token.Value, false, token);
+                    foreach (GoToken token in pending)
+                    {
+                        AddParameter("", token.Value, false, token);
+                    }
                 }
                 pending.Clear();
                 int typeStart = named ? 1 : 0;
                 bool variadic = group[typeStart].Value == "...";
-                if (variadic) typeStart++;
+                if (variadic)
+                {
+                    typeStart++;
+                }
+
                 string type = string.Concat(group.Skip(typeStart).Select(t => t.Value));
                 if (named)
-                    foreach (var token in nameTokens) AddParameter(token.Value, type, variadic, token);
-                else AddParameter("", type, variadic, group[0]);
+                {
+                    foreach (GoToken token in nameTokens)
+                    {
+                        AddParameter(token.Value, type, variadic, token);
+                    }
+                }
+                else
+                {
+                    AddParameter("", type, variadic, group[0]);
+                }
             }
-            if (Check(",")) Advance();
-            else if (_pos == start && !IsAtEnd() && !Check(")")) Advance();
+            if (Check(","))
+            {
+                Advance();
+            }
+            else if (_pos == start && !IsAtEnd() && !Check(")"))
+            {
+                Advance();
+            }
         }
-        foreach (var token in pending) AddParameter("", token.Value, false, token);
-        if (Check(")")) Advance();
+        foreach (GoToken token in pending)
+        {
+            AddParameter("", token.Value, false, token);
+        }
+
+        if (Check(")"))
+        {
+            Advance();
+        }
+
         return parameters;
 
         void AddParameter(string name, string type, bool variadic, GoToken token) =>
@@ -835,29 +1088,44 @@ internal class GoParser(List<GoToken> tokens, string sourceText, string filePath
         if (!Check("{") && !IsAtEnd() && (Current().Kind is GoTokenKind.Identifier or GoTokenKind.Keyword || Check("*") || Check("[")) && !CheckKeyword("func"))
         {
             string retType = ConsumeType();
-            if (retType != "") return new TypeReference(retType, null, [], retType);
+            if (retType != "")
+            {
+                return new TypeReference(retType, null, [], retType);
+            }
         }
         return null;
     }
 
     private static bool HasNamedReturnParameters(IReadOnlyList<GoToken> returnTokens)
     {
-        var group = new List<GoToken>();
+        List<GoToken> group = new List<GoToken>();
         int depth = 0;
-        foreach (var token in returnTokens)
+        foreach (GoToken token in returnTokens)
         {
-            if (token.Value is "(" or "[" or "{") depth++;
-            else if (token.Value is ")" or "]" or "}") depth--;
+            if (token.Value is "(" or "[" or "{")
+            {
+                depth++;
+            }
+            else if (token.Value is ")" or "]" or "}")
+            {
+                depth--;
+            }
 
             if (depth == 1 && token.Value == ",")
             {
-                if (IsNamedReturnGroup(group)) return true;
+                if (IsNamedReturnGroup(group))
+                {
+                    return true;
+                }
+
                 group.Clear();
                 continue;
             }
 
             if (depth == 1 && token.Value is not "(" and not ")")
+            {
                 group.Add(token);
+            }
         }
 
         return IsNamedReturnGroup(group);
@@ -865,12 +1133,14 @@ internal class GoParser(List<GoToken> tokens, string sourceText, string filePath
 
     private static bool IsNamedReturnGroup(IReadOnlyList<GoToken> group)
     {
-        var significant = group
+        List<GoToken> significant = group
             .Where(t => t.Kind is GoTokenKind.Identifier or GoTokenKind.Keyword || t.Value is "*" or "...")
             .Take(2)
             .ToList();
         if (significant.Count < 2 || significant[0].Kind != GoTokenKind.Identifier)
+        {
             return false;
+        }
 
         return significant[1].Kind is GoTokenKind.Identifier or GoTokenKind.Keyword
             || significant[1].Value is "*" or "...";
@@ -878,7 +1148,11 @@ internal class GoParser(List<GoToken> tokens, string sourceText, string filePath
 
     private void ParseBlock(List<StatementInfo> statements)
     {
-        if (!Check("{")) return;
+        if (!Check("{"))
+        {
+            return;
+        }
+
         int blockStart = _pos;
         Advance();
         int depth = 1;
@@ -912,9 +1186,14 @@ internal class GoParser(List<GoToken> tokens, string sourceText, string filePath
             {
                 int stmtLine = CurrentLine();
                 if (ContainsKeywordBeforeBlock("range"))
+                {
                     statements.Add(new GoStatementInfo("range", [], null, null, [], stmtLine, true));
+                }
                 else
+                {
                     statements.Add(new GoStatementInfo("for", [], null, null, [], stmtLine, true));
+                }
+
                 Advance();
                 continue;
             }
@@ -923,9 +1202,14 @@ internal class GoParser(List<GoToken> tokens, string sourceText, string filePath
             {
                 int stmtLine = CurrentLine();
                 if (ContainsKeywordBeforeBlock("type"))
+                {
                     statements.Add(new GoStatementInfo("type-switch", [], null, null, [], stmtLine, true));
+                }
                 else
+                {
                     statements.Add(new GoStatementInfo("switch", [], null, null, [], stmtLine, true));
+                }
+
                 Advance();
                 continue;
             }
@@ -955,7 +1239,11 @@ internal class GoParser(List<GoToken> tokens, string sourceText, string filePath
             {
                 int stmtLine = CurrentLine();
                 Advance();
-                if (Check("(")) SkipParens();
+                if (Check("("))
+                {
+                    SkipParens();
+                }
+
                 statements.Add(new GoStatementInfo("throw", [], null, "panic", [], stmtLine, true));
                 continue;
             }
@@ -963,7 +1251,10 @@ internal class GoParser(List<GoToken> tokens, string sourceText, string filePath
             {
                 int stmtLine = CurrentLine();
                 Advance();
-                if (Check("(")) SkipParens();
+                if (Check("("))
+                {
+                    SkipParens();
+                }
                 // recover() catches all panics — it is an unconditional (generic) error handler.
                 statements.Add(new GoStatementInfo("catch", [], null, "recover", [], stmtLine, true)
                 { IsErrorHandler = true, IsGenericErrorHandler = true });
@@ -1012,14 +1303,41 @@ internal class GoParser(List<GoToken> tokens, string sourceText, string filePath
         int depth = 0;
         for (int i = _pos + 1; i < tokens.Count; i++)
         {
-            var t = tokens[i];
-            if (t.Kind == GoTokenKind.Eof) break;
-            if (depth == 0 && t.Value == "{") break;
-            if (t.Value is "(" or "[") depth++;
-            if (t.Value is ")" or "]") { if (depth > 0) depth--; }
-            if (t.Kind == GoTokenKind.Identifier && t.Value == "err") sawErr = true;
-            if (t.Value == "!=" && sawErr) sawNe = true;
-            if (t.Kind == GoTokenKind.Identifier && t.Value == "nil" && sawNe) return true;
+            GoToken t = tokens[i];
+            if (t.Kind == GoTokenKind.Eof)
+            {
+                break;
+            }
+
+            if (depth == 0 && t.Value == "{")
+            {
+                break;
+            }
+
+            if (t.Value is "(" or "[")
+            {
+                depth++;
+            }
+
+            if (t.Value is ")" or "]") { if (depth > 0)
+                {
+                    depth--;
+                }
+            }
+            if (t.Kind == GoTokenKind.Identifier && t.Value == "err")
+            {
+                sawErr = true;
+            }
+
+            if (t.Value == "!=" && sawErr)
+            {
+                sawNe = true;
+            }
+
+            if (t.Kind == GoTokenKind.Identifier && t.Value == "nil" && sawNe)
+            {
+                return true;
+            }
         }
         return false;
     }
@@ -1029,12 +1347,30 @@ internal class GoParser(List<GoToken> tokens, string sourceText, string filePath
         int depth = 0;
         for (int i = _pos; i < tokens.Count; i++)
         {
-            var token = tokens[i];
-            if (depth == 0 && token.Value == "{") return false;
-            if (token.Value is "(" or "[" or "{") depth++;
-            else if (token.Value is ")" or "]" or "}") depth--;
-            if (depth <= 1 && token.Kind == GoTokenKind.Keyword && token.Value == keyword) return true;
-            if (depth == 0 && token.Value == ";") return false;
+            GoToken token = tokens[i];
+            if (depth == 0 && token.Value == "{")
+            {
+                return false;
+            }
+
+            if (token.Value is "(" or "[" or "{")
+            {
+                depth++;
+            }
+            else if (token.Value is ")" or "]" or "}")
+            {
+                depth--;
+            }
+
+            if (depth <= 1 && token.Kind == GoTokenKind.Keyword && token.Value == keyword)
+            {
+                return true;
+            }
+
+            if (depth == 0 && token.Value == ";")
+            {
+                return false;
+            }
         }
         return false;
     }
@@ -1048,7 +1384,11 @@ internal class GoParser(List<GoToken> tokens, string sourceText, string filePath
             int depth = 1;
             while (!IsAtEnd() && depth > 0)
             {
-                if (Check("(")) depth++;
+                if (Check("("))
+                {
+                    depth++;
+                }
+
                 if (Check(")")) { depth--; if (depth == 0) { Advance(); break; } }
                 Advance();
             }
@@ -1057,7 +1397,9 @@ internal class GoParser(List<GoToken> tokens, string sourceText, string filePath
         {
             // single line
             while (!IsAtEnd() && CurrentLine() == tokens[_pos > 0 ? _pos - 1 : 0].Line)
+            {
                 Advance();
+            }
         }
     }
 
@@ -1067,7 +1409,11 @@ internal class GoParser(List<GoToken> tokens, string sourceText, string filePath
     private GoToken Peek() => _pos + 1 < tokens.Count ? tokens[_pos + 1] : tokens[^1];
     private int CurrentLine() => Current().Line;
     private bool IsAtEnd() => _pos >= tokens.Count || Current().Kind == GoTokenKind.Eof;
-    private void Advance() { if (!IsAtEnd()) _pos++; }
+    private void Advance() { if (!IsAtEnd())
+        {
+            _pos++;
+        }
+    }
 
     private bool Check(string value) => !IsAtEnd() && Current().Value == value;
     private bool CheckKeyword(string kw) => !IsAtEnd() && Current().Kind == GoTokenKind.Keyword && Current().Value == kw;
@@ -1076,7 +1422,7 @@ internal class GoParser(List<GoToken> tokens, string sourceText, string filePath
     private string ConsumeIdentifier()
     {
         if (!IsAtEnd() && Current().Kind == GoTokenKind.Identifier)
-        { var v = Current().Value; Advance(); return v; }
+        { string v = Current().Value; Advance(); return v; }
         return "";
     }
 
@@ -1087,68 +1433,120 @@ internal class GoParser(List<GoToken> tokens, string sourceText, string filePath
         while (!IsAtEnd())
         {
             if (Check("[") || Check("(")) { depth++; Advance(); continue; }
-            if (Check("]") || Check(")")) { if (depth == 0) break; depth--; Advance(); continue; }
+            if (Check("]") || Check(")")) { if (depth == 0) { break; } depth--; Advance(); continue; }
             if (includeBraces)
             {
                 if (Check("{")) { depth++; Advance(); continue; }
-                if (Check("}")) { if (depth == 0) break; depth--; Advance(); continue; }
+                if (Check("}")) { if (depth == 0) { break; } depth--; Advance(); continue; }
             }
             else
             {
-                if (Check("{") || Check("}")) break;
+                if (Check("{") || Check("}"))
+                {
+                    break;
+                }
             }
-            if (depth == 0 && (Check(",") || Check(";") || Check("\n"))) break;
+            if (depth == 0 && (Check(",") || Check(";") || Check("\n")))
+            {
+                break;
+            }
             // A struct tag (raw/interpreted string) is not part of the field type — stop here
             // so the tag stays as the current token for tag detection and the next field parses.
-            if (depth == 0 && Current().Kind == GoTokenKind.StringLiteral) break;
+            if (depth == 0 && Current().Kind == GoTokenKind.StringLiteral)
+            {
+                break;
+            }
             // Stop at keywords that start new declarations
-            if (depth == 0 && (CheckKeyword("func") && _pos != start || CheckKeyword("type") || CheckKeyword("var") || CheckKeyword("const"))) break;
+            if (depth == 0 && (CheckKeyword("func") && _pos != start || CheckKeyword("type") || CheckKeyword("var") || CheckKeyword("const")))
+            {
+                break;
+            }
+
             Advance();
         }
-        if (_pos == start) return "";
+        if (_pos == start)
+        {
+            return "";
+        }
+
         return string.Join("", tokens[start.._pos].Select(t => t.Value));
     }
 
     private void SkipGenerics()
     {
-        if (!Check("[")) return;
+        if (!Check("["))
+        {
+            return;
+        }
+
         int depth = 0;
         while (!IsAtEnd())
         {
             if (Check("[")) { depth++; Advance(); }
-            else if (Check("]")) { depth--; Advance(); if (depth == 0) break; }
-            else Advance();
+            else if (Check("]")) { depth--; Advance(); if (depth == 0)
+                {
+                    break;
+                }
+            }
+            else
+            {
+                Advance();
+            }
         }
     }
 
     private void SkipParens()
     {
-        if (!Check("(")) return;
+        if (!Check("("))
+        {
+            return;
+        }
+
         int depth = 0;
         while (!IsAtEnd())
         {
             if (Check("(")) { depth++; Advance(); }
-            else if (Check(")")) { depth--; Advance(); if (depth == 0) break; }
-            else Advance();
+            else if (Check(")")) { depth--; Advance(); if (depth == 0)
+                {
+                    break;
+                }
+            }
+            else
+            {
+                Advance();
+            }
         }
     }
 
     private void SkipBraces()
     {
-        if (!Check("{")) return;
+        if (!Check("{"))
+        {
+            return;
+        }
+
         int depth = 0;
         while (!IsAtEnd())
         {
             if (Check("{")) { depth++; Advance(); }
-            else if (Check("}")) { depth--; Advance(); if (depth == 0) break; }
-            else Advance();
+            else if (Check("}")) { depth--; Advance(); if (depth == 0)
+                {
+                    break;
+                }
+            }
+            else
+            {
+                Advance();
+            }
         }
     }
 
     private void SkipComments()
     {
         while (!IsAtEnd() && Current().Kind is GoTokenKind.LineComment or GoTokenKind.BlockComment)
+        {
             Advance();
+        }
     }
 
     private bool HasPrecedingDocComment()
@@ -1156,8 +1554,15 @@ internal class GoParser(List<GoToken> tokens, string sourceText, string filePath
         for (int i = _pos - 1; i >= 0 && i >= _pos - 5; i--)
         {
             if (tokens[i].Kind == GoTokenKind.LineComment && tokens[i].Value.StartsWith("//"))
+            {
                 return true;
-            if (tokens[i].Kind == GoTokenKind.BlockComment) return true;
+            }
+
+            if (tokens[i].Kind == GoTokenKind.BlockComment)
+            {
+                return true;
+            }
+
             continue;
         }
         return false;
@@ -1165,11 +1570,18 @@ internal class GoParser(List<GoToken> tokens, string sourceText, string filePath
 
     private HashSet<int> ExtractCommentLines()
     {
-        var lines = new HashSet<int>();
-        foreach (var t in tokens)
+        HashSet<int> lines = new HashSet<int>();
+        foreach (GoToken t in tokens)
+        {
             if (t.Kind is GoTokenKind.LineComment or GoTokenKind.BlockComment)
+            {
                 for (int line = t.Line; line <= t.Line + t.Value.Count(c => c == '\n'); line++)
+                {
                     lines.Add(line);
+                }
+            }
+        }
+
         return lines;
     }
 

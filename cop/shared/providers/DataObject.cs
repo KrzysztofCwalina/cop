@@ -1,3 +1,7 @@
+// Represents provider records and their dynamically accessible fields.
+
+using System.Text;
+
 namespace Cop.Lang;
 
 /// <summary>
@@ -49,10 +53,14 @@ public class DataObject
 
     public object? GetField(string name)
     {
-        if (_fields.TryGetValue(name, out var value)) return value;
+        if (_fields.TryGetValue(name, out object? value))
+        {
+            return value;
+        }
+
         if (_fieldResolver is not null)
         {
-            var resolved = _fieldResolver(name);
+            object? resolved = _fieldResolver(name);
             _fields[name] = resolved; // memoize
             return resolved;
         }
@@ -68,17 +76,21 @@ public class DataObject
     /// </summary>
     public string ToJson(int indent = 0)
     {
-        var sb = new System.Text.StringBuilder();
-        var pad = new string(' ', indent);
-        var inner = new string(' ', indent + 4);
+        StringBuilder sb = new System.Text.StringBuilder();
+        string pad = new string(' ', indent);
+        string inner = new string(' ', indent + 4);
         sb.AppendLine("{");
         int i = 0;
-        foreach (var (key, value) in _fields)
+        foreach ((string? key, object? value) in _fields)
         {
             sb.Append(inner);
             sb.Append($"\"{key}\": ");
             sb.Append(FormatJsonValue(value, indent + 4));
-            if (++i < _fields.Count) sb.Append(',');
+            if (++i < _fields.Count)
+            {
+                sb.Append(',');
+            }
+
             sb.AppendLine();
         }
         sb.Append(pad).Append('}');
@@ -102,15 +114,23 @@ public class DataObject
 
     private static string FormatJsonArray(System.Collections.IList list, int indent)
     {
-        if (list.Count == 0) return "[]";
-        var sb = new System.Text.StringBuilder();
-        var inner = new string(' ', indent + 4);
+        if (list.Count == 0)
+        {
+            return "[]";
+        }
+
+        StringBuilder sb = new System.Text.StringBuilder();
+        string inner = new string(' ', indent + 4);
         sb.AppendLine("[");
         for (int i = 0; i < list.Count; i++)
         {
             sb.Append(inner);
             sb.Append(FormatJsonValue(list[i], indent + 4));
-            if (i < list.Count - 1) sb.Append(',');
+            if (i < list.Count - 1)
+            {
+                sb.Append(',');
+            }
+
             sb.AppendLine();
         }
         sb.Append(new string(' ', indent)).Append(']');

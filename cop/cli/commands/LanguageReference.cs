@@ -1,3 +1,5 @@
+// Loads and formats the embedded Cop language reference.
+
 using System.Reflection;
 
 namespace Cop.Cli.Commands;
@@ -15,15 +17,15 @@ internal static class LanguageReference
         {
             if (_content == null)
             {
-                var assembly = Assembly.GetExecutingAssembly();
-                using var stream = assembly.GetManifestResourceStream("Cop.Cli.LanguageReference.md");
+                Assembly assembly = Assembly.GetExecutingAssembly();
+                using Stream? stream = assembly.GetManifestResourceStream("Cop.Cli.LanguageReference.md");
                 if (stream == null)
                 {
                     _content = "Error: Language reference resource not found. This is a build issue.";
                 }
                 else
                 {
-                    using var reader = new StreamReader(stream);
+                    using StreamReader reader = new StreamReader(stream);
                     _content = reader.ReadToEnd();
                 }
             }

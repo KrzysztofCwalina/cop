@@ -1,3 +1,5 @@
+// Reads platform file metadata used for source-cache invalidation.
+
 using System.ComponentModel;
 using System.Runtime.InteropServices;
 using Microsoft.Win32.SafeHandles;
@@ -9,14 +11,14 @@ public static class SourceFileMetadata
     public static long ReadChangeTime(string path)
     {
         // Attribute-only access detects same-length edits even when LastWriteTime is restored.
-        var nativePath = path.StartsWith(@"\\?\", StringComparison.Ordinal) ? path
+        string nativePath = path.StartsWith(@"\\?\", StringComparison.Ordinal) ? path
             : path.StartsWith(@"\\", StringComparison.Ordinal) ? @"\\?\UNC\" + path[2..]
             : @"\\?\" + path;
-        using var handle = CreateFileW(nativePath, 0x80, 7, IntPtr.Zero, 3, 0, IntPtr.Zero);
-        if (handle.IsInvalid || !GetFileInformationByHandleEx(handle, 0, out var information,
+        using SafeFileHandle handle = CreateFileW(nativePath, 0x80, 7, IntPtr.Zero, 3, 0, IntPtr.Zero);
+        if (handle.IsInvalid || !GetFileInformationByHandleEx(handle, 0, out FileBasicInfo information,
                 (uint)Marshal.SizeOf<FileBasicInfo>()))
         {
-            var error = new Win32Exception(Marshal.GetLastWin32Error());
+            Win32Exception error = new Win32Exception(Marshal.GetLastWin32Error());
             throw new IOException($"Could not inspect source file '{path}': {error.Message}", error);
         }
         return information.ChangeTime;

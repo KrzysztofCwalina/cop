@@ -8,8 +8,8 @@ export flags Modifier = Public | Private | Protected | Internal | Static | Seale
 
 # Extensible enums — known values for Kind properties. Providers may return additional values.
 export enum TypeKind = Class | Struct | Interface | Enum | Alias
-export enum StatementKind = call | declaration | import | command | attribute | throw | return | using | foreach | try | catch | finally | if | else | while | do | for | switch | await | directive | label | break | continue | localfunction | pipeline | lock | unsafe | fixed | checked | unchecked | yield | goto | assignment | expression
-export enum ExpressionKind = identifier | stringLiteral | numericLiteral | booleanLiteral | nullLiteral | arrayLiteral | objectLiteral | memberAccess | invocation | other
+export enum StatementKind = call | declaration | import | command | attribute | throw | return | using | foreach | try | catch | finally | if | else | while | do | for | switch | await | directive | label | break | continue | localfunction | pipeline | lock | unsafe | fixed | checked | unchecked | yield | goto | assignment | expression | empty
+export enum ExpressionKind = identifier | stringLiteral | numericLiteral | booleanLiteral | nullLiteral | arrayLiteral | objectLiteral | memberAccess | invocation | other | binary
 export enum ApiKind = class | struct | interface | enum | enumvalue | ctor | method | property | event | field
 export enum LineKind = code | comment | blank
 export enum Language = csharp | python | javascript | rust | go | java | cop | text
@@ -48,6 +48,7 @@ export type Type = {
 ## Use Statements and their Parent/Children relationships instead of searching Source.
 export type Method = {
     Name : string,
+    Kind : string,
     ReceiverType : string?,
     TypeParameters : [string],
     Column : int?,
@@ -127,6 +128,7 @@ export type TypeReference = {
     Name : string,
     Namespace : string?,
     Generic : bool,
+    IsAnonymous : bool,
     GenericArguments : [TypeReference],
     Length : int
 }
@@ -147,6 +149,7 @@ export type Statement = {
     Arguments : [string],
     CallTarget : CodeExpression?,
     ValueExpression : CodeExpression?,
+    ConditionExpression : CodeExpression?,
     ArgumentExpressions : [CodeExpression],
     Column : int?,
     EndLine : int?,
@@ -176,6 +179,7 @@ export type CodeExpression = {
     Kind : ExpressionKind,
     Name : string?,
     StringValue : string?,
+    BooleanValue : bool?,
     Target : CodeExpression?,
     Children : [CodeExpression]
 }
@@ -270,7 +274,15 @@ export type Line = {
     Source : string,
     CopIgnore : string,
     PreviousText : string,
-    NextText : string
+    NextText : string,
+    Comments : [Comment]
+}
+
+## A parser-identified comment. Content excludes the language's comment delimiter.
+export type Comment = {
+    Kind : string,
+    Content : string,
+    Line : int
 }
 
 export predicate isComment(Line) => Line.Kind == comment

@@ -1,3 +1,5 @@
+// Executes bounded external analysis tools and provides a common violation schema.
+
 using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
@@ -15,7 +17,7 @@ public abstract class ToolProvider : DataProvider
 
     private static ReadOnlyMemory<byte> BuildSchema()
     {
-        var schema = new ProviderSchema
+        ProviderSchema schema = new ProviderSchema
         {
             Types =
             [
@@ -37,14 +39,16 @@ public abstract class ToolProvider : DataProvider
         return schema.ToJson();
     }
 
+    /// <inheritdoc />
     public override ReadOnlyMemory<byte> GetSchema() => SchemaJson;
 
+    /// <inheritdoc />
     public override object? Query(ProviderQuery query)
     {
-        var rootPath = query.RootPath ?? Directory.GetCurrentDirectory();
-        var excluded = query.ExcludedDirectories ?? new HashSet<string>();
+        string rootPath = query.RootPath ?? Directory.GetCurrentDirectory();
+        IReadOnlySet<string> excluded = query.ExcludedDirectories ?? new HashSet<string>();
 
-        var violations = RunTool(rootPath, excluded);
+        List<object> violations = RunTool(rootPath, excluded);
         return new Dictionary<string, List<object>> { ["Violations"] = violations };
     }
 
@@ -55,7 +59,7 @@ public abstract class ToolProvider : DataProvider
     protected static (string Stdout, string Stderr, int ExitCode) RunProcess(
         string fileName, string arguments, string workingDir, bool shell = false, int timeoutMs = 120_000)
     {
-        var psi = new ProcessStartInfo
+        ProcessStartInfo psi = new ProcessStartInfo
         {
             FileName = shell ? GetShellExecutable() : fileName,
             Arguments = shell ? GetShellArgs(fileName, arguments) : arguments,
@@ -69,42 +73,50 @@ public abstract class ToolProvider : DataProvider
         };
 
         Console.Error.Write($"  Running {fileName}...");
-        var sw = Stopwatch.StartNew();
+        Stopwatch sw = Stopwatch.StartNew();
         int maxLineLen = 0;
 
-        using var process = Process.Start(psi)
+        using Process process = Process.Start(psi)
             ?? throw new InvalidOperationException($"Failed to start: {fileName}");
 
         // Stream stderr to console in real-time for progress visibility
-        var stderrBuilder = new StringBuilder();
+        StringBuilder stderrBuilder = new StringBuilder();
         process.ErrorDataReceived += (_, e) =>
         {
-            if (e.Data == null) return;
+            if (e.Data == null)
+            {
+                return;
+            }
+
             stderrBuilder.AppendLine(e.Data);
-            var line = e.Data.TrimEnd();
+            string line = e.Data.TrimEnd();
             if (line.Length > 0)
             {
-                var msg = $"\r  Running {fileName}... {Truncate(line, 60)}";
+                string msg = $"\r  Running {fileName}... {Truncate(line, 60)}";
                 // Pad with spaces to overwrite any remnant text from longer previous lines
-                if (msg.Length > maxLineLen) maxLineLen = msg.Length;
+                if (msg.Length > maxLineLen)
+                {
+                    maxLineLen = msg.Length;
+                }
+
                 Console.Error.Write(msg.PadRight(maxLineLen));
             }
         };
         process.BeginErrorReadLine();
 
-        var stdoutTask = process.StandardOutput.ReadToEndAsync();
+        Task<string> stdoutTask = process.StandardOutput.ReadToEndAsync();
 
         if (!process.WaitForExit(timeoutMs))
         {
             try { process.Kill(entireProcessTree: true); } catch { }
-            var timeoutMsg = $"\r  Running {fileName}... timed out after {timeoutMs / 1000}s";
+            string timeoutMsg = $"\r  Running {fileName}... timed out after {timeoutMs / 1000}s";
             Console.Error.WriteLine(timeoutMsg.PadRight(maxLineLen));
             throw new TimeoutException($"{fileName} timed out after {timeoutMs / 1000}s");
         }
 
         stdoutTask.Wait();
         sw.Stop();
-        var doneMsg = $"\r  Running {fileName}... done ({sw.Elapsed.TotalSeconds:F1}s)";
+        string doneMsg = $"\r  Running {fileName}... done ({sw.Elapsed.TotalSeconds:F1}s)";
         Console.Error.WriteLine(doneMsg.PadRight(maxLineLen));
         return (stdoutTask.Result, stderrBuilder.ToString(), process.ExitCode);
     }
@@ -114,19 +126,28 @@ public abstract class ToolProvider : DataProvider
 
     protected static string NormalizePath(string filePath, string rootPath)
     {
-        if (string.IsNullOrEmpty(filePath)) return "";
+        if (string.IsNullOrEmpty(filePath))
+        {
+            return "";
+        }
+
         if (Path.IsPathRooted(filePath))
+        {
             filePath = Path.GetRelativePath(rootPath, filePath);
+        }
+
         return filePath.Replace('\\', '/');
     }
 
     protected static bool IsExcluded(string filePath, IReadOnlySet<string> excluded)
     {
-        foreach (var dir in excluded)
+        foreach (string dir in excluded)
         {
             if (filePath.StartsWith(dir + "/", StringComparison.OrdinalIgnoreCase) ||
                 filePath.Equals(dir, StringComparison.OrdinalIgnoreCase))
+            {
                 return true;
+            }
         }
         return false;
     }
@@ -145,9 +166,14 @@ public abstract class ToolProvider : DataProvider
 /// </summary>
 public class ToolViolation
 {
+    /// <summary>Gets the source path reported by the external tool.</summary>
     public string File { get; init; } = "";
+    /// <summary>Gets the source line reported by the external tool.</summary>
     public int Line { get; init; }
+    /// <summary>Gets the normalized diagnostic severity.</summary>
     public string Severity { get; init; } = "warning";
+    /// <summary>Gets the diagnostic text reported by the external tool.</summary>
     public string Message { get; init; } = "";
+    /// <summary>Gets the diagnostic's tool or source identity.</summary>
     public string Source { get; init; } = "";
 }

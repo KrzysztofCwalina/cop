@@ -1,3 +1,5 @@
+// Runs dotnet format and converts formatting findings into provider violations.
+
 using System.Text.Json;
 using Cop.Core;
 
@@ -12,34 +14,36 @@ public class CSharpFormatProvider : ToolProvider
 
     protected override List<object> RunTool(string rootPath, IReadOnlySet<string> excluded)
     {
-        var reportDir = Path.Combine(Path.GetTempPath(), $"cop-format-{Guid.NewGuid():N}");
+        string reportDir = Path.Combine(Path.GetTempPath(), $"cop-format-{Guid.NewGuid():N}");
         Directory.CreateDirectory(reportDir);
 
         try
         {
             RunProcess("dotnet", $"format --verify-no-changes --report \"{reportDir}\"", rootPath);
 
-            var violations = new List<object>();
-            foreach (var jsonFile in Directory.GetFiles(reportDir, "*.json", SearchOption.AllDirectories))
+            List<object> violations = new List<object>();
+            foreach (string jsonFile in Directory.GetFiles(reportDir, "*.json", SearchOption.AllDirectories))
             {
-                var json = File.ReadAllText(jsonFile);
-                var entries = ParseReportEntries(json);
+                string json = File.ReadAllText(jsonFile);
+                List<JsonElement> entries = ParseReportEntries(json);
 
-                foreach (var entry in entries)
+                foreach (JsonElement entry in entries)
                 {
-                    var filePath = NormalizePath(
+                    string filePath = NormalizePath(
                         entry.GetProperty("FilePath").GetString() ?? entry.GetProperty("FileName").GetString() ?? "",
                         rootPath);
                     if (string.IsNullOrEmpty(filePath) || IsExcluded(filePath, excluded))
-                        continue;
-
-                    if (entry.TryGetProperty("FileChanges", out var changes))
                     {
-                        foreach (var change in changes.EnumerateArray())
+                        continue;
+                    }
+
+                    if (entry.TryGetProperty("FileChanges", out JsonElement changes))
+                    {
+                        foreach (JsonElement change in changes.EnumerateArray())
                         {
-                            var line = change.TryGetProperty("LineNumber", out var ln) ? ln.GetInt32() : 0;
-                            var ruleId = change.TryGetProperty("DiagnosticId", out var did) ? did.GetString() : "IDE0055";
-                            var message = change.TryGetProperty("FormatDescription", out var desc) ? desc.GetString() : "Formatting violation";
+                            int line = change.TryGetProperty("LineNumber", out JsonElement ln) ? ln.GetInt32() : 0;
+                            string? ruleId = change.TryGetProperty("DiagnosticId", out JsonElement did) ? did.GetString() : "IDE0055";
+                            string? message = change.TryGetProperty("FormatDescription", out JsonElement desc) ? desc.GetString() : "Formatting violation";
                             violations.Add(new ToolViolation
                             {
                                 File = filePath,
@@ -62,16 +66,20 @@ public class CSharpFormatProvider : ToolProvider
 
     private static List<JsonElement> ParseReportEntries(string json)
     {
-        var doc = JsonDocument.Parse(json);
-        var root = doc.RootElement;
+        JsonDocument doc = JsonDocument.Parse(json);
+        JsonElement root = doc.RootElement;
 
         if (root.ValueKind == JsonValueKind.Array)
+        {
             return [.. root.EnumerateArray()];
+        }
 
         if (root.ValueKind == JsonValueKind.Object)
         {
-            if (root.TryGetProperty("Files", out var files) || root.TryGetProperty("files", out files))
+            if (root.TryGetProperty("Files", out JsonElement files) || root.TryGetProperty("files", out files))
+            {
                 return [.. files.EnumerateArray()];
+            }
         }
 
         return [];

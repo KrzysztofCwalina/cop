@@ -1,3 +1,5 @@
+// Lists the commands and declarations available in a Cop program.
+
 using System.CommandLine;
 using Cop.Core;
 using Cop.Lang;
@@ -11,27 +13,31 @@ namespace Cop.Cli.Commands;
 /// </summary>
 public static class ListCommand
 {
+    /// <summary>
+    /// Creates the command for listing a package's exported commands and checks.
+    /// </summary>
     public static Command Create()
     {
-        var packageArg = new Argument<string>("package")
+        Argument<string> packageArg = new Argument<string>("package")
         {
             Description = "Package name to inspect (e.g., csharp-checks)"
         };
-        var command = new Command("commands", "Show checks, groups, and commands exported by a package")
+        Command command = new Command("commands", "Show checks, groups, and commands exported by a package")
         {
             packageArg
         };
         command.SetAction(parseResult =>
         {
-            var packageName = parseResult.GetValue(packageArg)!;
+            string packageName = parseResult.GetValue(packageArg)!;
             return Execute(packageName);
         });
         return command;
     }
 
+    /// <summary>Resolves a package and lists its exported commands and checks.</summary>
     public static int Execute(string packageName)
     {
-        var packageDir = PackageResolver.ResolvePackageDir(packageName);
+        string? packageDir = PackageResolver.ResolvePackageDir(packageName);
 
         if (packageDir == null)
         {
@@ -40,7 +46,7 @@ public static class ListCommand
         }
 
         // Find .cop source files
-        var copDir = Path.Combine(packageDir, "src");
+        string copDir = Path.Combine(packageDir, "src");
 
         if (!Directory.Exists(copDir))
         {
@@ -48,7 +54,7 @@ public static class ListCommand
             return 1;
         }
 
-        var copFiles = Directory.GetFiles(copDir, "*.cop");
+        string[] copFiles = Directory.GetFiles(copDir, "*.cop");
         if (copFiles.Length == 0)
         {
             Console.Error.WriteLine($"Error: No .cop files found in package '{packageName}'.");
@@ -56,12 +62,12 @@ public static class ListCommand
         }
 
         // Parse all .cop files
-        var modules = new List<(string Path, ModuleNode Module)>();
-        foreach (var file in copFiles)
+        List<(string Path, ModuleNode Module)> modules = new List<(string Path, ModuleNode Module)>();
+        foreach (string file in copFiles)
         {
             try
             {
-                var source = File.ReadAllText(file);
+                string source = File.ReadAllText(file);
                 modules.Add((file, CopParser.Parse(source, file)));
             }
             catch (ParseException ex)
@@ -71,20 +77,20 @@ public static class ListCommand
         }
 
         // Collect exported lets and commands
-        var lets = new List<(string Name, string? Doc)>();
-        var groups = new List<(string Name, string? Doc, int Count)>();
-        var commands = new List<(string Name, string? Doc, List<string>? Params)>();
+        List<(string Name, string? Doc)> lets = new List<(string Name, string? Doc)>();
+        List<(string Name, string? Doc, int Count)> groups = new List<(string Name, string? Doc, int Count)>();
+        List<(string Name, string? Doc, List<string>? Params)> commands = new List<(string Name, string? Doc, List<string>? Params)>();
 
-        foreach (var (_, module) in modules)
+        foreach ((string _, ModuleNode? module) in modules)
         {
-            foreach (var decl in module.Declarations)
+            foreach (Declaration decl in module.Declarations)
             {
                 if (decl is LetDecl let && let.IsExported)
                 {
                     if (let.Value is Cop.Lang.Ast.BinaryExpr { Op: BinaryOp.Add })
                     {
                         // Union of collections (a + b + c)
-                        var count = CountBinaryAddElements(let.Value);
+                        int count = CountBinaryAddElements(let.Value);
                         groups.Add((let.Name, let.DocComment, count));
                     }
                     else
@@ -111,22 +117,31 @@ public static class ListCommand
         }
 
         // Get package description from first doc comment or file header
-        var packageDoc = GetPackageDescription(modules.Select(m => m.Path).ToList(), packageName);
+        string? packageDoc = GetPackageDescription(modules.Select(m => m.Path).ToList(), packageName);
         if (packageDoc != null)
+        {
             Console.WriteLine($"{packageName} — {packageDoc}");
+        }
         else
+        {
             Console.WriteLine(packageName);
+        }
+
         Console.WriteLine();
 
         if (lets.Count > 0)
         {
             Console.WriteLine("Checks:");
-            foreach (var (name, doc) in lets)
+            foreach ((string? name, string? doc) in lets)
             {
                 if (!string.IsNullOrEmpty(doc))
+                {
                     Console.WriteLine($"  {name,-36} {doc}");
+                }
                 else
+                {
                     Console.WriteLine($"  {name}");
+                }
             }
             Console.WriteLine();
         }
@@ -134,9 +149,9 @@ public static class ListCommand
         if (groups.Count > 0)
         {
             Console.WriteLine("Groups:");
-            foreach (var (name, doc, count) in groups)
+            foreach ((string? name, string? doc, int count) in groups)
             {
-                var desc = doc ?? $"Union of {count} checks";
+                string desc = doc ?? $"Union of {count} checks";
                 Console.WriteLine($"  {name,-36} {desc}");
             }
             Console.WriteLine();
@@ -145,15 +160,19 @@ public static class ListCommand
         if (commands.Count > 0)
         {
             Console.WriteLine("Commands:");
-            foreach (var (name, doc, parameters) in commands)
+            foreach ((string? name, string? doc, List<string>? parameters) in commands)
             {
-                var displayName = parameters is { Count: > 0 }
+                string displayName = parameters is { Count: > 0 }
                     ? $"{name}({string.Join(", ", parameters)})"
                     : name;
                 if (!string.IsNullOrEmpty(doc))
+                {
                     Console.WriteLine($"  {displayName,-36} {doc}");
+                }
                 else
+                {
                     Console.WriteLine($"  {displayName}");
+                }
             }
         }
 
@@ -162,15 +181,17 @@ public static class ListCommand
 
     private static string? GetPackageDescription(List<string> filePaths, string packageName)
     {
-        foreach (var path in filePaths)
+        foreach (string path in filePaths)
         {
             if (path.Contains(packageName, StringComparison.OrdinalIgnoreCase))
             {
                 try
                 {
-                    var lines = File.ReadAllLines(path);
+                    string[] lines = File.ReadAllLines(path);
                     if (lines.Length > 0 && lines[0].StartsWith("# "))
+                    {
                         return lines[0][2..].Trim();
+                    }
                 }
                 catch { }
             }
@@ -181,7 +202,10 @@ public static class ListCommand
     private static int CountBinaryAddElements(Cop.Lang.Ast.Expression expr)
     {
         if (expr is Cop.Lang.Ast.BinaryExpr { Op: BinaryOp.Add } bin)
+        {
             return CountBinaryAddElements(bin.Left) + CountBinaryAddElements(bin.Right);
+        }
+
         return 1;
     }
 }

@@ -1,3 +1,5 @@
+// Collects values written to a sink by appending them to a destination list.
+
 using System.Collections;
 
 namespace Cop.Core;

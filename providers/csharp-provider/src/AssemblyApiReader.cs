@@ -1,3 +1,5 @@
+// Reads public and protected assembly API metadata without executing it.
+
 using System.Reflection;
 using Cop.Providers.SourceModel;
 using CheckTypeKind = Cop.Providers.SourceModel.TypeKind;
@@ -19,19 +21,25 @@ public static class AssemblyApiReader
     {
         dllPath = Path.GetFullPath(dllPath);
         if (!File.Exists(dllPath))
+        {
             throw new FileNotFoundException($"Assembly not found: {dllPath}");
+        }
 
-        var resolver = FrameworkMetadata.CreateAssemblyResolver(dllPath);
-        using var mlc = new MetadataLoadContext(resolver, coreAssemblyName: "System.Runtime");
-        var assembly = mlc.LoadFromAssemblyPath(dllPath);
+        MetadataAssemblyResolver resolver = FrameworkMetadata.CreateAssemblyResolver(dllPath);
+        using MetadataLoadContext mlc = new MetadataLoadContext(resolver, coreAssemblyName: "System.Runtime");
+        Assembly assembly = mlc.LoadFromAssemblyPath(dllPath);
 
-        var types = new List<TypeDeclaration>();
+        List<TypeDeclaration> types = new List<TypeDeclaration>();
         string? fileNamespace = null;
 
-        foreach (var type in assembly.GetExportedTypes())
+        foreach (Type type in assembly.GetExportedTypes())
         {
-            if (type.DeclaringType != null) continue; // skip nested (handled inside parent)
-            var td = ConvertType(type, mlc);
+            if (type.DeclaringType != null)
+            {
+                continue; // skip nested (handled inside parent)
+            }
+
+            TypeDeclaration td = ConvertType(type, mlc);
             types.Add(td);
             fileNamespace ??= type.Namespace;
         }
@@ -47,51 +55,80 @@ public static class AssemblyApiReader
 
     private static TypeDeclaration ConvertType(Type type, MetadataLoadContext mlc)
     {
-        var kind = GetTypeKind(type);
-        var modifiers = GetModifiers(type);
-        var baseTypes = GetBaseTypes(type);
-        var name = FormatTypeName(type);
+        CheckTypeKind kind = GetTypeKind(type);
+        Modifier modifiers = GetModifiers(type);
+        List<string> baseTypes = GetBaseTypes(type);
+        string name = FormatTypeName(type);
 
-        var constructors = new List<MethodDeclaration>();
-        var methods = new List<MethodDeclaration>();
-        var properties = new List<PropertyDeclaration>();
-        var events = new List<EventDeclaration>();
-        var fields = new List<FieldDeclaration>();
-        var nestedTypes = new List<TypeDeclaration>();
-        var enumValues = new List<string>();
+        List<MethodDeclaration> constructors = new List<MethodDeclaration>();
+        List<MethodDeclaration> methods = new List<MethodDeclaration>();
+        List<PropertyDeclaration> properties = new List<PropertyDeclaration>();
+        List<EventDeclaration> events = new List<EventDeclaration>();
+        List<FieldDeclaration> fields = new List<FieldDeclaration>();
+        List<TypeDeclaration> nestedTypes = new List<TypeDeclaration>();
+        List<string> enumValues = new List<string>();
 
         if (kind == CheckTypeKind.Enum)
         {
-            foreach (var field in type.GetFields(BindingFlags.Public | BindingFlags.Static | BindingFlags.DeclaredOnly))
+            foreach (FieldInfo field in type.GetFields(BindingFlags.Public | BindingFlags.Static | BindingFlags.DeclaredOnly))
+            {
                 enumValues.Add(field.Name);
+            }
         }
         else
         {
             const BindingFlags apiFlags = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Static | BindingFlags.DeclaredOnly;
-            foreach (var ctor in type.GetConstructors(apiFlags))
+            foreach (ConstructorInfo ctor in type.GetConstructors(apiFlags))
             {
-                if (!IsVisibleApi(ctor)) continue;
+                if (!IsVisibleApi(ctor))
+                {
+                    continue;
+                }
+
                 constructors.Add(ConvertConstructor(ctor));
             }
 
-            foreach (var method in type.GetMethods(apiFlags))
+            foreach (MethodInfo method in type.GetMethods(apiFlags))
             {
-                if (!IsVisibleApi(method) || (method.IsSpecialName && !method.Name.StartsWith("op_", StringComparison.Ordinal))) continue;
+                if (!IsVisibleApi(method) || (method.IsSpecialName && !method.Name.StartsWith("op_", StringComparison.Ordinal)))
+                {
+                    continue;
+                }
+
                 methods.Add(ConvertMethod(method));
             }
 
-            foreach (var prop in type.GetProperties(apiFlags))
-                if (prop.GetAccessors(true).Any(IsVisibleApi)) properties.Add(ConvertProperty(prop));
+            foreach (PropertyInfo prop in type.GetProperties(apiFlags))
+            {
+                if (prop.GetAccessors(true).Any(IsVisibleApi))
+                {
+                    properties.Add(ConvertProperty(prop));
+                }
+            }
 
-            foreach (var evt in type.GetEvents(apiFlags))
-                if (evt.GetAddMethod(true) is { } add && IsVisibleApi(add)) events.Add(ConvertEvent(evt));
+            foreach (EventInfo evt in type.GetEvents(apiFlags))
+            {
+                if (evt.GetAddMethod(true) is { } add && IsVisibleApi(add))
+                {
+                    events.Add(ConvertEvent(evt));
+                }
+            }
 
-            foreach (var field in type.GetFields(apiFlags))
-                if (field.IsPublic || field.IsFamily || field.IsFamilyOrAssembly) fields.Add(ConvertField(field));
+            foreach (FieldInfo field in type.GetFields(apiFlags))
+            {
+                if (field.IsPublic || field.IsFamily || field.IsFamilyOrAssembly)
+                {
+                    fields.Add(ConvertField(field));
+                }
+            }
 
-            foreach (var nested in type.GetNestedTypes(BindingFlags.Public | BindingFlags.NonPublic))
+            foreach (Type nested in type.GetNestedTypes(BindingFlags.Public | BindingFlags.NonPublic))
+            {
                 if (nested.IsNestedPublic || nested.IsNestedFamily || nested.IsNestedFamORAssem)
+                {
                     nestedTypes.Add(ConvertType(nested, mlc));
+                }
+            }
         }
 
         return new TypeDeclaration(
@@ -116,61 +153,106 @@ public static class AssemblyApiReader
 
     private static string FormatTypeName(Type type)
     {
-        var fullName = type.FullName ?? type.Name;
+        string fullName = type.FullName ?? type.Name;
         if (!type.IsGenericType)
+        {
             return fullName;
-        var baseName = fullName.Contains('`')
+        }
+
+        string baseName = fullName.Contains('`')
             ? fullName[..fullName.IndexOf('`')]
             : fullName;
-        var args = type.GetGenericArguments().Select(FormatTypeRef);
+        IEnumerable<string> args = type.GetGenericArguments().Select(FormatTypeRef);
         return $"{baseName}<{string.Join(", ", args)}>";
     }
 
     private static string FormatTypeRef(Type type)
     {
-        if (type.IsGenericParameter) return type.Name;
-        var name = type.FullName ?? type.Name;
-        if (!type.IsGenericType) return name;
+        if (type.IsGenericParameter)
+        {
+            return type.Name;
+        }
 
-        var baseName = name.Contains('`')
+        string name = type.FullName ?? type.Name;
+        if (!type.IsGenericType)
+        {
+            return name;
+        }
+
+        string baseName = name.Contains('`')
             ? name[..name.IndexOf('`')]
             : name;
-        var args = type.GetGenericArguments().Select(FormatTypeRef);
+        IEnumerable<string> args = type.GetGenericArguments().Select(FormatTypeRef);
         return $"{baseName}<{string.Join(", ", args)}>";
     }
 
     private static CheckTypeKind GetTypeKind(Type type)
     {
-        if (type.IsEnum) return CheckTypeKind.Enum;
-        if (type.IsInterface) return CheckTypeKind.Interface;
-        if (type.IsValueType) return CheckTypeKind.Struct;
+        if (type.IsEnum)
+        {
+            return CheckTypeKind.Enum;
+        }
+
+        if (type.IsInterface)
+        {
+            return CheckTypeKind.Interface;
+        }
+
+        if (type.IsValueType)
+        {
+            return CheckTypeKind.Struct;
+        }
+
         return CheckTypeKind.Class;
     }
 
     private static Modifier GetModifiers(Type type)
     {
-        var mods = Modifier.None;
-        if (type.IsPublic || type.IsNestedPublic) mods |= Modifier.Public;
-        if (type.IsNestedFamily || type.IsNestedFamORAssem) mods |= Modifier.Protected;
-        if (type.IsSealed && !type.IsValueType && !type.IsEnum) mods |= Modifier.Sealed;
-        if (type.IsAbstract && !type.IsInterface && !type.IsSealed) mods |= Modifier.Abstract;
+        Modifier mods = Modifier.None;
+        if (type.IsPublic || type.IsNestedPublic)
+        {
+            mods |= Modifier.Public;
+        }
+
+        if (type.IsNestedFamily || type.IsNestedFamORAssem)
+        {
+            mods |= Modifier.Protected;
+        }
+
+        if (type.IsSealed && !type.IsValueType && !type.IsEnum)
+        {
+            mods |= Modifier.Sealed;
+        }
+
+        if (type.IsAbstract && !type.IsInterface && !type.IsSealed)
+        {
+            mods |= Modifier.Abstract;
+        }
         // Static classes are abstract + sealed in metadata
-        if (type.IsAbstract && type.IsSealed) mods = (mods & ~Modifier.Abstract & ~Modifier.Sealed) | Modifier.Public | Modifier.Static;
+        if (type.IsAbstract && type.IsSealed)
+        {
+            mods = (mods & ~Modifier.Abstract & ~Modifier.Sealed) | Modifier.Public | Modifier.Static;
+        }
+
         return mods;
     }
 
     private static List<string> GetBaseTypes(Type type)
     {
-        var bases = new List<string>();
+        List<string> bases = new List<string>();
         if (type.BaseType != null && type.BaseType.FullName != "System.Object"
             && type.BaseType.FullName != "System.ValueType" && type.BaseType.FullName != "System.Enum")
         {
             bases.Add(FormatTypeRef(type.BaseType));
         }
-        foreach (var iface in type.GetInterfaces())
+        foreach (Type iface in type.GetInterfaces())
         {
             // Only include directly declared interfaces
-            if (type.BaseType != null && type.BaseType.GetInterfaces().Contains(iface)) continue;
+            if (type.BaseType != null && type.BaseType.GetInterfaces().Contains(iface))
+            {
+                continue;
+            }
+
             bases.Add(FormatTypeRef(iface));
         }
         return bases;
@@ -192,7 +274,7 @@ public static class AssemblyApiReader
 
     private static MethodDeclaration ConvertMethod(MethodInfo method)
     {
-        var returnType = FormatTypeRef(method.ReturnType);
+        string returnType = FormatTypeRef(method.ReturnType);
         return new MethodDeclaration(
             Name: FormatMethodName(method),
             Modifiers: GetMethodModifiers(method),
@@ -207,42 +289,75 @@ public static class AssemblyApiReader
 
     private static string FormatMethodName(MethodInfo method)
     {
-        if (!method.IsGenericMethod) return method.Name;
-        var args = method.GetGenericArguments().Select(a => a.Name);
+        if (!method.IsGenericMethod)
+        {
+            return method.Name;
+        }
+
+        IEnumerable<string> args = method.GetGenericArguments().Select(a => a.Name);
         return $"{method.Name}<{string.Join(", ", args)}>";
     }
 
     private static Modifier GetMethodModifiers(MethodBase method)
     {
-        var mods = Modifier.None;
-        if (method.IsPublic) mods |= Modifier.Public;
-        else if (method.IsFamily || method.IsFamilyOrAssembly) mods |= Modifier.Protected;
-        if (method.IsStatic) mods |= Modifier.Static;
-        if (method.IsAbstract) mods |= Modifier.Abstract;
+        Modifier mods = Modifier.None;
+        if (method.IsPublic)
+        {
+            mods |= Modifier.Public;
+        }
+        else if (method.IsFamily || method.IsFamilyOrAssembly)
+        {
+            mods |= Modifier.Protected;
+        }
+
+        if (method.IsStatic)
+        {
+            mods |= Modifier.Static;
+        }
+
+        if (method.IsAbstract)
+        {
+            mods |= Modifier.Abstract;
+        }
+
         if (method.IsVirtual && !method.IsAbstract && !method.IsFinal)
         {
             // Check if this is an override or a new virtual
             if (method is MethodInfo mi && mi.GetBaseDefinition() != mi)
+            {
                 mods |= Modifier.Override;
+            }
             else
+            {
                 mods |= Modifier.Virtual;
+            }
         }
         return mods;
     }
 
     private static PropertyDeclaration ConvertProperty(PropertyInfo prop)
     {
-        var getter = prop.GetGetMethod(true);
-        var setter = prop.GetSetMethod(true);
-        if (getter is not null && !IsVisibleApi(getter)) getter = null;
-        if (setter is not null && !IsVisibleApi(setter)) setter = null;
-        var mods = Modifier.None;
+        MethodInfo? getter = prop.GetGetMethod(true);
+        MethodInfo? setter = prop.GetSetMethod(true);
+        if (getter is not null && !IsVisibleApi(getter))
+        {
+            getter = null;
+        }
 
-        var accessorMethod = getter ?? setter;
+        if (setter is not null && !IsVisibleApi(setter))
+        {
+            setter = null;
+        }
+
+        Modifier mods = Modifier.None;
+
+        MethodInfo? accessorMethod = getter ?? setter;
         if (accessorMethod != null)
+        {
             mods = GetMethodModifiers(accessorMethod);
+        }
 
-        var typeRef = FormatTypeRef(prop.PropertyType);
+        string typeRef = FormatTypeRef(prop.PropertyType);
         return new PropertyDeclaration(
             Name: prop.Name,
             Type: new TypeReference(prop.PropertyType.Name, prop.PropertyType.Namespace, [], typeRef),
@@ -253,13 +368,15 @@ public static class AssemblyApiReader
 
     private static EventDeclaration ConvertEvent(EventInfo evt)
     {
-        var mods = Modifier.None;
-        var addMethod = evt.GetAddMethod(true);
+        Modifier mods = Modifier.None;
+        MethodInfo? addMethod = evt.GetAddMethod(true);
         if (addMethod != null)
+        {
             mods = GetMethodModifiers(addMethod);
+        }
 
-        var handlerType = evt.EventHandlerType;
-        var typeRef = handlerType != null ? FormatTypeRef(handlerType) : "EventHandler";
+        Type? handlerType = evt.EventHandlerType;
+        string typeRef = handlerType != null ? FormatTypeRef(handlerType) : "EventHandler";
         return new EventDeclaration(
             Name: evt.Name,
             Type: handlerType != null
@@ -271,14 +388,32 @@ public static class AssemblyApiReader
 
     private static FieldDeclaration ConvertField(FieldInfo field)
     {
-        var mods = Modifier.None;
-        if (field.IsPublic) mods |= Modifier.Public;
-        else if (field.IsFamily || field.IsFamilyOrAssembly) mods |= Modifier.Protected;
-        if (field.IsStatic) mods |= Modifier.Static;
-        if (field.IsInitOnly) mods |= Modifier.Readonly;
-        if (field.IsLiteral) mods |= Modifier.Const;
+        Modifier mods = Modifier.None;
+        if (field.IsPublic)
+        {
+            mods |= Modifier.Public;
+        }
+        else if (field.IsFamily || field.IsFamilyOrAssembly)
+        {
+            mods |= Modifier.Protected;
+        }
 
-        var typeRef = FormatTypeRef(field.FieldType);
+        if (field.IsStatic)
+        {
+            mods |= Modifier.Static;
+        }
+
+        if (field.IsInitOnly)
+        {
+            mods |= Modifier.Readonly;
+        }
+
+        if (field.IsLiteral)
+        {
+            mods |= Modifier.Const;
+        }
+
+        string typeRef = FormatTypeRef(field.FieldType);
         return new FieldDeclaration(
             Name: field.Name,
             Type: new TypeReference(field.FieldType.Name, field.FieldType.Namespace, [], typeRef),
@@ -288,7 +423,7 @@ public static class AssemblyApiReader
 
     private static ParameterDeclaration ConvertParameter(ParameterInfo param)
     {
-        var typeRef = param.ParameterType != null ? FormatTypeRef(param.ParameterType) : "object";
+        string typeRef = param.ParameterType != null ? FormatTypeRef(param.ParameterType) : "object";
         return new ParameterDeclaration(
             Name: param.Name ?? $"arg{param.Position}",
             Type: param.ParameterType != null
@@ -304,13 +439,25 @@ public static class AssemblyApiReader
     private static string FormatDefaultValue(ParameterInfo param)
     {
         if (param.DefaultValue == null)
+        {
             return "null";
+        }
+
         if (param.DefaultValue is bool b)
+        {
             return b ? "true" : "false";
+        }
+
         if (param.DefaultValue is string s)
+        {
             return $"\"{s}\"";
+        }
+
         if (param.ParameterType?.IsEnum == true)
+        {
             return $"({FormatTypeRef(param.ParameterType)}){param.DefaultValue}";
+        }
+
         return param.DefaultValue.ToString() ?? "default";
     }
 }

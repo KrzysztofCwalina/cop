@@ -1,3 +1,5 @@
+// Represents type names and type relationships used during query evaluation.
+
 namespace Cop.Lang;
 
 /// <summary>
@@ -5,9 +7,16 @@ namespace Cop.Lang;
 /// </summary>
 public class TypeDescriptor
 {
+    /// <summary>The Cop name used to resolve this runtime type.</summary>
     public string Name { get; }
+
+    /// <summary>The base type searched for inherited properties.</summary>
     public TypeDescriptor? BaseType { get; set; }
+
+    /// <summary>Properties declared directly on this type, indexed by name.</summary>
     public Dictionary<string, PropertyDescriptor> Properties { get; } = new();
+
+    /// <summary>An optional converter from a CLR value to its display text.</summary>
     public Func<object, string>? TextConverter { get; set; }
 
     /// <summary>
@@ -22,6 +31,9 @@ public class TypeDescriptor
     /// </summary>
     public Dictionary<string, Func<object, List<object?>, object?>> MethodEvaluators { get; } = new();
 
+    /// <summary>
+    /// Creates a runtime type descriptor with no registered properties.
+    /// </summary>
     public TypeDescriptor(string name)
     {
         Name = name;
@@ -32,8 +44,11 @@ public class TypeDescriptor
     /// </summary>
     public PropertyDescriptor? GetProperty(string name)
     {
-        if (Properties.TryGetValue(name, out var prop))
+        if (Properties.TryGetValue(name, out PropertyDescriptor? prop))
+        {
             return prop;
+        }
+
         return BaseType?.GetProperty(name);
     }
 
@@ -42,36 +57,18 @@ public class TypeDescriptor
     /// </summary>
     public IEnumerable<PropertyDescriptor> GetAllProperties()
     {
-        var seen = new HashSet<string>();
-        var current = this;
+        HashSet<string> seen = new HashSet<string>();
+        TypeDescriptor? current = this;
         while (current is not null)
         {
-            foreach (var prop in current.Properties.Values)
+            foreach (PropertyDescriptor prop in current.Properties.Values)
             {
                 if (seen.Add(prop.Name))
+                {
                     yield return prop;
+                }
             }
             current = current.BaseType;
         }
-    }
-}
-
-/// <summary>
-/// Describes a single property on a type, with an optional CLR accessor delegate.
-/// </summary>
-public class PropertyDescriptor
-{
-    public string Name { get; }
-    public string TypeName { get; }
-    public bool IsOptional { get; }
-    public bool IsCollection { get; }
-    public Func<object, object?>? Accessor { get; set; }
-
-    public PropertyDescriptor(string name, string typeName, bool isOptional = false, bool isCollection = false)
-    {
-        Name = name;
-        TypeName = typeName;
-        IsOptional = isOptional;
-        IsCollection = isCollection;
     }
 }

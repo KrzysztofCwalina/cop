@@ -1,3 +1,5 @@
+// Preserves Rust type-category facts through shared types and source caching.
+
 namespace Cop.Providers.SourceModel;
 
 /// <summary>
@@ -13,6 +15,7 @@ namespace Cop.Providers.SourceModel;
 /// </summary>
 public sealed record RustTypeDeclaration : TypeDeclaration
 {
+    /// <summary>Copies a shared type and adds Rust type-category facts.</summary>
     public RustTypeDeclaration(
         TypeDeclaration source,
         bool isTrait = false,
@@ -54,8 +57,10 @@ public sealed record RustTypeDeclaration : TypeDeclaration
     /// <summary>True for negative impls, e.g. <c>impl !Send for T</c>.</summary>
     public bool IsNegativeImpl { get; init; }
 
+    /// <inheritdoc />
     public override string? LanguageTag => "rust";
 
+    /// <inheritdoc />
     public override IReadOnlyList<KeyValuePair<string, bool>>? LanguageFlags =>
     [
         new("IsTrait", IsTrait),
@@ -74,15 +79,16 @@ public sealed record RustTypeDeclaration : TypeDeclaration
     public static void RegisterCacheFactory() =>
         LanguageTypeRegistry.Register("rust", (baseDecl, flags) => new RustTypeDeclaration(
             baseDecl,
-            isTrait: flags.TryGetValue("IsTrait", out var t) && t,
-            isImpl: flags.TryGetValue("IsImpl", out var i) && i,
-            isUnsafe: flags.TryGetValue("IsUnsafe", out var u) && u,
-            isUnion: flags.TryGetValue("IsUnion", out var union) && union,
-            isTupleStruct: flags.TryGetValue("IsTupleStruct", out var tupleStruct) && tupleStruct,
-            isUnitStruct: flags.TryGetValue("IsUnitStruct", out var unitStruct) && unitStruct,
-            isNegativeImpl: flags.TryGetValue("IsNegativeImpl", out var negativeImpl) && negativeImpl));
+            isTrait: flags.TryGetValue("IsTrait", out bool t) && t,
+            isImpl: flags.TryGetValue("IsImpl", out bool i) && i,
+            isUnsafe: flags.TryGetValue("IsUnsafe", out bool u) && u,
+            isUnion: flags.TryGetValue("IsUnion", out bool union) && union,
+            isTupleStruct: flags.TryGetValue("IsTupleStruct", out bool tupleStruct) && tupleStruct,
+            isUnitStruct: flags.TryGetValue("IsUnitStruct", out bool unitStruct) && unitStruct,
+            isNegativeImpl: flags.TryGetValue("IsNegativeImpl", out bool negativeImpl) && negativeImpl));
 }
 
+/// <summary>Converts shared type declarations to Rust-specific declarations.</summary>
 public static class RustTypeDeclarationExtensions
 {
     /// <summary>Wraps a common <see cref="TypeDeclaration"/> as a Rust-specific one.</summary>

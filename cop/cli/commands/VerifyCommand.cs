@@ -1,4 +1,7 @@
+// Verifies Cop programs without executing their commands.
+
 using System.CommandLine;
+using System.Text.Json;
 using Cop.Core;
 using Cop.Lang;
 using Cop.Lang.Ast;
@@ -16,24 +19,24 @@ public static class VerifyCommand
 {
     public static Command Create()
     {
-        var pathArg = new Argument<string>("path")
+        Argument<string> pathArg = new Argument<string>("path")
         {
             Arity = ArgumentArity.ZeroOrOne,
             Description = ".cop file or directory to verify"
         };
-        var jsonOption = new Option<bool>("--json")
+        Option<bool> jsonOption = new Option<bool>("--json")
         {
             Description = "Emit diagnostics as JSON to stdout (for editors and tools)"
         };
-        var structuralOption = new Option<bool>("--strict-structure")
+        Option<bool> structuralOption = new Option<bool>("--strict-structure")
         {
             Description = "Reject raw-text dependencies in structural checks (including helpers and imports)"
         };
-        var textCheckOption = new Option<string[]>("--allow-text-check")
+        Option<string[]> textCheckOption = new Option<string[]>("--allow-text-check")
         {
             Description = "User-approved text check binding or predicate (repeatable; requires --strict-structure)"
         };
-        var command = new Command("verify", "Verify program correctness without executing (syntax, imports, types, bindings)")
+        Command command = new Command("verify", "Verify program correctness without executing (syntax, imports, types, bindings)")
         {
             pathArg,
             jsonOption,
@@ -84,7 +87,7 @@ public static class VerifyCommand
         }
 
         Array.Sort(files, StringComparer.Ordinal);
-        var diagnostics = CollectDiagnostics(files, scriptsDir, File.ReadAllText, strictStructure, allowTextChecks);
+        List<CopDiagnostic> diagnostics = CollectDiagnostics(files, scriptsDir, File.ReadAllText, strictStructure, allowTextChecks);
 
         // Output
         int errorCount = diagnostics.Count(d => d.Severity == CopDiagnosticSeverity.Error);
@@ -109,11 +112,17 @@ public static class VerifyCommand
 
         Console.Error.WriteLine();
         if (errorCount > 0 && warningCount > 0)
+        {
             Console.Error.WriteLine($"  {errorCount} error(s), {warningCount} warning(s) in {files.Length} file(s)");
+        }
         else if (errorCount > 0)
+        {
             Console.Error.WriteLine($"  {errorCount} error(s) in {files.Length} file(s)");
+        }
         else
+        {
             Console.Error.WriteLine($"  {warningCount} warning(s) in {files.Length} file(s)");
+        }
 
         return errorCount > 0 ? 1 : 0;
     }
@@ -128,16 +137,16 @@ public static class VerifyCommand
     internal static List<CopDiagnostic> CollectDiagnostics(string[] files, string scriptsDir, Func<string, string> readSource,
         bool strictStructure = false, string[]? allowTextChecks = null)
     {
-        var diagnostics = new List<CopDiagnostic>();
+        List<CopDiagnostic> diagnostics = new List<CopDiagnostic>();
 
         // Phase 1: Syntax — parse all files
-        var modules = new List<(ModuleNode Module, string FilePath, string Source)>();
-        foreach (var file in files)
+        List<(ModuleNode Module, string FilePath, string Source)> modules = new List<(ModuleNode Module, string FilePath, string Source)>();
+        foreach (string file in files)
         {
             try
             {
-                var source = readSource(file);
-                var module = CopParser.Parse(source, file);
+                string source = readSource(file);
+                ModuleNode module = CopParser.Parse(source, file);
                 modules.Add((module, file, source));
             }
             catch (ParseException ex)
@@ -154,51 +163,58 @@ public static class VerifyCommand
         }
 
         // Phase 2: Import resolution
-        var feedPaths = FindFeedPaths(scriptsDir);
+        List<string> feedPaths = FindFeedPaths(scriptsDir);
 
         // Also extract feed paths declared in source files (feed 'path')
-        foreach (var (_, filePath, source) in modules)
+        foreach ((ModuleNode _, string? filePath, string? source) in modules)
         {
-            var fileDir = Path.GetDirectoryName(filePath) ?? scriptsDir;
-            foreach (var fp in ModuleLoader.ExtractFeedPaths(source, fileDir))
+            string fileDir = Path.GetDirectoryName(filePath) ?? scriptsDir;
+            foreach (string fp in ModuleLoader.ExtractFeedPaths(source, fileDir))
             {
                 if (!feedPaths.Contains(fp))
+                {
                     feedPaths.Add(fp);
+                }
             }
         }
 
-        var moduleLoader = new ModuleLoader(feedPaths);
-        var imports = new HashSet<string>(StringComparer.Ordinal);
+        ModuleLoader moduleLoader = new ModuleLoader(feedPaths);
+        HashSet<string> imports = new HashSet<string>(StringComparer.Ordinal);
 
-        foreach (var (module, _, _) in modules)
+        foreach ((ModuleNode? module, string _, string _) in modules)
         {
-            foreach (var decl in module.Declarations)
+            foreach (Declaration decl in module.Declarations)
             {
                 if (decl is ImportDecl imp)
+                {
                     imports.Add(imp.ModuleName);
+                }
             }
         }
 
         // Resolve imports using a lightweight evaluator (no execution, just name registration)
-        var evaluator = new Evaluator();
-        foreach (var import in imports)
+        Evaluator evaluator = new Evaluator();
+        foreach (string import in imports)
+        {
             moduleLoader.LoadPackage(import, evaluator);
+        }
 
         diagnostics.AddRange(moduleLoader.Diagnostics);
 
         // Phase 3: Name binding
         // Collect symbols from imports that the binder should know about
-        var externalSymbols = CollectExternalSymbols(evaluator.GlobalEnvironment, moduleLoader.LoadedModules);
+        List<Lang.Interpreter.Symbol> externalSymbols = CollectExternalSymbols(evaluator.GlobalEnvironment, moduleLoader.LoadedModules);
 
         // All top-level names declared across every file of this program. A reference in one file
         // to a let/function/etc. declared in a sibling file (the cop-checks/ pattern) must not be
         // flagged as undefined. Used as a fallback only — not added to any scope, so it never
         // triggers a duplicate-declaration diagnostic.
-        var programNames = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var (programModule, _, _) in modules)
-            foreach (var decl in programModule.Declarations)
+        HashSet<string> programNames = new HashSet<string>(StringComparer.Ordinal);
+        foreach ((ModuleNode? programModule, string _, string _) in modules)
+        {
+            foreach (Declaration decl in programModule.Declarations)
             {
-                var declName = decl switch
+                string? declName = decl switch
                 {
                     TypeDecl td => td.Name,
                     EnumDecl ed => ed.Name,
@@ -208,8 +224,12 @@ public static class VerifyCommand
                     CommandDecl cd => cd.Name,
                     _ => null
                 };
-                if (declName is not null) programNames.Add(declName);
+                if (declName is not null)
+                {
+                    programNames.Add(declName);
+                }
             }
+        }
 
         // Program declarations shadow default-library functions, just as they do at runtime.
         externalSymbols.RemoveAll(symbol => programNames.Contains(symbol.Name));
@@ -218,10 +238,11 @@ public static class VerifyCommand
         // (e.g. METRICS(slop, ...), CHECK(csharp-library-checks)). Add them to the same
         // fallback set so they are not flagged as undefined. They are NOT added to the scope, so
         // a program may still re-declare one (shadowing) without a duplicate-declaration error.
-        foreach (var loaded in moduleLoader.LoadedModules)
-            foreach (var decl in loaded.Declarations)
+        foreach (ModuleNode loaded in moduleLoader.LoadedModules)
+        {
+            foreach (Declaration decl in loaded.Declarations)
             {
-                var exportedName = decl switch
+                string? exportedName = decl switch
                 {
                     TypeDecl { IsExported: true } td => td.Name,
                     EnumDecl { IsExported: true } ed => ed.Name,
@@ -231,15 +252,19 @@ public static class VerifyCommand
                     CommandDecl { IsExported: true } cd => cd.Name,
                     _ => null
                 };
-                if (exportedName is not null) programNames.Add(exportedName);
+                if (exportedName is not null)
+                {
+                    programNames.Add(exportedName);
+                }
             }
+        }
 
-        foreach (var (module, filePath, source) in modules)
+        foreach ((ModuleNode? module, string? filePath, string? source) in modules)
         {
-            var binder = new Binder(filePath, externalSymbols, programNames, reportUndefinedIdentifiers: true);
-            var bindingResult = binder.Bind(module);
+            Binder binder = new Binder(filePath, externalSymbols, programNames, reportUndefinedIdentifiers: true);
+            BindingResult bindingResult = binder.Bind(module);
 
-            foreach (var bd in bindingResult.Diagnostics)
+            foreach (BindingDiagnostic bd in bindingResult.Diagnostics)
             {
                 diagnostics.Add(new CopDiagnostic(
                     bd.Severity switch
@@ -262,19 +287,23 @@ public static class VerifyCommand
         // Conservative: only confident, concrete incompatibilities are reported.
         try
         {
-            var typeModel = modules.Select(m => m.Module).Concat(moduleLoader.LoadedModules);
-            var toCheck = modules.Select(m => (m.Module, m.FilePath, m.Source));
+            IEnumerable<ModuleNode> typeModel = modules.Select(m => m.Module).Concat(moduleLoader.LoadedModules);
+            IEnumerable<(ModuleNode Module, string FilePath, string Source)> toCheck = modules.Select(m => (m.Module, m.FilePath, m.Source));
             diagnostics.AddRange(TypeChecker.Check(typeModel, toCheck));
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             // The type checker must never make verification crash; fall back to the other phases.
             if (Cop.Core.CopDiagnostics.Level >= 1)
+            {
                 Console.Error.WriteLine($"[diag] type checker skipped: {ex.Message}");
+            }
         }
 
         if (strictStructure)
+        {
             diagnostics.AddRange(StructuralCheckPolicy.Check(modules, moduleLoader.LoadedFiles, allowTextChecks ?? []));
+        }
 
         return diagnostics;
     }
@@ -294,8 +323,8 @@ public static class VerifyCommand
         string[] files, string scriptsDir, Func<string, string> readSource,
         out IReadOnlyDictionary<string, List<ModuleNode>> namespaces)
     {
-        var local = new List<(ModuleNode Module, string FilePath, string Source)>();
-        foreach (var file in files)
+        List<(ModuleNode Module, string FilePath, string Source)> local = new List<(ModuleNode Module, string FilePath, string Source)>();
+        foreach (string file in files)
         {
             string source;
             try { source = readSource(file); }
@@ -306,28 +335,40 @@ public static class VerifyCommand
             catch { /* a catastrophically broken file contributes nothing to the model */ }
         }
 
-        var feedPaths = FindFeedPaths(scriptsDir);
-        foreach (var (_, filePath, source) in local)
+        List<string> feedPaths = FindFeedPaths(scriptsDir);
+        foreach ((ModuleNode _, string? filePath, string? source) in local)
         {
-            var fileDir = Path.GetDirectoryName(filePath) ?? scriptsDir;
-            foreach (var fp in ModuleLoader.ExtractFeedPaths(source, fileDir))
-                if (!feedPaths.Contains(fp)) feedPaths.Add(fp);
+            string fileDir = Path.GetDirectoryName(filePath) ?? scriptsDir;
+            foreach (string fp in ModuleLoader.ExtractFeedPaths(source, fileDir))
+            {
+                if (!feedPaths.Contains(fp))
+                {
+                    feedPaths.Add(fp);
+                }
+            }
         }
 
-        var moduleLoader = new ModuleLoader(feedPaths);
-        var imports = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var (module, _, _) in local)
-            foreach (var decl in module.Declarations)
-                if (decl is ImportDecl imp) imports.Add(imp.ModuleName);
+        ModuleLoader moduleLoader = new ModuleLoader(feedPaths);
+        HashSet<string> imports = new HashSet<string>(StringComparer.Ordinal);
+        foreach ((ModuleNode? module, string _, string _) in local)
+        {
+            foreach (Declaration decl in module.Declarations)
+            {
+                if (decl is ImportDecl imp)
+                {
+                    imports.Add(imp.ModuleName);
+                }
+            }
+        }
 
-        var evaluator = new Evaluator();
-        foreach (var import in imports)
+        Evaluator evaluator = new Evaluator();
+        foreach (string import in imports)
         {
             try { moduleLoader.LoadPackage(import, evaluator); }
             catch { /* a broken import must not crash the editor */ }
         }
 
-        var all = new List<ModuleNode>(local.Count + 8);
+        List<ModuleNode> all = new List<ModuleNode>(local.Count + 8);
         all.AddRange(local.Select(m => m.Module));
         all.AddRange(moduleLoader.LoadedModules);
         namespaces = moduleLoader.PackageModules;
@@ -338,20 +379,34 @@ public static class VerifyCommand
     /// import-completion). A directory is a package when it contains a <c>src/</c> folder.</summary>
     internal static IReadOnlyCollection<string> ListAvailablePackages(string scriptsDir)
     {
-        var names = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var feed in FindFeedPaths(scriptsDir))
+        HashSet<string> names = new HashSet<string>(StringComparer.Ordinal);
+        foreach (string feed in FindFeedPaths(scriptsDir))
         {
-            if (!Directory.Exists(feed)) continue;
-            foreach (var dir in Directory.GetDirectories(feed))
+            if (!Directory.Exists(feed))
             {
-                var name = Path.GetFileName(dir);
-                if (name.StartsWith('.')) continue;
-                if (Directory.Exists(Path.Combine(dir, "src"))) names.Add(name);
-                foreach (var sub in Directory.GetDirectories(dir))
+                continue;
+            }
+
+            foreach (string dir in Directory.GetDirectories(feed))
+            {
+                string name = Path.GetFileName(dir);
+                if (name.StartsWith('.'))
                 {
-                    var subName = Path.GetFileName(sub);
+                    continue;
+                }
+
+                if (Directory.Exists(Path.Combine(dir, "src")))
+                {
+                    names.Add(name);
+                }
+
+                foreach (string sub in Directory.GetDirectories(dir))
+                {
+                    string subName = Path.GetFileName(sub);
                     if (!subName.StartsWith('.') && Directory.Exists(Path.Combine(sub, "src")))
+                    {
                         names.Add(subName);
+                    }
                 }
             }
         }
@@ -385,7 +440,7 @@ public static class VerifyCommand
             errors,
             warnings
         };
-        var options = new System.Text.Json.JsonSerializerOptions
+        JsonSerializerOptions options = new System.Text.Json.JsonSerializerOptions
         {
             WriteIndented = true,
             DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull,
@@ -400,27 +455,29 @@ public static class VerifyCommand
     /// </summary>
     internal static List<Cop.Lang.Interpreter.Symbol> CollectExternalSymbols(Cop.Lang.Interpreter.Environment env, IReadOnlyList<ModuleNode> loadedModules, IEnumerable<ProviderSchema>? providerSchemas = null)
     {
-        var symbols = new List<Cop.Lang.Interpreter.Symbol>();
-        var seen = new HashSet<string>(StringComparer.Ordinal);
+        List<Lang.Interpreter.Symbol> symbols = new List<Cop.Lang.Interpreter.Symbol>();
+        HashSet<string> seen = new HashSet<string>(StringComparer.Ordinal);
 
         // Add core primitive types that are always available
-        var primitiveTypes = new[] { "string", "int", "float", "bool", "byte", "bytes", "object", "T", "R", "K", "A" };
-        foreach (var name in primitiveTypes)
+        string[] primitiveTypes = new[] { "string", "int", "float", "bool", "byte", "bytes", "object", "T", "R", "K", "A" };
+        foreach (string? name in primitiveTypes)
         {
             if (seen.Add(name))
+            {
                 symbols.Add(new TypeSymbol(name, null, []));
+            }
         }
 
         // Types from provider schemas (e.g., Folder, File from filesystem provider)
         if (providerSchemas != null)
         {
-            foreach (var schema in providerSchemas)
+            foreach (ProviderSchema schema in providerSchemas)
             {
-                foreach (var type in schema.Types)
+                foreach (ProviderTypeSchema type in schema.Types)
                 {
                     if (seen.Add(type.Name))
                     {
-                        var props = type.Properties.Select(p =>
+                        List<PropertySymbol> props = type.Properties.Select(p =>
                             new PropertySymbol(p.Name, new TypeRef(p.Type), p.Optional)).ToList();
                         symbols.Add(new TypeSymbol(type.Name, type.Base, props));
                     }
@@ -429,37 +486,45 @@ public static class VerifyCommand
         }
 
         // Add types, functions, and enums from imported modules
-        foreach (var module in loadedModules)
+        foreach (ModuleNode module in loadedModules)
         {
-            foreach (var decl in module.Declarations)
+            foreach (Declaration decl in module.Declarations)
             {
                 switch (decl)
                 {
                     case TypeDecl td when td.IsExported:
                         if (seen.Add(td.Name))
                         {
-                            var props = td.Properties.Select(p =>
+                            List<PropertySymbol> props = td.Properties.Select(p =>
                                 new PropertySymbol(p.Name, p.Type, p.IsOptional)).ToList();
                             symbols.Add(new TypeSymbol(td.Name, td.BaseType, props));
                         }
                         break;
                     case EnumDecl ed when ed.IsExported:
                         if (seen.Add(ed.Name))
+                        {
                             symbols.Add(new EnumSymbol(ed.Name, null, ed.Members.Select(m => new EnumMemberSymbol(m, ed.Name)).ToList()));
+                        }
+
                         break;
                     case FunctionDecl fd when fd.IsExported:
                         if (seen.Add(fd.Name))
+                        {
                             symbols.Add(new FunctionSymbol(fd.Name, CallableKind.Function, []));
+                        }
+
                         break;
                 }
             }
         }
 
         // Add symbols from imported packages (registered in the evaluator's environment)
-        foreach (var (name, _) in env.AllBindings())
+        foreach ((string? name, CopValue _) in env.AllBindings())
         {
             if (seen.Add(name))
+            {
                 symbols.Add(new VariableSymbol(name));
+            }
         }
 
         // Built-in names that are always available to the binder's fallback (so a reference to one
@@ -468,11 +533,13 @@ public static class VerifyCommand
         //    can never drift when an intrinsic is added/renamed;
         //  - runtime/standard-library/domain names that have no single registry yet (commands like
         //    CHECK/FAIL, collection combinators, std transforms). Over-inclusion here is harmless.
-        var runtimeBuiltins = new[] { "print", "PRINT", "SAVE", "FAIL", "CHECK", "ASSERT", "provider", "count", "sum", "avg", "min", "max", "first", "last", "distinct", "flatten", "join", "sort", "reverse", "take", "skip", "map", "any", "all", "none", "contains", "where", "groupBy", "format" };
-        foreach (var name in Cop.Lang.IntrinsicRegistry.All.SelectMany(o => o.AllNames).Concat(runtimeBuiltins))
+        string[] runtimeBuiltins = new[] { "print", "PRINT", "SAVE", "FAIL", "CHECK", "ASSERT", "provider", "count", "sum", "avg", "min", "max", "first", "last", "distinct", "flatten", "join", "sort", "reverse", "take", "skip", "map", "any", "all", "none", "contains", "where", "groupBy", "format" };
+        foreach (string? name in Cop.Lang.IntrinsicRegistry.All.SelectMany(o => o.AllNames).Concat(runtimeBuiltins))
         {
             if (seen.Add(name))
+            {
                 symbols.Add(new FunctionSymbol(name, CallableKind.External, []));
+            }
         }
 
         return symbols;
@@ -487,20 +554,31 @@ public static class VerifyCommand
         List<CopDiagnostic> diagnostics)
     {
         // Look for runtime:: declarations and verify their provider packages exist
-        foreach (var (module, filePath, source) in modules)
+        foreach ((ModuleNode? module, string? filePath, string? source) in modules)
         {
-            foreach (var decl in module.Declarations)
+            foreach (Declaration decl in module.Declarations)
             {
-                if (decl is not LetDecl ld) continue;
-                if (ld.Value is not Cop.Lang.Ast.MemberExpr ma) continue;
-                if (ma.Object is not Cop.Lang.Ast.IdentifierExpr id || id.Name != "runtime") continue;
+                if (decl is not LetDecl ld)
+                {
+                    continue;
+                }
+
+                if (ld.Value is not Cop.Lang.Ast.MemberExpr ma)
+                {
+                    continue;
+                }
+
+                if (ma.Object is not Cop.Lang.Ast.IdentifierExpr id || id.Name != "runtime")
+                {
+                    continue;
+                }
 
                 // This is a runtime::X reference — check if a provider for X exists in feeds
-                var providerName = ma.Member;
+                string providerName = ma.Member;
                 bool found = false;
-                foreach (var feed in feedPaths)
+                foreach (string feed in feedPaths)
                 {
-                    var dir = ImportResolver.FindPackageDir(feed, providerName);
+                    string? dir = ImportResolver.FindPackageDir(feed, providerName);
                     if (dir is not null)
                     {
                         found = true;

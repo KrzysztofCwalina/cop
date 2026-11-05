@@ -1,3 +1,5 @@
+// Inspects provider assembly metadata for host compatibility before loading.
+
 using System.Reflection.Metadata;
 using System.Reflection.PortableExecutable;
 
@@ -11,37 +13,52 @@ internal static class ProviderCompatibility
     internal static string? GetError(string packageDir, PackageMetadata metadata)
     {
         if (!metadata.IsClrProvider || FindAssembly(packageDir, metadata) is not { } path)
-            return null;
-
-        using var stream = File.OpenRead(path);
-        using var pe = new PEReader(stream);
-        var reader = pe.GetMetadataReader();
-        foreach (var handle in reader.AssemblyReferences)
         {
-            var reference = reader.GetAssemblyReference(handle);
+            return null;
+        }
+
+        using FileStream stream = File.OpenRead(path);
+        using PEReader pe = new PEReader(stream);
+        MetadataReader reader = pe.GetMetadataReader();
+        foreach (AssemblyReferenceHandle handle in reader.AssemblyReferences)
+        {
+            AssemblyReference reference = reader.GetAssemblyReference(handle);
             if (reader.GetString(reference.Name) == Host.Name && reference.Version != Host.Version)
+            {
                 return $"Provider '{metadata.Name}' at '{path}' is incompatible: it requires cop {reference.Version}, " +
                     $"but this executable is {HostVersion}.";
+            }
         }
         return null;
     }
 
     internal static string? FindAssembly(string packageDir, PackageMetadata metadata)
     {
-        var libDir = Path.Combine(packageDir, "lib");
+        string libDir = Path.Combine(packageDir, "lib");
         if (!Directory.Exists(libDir))
+        {
             return null;
-        var dlls = Directory.GetFiles(libDir, "*.dll");
+        }
+
+        string[] dlls = Directory.GetFiles(libDir, "*.dll");
         if (dlls.Length == 0)
         {
-            var ridDir = Path.Combine(libDir, System.Runtime.InteropServices.RuntimeInformation.RuntimeIdentifier);
+            string ridDir = Path.Combine(libDir, System.Runtime.InteropServices.RuntimeInformation.RuntimeIdentifier);
             if (Directory.Exists(ridDir))
+            {
                 dlls = Directory.GetFiles(ridDir, "*.dll");
+            }
         }
         if (dlls.Length == 0)
+        {
             return null;
+        }
+
         if (dlls.Length == 1)
+        {
             return dlls[0];
+        }
+
         return dlls.FirstOrDefault(d => Path.GetFileName(d).Equals(metadata.ProviderAssembly, StringComparison.OrdinalIgnoreCase))
             ?? dlls.FirstOrDefault(d => Path.GetFileNameWithoutExtension(d).Equals(metadata.Name, StringComparison.OrdinalIgnoreCase))
             ?? dlls[0];

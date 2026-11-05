@@ -1,3 +1,5 @@
+// Defines text ranges and style metadata for rich output.
+
 namespace Cop.Lang;
 
 /// <summary>

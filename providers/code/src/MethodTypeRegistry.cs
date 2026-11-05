@@ -1,3 +1,5 @@
+// Reconstructs language-specific methods and statements from source caches.
+
 namespace Cop.Providers.SourceModel;
 
 /// <summary>

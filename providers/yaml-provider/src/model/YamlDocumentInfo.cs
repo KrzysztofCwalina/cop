@@ -1,3 +1,5 @@
+// Models a YAML document boundary and its source provenance.
+
 namespace Cop.Providers.Yaml;
 
 /// <summary>
@@ -6,6 +8,8 @@ namespace Cop.Providers.Yaml;
 /// </summary>
 public record YamlDocumentInfo(int Index, int Line)
 {
+    /// <summary>Gets the YAML source file containing this document.</summary>
     public SourceModel.SourceFile? File { get; init; }
+    /// <summary>Gets the file path and line used to locate diagnostics.</summary>
     public string Source => $"{File?.Path}:{Line}";
 }

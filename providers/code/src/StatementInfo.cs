@@ -1,3 +1,5 @@
+// Represents statements, call bindings, and their structural relationships.
+
 namespace Cop.Providers.SourceModel;
 
 public class StatementInfo(
@@ -55,6 +57,7 @@ public class StatementInfo(
     public List<string> Arguments { get; } = arguments;
     public ExpressionInfo? CallTarget { get; set; }
     public ExpressionInfo? ValueExpression { get; set; }
+    public ExpressionInfo? ConditionExpression { get; set; }
     public List<ExpressionInfo> ArgumentExpressions { get; set; } = [];
     public int Line { get; } = line;
     public bool IsInMethod { get; } = isInMethod;
@@ -101,8 +104,8 @@ public class StatementInfo(
 
     public List<StatementInfo> GetAncestors()
     {
-        var result = new List<StatementInfo>();
-        var current = Parent;
+        List<StatementInfo> result = new List<StatementInfo>();
+        StatementInfo? current = Parent;
         while (current != null)
         {
             result.Add(current);

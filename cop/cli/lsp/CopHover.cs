@@ -1,3 +1,5 @@
+// Builds hover documentation for Cop symbols at an editor position.
+
 using System.Text;
 using Cop.Lang;
 using Cop.Lang.Ast;
@@ -18,71 +20,99 @@ internal static class CopHover
     /// 0-based, or null when there is nothing confident to show.</summary>
     public static string? Hover(SemanticModel model, ModuleNode? fileModule, string text, int line, int character)
     {
-        var lines = CopEditorContext.SplitLines(text);
-        if (line < 0 || line >= lines.Length) return null;
-        var lineText = lines[line];
-        var (word, start) = CopEditorContext.WordAt(lineText, character);
-        if (word is null) return null;
-        var before = lineText[..start];
+        string[] lines = CopEditorContext.SplitLines(text);
+        if (line < 0 || line >= lines.Length)
+        {
+            return null;
+        }
 
-        var locals = CopEditorContext.BuildLocals(model, fileModule, lines, line);
+        string lineText = lines[line];
+        (string? word, int start) = CopEditorContext.WordAt(lineText, character);
+        if (word is null)
+        {
+            return null;
+        }
+
+        string before = lineText[..start];
+
+        Dictionary<string, TypeInfo> locals = CopEditorContext.BuildLocals(model, fileModule, lines, line);
 
         // 1. Declared predicate or function.
-        var callable = model.Callable(word);
-        if (callable is not null) return CallableHover(callable);
+        CallableInfo? callable = model.Callable(word);
+        if (callable is not null)
+        {
+            return CallableHover(callable);
+        }
 
         // 2. Top-level `let` binding.
         if (model.IsLet(word))
         {
-            var t = model.LetType(word);
+            TypeInfo? t = model.LetType(word);
             return Code($"let {word}: {t?.Display ?? "unknown"}");
         }
 
         // 3. Property in a dot-chain (e.g. `codebase.Types.Name`).
         if (before.TrimEnd().EndsWith('.'))
         {
-            var chain = CopEditorContext.ChainBefore(before, '.');
+            string? chain = CopEditorContext.ChainBefore(before, '.');
             if (chain is not null)
             {
-                var parent = model.InferExpressionType(chain, locals);
+                TypeInfo? parent = model.InferExpressionType(chain, locals);
                 if (parent is not null)
                 {
                     // A collection projects to its element type; a scalar uses its own type.
-                    var owner = parent.Value.Name;
-                    var prop = model.PropertyOf(owner, word);
+                    string owner = parent.Value.Name;
+                    PropertyInfo? prop = model.PropertyOf(owner, word);
                     if (prop is not null)
+                    {
                         return Code($"(property) {prop.DeclaringType}.{prop.Name}: {prop.Type}");
-                    var builtin = BuiltinProperty(parent.Value, word);
-                    if (builtin is not null) return Code(builtin);
+                    }
+
+                    string? builtin = BuiltinProperty(parent.Value, word);
+                    if (builtin is not null)
+                    {
+                        return Code(builtin);
+                    }
                 }
             }
         }
 
         // 4. Implicit `item`.
-        if (word == Evaluator.ImplicitItemVariable && locals.TryGetValue(Evaluator.ImplicitItemVariable, out var itemType))
+        if (word == Evaluator.ImplicitItemVariable && locals.TryGetValue(Evaluator.ImplicitItemVariable, out TypeInfo itemType))
+        {
             return Code($"(variable) {Evaluator.ImplicitItemVariable}: {itemType.Display}");
+        }
 
         // 5. Type name.
-        if (model.IsKnownType(word)) return TypeHover(model, word);
+        if (model.IsKnownType(word))
+        {
+            return TypeHover(model, word);
+        }
 
         // 6. Predicate/function parameter in scope.
-        if (locals.TryGetValue(word, out var paramType))
+        if (locals.TryGetValue(word, out TypeInfo paramType))
+        {
             return Code($"(parameter) {word}: {paramType.Display}");
+        }
 
         // 7. Keyword.
-        foreach (var kw in LanguageMetadata.Keywords)
+        foreach (KeywordEntry kw in LanguageMetadata.Keywords)
+        {
             if (kw.Name == word)
+            {
                 return Code($"(keyword) {word}") + "\n\n" + kw.Detail;
+            }
+        }
 
         return null;
     }
 
     private static string CallableHover(CallableInfo c)
     {
-        var pars = string.Join(", ", c.ParamTypes.Select(p => p ?? "?"));
+        string pars = string.Join(", ", c.ParamTypes.Select(p => p ?? "?"));
         if (c.IsPredicate)
         {
-            var ret = c.IsNarrowing && c.ReturnType is not null ? c.ReturnType : "bool";
+            string ret = c.IsNarrowing && c.ReturnType is not null ? c.ReturnType : "bool";
             return Code($"predicate {c.Name}({pars}) => {ret}");
         }
         return c.ReturnType is not null
@@ -92,9 +122,9 @@ internal static class CopHover
 
     private static string TypeHover(SemanticModel model, string name)
     {
-        var sb = new StringBuilder();
+        StringBuilder sb = new StringBuilder();
         sb.Append(Code($"type {name}"));
-        var props = model.PropertiesOf(name);
+        IReadOnlyList<PropertyInfo> props = model.PropertiesOf(name);
         if (props.Count > 0)
         {
             sb.Append("\n\n**Properties:**\n");
@@ -108,13 +138,19 @@ internal static class CopHover
     {
         if (parent.IsCollection)
         {
-            var e = Array.Find(LanguageMetadata.CollectionProperties, p => p.Name == word);
-            if (e.Name == word) return $"(property) [{parent.Name}].{word}{Detail(e.Detail)}";
+            MetadataEntry e = Array.Find(LanguageMetadata.CollectionProperties, p => p.Name == word);
+            if (e.Name == word)
+            {
+                return $"(property) [{parent.Name}].{word}{Detail(e.Detail)}";
+            }
         }
         if (SemanticModel.IsStringType(parent.Display))
         {
-            var e = Array.Find(LanguageMetadata.StringProperties, p => p.Name == word);
-            if (e.Name == word) return $"(property) string.{word}{Detail(e.Detail)}";
+            MetadataEntry e = Array.Find(LanguageMetadata.StringProperties, p => p.Name == word);
+            if (e.Name == word)
+            {
+                return $"(property) string.{word}{Detail(e.Detail)}";
+            }
         }
         return null;
     }

@@ -525,7 +525,10 @@ public class PythonSemanticBindingTests
                 File.WriteAllText(dependency, dependencyText.Replace("-> str", "-> int"));
                 File.SetLastWriteTimeUtc(dependency, timestamp);
             }
-            var result = Engine.Run(checks, target, additionalFeedPaths: [Path.Combine(repo, "packages")]);
+            var result = Engine.Run(checks, target, new EngineRunOptions
+            {
+                AdditionalFeedPaths = [Path.Combine(repo, "packages")],
+            });
             Assert.That(result.ParseErrors, Is.Empty);
             Assert.That(result.Errors, Is.Empty);
             Assert.That(result.Warnings, Is.Empty);

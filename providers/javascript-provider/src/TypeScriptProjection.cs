@@ -1,3 +1,5 @@
+// Maps TypeScript compiler responses into the shared Cop source model.
+
 using System.Collections.Concurrent;
 using System.Security.Cryptography;
 using System.Text;
@@ -10,40 +12,60 @@ namespace Cop.Providers.SourceParsers;
 /// <summary>Discovers an already-installed compiler without invoking npm or assuming global require resolution.</summary>
 public sealed record JavaScriptToolchain(string NodePath, string CompilerPath)
 {
+    /// <summary>Finds installed Node.js and TypeScript for a source path.</summary>
     public static JavaScriptToolchain? Discover(string sourcePath, string? searchPath = null)
     {
-        var node = ToolchainProcess.FindExecutable("node", searchPath);
-        if (node is null) return null;
+        string? node = ToolchainProcess.FindExecutable("node", searchPath);
+        if (node is null)
+        {
+            return null;
+        }
 
-        for (var directory = new DirectoryInfo(Path.GetDirectoryName(Path.GetFullPath(sourcePath))!);
+        for (DirectoryInfo? directory = new DirectoryInfo(Path.GetDirectoryName(Path.GetFullPath(sourcePath))!);
             directory is not null; directory = directory.Parent)
         {
-            var local = Path.Combine(directory.FullName, "node_modules", "typescript", "lib", "typescript.js");
-            if (File.Exists(local)) return new(node, local);
+            string local = Path.Combine(directory.FullName, "node_modules", "typescript", "lib", "typescript.js");
+            if (File.Exists(local))
+            {
+                return new(node, local);
+            }
         }
 
         // npm's Windows launchers sit beside node_modules; Unix tsc is normally a symlink
         // into ../lib/node_modules/typescript/bin/tsc (including version-manager installations).
-        foreach (var entry in (searchPath ?? Environment.GetEnvironmentVariable("PATH") ?? "")
+        foreach (string entry in (searchPath ?? Environment.GetEnvironmentVariable("PATH") ?? "")
             .Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries))
         {
-            var directory = entry.Trim().Trim('"');
-            if (!Path.IsPathFullyQualified(directory)) continue;
-            foreach (var launcherName in OperatingSystem.IsWindows()
+            string directory = entry.Trim().Trim('"');
+            if (!Path.IsPathFullyQualified(directory))
+            {
+                continue;
+            }
+
+            foreach (string? launcherName in OperatingSystem.IsWindows()
                 ? new[] { "tsc.cmd", "tsc.ps1", "tsc.exe", "tsc" } : new[] { "tsc" })
             {
-                var launcher = new FileInfo(Path.Combine(directory, launcherName));
-                if (!launcher.Exists) continue;
-                var target = launcher.ResolveLinkTarget(returnFinalTarget: true);
-                var candidates = new[]
+                FileInfo launcher = new FileInfo(Path.Combine(directory, launcherName));
+                if (!launcher.Exists)
+                {
+                    continue;
+                }
+
+                FileSystemInfo? target = launcher.ResolveLinkTarget(returnFinalTarget: true);
+                string[] candidates = new[]
                 {
                     Path.Combine(directory, "node_modules", "typescript", "lib", "typescript.js"),
                     Path.GetFullPath(Path.Combine(directory, "..", "lib", "node_modules", "typescript", "lib", "typescript.js")),
                     Path.GetFullPath(Path.Combine(Path.GetDirectoryName(target?.FullName ?? launcher.FullName)!,
                         "..", "lib", "typescript.js"))
                 };
-                foreach (var candidate in candidates)
-                    if (File.Exists(candidate)) return new(node, candidate);
+                foreach (string? candidate in candidates)
+                {
+                    if (File.Exists(candidate))
+                    {
+                        return new(node, candidate);
+                    }
+                }
             }
         }
         return null;
@@ -54,18 +76,22 @@ internal sealed class TypeScriptProjection(string? searchPath)
 {
     private static readonly Lazy<string> ScriptPath = new(() =>
     {
-        using var stream = typeof(TypeScriptProjection).Assembly.GetManifestResourceStream(
+        using Stream stream = typeof(TypeScriptProjection).Assembly.GetManifestResourceStream(
             "Cop.Providers.src.typescript-projector.cjs")
             ?? throw new InvalidOperationException("The embedded TypeScript projector is missing.");
-        using var reader = new StreamReader(stream);
-        var bytes = Encoding.UTF8.GetBytes(reader.ReadToEnd());
-        var hash = Convert.ToHexStringLower(SHA256.HashData(bytes));
-        var directory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+        using StreamReader reader = new StreamReader(stream);
+        byte[] bytes = Encoding.UTF8.GetBytes(reader.ReadToEnd());
+        string hash = Convert.ToHexStringLower(SHA256.HashData(bytes));
+        string directory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
             ".cop", "helpers", "javascript");
         Directory.CreateDirectory(directory);
-        var path = Path.Combine(directory, hash + ".cjs");
-        if (File.Exists(path) && File.ReadAllBytes(path).AsSpan().SequenceEqual(bytes)) return path;
-        var temporary = Path.Combine(directory, hash + "." + Guid.NewGuid().ToString("N") + ".tmp");
+        string path = Path.Combine(directory, hash + ".cjs");
+        if (File.Exists(path) && File.ReadAllBytes(path).AsSpan().SequenceEqual(bytes))
+        {
+            return path;
+        }
+
+        string temporary = Path.Combine(directory, hash + "." + Guid.NewGuid().ToString("N") + ".tmp");
         try
         {
             File.WriteAllBytes(temporary, bytes);
@@ -79,22 +105,28 @@ internal sealed class TypeScriptProjection(string? searchPath)
 
     private JavaScriptToolchain? FindToolchain(string filePath)
     {
-        var absolutePath = Path.GetFullPath(filePath);
-        var directory = Path.GetDirectoryName(absolutePath)!;
-        var toolchain = _toolchains.GetOrAdd(directory, _ => new(() =>
+        string absolutePath = Path.GetFullPath(filePath);
+        string directory = Path.GetDirectoryName(absolutePath)!;
+        JavaScriptToolchain? toolchain = _toolchains.GetOrAdd(directory, _ => new(() =>
             JavaScriptToolchain.Discover(absolutePath, searchPath))).Value;
         return toolchain is not null && !_unavailableCompilers.ContainsKey(toolchain.CompilerPath) ? toolchain : null;
     }
 
+    /// <summary>Gets the installed compiler identity, if available.</summary>
     public string? GetCacheIdentity(string filePath) => FindToolchain(filePath) is { } toolchain
         ? $"{toolchain.NodePath}:{toolchain.CompilerPath}" : null;
 
+    /// <summary>Projects compiler syntax and binding facts for a file.</summary>
     public SourceFile? Parse(string filePath, string sourceText)
     {
-        var absolutePath = Path.GetFullPath(filePath);
-        var toolchain = FindToolchain(filePath);
-        if (toolchain is null) return null;
-        var request = JsonSerializer.Serialize(new { filePath = absolutePath, sourceText });
+        string absolutePath = Path.GetFullPath(filePath);
+        JavaScriptToolchain? toolchain = FindToolchain(filePath);
+        if (toolchain is null)
+        {
+            return null;
+        }
+
+        string request = JsonSerializer.Serialize(new { filePath = absolutePath, sourceText });
         try { return Request<FileProjection>(toolchain, request).ToSourceFile(filePath, sourceText); }
         catch (CompilerUnavailableException ex)
         {
@@ -103,10 +135,15 @@ internal sealed class TypeScriptProjection(string? searchPath)
         }
     }
 
+    /// <summary>Reads the compiler configuration governing a source file.</summary>
     public ProjectConfiguration? ReadProject(string filePath)
     {
-        var toolchain = FindToolchain(filePath);
-        if (toolchain is null) return null;
+        JavaScriptToolchain? toolchain = FindToolchain(filePath);
+        if (toolchain is null)
+        {
+            return null;
+        }
+
         try
         {
             return Request<ProjectConfiguration>(toolchain,
@@ -127,7 +164,7 @@ internal sealed class TypeScriptProjection(string? searchPath)
 
     private static T Request<T>(JavaScriptToolchain toolchain, string request)
     {
-        var output = ToolchainExecutionScope.RequestAsync(toolchain.NodePath, [ScriptPath.Value, toolchain.CompilerPath],
+        ToolchainResult output = ToolchainExecutionScope.RequestAsync(toolchain.NodePath, [ScriptPath.Value, toolchain.CompilerPath],
             Environment.CurrentDirectory, request, environment: new Dictionary<string, string?>
             {
                 ["NODE_OPTIONS"] = null,
@@ -135,13 +172,22 @@ internal sealed class TypeScriptProjection(string? searchPath)
             })
             .GetAwaiter().GetResult();
         if (output.Status == ToolchainStatus.Unavailable)
+        {
             throw new CompilerUnavailableException(output.Diagnostic ?? "Node.js is unavailable.");
+        }
+
         if (output.Status != ToolchainStatus.Success)
+        {
             throw new InvalidOperationException($"JavaScript/TypeScript compiler analysis failed: {output.Diagnostic} {output.StandardError}");
-        using var document = JsonDocument.Parse(output.StandardOutput);
-        if (document.RootElement.TryGetProperty("Unavailable", out var unavailable))
+        }
+
+        using JsonDocument document = JsonDocument.Parse(output.StandardOutput);
+        if (document.RootElement.TryGetProperty("Unavailable", out JsonElement unavailable))
+        {
             throw new CompilerUnavailableException(unavailable.GetString() ?? "Installed TypeScript is unusable.");
-        var data = JsonSerializer.Deserialize<T>(output.StandardOutput)
+        }
+
+        T data = JsonSerializer.Deserialize<T>(output.StandardOutput)
             ?? throw new InvalidDataException("The TypeScript compiler returned no projection.");
         return data;
     }
@@ -150,33 +196,46 @@ internal sealed class TypeScriptProjection(string? searchPath)
 
     internal sealed class ProjectConfiguration
     {
+        /// <summary>Gets or sets the compiler-selected source files.</summary>
         public List<string> SourceFiles { get; set; } = [];
+        /// <summary>Gets or sets referenced compiler project paths.</summary>
         public List<string> References { get; set; } = [];
+        /// <summary>Gets or sets module path alias mappings.</summary>
         public Dictionary<string, string[]> PathAliases { get; set; } = [];
+        /// <summary>Gets or sets the module resolution base directory.</summary>
         public string? BaseUrl { get; set; }
+        /// <summary>Gets or sets compiler configuration diagnostics.</summary>
         public List<string> Errors { get; set; } = [];
     }
 
     private sealed class FileProjection
     {
+        /// <summary>Gets or sets projected type declarations.</summary>
         public List<TypeProjection> Types { get; set; } = [];
+        /// <summary>Gets or sets projected module-level methods.</summary>
         public List<MethodProjection> Methods { get; set; } = [];
+        /// <summary>Gets or sets projected source statements.</summary>
         public List<StatementProjection> Statements { get; set; } = [];
+        /// <summary>Gets or sets imported module names.</summary>
         public List<string> Usings { get; set; } = [];
+        /// <summary>Gets or sets structured import binding facts.</summary>
         public List<ImportInfo> Imports { get; set; } = [];
+        /// <summary>Gets or sets line numbers occupied by comments.</summary>
         public HashSet<int> CommentLines { get; set; } = [];
+        /// <summary>Gets or sets compiler parsing diagnostics.</summary>
         public List<string> ParseErrors { get; set; } = [];
 
+        /// <summary>Builds a source file and links method and parent IDs.</summary>
         public SourceFile ToSourceFile(string filePath, string sourceText)
         {
-            var methods = new Dictionary<int, MethodDeclaration>();
-            var types = Types.Select(t => t.ToType(methods)).ToList();
-            var moduleMethods = Methods.Select(m => m.ToMethod(methods)).ToList();
-            var statements = Statements.Select(s => s.ToStatement()).ToList();
+            Dictionary<int, MethodDeclaration> methods = new Dictionary<int, MethodDeclaration>();
+            List<TypeDeclaration> types = Types.Select(t => t.ToType(methods)).ToList();
+            List<MethodDeclaration> moduleMethods = Methods.Select(m => m.ToMethod(methods)).ToList();
+            List<StatementInfo> statements = Statements.Select(s => s.ToStatement()).ToList();
             for (int i = 0; i < statements.Count; i++)
             {
-                var projection = Statements[i];
-                var statement = statements[i];
+                StatementProjection projection = Statements[i];
+                StatementInfo statement = statements[i];
                 if (projection.MethodId is int methodId)
                 {
                     statement.Method = methods[methodId];
@@ -198,33 +257,60 @@ internal sealed class TypeScriptProjection(string? searchPath)
 
     private sealed class TypeProjection
     {
+        /// <summary>Gets or sets the declared type name.</summary>
         public string Name { get; set; } = "";
+        /// <summary>Gets or sets the shared-model type category.</summary>
         public string Kind { get; set; } = "";
+        /// <summary>Gets or sets the enclosing namespace, if present.</summary>
         public string? Namespace { get; set; }
+        /// <summary>Gets or sets the shared-model modifier flags.</summary>
         public int Modifiers { get; set; }
+        /// <summary>Gets or sets declared base type names.</summary>
         public List<string> BaseTypes { get; set; } = [];
+        /// <summary>Gets or sets attached decorator expressions.</summary>
         public List<string> Decorators { get; set; } = [];
+        /// <summary>Gets or sets constructor projections.</summary>
         public List<MethodProjection> Constructors { get; set; } = [];
+        /// <summary>Gets or sets member method projections.</summary>
         public List<MethodProjection> Methods { get; set; } = [];
+        /// <summary>Gets or sets nested type projections.</summary>
         public List<TypeProjection> NestedTypes { get; set; } = [];
+        /// <summary>Gets or sets enumeration member names.</summary>
         public List<string> EnumValues { get; set; } = [];
+        /// <summary>Gets or sets field declarations.</summary>
         public List<FieldDeclaration> Fields { get; set; } = [];
+        /// <summary>Gets or sets property declarations.</summary>
         public List<PropertyDeclaration> Properties { get; set; } = [];
+        /// <summary>Gets or sets the declaration's starting line.</summary>
         public int Line { get; set; }
+        /// <summary>Gets or sets whether documentation is attached.</summary>
         public bool HasDocComment { get; set; }
+        /// <summary>Gets or sets attached documentation text.</summary>
         public string? DocComment { get; set; }
+        /// <summary>Gets or sets whether the declaration is exported.</summary>
         public bool IsExported { get; set; }
+        /// <summary>Gets or sets whether a base class is declared.</summary>
         public bool HasBaseClass { get; set; }
+        /// <summary>Gets or sets whether the type is abstract.</summary>
         public bool IsAbstract { get; set; }
+        /// <summary>Gets or sets whether type parameters are declared.</summary>
         public bool IsGeneric { get; set; }
+        /// <summary>Gets or sets whether interfaces are implemented.</summary>
         public bool HasImplements { get; set; }
+        /// <summary>Gets or sets implemented interface names.</summary>
         public List<string> Interfaces { get; set; } = [];
+        /// <summary>Gets or sets the resolved type alias target.</summary>
         public TypeReference? AliasTarget { get; set; }
+        /// <summary>Gets or sets declared type parameter names.</summary>
         public List<string> TypeParameters { get; set; } = [];
+        /// <summary>Gets or sets the declaration's starting column.</summary>
         public int? Column { get; set; }
+        /// <summary>Gets or sets the declaration's ending line.</summary>
         public int? EndLine { get; set; }
+        /// <summary>Gets or sets the declaration's ending column.</summary>
         public int? EndColumn { get; set; }
 
+        /// <summary>Builds a type and indexes its projected methods.</summary>
         public TypeDeclaration ToType(Dictionary<int, MethodDeclaration> methods) =>
             new TypeDeclaration(Name, Enum.Parse<TypeKind>(Kind), (Modifier)Modifiers, BaseTypes, Decorators,
                 Constructors.Select(m => m.ToMethod(methods)).ToList(),
@@ -239,27 +325,45 @@ internal sealed class TypeScriptProjection(string? searchPath)
 
     private sealed class MethodProjection
     {
+        /// <summary>Gets or sets the ID used by statement method links.</summary>
         public int Id { get; set; }
+        /// <summary>Gets or sets the declared method name.</summary>
         public string Name { get; set; } = "";
+        /// <summary>Gets or sets the shared-model modifier flags.</summary>
         public int Modifiers { get; set; }
+        /// <summary>Gets or sets attached decorator expressions.</summary>
         public List<string> Decorators { get; set; } = [];
+        /// <summary>Gets or sets the resolved return type.</summary>
         public TypeReference? ReturnType { get; set; }
+        /// <summary>Gets or sets parameter declarations.</summary>
         public List<ParameterDeclaration> Parameters { get; set; } = [];
+        /// <summary>Gets or sets the declaration's starting line.</summary>
         public int Line { get; set; }
+        /// <summary>Gets or sets whether documentation is attached.</summary>
         public bool HasDocComment { get; set; }
+        /// <summary>Gets or sets attached documentation text.</summary>
         public string? DocComment { get; set; }
+        /// <summary>Gets or sets whether this is a generator function.</summary>
         public bool IsGenerator { get; set; }
+        /// <summary>Gets or sets whether this is an arrow function.</summary>
         public bool IsArrow { get; set; }
+        /// <summary>Gets or sets whether this is a property getter.</summary>
         public bool IsGetter { get; set; }
+        /// <summary>Gets or sets whether this is a property setter.</summary>
         public bool IsSetter { get; set; }
+        /// <summary>Gets or sets declared type parameter names.</summary>
         public List<string> TypeParameters { get; set; } = [];
+        /// <summary>Gets or sets the declaration's starting column.</summary>
         public int? Column { get; set; }
+        /// <summary>Gets or sets the declaration's ending line.</summary>
         public int? EndLine { get; set; }
+        /// <summary>Gets or sets the declaration's ending column.</summary>
         public int? EndColumn { get; set; }
 
+        /// <summary>Builds and indexes the shared method declaration.</summary>
         public MethodDeclaration ToMethod(Dictionary<int, MethodDeclaration> methods)
         {
-            var method = new MethodDeclaration(Name, (Modifier)Modifiers, Decorators, ReturnType, Parameters, Line)
+            JavaScriptMethodDeclaration method = new MethodDeclaration(Name, (Modifier)Modifiers, Decorators, ReturnType, Parameters, Line)
             {
                 HasDocComment = HasDocComment, DocComment = DocComment, TypeParameters = TypeParameters,
                 Column = Column, EndLine = EndLine, EndColumn = EndColumn
@@ -271,31 +375,56 @@ internal sealed class TypeScriptProjection(string? searchPath)
 
     private sealed class StatementProjection
     {
+        /// <summary>Gets or sets the shared-model statement category.</summary>
         public string Kind { get; set; } = "";
+        /// <summary>Gets or sets parsed statement keywords.</summary>
         public List<string> Keywords { get; set; } = [];
+        /// <summary>Gets or sets the referenced type's name.</summary>
         public string? TypeName { get; set; }
+        /// <summary>Gets or sets the resolved receiver type.</summary>
         public TypeReference? ReceiverType { get; set; }
+        /// <summary>Gets or sets the resolved expression value type.</summary>
         public TypeReference? ValueType { get; set; }
+        /// <summary>Gets or sets the callable bound by the compiler.</summary>
         public CallableReference? ReferencedCallable { get; set; }
+        /// <summary>Gets or sets the referenced member's name.</summary>
         public string? MemberName { get; set; }
+        /// <summary>Gets or sets source spellings of call arguments.</summary>
         public List<string> Arguments { get; set; } = [];
+        /// <summary>Gets or sets the structured call target expression.</summary>
         public ExpressionInfo? CallTarget { get; set; }
+        /// <summary>Gets or sets structured call argument expressions.</summary>
         public List<ExpressionInfo> ArgumentExpressions { get; set; } = [];
+        /// <summary>Gets or sets the statement's starting line.</summary>
         public int Line { get; set; }
+        /// <summary>Gets or sets the enclosing projected method's ID.</summary>
         public int? MethodId { get; set; }
+        /// <summary>Gets or sets the enclosing statement's index.</summary>
         public int? ParentId { get; set; }
+        /// <summary>Gets or sets whether an exception is rethrown.</summary>
         public bool HasRethrow { get; set; }
+        /// <summary>Gets or sets whether this is an error handler.</summary>
         public bool IsErrorHandler { get; set; }
+        /// <summary>Gets or sets whether the handler catches broadly.</summary>
         public bool IsGenericErrorHandler { get; set; }
+        /// <summary>Gets or sets whether the statement body is braced.</summary>
         public bool IsBraced { get; set; }
+        /// <summary>Gets or sets the source condition expression.</summary>
         public string? Condition { get; set; }
+        /// <summary>Gets or sets the source value expression.</summary>
         public string? Expression { get; set; }
+        /// <summary>Gets or sets the structured value expression.</summary>
         public ExpressionInfo? ValueExpression { get; set; }
+        /// <summary>Gets or sets interfaces of a constructed type.</summary>
         public List<string> ConstructedTypeInterfaces { get; set; } = [];
+        /// <summary>Gets or sets the statement's starting column.</summary>
         public int? Column { get; set; }
+        /// <summary>Gets or sets the statement's ending line.</summary>
         public int? EndLine { get; set; }
+        /// <summary>Gets or sets the statement's ending column.</summary>
         public int? EndColumn { get; set; }
 
+        /// <summary>Builds shared statement and expression facts.</summary>
         public StatementInfo ToStatement() =>
             new JavaScriptStatementInfo(Kind, Keywords, TypeName, MemberName, Arguments, Line, MethodId is not null)
             {

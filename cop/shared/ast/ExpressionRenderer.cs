@@ -1,3 +1,5 @@
+// Renders syntax expressions as readable Cop source text.
+
 namespace Cop.Lang.Ast;
 
 using System.Globalization;
@@ -16,9 +18,12 @@ public static class ExpressionRenderer
     /// </summary>
     public static string Render(Expression? expr, int maxLength = 120)
     {
-        var text = RenderCore(expr);
+        string text = RenderCore(expr);
         if (maxLength > 0 && text.Length > maxLength)
+        {
             text = text.Substring(0, maxLength - 1) + "\u2026";
+        }
+
         return text;
     }
 
@@ -53,7 +58,7 @@ public static class ExpressionRenderer
 
     private static string RenderInterpolated(InterpolatedStringExpr e)
     {
-        var inner = string.Concat(e.Parts.Select(p => p switch
+        string inner = string.Concat(e.Parts.Select(p => p switch
         {
             TextPart t => t.Text,
             ExpressionPart ep => $"{{{RenderCore(ep.Expr)}{(ep.Format is null ? "" : "@" + ep.Format)}}}",

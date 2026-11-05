@@ -1,3 +1,5 @@
+// Connects HTTP request functions and streaming server endpoints to Cop pipelines.
+
 using System.Runtime.CompilerServices;
 using System.Text.Json;
 using System.Threading.Channels;
@@ -18,17 +20,22 @@ public class HttpSource : StreamProvider
     private readonly Channel<HttpRequestItem> _requestChannel;
     private WebApplication? _app;
 
+    /// <summary>Creates an HTTP streaming source listening on port 5000.</summary>
     public HttpSource() : this(5000) { }
 
+    /// <summary>
+    /// Creates an HTTP streaming source listening on the specified port.
+    /// </summary>
     public HttpSource(int port)
     {
         _port = port;
         _requestChannel = Channel.CreateUnbounded<HttpRequestItem>();
     }
 
+    /// <inheritdoc />
     public override ReadOnlyMemory<byte> GetSchema()
     {
-        var schema = new ProviderSchema
+        ProviderSchema schema = new ProviderSchema
         {
             Types =
             [
@@ -52,22 +59,23 @@ public class HttpSource : StreamProvider
         return schema.ToJson();
     }
 
+    /// <inheritdoc />
     public override async IAsyncEnumerable<object> QueryStream(
         ProviderQuery query, [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         await EnsureServerStartedAsync(cancellationToken);
 
-        await foreach (var request in _requestChannel.Reader.ReadAllAsync(cancellationToken))
+        await foreach (HttpRequestItem request in _requestChannel.Reader.ReadAllAsync(cancellationToken))
         {
             if (request.ReadError is not null)
             {
-                var errorValue = new ErrorValue(request.ReadError);
+                ErrorValue errorValue = new ErrorValue(request.ReadError);
                 errorValue.Set("__responseCompletion", request.ResponseCompletion);
                 yield return errorValue;
             }
             else
             {
-                var so = new DataObject("Request");
+                DataObject so = new DataObject("Request");
                 so.Set("Method", request.Method);
                 so.Set("Uri", request.Uri);
                 so.Set("Body", request.Body);
@@ -80,9 +88,12 @@ public class HttpSource : StreamProvider
 
     private async Task EnsureServerStartedAsync(CancellationToken cancellationToken)
     {
-        if (_app != null) return;
+        if (_app != null)
+        {
+            return;
+        }
 
-        var builder = WebApplication.CreateSlimBuilder();
+        WebApplicationBuilder builder = WebApplication.CreateSlimBuilder();
         _app = builder.Build();
 
         _app.Map("{**path}", async (HttpContext ctx) =>
@@ -92,15 +103,15 @@ public class HttpSource : StreamProvider
             {
                 if (ctx.Request.ContentLength > 0)
                 {
-                    using var ms = new MemoryStream();
+                    using MemoryStream ms = new MemoryStream();
                     await ctx.Request.Body.CopyToAsync(ms, cancellationToken);
                     body = ms.ToArray();
                 }
             }
             catch (Exception ex) when (ex is IOException or OperationCanceledException)
             {
-                var tcs = new TaskCompletionSource<HttpResponseItem>();
-                var errorItem = new HttpRequestItem
+                TaskCompletionSource<HttpResponseItem> tcs = new TaskCompletionSource<HttpResponseItem>();
+                HttpRequestItem errorItem = new HttpRequestItem
                 {
                     Method = ctx.Request.Method,
                     Uri = (ctx.Request.Path.Value ?? "/") + (ctx.Request.QueryString.Value ?? ""),
@@ -110,15 +121,15 @@ public class HttpSource : StreamProvider
                     ReadError = $"Request read failed: {ex.Message}"
                 };
                 await _requestChannel.Writer.WriteAsync(errorItem, CancellationToken.None);
-                var response = await tcs.Task;
+                HttpResponseItem response = await tcs.Task;
                 ctx.Response.StatusCode = response.StatusCode;
                 ctx.Response.ContentType = response.ContentType;
                 try { await ctx.Response.WriteAsync(response.Body); } catch { }
                 return;
             }
 
-            var tcs2 = new TaskCompletionSource<HttpResponseItem>();
-            var requestItem = new HttpRequestItem
+            TaskCompletionSource<HttpResponseItem> tcs2 = new TaskCompletionSource<HttpResponseItem>();
+            HttpRequestItem requestItem = new HttpRequestItem
             {
                 Method = ctx.Request.Method,
                 Uri = (ctx.Request.Path.Value ?? "/") + (ctx.Request.QueryString.Value ?? ""),
@@ -129,7 +140,7 @@ public class HttpSource : StreamProvider
 
             await _requestChannel.Writer.WriteAsync(requestItem, ctx.RequestAborted);
 
-            var response2 = await tcs2.Task;
+            HttpResponseItem response2 = await tcs2.Task;
 
             ctx.Response.StatusCode = response2.StatusCode;
             ctx.Response.ContentType = response2.ContentType;
@@ -146,6 +157,9 @@ public class HttpSource : StreamProvider
         await _app.StartAsync(cancellationToken);
     }
 
+    /// <summary>
+    /// Stops accepting requests and releases the active web application.
+    /// </summary>
     public async Task StopAsync()
     {
         if (_app != null)
@@ -164,35 +178,48 @@ public class HttpSource : StreamProvider
 /// </summary>
 public class HttpSink : SinkProvider
 {
+    /// <inheritdoc />
     public override string Name => "RESPONSES";
 
+    /// <inheritdoc />
     public override Task WriteAsync(object? originalItem, object result)
     {
         TaskCompletionSource<HttpResponseItem>? tcs = null;
         if (originalItem is DataObject origSo)
+        {
             tcs = origSo.GetField("__responseCompletion") as TaskCompletionSource<HttpResponseItem>;
+        }
 
         if (tcs is null)
+        {
             throw new InvalidOperationException("http.RESPONSES can only be used with items from http.Requests.");
+        }
 
         HttpResponseItem response;
         if (result is ErrorValue err)
         {
-            var message = err.GetField("Message")?.ToString() ?? "Internal Server Error";
+            string message = err.GetField("Message")?.ToString() ?? "Internal Server Error";
             response = new HttpResponseItem { StatusCode = 500, Body = $"{{\"error\":\"{message}\"}}", ContentType = "application/json" };
         }
         else if (result is DataObject so)
         {
-            var statusCode = so.GetField("StatusCode") is int sc ? sc : 200;
-            var bodyField = so.GetField("Body");
+            int statusCode = so.GetField("StatusCode") is int sc ? sc : 200;
+            object? bodyField = so.GetField("Body");
             string body;
             if (bodyField is byte[] bytes)
+            {
                 body = System.Text.Encoding.UTF8.GetString(bytes);
+            }
             else if (bodyField is DataObject bodyObj)
+            {
                 body = bodyObj.ToJson();
+            }
             else
+            {
                 body = bodyField?.ToString() ?? SerializeToJson(so);
-            var contentType = so.GetField("ContentType")?.ToString() ?? "application/json";
+            }
+
+            string contentType = so.GetField("ContentType")?.ToString() ?? "application/json";
             response = new HttpResponseItem { StatusCode = statusCode, Body = body, ContentType = contentType };
         }
         else
@@ -206,9 +233,12 @@ public class HttpSink : SinkProvider
 
     private static string SerializeToJson(DataObject so)
     {
-        var dict = new Dictionary<string, object?>();
-        foreach (var (key, value) in so.Fields)
+        Dictionary<string, object?> dict = new Dictionary<string, object?>();
+        foreach ((string? key, object? value) in so.Fields)
+        {
             dict[key] = value;
+        }
+
         return JsonSerializer.Serialize(dict);
     }
 }
@@ -220,9 +250,10 @@ public class HttpSink : SinkProvider
 public class HttpProvider : DataProvider
 {
 
+    /// <inheritdoc />
     public override ReadOnlyMemory<byte> GetSchema()
     {
-        var schema = new ProviderSchema
+        ProviderSchema schema = new ProviderSchema
         {
             Types =
             [
@@ -245,8 +276,10 @@ public class HttpProvider : DataProvider
 
     private static readonly HttpClient _httpClient = new() { Timeout = TimeSpan.FromSeconds(30) };
 
+    /// <inheritdoc />
     public override object? Query(ProviderQuery query) => null;
 
+    /// <inheritdoc />
     public override Dictionary<string, Func<List<object?>, Task<object?>>>? GetFunctions()
     {
         return new(StringComparer.OrdinalIgnoreCase)
@@ -260,31 +293,40 @@ public class HttpProvider : DataProvider
     private static async Task<object?> HttpGetAsync(List<object?> args)
     {
         if (args.Count < 1)
+        {
             throw new InvalidOperationException("http.Get requires at least 1 argument: http.Get(url, headers?)");
-        var url = args[0]?.ToString() ?? throw new InvalidOperationException("http.Get: url cannot be null");
-        var headers = args.Count > 1 ? args[1] as DataObject : null;
+        }
+
+        string url = args[0]?.ToString() ?? throw new InvalidOperationException("http.Get: url cannot be null");
+        DataObject? headers = args.Count > 1 ? args[1] as DataObject : null;
         return await SendRequestAsync(HttpMethod.Get, url, body: null, headers);
     }
 
     private static async Task<object?> HttpPostAsync(List<object?> args)
     {
         if (args.Count < 2)
+        {
             throw new InvalidOperationException("http.Post requires at least 2 arguments: http.Post(url, headers, body)");
-        var url = args[0]?.ToString() ?? throw new InvalidOperationException("http.Post: url cannot be null");
-        var headers = args.Count > 1 ? args[1] as DataObject : null;
-        var body = args.Count > 2 ? args[2] : null;
+        }
+
+        string url = args[0]?.ToString() ?? throw new InvalidOperationException("http.Post: url cannot be null");
+        DataObject? headers = args.Count > 1 ? args[1] as DataObject : null;
+        object? body = args.Count > 2 ? args[2] : null;
         return await SendRequestAsync(HttpMethod.Post, url, body, headers);
     }
 
     private static async Task<object?> HttpSendAsync(List<object?> args)
     {
         if (args.Count < 2)
+        {
             throw new InvalidOperationException("http.Send requires at least 2 arguments: http.Send(method, url, headers?, body?)");
-        var methodStr = args[0]?.ToString() ?? "GET";
-        var url = args[1]?.ToString() ?? throw new InvalidOperationException("http.Send: url cannot be null");
-        var headers = args.Count > 2 ? args[2] as DataObject : null;
-        var body = args.Count > 3 ? args[3] : null;
-        var method = new HttpMethod(methodStr);
+        }
+
+        string methodStr = args[0]?.ToString() ?? "GET";
+        string url = args[1]?.ToString() ?? throw new InvalidOperationException("http.Send: url cannot be null");
+        DataObject? headers = args.Count > 2 ? args[2] as DataObject : null;
+        object? body = args.Count > 3 ? args[3] : null;
+        HttpMethod method = new HttpMethod(methodStr);
         return await SendRequestAsync(method, url, body, headers);
     }
 
@@ -292,7 +334,7 @@ public class HttpProvider : DataProvider
     {
         try
         {
-            using var request = new HttpRequestMessage(method, url);
+            using HttpRequestMessage request = new HttpRequestMessage(method, url);
 
             if (body is not null)
             {
@@ -306,33 +348,46 @@ public class HttpProvider : DataProvider
                 request.Content = new ByteArrayContent(bodyBytes);
 
                 if (body is DataObject)
+                {
                     request.Content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/json") { CharSet = "utf-8" };
+                }
                 else if (body is string)
+                {
                     request.Content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("text/plain") { CharSet = "utf-8" };
+                }
             }
 
             if (headers is not null)
             {
-                foreach (var (key, value) in headers.Fields)
+                foreach ((string? key, object? value) in headers.Fields)
                 {
-                    var headerValue = value?.ToString() ?? "";
+                    string headerValue = value?.ToString() ?? "";
                     if (key.Equals("Content-Type", StringComparison.OrdinalIgnoreCase) && request.Content is not null)
+                    {
                         request.Content.Headers.ContentType = System.Net.Http.Headers.MediaTypeHeaderValue.Parse(headerValue);
+                    }
                     else
+                    {
                         request.Headers.TryAddWithoutValidation(key, headerValue);
+                    }
                 }
             }
 
-            using var response = await _httpClient.SendAsync(request);
+            using HttpResponseMessage response = await _httpClient.SendAsync(request);
 
-            var responseBody = await response.Content.ReadAsByteArrayAsync();
-            var responseHeaders = new DataObject("Headers");
-            foreach (var header in response.Headers)
+            byte[] responseBody = await response.Content.ReadAsByteArrayAsync();
+            DataObject responseHeaders = new DataObject("Headers");
+            foreach (KeyValuePair<string, IEnumerable<string>> header in response.Headers)
+            {
                 responseHeaders.Set(header.Key, string.Join(", ", header.Value));
-            foreach (var header in response.Content.Headers)
-                responseHeaders.Set(header.Key, string.Join(", ", header.Value));
+            }
 
-            var result = new DataObject("Response");
+            foreach (KeyValuePair<string, IEnumerable<string>> header in response.Content.Headers)
+            {
+                responseHeaders.Set(header.Key, string.Join(", ", header.Value));
+            }
+
+            DataObject result = new DataObject("Response");
             result.Set("StatusCode", (int)response.StatusCode);
             result.Set("Body", responseBody);
             result.Set("ContentType", response.Content.Headers.ContentType?.MediaType ?? "");
@@ -352,9 +407,13 @@ public class HttpProvider : DataProvider
 /// </summary>
 public class HttpRequestItem
 {
+    /// <summary>Gets the incoming HTTP method.</summary>
     public string Method { get; init; } = "";
+    /// <summary>Gets the request URI supplied by the client.</summary>
     public string Uri { get; init; } = "/";
+    /// <summary>Gets the request payload bytes.</summary>
     public byte[] Body { get; init; } = [];
+    /// <summary>Gets the request payload's media type.</summary>
     public string ContentType { get; init; } = "";
     internal TaskCompletionSource<HttpResponseItem> ResponseCompletion { get; init; } = null!;
     internal string? ReadError { get; init; }
@@ -365,7 +424,10 @@ public class HttpRequestItem
 /// </summary>
 public class HttpResponseItem
 {
+    /// <summary>Gets the HTTP status code returned to the client.</summary>
     public int StatusCode { get; init; } = 200;
+    /// <summary>Gets the response payload text.</summary>
     public string Body { get; init; } = "";
+    /// <summary>Gets the response payload's media type.</summary>
     public string ContentType { get; init; } = "application/json";
 }

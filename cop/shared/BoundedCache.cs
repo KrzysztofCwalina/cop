@@ -1,3 +1,5 @@
+// Bounds cached values with least-recently-used eviction.
+
 namespace Cop.Lang;
 
 /// <summary>
@@ -21,7 +23,7 @@ internal sealed class BoundedCache<TKey, TValue> where TKey : notnull
 
     public bool TryGetValue(TKey key, out TValue value)
     {
-        if (_map.TryGetValue(key, out var node))
+        if (_map.TryGetValue(key, out LinkedListNode<(TKey Key, TValue Value)>? node))
         {
             // Move to front (most recently used)
             _order.Remove(node);
@@ -35,7 +37,7 @@ internal sealed class BoundedCache<TKey, TValue> where TKey : notnull
 
     public void Set(TKey key, TValue value)
     {
-        if (_map.TryGetValue(key, out var existing))
+        if (_map.TryGetValue(key, out LinkedListNode<(TKey Key, TValue Value)>? existing))
         {
             _order.Remove(existing);
             _map.Remove(key);
@@ -43,12 +45,12 @@ internal sealed class BoundedCache<TKey, TValue> where TKey : notnull
         else if (_map.Count >= _capacity)
         {
             // Evict LRU (last in list)
-            var lru = _order.Last!;
+            LinkedListNode<(TKey Key, TValue Value)> lru = _order.Last!;
             _order.RemoveLast();
             _map.Remove(lru.Value.Key);
         }
 
-        var node = new LinkedListNode<(TKey, TValue)>((key, value));
+        LinkedListNode<(TKey, TValue)> node = new LinkedListNode<(TKey, TValue)>((key, value));
         _order.AddFirst(node);
         _map[key] = node;
     }

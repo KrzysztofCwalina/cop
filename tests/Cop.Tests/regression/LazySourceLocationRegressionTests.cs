@@ -29,7 +29,10 @@ public class LazySourceLocationRegressionTests
                 command MAIN = CHECK(findings)
                 """);
 
-            var result = Engine.Run(scripts, target, additionalFeedPaths: [Path.Combine(repo!, "packages")]);
+            var result = Engine.Run(scripts, target, new EngineRunOptions
+            {
+                AdditionalFeedPaths = [Path.Combine(repo!, "packages")],
+            });
 
             Assert.That(result.ParseErrors, Is.Empty);
             Assert.That(result.Errors, Is.Empty, string.Join("\n", result.Errors));

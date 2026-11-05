@@ -282,8 +282,11 @@ public class AiJudgeTests
         Directory.CreateDirectory(scripts);
         File.WriteAllText(Path.Combine(scripts, "main.cop"), program);
 
-        var result = Engine.Run(scripts, target, additionalFeedPaths: [Path.Combine(RepoRoot, "packages")],
-            reviewOptions: new ReviewOptions { Scope = "full", AiConfigPath = _config });
+        var result = Engine.Run(scripts, target, new EngineRunOptions
+        {
+            AdditionalFeedPaths = [Path.Combine(RepoRoot, "packages")],
+            ReviewOptions = new ReviewOptions { Scope = "full", AiConfigPath = _config },
+        });
 
         Assert.That(result.ParseErrors, Is.Empty);
         Assert.That(result.Errors, Is.Empty);
@@ -367,7 +370,7 @@ public class AiJudgeTests
         var files = context.RootElement.GetProperty("files").EnumerateArray().ToArray();
         var engine = files.Single(file => file.GetProperty("path").GetString() == "Engine.cs");
         Assert.That(engine.GetProperty("lines")[0].GetProperty("text").GetString(),
-            Is.EqualTo("using System.Diagnostics;"));
+            Is.EqualTo(File.ReadLines(Path.Combine(RepoRoot, "cop", "runtime", "Engine.cs")).First()));
         Assert.That(files.Any(file => file.GetProperty("path").GetString() == "cli/Program.cs"), Is.False);
     }
 

@@ -1,3 +1,5 @@
+// Resolves transitive dependencies for cop packages.
+
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -6,20 +8,6 @@ using System.Threading.Tasks;
 
 namespace Cop.Core
 {
-    /// <summary>
-    /// Exception thrown when a circular dependency is detected during resolution.
-    /// </summary>
-    public class CircularDependencyException : Exception
-    {
-        public List<string> Cycle { get; }
-
-        public CircularDependencyException(List<string> cycle)
-            : base($"Circular dependency detected: {string.Join(" → ", cycle)}")
-        {
-            Cycle = cycle;
-        }
-    }
-
     /// <summary>
     /// Resolves transitive dependencies for cop packages.
     /// Handles version resolution, conflict resolution (highest version wins),
@@ -46,36 +34,36 @@ namespace Cop.Core
             CancellationToken ct = default)
         {
             // Dictionary to track the highest version for each package (by FullPath)
-            var resolvedPackages = new Dictionary<string, PackageReference>();
+            Dictionary<string, PackageReference> resolvedPackages = new Dictionary<string, PackageReference>();
 
             // Stack for DFS traversal
-            var toProcess = new Stack<PackageReference>(directDependencies.AsEnumerable().Reverse());
+            Stack<PackageReference> toProcess = new Stack<PackageReference>(directDependencies.AsEnumerable().Reverse());
 
             // Track the resolution path for cycle detection
-            var resolutionPath = new Dictionary<string, List<string>>();
+            Dictionary<string, List<string>> resolutionPath = new Dictionary<string, List<string>>();
 
             while (toProcess.Count > 0)
             {
-                var current = toProcess.Pop();
+                PackageReference current = toProcess.Pop();
 
                 // Resolve version if null
-                var resolvedCurrent = await ResolveMissingVersionAsync(current, ct);
+                PackageReference resolvedCurrent = await ResolveMissingVersionAsync(current, ct);
 
                 // Check for circular dependency
-                var packagePath = GetPackageIdentifier(resolvedCurrent);
+                string packagePath = GetPackageIdentifier(resolvedCurrent);
                 if (resolutionPath.ContainsKey(packagePath))
                 {
-                    var cycle = resolutionPath[packagePath];
+                    List<string> cycle = resolutionPath[packagePath];
                     cycle.Add(packagePath); // Complete the cycle
                     throw new CircularDependencyException(cycle);
                 }
 
                 // Update resolution path
-                var currentPath = new List<string> { packagePath };
+                List<string> currentPath = new List<string> { packagePath };
                 resolutionPath[packagePath] = currentPath;
 
                 // Check if this package version is already resolved
-                if (resolvedPackages.TryGetValue(packagePath, out var existing))
+                if (resolvedPackages.TryGetValue(packagePath, out PackageReference? existing))
                 {
                     // Keep the highest version
                     if (CompareVersions(resolvedCurrent.Version ?? "0.0.0", existing.Version ?? "0.0.0") <= 0)
@@ -93,15 +81,15 @@ namespace Cop.Core
                 // Fetch metadata to get transitive dependencies
                 try
                 {
-                    var metadata = await _source.GetPackageMetadataAsync(resolvedCurrent, ct);
+                    PackageMetadata metadata = await _source.GetPackageMetadataAsync(resolvedCurrent, ct);
 
                     if (metadata?.Dependencies != null && metadata.Dependencies.Count > 0)
                     {
                         // Parse each dependency string
-                        var transitiveDeps = new List<PackageReference>();
-                        foreach (var depString in metadata.Dependencies)
+                        List<PackageReference> transitiveDeps = new List<PackageReference>();
+                        foreach (string depString in metadata.Dependencies)
                         {
-                            var depRef = PackageReference.Parse(depString);
+                            PackageReference depRef = PackageReference.Parse(depString);
                             if (depRef != null)
                             {
                                 transitiveDeps.Add(depRef);
@@ -110,10 +98,10 @@ namespace Cop.Core
 
                         // Add transitive dependencies to the processing queue
                         // Add to path tracking for cycle detection
-                        foreach (var dep in transitiveDeps.AsEnumerable().Reverse())
+                        foreach (PackageReference? dep in transitiveDeps.AsEnumerable().Reverse())
                         {
-                            var newPath = new List<string>(currentPath) { GetPackageIdentifier(dep) };
-                            var depIdentifier = GetPackageIdentifier(dep);
+                            List<string> newPath = new List<string>(currentPath) { GetPackageIdentifier(dep) };
+                            string depIdentifier = GetPackageIdentifier(dep);
                             resolutionPath[depIdentifier] = newPath;
                             toProcess.Push(dep);
                         }
@@ -142,7 +130,7 @@ namespace Cop.Core
                 return reference;
             }
 
-            var latestVersion = await _source.GetLatestVersionAsync(reference, ct);
+            string? latestVersion = await _source.GetLatestVersionAsync(reference, ct);
             return new PackageReference
             {
                 FullPath = reference.FullPath,
@@ -172,40 +160,54 @@ namespace Cop.Core
         public static int CompareVersions(string v1, string v2)
         {
             if (v1 == v2)
+            {
                 return 0;
+            }
 
-            var parts1 = ParseVersion(v1);
-            var parts2 = ParseVersion(v2);
+            (int Major, int Minor, int Patch) parts1 = ParseVersion(v1);
+            (int Major, int Minor, int Patch) parts2 = ParseVersion(v2);
 
             // Compare major
             if (parts1.Major != parts2.Major)
+            {
                 return parts1.Major < parts2.Major ? -1 : 1;
+            }
 
             // Compare minor
             if (parts1.Minor != parts2.Minor)
+            {
                 return parts1.Minor < parts2.Minor ? -1 : 1;
+            }
 
             // Compare patch
             if (parts1.Patch != parts2.Patch)
+            {
                 return parts1.Patch < parts2.Patch ? -1 : 1;
+            }
 
             return 0;
         }
 
         private static (int Major, int Minor, int Patch) ParseVersion(string version)
         {
-            var parts = version.Split('.');
+            string[] parts = version.Split('.');
             
             int major = 0, minor = 0, patch = 0;
 
-            if (parts.Length > 0 && int.TryParse(parts[0], out var m))
+            if (parts.Length > 0 && int.TryParse(parts[0], out int m))
+            {
                 major = m;
+            }
 
-            if (parts.Length > 1 && int.TryParse(parts[1], out var mi))
+            if (parts.Length > 1 && int.TryParse(parts[1], out int mi))
+            {
                 minor = mi;
+            }
 
-            if (parts.Length > 2 && int.TryParse(parts[2], out var p))
+            if (parts.Length > 2 && int.TryParse(parts[2], out int p))
+            {
                 patch = p;
+            }
 
             return (major, minor, patch);
         }

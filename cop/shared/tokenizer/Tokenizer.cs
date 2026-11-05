@@ -1,67 +1,12 @@
+// Converts Cop source into tokens while tracking source locations.
+
+using System.Text;
+
 namespace Cop.Lang;
 
-public enum TokenKind
-{
-    Identifier,
-    StringLiteral,
-    VerbatimStringLiteral,
-    IntLiteral,
-    NumberLiteral,
-    True,
-    False,
-    Nic,
-
-    TypeKeyword,
-    CollectionKeyword,
-    ImportKeyword,
-    LetKeyword,
-    CommandKeyword,
-    ExportKeyword,
-    PredicateKeyword,
-    FunctionKeyword,
-    ForeachKeyword,
-    TestKeyword,
-    AsyncKeyword,
-    RunKeyword,
-    FeedKeyword,
-    FlagsKeyword,
-    EnumKeyword,
-    IntrinsicKeyword,
-    DoubleColon,
-    Colon,
-    AndAnd,
-    Ampersand,
-    Pipe,
-    OrOr,
-    Not,
-    EqualEqual,
-    NotEqual,
-    Arrow,
-    Dot,
-    LParen,
-    RParen,
-    LBrace,
-    RBrace,
-    LBracket,
-    RBracket,
-    Equals,
-    Comma,
-    QuestionMark,
-    GreaterThan,
-    LessThan,
-    GreaterEqual,
-    LessEqual,
-    Minus,
-    Plus,
-    Star,
-    Slash,
-    Percent,
-    DocComment,
-    Eof
-}
-
-public record Token(TokenKind Kind, string Value, int Line);
-
+/// <summary>
+/// Converts Cop source into tokens while tracking source locations.
+/// </summary>
 public class Tokenizer
 {
     private readonly string _source;
@@ -77,16 +22,19 @@ public class Tokenizer
 
     public List<Token> Tokenize()
     {
-        var tokens = new List<Token>();
+        List<Token> tokens = new List<Token>();
         while (_pos < _source.Length)
         {
             SkipWhitespaceAndComments();
-            if (_pos >= _source.Length) break;
+            if (_pos >= _source.Length)
+            {
+                break;
+            }
 
             // Check for # comment forms
             if (_source[_pos] == '#')
             {
-                var docToken = TryReadHashComment();
+                Token? docToken = TryReadHashComment();
                 if (docToken != null)
                 {
                     tokens.Add(docToken);
@@ -108,7 +56,10 @@ public class Tokenizer
             if (_source[_pos] == '\n') { _line++; _pos++; }
             else if (_source[_pos] == '\r') { _pos++; }
             else if (char.IsWhiteSpace(_source[_pos])) { _pos++; }
-            else break;
+            else
+            {
+                break;
+            }
         }
     }
 
@@ -122,15 +73,27 @@ public class Tokenizer
         {
             _pos += 2; // skip ##
             // skip optional leading space
-            if (_pos < _source.Length && _source[_pos] == ' ') _pos++;
+            if (_pos < _source.Length && _source[_pos] == ' ')
+            {
+                _pos++;
+            }
+
             int start = _pos;
-            while (_pos < _source.Length && _source[_pos] != '\n') _pos++;
+            while (_pos < _source.Length && _source[_pos] != '\n')
+            {
+                _pos++;
+            }
+
             string text = _source[start.._pos].TrimEnd('\r');
             return new Token(TokenKind.DocComment, text, line);
         }
 
         // Single-line # comment (including bare # with no content)
-        while (_pos < _source.Length && _source[_pos] != '\n') _pos++;
+        while (_pos < _source.Length && _source[_pos] != '\n')
+        {
+            _pos++;
+        }
+
         return null;
     }
 
@@ -186,16 +149,24 @@ public class Tokenizer
         }
 
         if (c == '@' && _pos + 1 < _source.Length && _source[_pos + 1] == '\'')
+        {
             return ReadVerbatimString(line);
+        }
 
         if (c == '\'')
+        {
             return ReadString(line);
+        }
 
         if (char.IsDigit(c))
+        {
             return ReadNumber(line);
+        }
 
         if (char.IsLetter(c) || c == '_')
+        {
             return ReadIdentifierOrKeyword(line);
+        }
 
         throw new ParseException($"Unexpected character '{c}'", _filePath, line);
     }
@@ -204,11 +175,13 @@ public class Tokenizer
     {
         // Check for triple-quote '''...'''
         if (_pos + 2 < _source.Length && _source[_pos + 1] == '\'' && _source[_pos + 2] == '\'')
+        {
             return ReadTripleQuoteString(line);
+        }
 
         _pos++; // skip opening '
 
-        var sb = new System.Text.StringBuilder();
+        StringBuilder sb = new System.Text.StringBuilder();
         while (_pos < _source.Length)
         {
             char c = _source[_pos];
@@ -237,7 +210,11 @@ public class Tokenizer
                 _pos++;
                 continue;
             }
-            if (c == '\n') _line++;
+            if (c == '\n')
+            {
+                _line++;
+            }
+
             sb.Append(c);
             _pos++;
         }
@@ -253,7 +230,7 @@ public class Tokenizer
     {
         _pos += 2; // skip @'
 
-        var sb = new System.Text.StringBuilder();
+        StringBuilder sb = new System.Text.StringBuilder();
         while (_pos < _source.Length)
         {
             char c = _source[_pos];
@@ -268,7 +245,11 @@ public class Tokenizer
                 _pos++;
                 return new Token(TokenKind.VerbatimStringLiteral, sb.ToString(), line);
             }
-            if (c == '\n') _line++;
+            if (c == '\n')
+            {
+                _line++;
+            }
+
             sb.Append(c);
             _pos++;
         }
@@ -280,11 +261,15 @@ public class Tokenizer
         _pos += 3; // skip opening '''
 
         // Skip the first newline after opening ''' if present
-        if (_pos < _source.Length && _source[_pos] == '\r') _pos++;
+        if (_pos < _source.Length && _source[_pos] == '\r')
+        {
+            _pos++;
+        }
+
         if (_pos < _source.Length && _source[_pos] == '\n') { _pos++; _line++; }
 
         // Read raw content until closing '''
-        var sb = new System.Text.StringBuilder();
+        StringBuilder sb = new System.Text.StringBuilder();
         while (_pos < _source.Length)
         {
             if (_source[_pos] == '\'' && _pos + 2 < _source.Length
@@ -293,7 +278,11 @@ public class Tokenizer
                 _pos += 3; // skip closing '''
                 return new Token(TokenKind.StringLiteral, StripIndent(sb.ToString()), line);
             }
-            if (_source[_pos] == '\n') _line++;
+            if (_source[_pos] == '\n')
+            {
+                _line++;
+            }
+
             sb.Append(_source[_pos]);
             _pos++;
         }
@@ -324,21 +313,33 @@ public class Tokenizer
         }
 
         if (indent == 0)
+        {
             return raw.TrimEnd();
+        }
 
         // Strip last line (it's just whitespace) and dedent each content line
-        var content = raw[..(lastNewline)];
-        var lines = content.Split('\n');
-        var result = new System.Text.StringBuilder();
+        string content = raw[..(lastNewline)];
+        string[] lines = content.Split('\n');
+        StringBuilder result = new System.Text.StringBuilder();
         for (int i = 0; i < lines.Length; i++)
         {
-            var l = lines[i];
+            string l = lines[i];
             // Strip trailing \r
-            if (l.Length > 0 && l[^1] == '\r') l = l[..^1];
+            if (l.Length > 0 && l[^1] == '\r')
+            {
+                l = l[..^1];
+            }
             // Strip indent prefix
             if (l.Length >= indent && l[..indent].Trim().Length == 0)
+            {
                 l = l[indent..];
-            if (i > 0) result.Append('\n');
+            }
+
+            if (i > 0)
+            {
+                result.Append('\n');
+            }
+
             result.Append(l);
         }
         return result.ToString();
@@ -347,11 +348,19 @@ public class Tokenizer
     private Token ReadNumber(int line)
     {
         int start = _pos;
-        while (_pos < _source.Length && char.IsDigit(_source[_pos])) _pos++;
+        while (_pos < _source.Length && char.IsDigit(_source[_pos]))
+        {
+            _pos++;
+        }
+
         if (_pos < _source.Length && _source[_pos] == '.' && _pos + 1 < _source.Length && char.IsDigit(_source[_pos + 1]))
         {
             _pos++; // skip '.'
-            while (_pos < _source.Length && char.IsDigit(_source[_pos])) _pos++;
+            while (_pos < _source.Length && char.IsDigit(_source[_pos]))
+            {
+                _pos++;
+            }
+
             return new Token(TokenKind.NumberLiteral, _source[start.._pos], line);
         }
         return new Token(TokenKind.IntLiteral, _source[start.._pos], line);
@@ -389,58 +398,12 @@ public class Tokenizer
     {
         int start = _pos;
         while (_pos < _source.Length && (char.IsLetterOrDigit(_source[_pos]) || _source[_pos] == '_' || _source[_pos] == '-'))
-            _pos++;
-        string value = _source[start.._pos];
-        var kind = Keywords.TryGetValue(value, out var kw) ? kw : TokenKind.Identifier;
-        return new Token(kind, value, line);
-    }
-}
-
-public class ParseException : Exception
-{
-    public string FilePath { get; }
-    public int Line { get; }
-    public int? Column { get; }
-    public string? SourceLine { get; }
-
-    public ParseException(string message, string filePath, int line, int? column = null, string? sourceLine = null)
-        : base($"{filePath}({line}): {message}")
-    {
-        FilePath = filePath;
-        Line = line;
-        Column = column;
-        SourceLine = sourceLine;
-    }
-
-    /// <summary>
-    /// Converts this ParseException into a structured CopDiagnostic.
-    /// </summary>
-    public CopDiagnostic ToDiagnostic() => new(
-        CopDiagnosticSeverity.Error,
-        Message.Contains("): ") ? Message[(Message.IndexOf("): ") + 3)..] : Message,
-        FilePath,
-        Line,
-        Column,
-        null,
-        SourceLine);
-
-    /// <summary>
-    /// Extracts a specific line (1-based) from source text.
-    /// </summary>
-    public static string? GetSourceLine(string source, int line)
-    {
-        if (string.IsNullOrEmpty(source) || line < 1) return null;
-        int currentLine = 1;
-        int start = 0;
-        while (currentLine < line && start < source.Length)
         {
-            if (source[start] == '\n') currentLine++;
-            start++;
+            _pos++;
         }
-        if (currentLine != line) return null;
-        int end = source.IndexOf('\n', start);
-        if (end < 0) end = source.Length;
-        var result = source[start..end].TrimEnd('\r');
-        return result;
+
+        string value = _source[start.._pos];
+        TokenKind kind = Keywords.TryGetValue(value, out TokenKind kw) ? kw : TokenKind.Identifier;
+        return new Token(kind, value, line);
     }
 }

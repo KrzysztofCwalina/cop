@@ -1,3 +1,5 @@
+// Projects Python AST protocol responses into the shared Cop source model.
+
 using System.Text.Json;
 using Cop.Providers.SourceModel;
 
@@ -11,13 +13,17 @@ internal sealed class PythonAstMapper(string path, string source)
     private readonly List<string> _imports = [];
     private readonly List<ImportInfo> _importFacts = [];
 
+    /// <summary>Projects a Python AST response into a file-scoped source model.</summary>
     public SourceFile Parse(JsonElement document)
     {
-        if (document.TryGetProperty("error", out var error))
+        if (document.TryGetProperty("error", out JsonElement error))
+        {
             return new(path, "python", [], [], source)
             {
                 ParseErrors = [$"{path}({document.GetProperty("line")},{document.GetProperty("column")}): error: {error.GetString()}"],
             };
+        }
+
         Walk(document.GetProperty("tree"), null, null);
         return new(path, "python", _types, _statements, source)
         {
@@ -31,11 +37,11 @@ internal sealed class PythonAstMapper(string path, string source)
 
     private static string Kind(JsonElement node) => String(node, "kind");
     private static string String(JsonElement node, string key) =>
-        node.ValueKind == JsonValueKind.Object && node.TryGetProperty(key, out var value)
+        node.ValueKind == JsonValueKind.Object && node.TryGetProperty(key, out JsonElement value)
             && value.ValueKind == JsonValueKind.String ? value.GetString()! : "";
-    private static int Line(JsonElement node) => node.ValueKind == JsonValueKind.Object && node.TryGetProperty("line", out var line) ? line.GetInt32() : 0;
+    private static int Line(JsonElement node) => node.ValueKind == JsonValueKind.Object && node.TryGetProperty("line", out JsonElement line) ? line.GetInt32() : 0;
     private static JsonElement Get(JsonElement node, string key) =>
-        node.ValueKind == JsonValueKind.Object && node.TryGetProperty(key, out var value) ? value : default;
+        node.ValueKind == JsonValueKind.Object && node.TryGetProperty(key, out JsonElement value) ? value : default;
     private static IEnumerable<JsonElement> Items(JsonElement node) =>
         node.ValueKind == JsonValueKind.Array ? node.EnumerateArray() : [];
     private static string Text(JsonElement node) => String(node, "text");
@@ -48,32 +54,36 @@ internal sealed class PythonAstMapper(string path, string source)
 
     private static TypeReference? Type(JsonElement node)
     {
-        if (node.ValueKind != JsonValueKind.Object) return null;
-        var originalText = Text(node);
-        var text = IsString(node)
+        if (node.ValueKind != JsonValueKind.Object)
+        {
+            return null;
+        }
+
+        string originalText = Text(node);
+        string text = IsString(node)
             ? Get(node, "value").GetString()! : Text(node);
-        var arguments = Kind(node) == "Subscript"
+        List<TypeReference> arguments = Kind(node) == "Subscript"
             ? Kind(Get(node, "slice")) == "Tuple"
                 ? Items(Get(Get(node, "slice"), "elts")).Select(Type).OfType<TypeReference>().ToList()
                 : new[] { Type(Get(node, "slice")) }.OfType<TypeReference>().ToList()
             : [];
-        var name = Kind(node) == "Subscript" ? Text(Get(node, "value")) : text;
+        string name = Kind(node) == "Subscript" ? Text(Get(node, "value")) : text;
         return new(name, null, arguments, originalText);
     }
 
     private TypeDeclaration Class(JsonElement node)
     {
-        var name = String(node, "name");
-        var bases = Items(Get(node, "bases")).Select(Text).ToList();
-        var decorators = Items(Get(node, "decorator_list")).Select(Decorator).ToList();
-        var methods = new List<MethodDeclaration>();
-        var constructors = new List<MethodDeclaration>();
-        var nested = new List<TypeDeclaration>();
-        var fields = new List<FieldDeclaration>();
-        var properties = new List<PropertyDeclaration>();
-        var body = Items(Get(node, "body")).ToList();
-        var doc = Doc(body);
-        var slots = false;
+        string name = String(node, "name");
+        List<string> bases = Items(Get(node, "bases")).Select(Text).ToList();
+        List<string> decorators = Items(Get(node, "decorator_list")).Select(Decorator).ToList();
+        List<MethodDeclaration> methods = new List<MethodDeclaration>();
+        List<MethodDeclaration> constructors = new List<MethodDeclaration>();
+        List<TypeDeclaration> nested = new List<TypeDeclaration>();
+        List<FieldDeclaration> fields = new List<FieldDeclaration>();
+        List<PropertyDeclaration> properties = new List<PropertyDeclaration>();
+        List<JsonElement> body = Items(Get(node, "body")).ToList();
+        string? doc = Doc(body);
+        bool slots = false;
         void DeclareMember(JsonElement child, StatementInfo? parent)
         {
             if (Kind(child) == "ClassDef")
@@ -84,27 +94,33 @@ internal sealed class PythonAstMapper(string path, string source)
             else if (Kind(child) == "TypeAlias")
             {
                 nested.Add(Alias(child));
-                foreach (var expression in Children(child)) Walk(expression, null, parent);
+                foreach (JsonElement expression in Children(child))
+                {
+                    Walk(expression, null, parent);
+                }
             }
             else
             {
-                var method = Function(child);
+                MethodDeclaration method = Function(child);
                 DefinitionExpressions(child, null, parent);
                 CollectReceiverFields(child, fields);
                 (method.Name == "__init__" ? constructors : methods).Add(method);
             }
         }
-        foreach (var child in body)
+        foreach (JsonElement child in body)
         {
             CollectFields(child, fields, ref slots);
             Walk(child, null, null, DeclareMember);
         }
-        foreach (var method in methods.Where(m => m.Decorators.Any(d => d == "property" || d.EndsWith(".property", StringComparison.Ordinal))))
+        foreach (MethodDeclaration? method in methods.Where(m => m.Decorators.Any(d => d == "property" || d.EndsWith(".property", StringComparison.Ordinal))))
+        {
             properties.Add(new(method.Name, method.ReturnType, method.Modifiers, method.Line)
             {
                 HasGetter = true, HasDocComment = method.HasDocComment, DocComment = method.DocComment,
                 HasSetter = methods.Any(m => m.Decorators.Contains(method.Name + ".setter")),
             });
+        }
+
         bool Base(string value) => bases.Any(b => b == value || b.EndsWith("." + value, StringComparison.Ordinal));
         return new TypeDeclaration(name, TypeKind.Class, Visibility(name), bases, decorators,
             constructors, methods, nested, [], Line(node))
@@ -124,55 +140,95 @@ internal sealed class PythonAstMapper(string path, string source)
 
     private static void CollectFields(JsonElement node, List<FieldDeclaration> fields, ref bool slots)
     {
-        if (Kind(node) is "ClassDef" or "FunctionDef" or "AsyncFunctionDef") return;
+        if (Kind(node) is "ClassDef" or "FunctionDef" or "AsyncFunctionDef")
+        {
+            return;
+        }
+
         if (Kind(node) is "Assign" or "AnnAssign")
         {
-            var targets = Kind(node) == "Assign" ? Items(Get(node, "targets")) : [Get(node, "target")];
-            foreach (var target in targets)
-                foreach (var name in AssignedNames(target))
+            IEnumerable<JsonElement> targets = Kind(node) == "Assign" ? Items(Get(node, "targets")) : [Get(node, "target")];
+            foreach (JsonElement target in targets)
+            {
+                foreach (string name in AssignedNames(target))
                 {
                     fields.Add(new(name, Type(Get(node, "annotation")), Visibility(name) | Modifier.Static, Line(node)));
                     slots |= name == "__slots__";
                 }
+            }
         }
-        foreach (var child in Children(node)) CollectFields(child, fields, ref slots);
+        foreach (JsonElement child in Children(node))
+        {
+            CollectFields(child, fields, ref slots);
+        }
     }
 
     private static IEnumerable<string> AssignedNames(JsonElement node)
     {
-        if (Kind(node) == "Name") yield return String(node, "id");
+        if (Kind(node) == "Name")
+        {
+            yield return String(node, "id");
+        }
+
         if (Kind(node) is "Tuple" or "List")
-            foreach (var child in Items(Get(node, "elts")))
-                foreach (var name in AssignedNames(child)) yield return name;
+        {
+            foreach (JsonElement child in Items(Get(node, "elts")))
+            {
+                foreach (string name in AssignedNames(child))
+                {
+                    yield return name;
+                }
+            }
+        }
     }
 
     private static void CollectReceiverFields(JsonElement function, List<FieldDeclaration> fields)
     {
-        var decorators = Items(Get(function, "decorator_list")).Select(Decorator).ToList();
-        if (decorators.Any(d => d == "staticmethod" || d.EndsWith(".staticmethod", StringComparison.Ordinal))) return;
-        var parameters = Get(function, "args");
-        var receiver = Items(Get(parameters, "posonlyargs")).Concat(Items(Get(parameters, "args"))).FirstOrDefault();
-        if (receiver.ValueKind != JsonValueKind.Object) return;
-        var name = String(receiver, "arg");
-        var isClass = decorators.Any(d => d == "classmethod" || d.EndsWith(".classmethod", StringComparison.Ordinal));
+        List<string> decorators = Items(Get(function, "decorator_list")).Select(Decorator).ToList();
+        if (decorators.Any(d => d == "staticmethod" || d.EndsWith(".staticmethod", StringComparison.Ordinal)))
+        {
+            return;
+        }
+
+        JsonElement parameters = Get(function, "args");
+        JsonElement receiver = Items(Get(parameters, "posonlyargs")).Concat(Items(Get(parameters, "args"))).FirstOrDefault();
+        if (receiver.ValueKind != JsonValueKind.Object)
+        {
+            return;
+        }
+
+        string name = String(receiver, "arg");
+        bool isClass = decorators.Any(d => d == "classmethod" || d.EndsWith(".classmethod", StringComparison.Ordinal));
         void Visit(JsonElement node)
         {
-            if (Kind(node) is "ClassDef" or "FunctionDef" or "AsyncFunctionDef" or "Lambda") return;
+            if (Kind(node) is "ClassDef" or "FunctionDef" or "AsyncFunctionDef" or "Lambda")
+            {
+                return;
+            }
+
             if (Kind(node) is "Assign" or "AnnAssign")
             {
-                var targets = Kind(node) == "Assign" ? Items(Get(node, "targets")) : [Get(node, "target")];
-                foreach (var target in targets)
+                IEnumerable<JsonElement> targets = Kind(node) == "Assign" ? Items(Get(node, "targets")) : [Get(node, "target")];
+                foreach (JsonElement target in targets)
+                {
                     if (Kind(target) == "Attribute" && Kind(Get(target, "value")) == "Name"
                         && String(Get(target, "value"), "id") == name)
                     {
-                        var member = String(target, "attr");
+                        string member = String(target, "attr");
                         fields.Add(new(member, Type(Get(node, "annotation")),
                             Visibility(member) | (isClass ? Modifier.Static : Modifier.None), Line(node)));
                     }
+                }
             }
-            foreach (var child in Children(node)) Visit(child);
+            foreach (JsonElement child in Children(node))
+            {
+                Visit(child);
+            }
         }
-        foreach (var statement in Items(Get(function, "body"))) Visit(statement);
+        foreach (JsonElement statement in Items(Get(function, "body")))
+        {
+            Visit(statement);
+        }
     }
 
     private static string? Doc(List<JsonElement> body) =>
@@ -181,15 +237,27 @@ internal sealed class PythonAstMapper(string path, string source)
 
     private MethodDeclaration Function(JsonElement node)
     {
-        var name = String(node, "name");
-        var decorators = Items(Get(node, "decorator_list")).Select(Decorator).ToList();
-        var modifiers = Visibility(name);
-        if (Kind(node) == "AsyncFunctionDef") modifiers |= Modifier.Async;
-        if (decorators.Any(d => d == "staticmethod" || d.EndsWith(".staticmethod", StringComparison.Ordinal))) modifiers |= Modifier.Static;
-        if (decorators.Any(d => d == "abstractmethod" || d.EndsWith(".abstractmethod", StringComparison.Ordinal))) modifiers |= Modifier.Abstract;
-        var body = Items(Get(node, "body")).ToList();
-        var doc = Doc(body);
-        var method = new MethodDeclaration(name, modifiers, decorators, Type(Get(node, "returns")),
+        string name = String(node, "name");
+        List<string> decorators = Items(Get(node, "decorator_list")).Select(Decorator).ToList();
+        Modifier modifiers = Visibility(name);
+        if (Kind(node) == "AsyncFunctionDef")
+        {
+            modifiers |= Modifier.Async;
+        }
+
+        if (decorators.Any(d => d == "staticmethod" || d.EndsWith(".staticmethod", StringComparison.Ordinal)))
+        {
+            modifiers |= Modifier.Static;
+        }
+
+        if (decorators.Any(d => d == "abstractmethod" || d.EndsWith(".abstractmethod", StringComparison.Ordinal)))
+        {
+            modifiers |= Modifier.Abstract;
+        }
+
+        List<JsonElement> body = Items(Get(node, "body")).ToList();
+        string? doc = Doc(body);
+        PythonMethodDeclaration method = new MethodDeclaration(name, modifiers, decorators, Type(Get(node, "returns")),
             Parameters(Get(node, "args")), Line(node))
         {
             HasDocComment = doc is not null, DocComment = doc,
@@ -197,25 +265,36 @@ internal sealed class PythonAstMapper(string path, string source)
             Column = Position(node, "column"), EndLine = Position(node, "end_line"), EndColumn = Position(node, "end_column"),
         }
             .AsPython(isGenerator: body.Any(ContainsYield));
-        foreach (var child in body) Walk(child, method, null);
+        foreach (JsonElement child in body)
+        {
+            Walk(child, method, null);
+        }
         // Defaults, annotations and decorators execute in the enclosing scope, not the function body.
         return method;
     }
 
     private static bool ContainsYield(JsonElement node)
     {
-        if (Kind(node) is "FunctionDef" or "AsyncFunctionDef" or "ClassDef" or "Lambda") return false;
+        if (Kind(node) is "FunctionDef" or "AsyncFunctionDef" or "ClassDef" or "Lambda")
+        {
+            return false;
+        }
+
         return Kind(node) is "Yield" or "YieldFrom" || Children(node).Any(ContainsYield);
     }
 
     private static List<ParameterDeclaration> Parameters(JsonElement arguments)
     {
-        var result = new List<ParameterDeclaration>();
-        var positional = Items(Get(arguments, "posonlyargs")).Concat(Items(Get(arguments, "args"))).ToList();
-        var defaults = Items(Get(arguments, "defaults")).ToList();
+        List<ParameterDeclaration> result = new List<ParameterDeclaration>();
+        List<JsonElement> positional = Items(Get(arguments, "posonlyargs")).Concat(Items(Get(arguments, "args"))).ToList();
+        List<JsonElement> defaults = Items(Get(arguments, "defaults")).ToList();
         void Add(JsonElement arg, JsonElement value, bool variadic = false, bool kwargs = false)
         {
-            if (arg.ValueKind != JsonValueKind.Object) return;
+            if (arg.ValueKind != JsonValueKind.Object)
+            {
+                return;
+            }
+
             result.Add(new(String(arg, "arg"), Type(Get(arg, "annotation")), variadic, kwargs,
                 value.ValueKind is not (JsonValueKind.Undefined or JsonValueKind.Null), Line(arg))
             {
@@ -224,15 +303,19 @@ internal sealed class PythonAstMapper(string path, string source)
                 Column = Position(arg, "column"), EndLine = Position(arg, "end_line"), EndColumn = Position(arg, "end_column"),
             });
         }
-        for (var i = 0; i < positional.Count; i++)
+        for (int i = 0; i < positional.Count; i++)
         {
-            var index = i - (positional.Count - defaults.Count);
+            int index = i - (positional.Count - defaults.Count);
             Add(positional[i], index >= 0 ? defaults[index] : default);
         }
         Add(Get(arguments, "vararg"), default, variadic: true);
-        var keywordDefaults = Items(Get(arguments, "kw_defaults")).ToList();
-        var keywords = Items(Get(arguments, "kwonlyargs")).ToList();
-        for (var i = 0; i < keywords.Count; i++) Add(keywords[i], keywordDefaults[i]);
+        List<JsonElement> keywordDefaults = Items(Get(arguments, "kw_defaults")).ToList();
+        List<JsonElement> keywords = Items(Get(arguments, "kwonlyargs")).ToList();
+        for (int i = 0; i < keywords.Count; i++)
+        {
+            Add(keywords[i], keywordDefaults[i]);
+        }
+
         Add(Get(arguments, "kwarg"), default, kwargs: true);
         return result;
     }
@@ -240,8 +323,12 @@ internal sealed class PythonAstMapper(string path, string source)
     private void Walk(JsonElement node, MethodDeclaration? method, StatementInfo? parent,
         Action<JsonElement, StatementInfo?>? declareMember = null)
     {
-        if (node.ValueKind != JsonValueKind.Object) return;
-        var kind = Kind(node);
+        if (node.ValueKind != JsonValueKind.Object)
+        {
+            return;
+        }
+
+        string kind = Kind(node);
         if (declareMember is not null && kind is "ClassDef" or "FunctionDef" or "AsyncFunctionDef" or "TypeAlias")
         {
             declareMember(node, parent);
@@ -266,17 +353,21 @@ internal sealed class PythonAstMapper(string path, string source)
         if (kind == "Import")
         {
             _imports.AddRange(Items(Get(node, "names")).Select(n => String(n, "name")));
-            foreach (var alias in Items(Get(node, "names")))
+            foreach (JsonElement alias in Items(Get(node, "names")))
+            {
                 _importFacts.Add(Import(node, String(alias, "name"), null, String(alias, "asname"), 0));
+            }
         }
         if (kind == "ImportFrom")
         {
             _imports.Add(new string('.', Get(node, "level").GetInt32()) + String(node, "module"));
-            foreach (var alias in Items(Get(node, "names")))
+            foreach (JsonElement alias in Items(Get(node, "names")))
+            {
                 _importFacts.Add(Import(node, String(node, "module"), String(alias, "name"), String(alias, "asname"), Get(node, "level").GetInt32()));
+            }
         }
 
-        var statementKind = kind switch
+        string? statementKind = kind switch
         {
             "Call" => "call", "If" or "IfExp" => "if", "For" or "AsyncFor" => "foreach",
             "While" => "while", "Try" or "TryStar" => "try", "ExceptHandler" => "catch",
@@ -289,9 +380,9 @@ internal sealed class PythonAstMapper(string path, string source)
         };
         if (statementKind is not null)
         {
-            var target = Get(node, "func");
-            var args = Items(Get(node, "args")).ToList();
-            var kwargs = Items(Get(node, "keywords")).ToList();
+            JsonElement target = Get(node, "func");
+            List<JsonElement> args = Items(Get(node, "args")).ToList();
+            List<JsonElement> kwargs = Items(Get(node, "keywords")).ToList();
             string? typeName = kind switch
             {
                 "Call" when Kind(target) == "Attribute" => Text(Get(target, "value")),
@@ -300,10 +391,14 @@ internal sealed class PythonAstMapper(string path, string source)
                 "Raise" => Kind(Get(node, "exc")) == "Call" ? Text(Get(Get(node, "exc"), "func")) : Text(Get(node, "exc")),
                 _ => null,
             };
-            if (typeName == "") typeName = null;
-            var member = kind == "Call" ? Kind(target) == "Name" ? String(target, "id")
+            if (typeName == "")
+            {
+                typeName = null;
+            }
+
+            string? member = kind == "Call" ? Kind(target) == "Name" ? String(target, "id")
                 : Kind(target) == "Attribute" ? String(target, "attr") : null : null;
-            var statement = new PythonStatementInfo(statementKind, [], typeName, member,
+            PythonStatementInfo statement = new PythonStatementInfo(statementKind, [], typeName, member,
                 args.Select(LiteralArgument).Concat(kwargs.Select(k => LiteralArgument(Get(k, "value")))).ToList(),
                 Line(node), method is not null)
             {
@@ -325,7 +420,10 @@ internal sealed class PythonAstMapper(string path, string source)
             parent?._children.Add(statement);
             parent = statement;
         }
-        foreach (var child in Children(node)) Walk(child, method, parent, declareMember);
+        foreach (JsonElement child in Children(node))
+        {
+            Walk(child, method, parent, declareMember);
+        }
     }
 
     private static ImportInfo Import(JsonElement node, string module, string? name, string alias, int level) =>
@@ -346,18 +444,44 @@ internal sealed class PythonAstMapper(string path, string source)
 
     private void DefinitionExpressions(JsonElement node, MethodDeclaration? method, StatementInfo? parent)
     {
-        foreach (var decorator in Items(Get(node, "decorator_list"))) Walk(decorator, method, parent);
-        foreach (var child in Children(Get(node, "args"))) Walk(child, method, parent);
+        foreach (JsonElement decorator in Items(Get(node, "decorator_list")))
+        {
+            Walk(decorator, method, parent);
+        }
+
+        foreach (JsonElement child in Children(Get(node, "args")))
+        {
+            Walk(child, method, parent);
+        }
+
         Walk(Get(node, "returns"), method, parent);
-        foreach (var parameter in Items(Get(node, "type_params"))) Walk(parameter, method, parent);
+        foreach (JsonElement parameter in Items(Get(node, "type_params")))
+        {
+            Walk(parameter, method, parent);
+        }
     }
 
     private void ClassExpressions(JsonElement node, MethodDeclaration? method, StatementInfo? parent)
     {
-        foreach (var decorator in Items(Get(node, "decorator_list"))) Walk(decorator, method, parent);
-        foreach (var baseType in Items(Get(node, "bases"))) Walk(baseType, method, parent);
-        foreach (var keyword in Items(Get(node, "keywords"))) Walk(keyword, method, parent);
-        foreach (var parameter in Items(Get(node, "type_params"))) Walk(parameter, method, parent);
+        foreach (JsonElement decorator in Items(Get(node, "decorator_list")))
+        {
+            Walk(decorator, method, parent);
+        }
+
+        foreach (JsonElement baseType in Items(Get(node, "bases")))
+        {
+            Walk(baseType, method, parent);
+        }
+
+        foreach (JsonElement keyword in Items(Get(node, "keywords")))
+        {
+            Walk(keyword, method, parent);
+        }
+
+        foreach (JsonElement parameter in Items(Get(node, "type_params")))
+        {
+            Walk(parameter, method, parent);
+        }
     }
 
     private static bool ContainsRethrow(JsonElement node) =>
@@ -370,7 +494,7 @@ internal sealed class PythonAstMapper(string path, string source)
 
     private static ExpressionInfo Expression(JsonElement node)
     {
-        var kind = Kind(node);
+        string kind = Kind(node);
         return kind switch
         {
             "Name" => new("identifier") { Name = String(node, "id") },
@@ -390,13 +514,27 @@ internal sealed class PythonAstMapper(string path, string source)
 
     private static IEnumerable<JsonElement> Children(JsonElement node)
     {
-        if (node.ValueKind != JsonValueKind.Object) yield break;
-        foreach (var property in node.EnumerateObject())
+        if (node.ValueKind != JsonValueKind.Object)
         {
-            if (property.Value.ValueKind == JsonValueKind.Object) yield return property.Value;
+            yield break;
+        }
+
+        foreach (JsonProperty property in node.EnumerateObject())
+        {
+            if (property.Value.ValueKind == JsonValueKind.Object)
+            {
+                yield return property.Value;
+            }
             else if (property.Value.ValueKind == JsonValueKind.Array)
-                foreach (var child in property.Value.EnumerateArray())
-                    if (child.ValueKind == JsonValueKind.Object) yield return child;
+            {
+                foreach (JsonElement child in property.Value.EnumerateArray())
+                {
+                    if (child.ValueKind == JsonValueKind.Object)
+                    {
+                        yield return child;
+                    }
+                }
+            }
         }
     }
 }

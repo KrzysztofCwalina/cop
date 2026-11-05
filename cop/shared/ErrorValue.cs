@@ -1,3 +1,5 @@
+// Carries operational failures as queryable values in Cop pipelines.
+
 namespace Cop.Lang;
 
 /// <summary>

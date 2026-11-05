@@ -1,3 +1,5 @@
+// Describes the callable declaration selected by compiler binding.
+
 namespace Cop.Providers.SourceModel;
 
 /// <summary>A compiler-selected callable declaration, not a runtime dispatch target.</summary>

@@ -1,3 +1,5 @@
+// Loads provider collections from an external process through the provider protocol.
+
 using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
@@ -40,15 +42,15 @@ public sealed class ProcessObjectProvider : DataProvider, IDisposable
 
     public override ReadOnlyMemory<byte> GetSchema()
     {
-        var request = """{"method":"getSchema"}""";
-        var response = SendRequest(request);
+        string request = """{"method":"getSchema"}""";
+        string response = SendRequest(request);
         return Encoding.UTF8.GetBytes(response);
     }
 
     public override byte[] Query(ProviderQuery query)
     {
-        var request = BuildQueryRequest(query);
-        var response = SendRequest(request);
+        string request = BuildQueryRequest(query);
+        string response = SendRequest(request);
         return Encoding.UTF8.GetBytes(response);
     }
 
@@ -67,19 +69,19 @@ public sealed class ProcessObjectProvider : DataProvider, IDisposable
         {
             EnsureProcessRunning();
 
-            var process = _process!;
-            var stdin = process.StandardInput;
-            var stdout = process.StandardOutput;
+            Process process = _process!;
+            StreamWriter stdin = process.StandardInput;
+            StreamReader stdout = process.StandardOutput;
 
             // Write request with Content-Length framing
-            var requestBytes = Encoding.UTF8.GetBytes(jsonRequest);
-            var header = $"Content-Length: {requestBytes.Length}\r\n\r\n";
+            byte[] requestBytes = Encoding.UTF8.GetBytes(jsonRequest);
+            string header = $"Content-Length: {requestBytes.Length}\r\n\r\n";
             stdin.Write(header);
             stdin.Write(jsonRequest);
             stdin.Flush();
 
             // Read response with Content-Length framing
-            var response = ReadFramedMessage(stdout);
+            string response = ReadFramedMessage(stdout);
             return response;
         }
     }
@@ -95,32 +97,43 @@ public sealed class ProcessObjectProvider : DataProvider, IDisposable
         // Read headers until empty line
         while (true)
         {
-            var line = ReadLineWithTimeout(reader);
+            string? line = ReadLineWithTimeout(reader);
             if (line is null)
+            {
                 throw new InvalidOperationException($"Provider process ({_runtime}) closed stdout unexpectedly. Stderr: {GetStderr()}");
+            }
 
             if (line.Length == 0)
+            {
                 break; // End of headers
+            }
 
             if (line.StartsWith("Content-Length:", StringComparison.OrdinalIgnoreCase))
             {
-                var value = line["Content-Length:".Length..].Trim();
+                string value = line["Content-Length:".Length..].Trim();
                 if (!int.TryParse(value, out contentLength))
+                {
                     throw new InvalidOperationException($"Provider process ({_runtime}) sent invalid Content-Length: '{value}'");
+                }
             }
         }
 
         if (contentLength < 0)
+        {
             throw new InvalidOperationException($"Provider process ({_runtime}) did not send Content-Length header. Stderr: {GetStderr()}");
+        }
 
         // Read exactly contentLength bytes
-        var buffer = new char[contentLength];
+        char[] buffer = new char[contentLength];
         int totalRead = 0;
         while (totalRead < contentLength)
         {
-            var read = reader.Read(buffer, totalRead, contentLength - totalRead);
+            int read = reader.Read(buffer, totalRead, contentLength - totalRead);
             if (read == 0)
+            {
                 throw new InvalidOperationException($"Provider process ({_runtime}) closed stdout before sending full response. Stderr: {GetStderr()}");
+            }
+
             totalRead += read;
         }
 
@@ -132,21 +145,26 @@ public sealed class ProcessObjectProvider : DataProvider, IDisposable
     /// </summary>
     private string? ReadLineWithTimeout(StreamReader reader)
     {
-        var task = Task.Run(() => reader.ReadLine());
+        Task<string?> task = Task.Run(() => reader.ReadLine());
         if (task.Wait(Timeout))
+        {
             return task.Result;
+        }
+
         throw new TimeoutException($"Provider process ({_runtime}) did not respond within {Timeout.TotalSeconds}s. Stderr: {GetStderr()}");
     }
 
     private void EnsureProcessRunning()
     {
         if (_process is not null && !_process.HasExited)
+        {
             return;
+        }
 
         _process?.Dispose();
         _stderr.Clear();
 
-        var psi = new ProcessStartInfo
+        ProcessStartInfo psi = new ProcessStartInfo
         {
             FileName = _runtime,
             Arguments = _entryScript,
@@ -175,33 +193,39 @@ public sealed class ProcessObjectProvider : DataProvider, IDisposable
         _process.ErrorDataReceived += (_, e) =>
         {
             if (e.Data is not null)
+            {
                 _stderr.AppendLine(e.Data);
+            }
         };
         _process.BeginErrorReadLine();
     }
 
     private string GetStderr()
     {
-        var text = _stderr.ToString().Trim();
+        string text = _stderr.ToString().Trim();
         return text.Length > 0 ? text : "(no stderr output)";
     }
 
     private static string BuildQueryRequest(ProviderQuery query)
     {
-        using var stream = new MemoryStream();
-        using var writer = new Utf8JsonWriter(stream);
+        using MemoryStream stream = new MemoryStream();
+        using Utf8JsonWriter writer = new Utf8JsonWriter(stream);
         writer.WriteStartObject();
         writer.WriteString("method", "query");
 
         writer.WriteStartObject("params");
 
         if (query.RootPath is not null)
+        {
             writer.WriteString("rootPath", query.RootPath);
+        }
 
         if (query.Collection is not null)
+        {
             writer.WriteString("collection", query.Collection);
+        }
 
-        var filterOptions = new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
+        JsonSerializerOptions filterOptions = new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
         if (query.Filter is not null)
         {
             writer.WritePropertyName("filter");
@@ -216,16 +240,22 @@ public sealed class ProcessObjectProvider : DataProvider, IDisposable
         if (query.ExcludedDirectories is not null)
         {
             writer.WriteStartArray("excludedDirectories");
-            foreach (var d in query.ExcludedDirectories)
+            foreach (string d in query.ExcludedDirectories)
+            {
                 writer.WriteStringValue(d);
+            }
+
             writer.WriteEndArray();
         }
 
         if (query.Options is not null)
         {
             writer.WriteStartObject("options");
-            foreach (var (k, v) in query.Options)
+            foreach ((string? k, string? v) in query.Options)
+            {
                 writer.WriteString(k, v);
+            }
+
             writer.WriteEndObject();
         }
 
@@ -238,7 +268,11 @@ public sealed class ProcessObjectProvider : DataProvider, IDisposable
 
     public void Dispose()
     {
-        if (_disposed) return;
+        if (_disposed)
+        {
+            return;
+        }
+
         _disposed = true;
 
         if (_process is not null && !_process.HasExited)
@@ -247,7 +281,9 @@ public sealed class ProcessObjectProvider : DataProvider, IDisposable
             {
                 _process.StandardInput.Close();
                 if (!_process.WaitForExit(3000))
+                {
                     _process.Kill();
+                }
             }
             catch { /* best effort */ }
         }

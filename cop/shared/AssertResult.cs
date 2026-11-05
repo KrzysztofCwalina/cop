@@ -1,3 +1,5 @@
+// Represents the named outcome and item count of a Cop assertion.
+
 namespace Cop.Lang;
 
 /// <summary>

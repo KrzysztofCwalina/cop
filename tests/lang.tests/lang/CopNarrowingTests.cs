@@ -122,8 +122,10 @@ public class CopNarrowingTests
     private string[] Run(string program)
     {
         File.WriteAllText(Path.Combine(_programDir, "main.cop"), program);
-        var result = Engine.Run(_programDir, _targetDir,
-            additionalFeedPaths: [Path.Combine(RepoRoot, "packages")]);
+        var result = Engine.Run(_programDir, _targetDir, new EngineRunOptions
+        {
+            AdditionalFeedPaths = [Path.Combine(RepoRoot, "packages")],
+        });
         Assert.That(result.HasFatalErrors, Is.False, string.Join("; ", result.Errors));
         return result.Outputs.Select(o => o.Message).ToArray();
     }

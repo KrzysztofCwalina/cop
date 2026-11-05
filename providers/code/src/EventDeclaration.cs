@@ -1,3 +1,5 @@
+// Represents event declarations and their visibility.
+
 namespace Cop.Providers.SourceModel;
 
 public record EventDeclaration(string Name, TypeReference? Type, Modifier Modifiers, int Line)

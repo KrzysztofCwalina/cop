@@ -62,6 +62,10 @@ switch (args[0])
             Console.Out.Write(new string('x', 4096));
             Console.Error.Write(new string('y', 4096));
         }
+    case "finite-flood":
+        Console.Out.Write(new string('x', 100_000));
+        Console.Error.Write(new string('y', 100_000));
+        break;
     case "worker":
     case "invalid-worker":
     case "stderr-worker":

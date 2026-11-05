@@ -1,3 +1,5 @@
+// Exposes unstructured text files through the source-file model.
+
 using Cop.Providers.SourceModel;
 
 namespace Cop.Providers.SourceParsers;
@@ -26,8 +28,8 @@ public class TextFileParser : ISourceParser
 
     public override SourceFile? Parse(string filePath, string sourceText)
     {
-        var ext = Path.GetExtension(filePath);
-        var language = ExtensionLanguageMap.TryGetValue(ext, out var lang) ? lang : "text";
+        string ext = Path.GetExtension(filePath);
+        string language = ExtensionLanguageMap.TryGetValue(ext, out string? lang) ? lang : "text";
 
         return new SourceFile(filePath, language, [], [], sourceText);
     }

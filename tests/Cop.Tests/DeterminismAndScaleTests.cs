@@ -125,7 +125,10 @@ public class DeterminismAndScaleTests
 
     private RunSnapshot RunAndCapture()
     {
-        var result = Engine.Run(_scriptsDir, _targetDir, additionalFeedPaths: new[] { PackagesDir });
+        var result = Engine.Run(_scriptsDir, _targetDir, new EngineRunOptions
+        {
+            AdditionalFeedPaths = new[] { PackagesDir },
+        });
 
         Assert.That(result.HasParseErrors, Is.False, string.Join(Environment.NewLine, result.ParseErrors));
         Assert.That(result.HasFatalErrors, Is.False, string.Join(Environment.NewLine, result.Errors));

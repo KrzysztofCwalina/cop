@@ -1,3 +1,5 @@
+// Exposes JavaScript-specific type, method, and statement facts to the runtime.
+
 using Cop.Core;
 using Cop.Providers.SourceModel;
 
@@ -9,13 +11,16 @@ namespace Cop.Providers;
 /// </summary>
 public static class JavaScriptBindings
 {
+    /// <summary>
+    /// Extends shared bindings with JavaScript-specific source accessors.
+    /// </summary>
     public static RuntimeBindings Build()
     {
-        var bindings = CodeBindings.Build();
+        RuntimeBindings bindings = CodeBindings.Build();
 
         bindings.ClrTypeMappings[typeof(JavaScriptTypeDeclaration)] = "JavaScriptType";
 
-        var jsAccessors = new Dictionary<string, Func<object, object?>>(bindings.Accessors["Type"])
+        Dictionary<string, Func<object, object?>> jsAccessors = new Dictionary<string, Func<object, object?>>(bindings.Accessors["Type"])
         {
             ["IsExported"] = o => (object)((JavaScriptTypeDeclaration)o).IsExported,
             ["HasBaseClass"] = o => (object)((JavaScriptTypeDeclaration)o).HasBaseClass,
@@ -27,7 +32,7 @@ public static class JavaScriptBindings
 
         bindings.ClrTypeMappings[typeof(JavaScriptMethodDeclaration)] = "JavaScriptMethod";
 
-        var jsMethodAccessors = new Dictionary<string, Func<object, object?>>(bindings.Accessors["Method"])
+        Dictionary<string, Func<object, object?>> jsMethodAccessors = new Dictionary<string, Func<object, object?>>(bindings.Accessors["Method"])
         {
             ["IsGenerator"] = o => (object)((JavaScriptMethodDeclaration)o).IsGenerator,
             ["IsArrow"] = o => (object)((JavaScriptMethodDeclaration)o).IsArrow,
@@ -39,7 +44,7 @@ public static class JavaScriptBindings
 
         bindings.ClrTypeMappings[typeof(JavaScriptStatementInfo)] = "JavaScriptStatement";
 
-        var jsStatementAccessors = new Dictionary<string, Func<object, object?>>(bindings.Accessors["Statement"])
+        Dictionary<string, Func<object, object?>> jsStatementAccessors = new Dictionary<string, Func<object, object?>>(bindings.Accessors["Statement"])
         {
             ["IsForOf"] = o => (object)((JavaScriptStatementInfo)o).IsForOf,
             ["IsForIn"] = o => (object)((JavaScriptStatementInfo)o).IsForIn,

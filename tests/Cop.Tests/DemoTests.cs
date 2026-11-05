@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Text.Json;
+using Cop.Core;
 using NUnit.Framework;
 
 namespace Cop.Tests;
@@ -38,11 +39,55 @@ public class DemoTests
         };
 
         using var process = Process.Start(psi)!;
-        var stdout = process.StandardOutput.ReadToEnd();
-        var stderr = process.StandardError.ReadToEnd();
-        process.WaitForExit(timeoutMs);
+        return ReadProcessOutput(process, timeoutMs);
+    }
 
-        return (stdout.Trim(), stderr.Trim(), process.ExitCode);
+    private static (string stdout, string stderr, int exitCode) ReadProcessOutput(
+        Process process, int timeoutMs)
+    {
+        var stdout = process.StandardOutput.ReadToEndAsync();
+        var stderr = process.StandardError.ReadToEndAsync();
+        if (!process.WaitForExit(timeoutMs))
+        {
+            process.Kill(entireProcessTree: true);
+            process.WaitForExit();
+            Assert.Fail($"Test process timed out after {timeoutMs} ms.");
+        }
+
+        return (stdout.GetAwaiter().GetResult().Trim(),
+            stderr.GetAwaiter().GetResult().Trim(), process.ExitCode);
+    }
+
+    [Test]
+    public async Task ProcessOutputDrainsBothFullPipesWithoutDeadlocking()
+    {
+        var configuration = new DirectoryInfo(TestContext.CurrentContext.TestDirectory).Parent!.Name;
+        var helper = Path.Combine(RepoRoot, "tests", "toolchain-worker", "bin",
+            configuration, "net10.0", "Toolchain.Worker.dll");
+        var start = new ProcessStartInfo(ToolchainProcess.FindExecutable("dotnet")
+            ?? throw new InvalidOperationException("The test requires the .NET host."))
+        {
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+        };
+        start.ArgumentList.Add(helper);
+        start.ArgumentList.Add("finite-flood");
+        using var process = Process.Start(start)!;
+        var output = Task.Run(() => ReadProcessOutput(process, 5000));
+        try
+        {
+            var result = await output.WaitAsync(TimeSpan.FromSeconds(10));
+            Assert.That(result.exitCode, Is.EqualTo(0));
+            Assert.That(result.stdout, Is.EqualTo(new string('x', 100_000)));
+            Assert.That(result.stderr, Is.EqualTo(new string('y', 100_000)));
+        }
+        finally
+        {
+            if (!process.HasExited)
+                process.Kill(entireProcessTree: true);
+            await output;
+        }
     }
 
     [Test]

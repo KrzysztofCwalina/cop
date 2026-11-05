@@ -1,3 +1,5 @@
+// Registers runtime functions that expose source changes to Cop programs.
+
 using Cop.Core;
 using Cop.Lang;
 using Cop.Lang.Interpreter;
@@ -18,9 +20,9 @@ internal static class ChangeFunctions
                 context.Changes.IsChanged(PathArgument(args), LineArgument(args))), 2);
         bridge.RegisterFunction("changeFiles", (_, _) =>
         {
-            var files = context.Changes.Files.Select(file =>
+            IEnumerable<CopValue> files = context.Changes.Files.Select(file =>
             {
-                var data = new DataObject("ChangedFile");
+                DataObject data = new DataObject("ChangedFile");
                 data.Set("Path", file.Path);
                 data.Set("OldPath", file.OldPath ?? "");
                 data.Set("Status", file.Status);

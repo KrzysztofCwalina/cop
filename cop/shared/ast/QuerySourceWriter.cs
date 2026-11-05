@@ -1,3 +1,5 @@
+// Serializes query expressions into Cop source with stable literal formatting.
+
 using System.Globalization;
 
 namespace Cop.Lang.Ast;
@@ -90,7 +92,11 @@ internal static class QuerySourceWriter
     {
         string text = number.ToString("R", CultureInfo.InvariantCulture);
         int exponentIndex = text.IndexOf('E');
-        if (exponentIndex < 0) return text.Contains('.') ? text : text + ".0";
+        if (exponentIndex < 0)
+        {
+            return text.Contains('.') ? text : text + ".0";
+        }
+
         string mantissa = text[..exponentIndex];
         string sign = mantissa.StartsWith('-') ? "-" : "";
         mantissa = mantissa.TrimStart('-');

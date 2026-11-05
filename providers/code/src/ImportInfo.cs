@@ -1,3 +1,5 @@
+// Represents parsed imports, aliases, and wildcard imports.
+
 namespace Cop.Providers.SourceModel;
 
 /// <summary>Parsed import syntax facts, not resolved symbol bindings.</summary>

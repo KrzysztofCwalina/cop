@@ -1,3 +1,5 @@
+// Shares demanded format files across collections within one execution.
+
 using Cop.Core;
 using Cop.Lang;
 
@@ -16,14 +18,21 @@ public sealed class DeferredFormatSnapshot(
 
     public DeferredProviderResult Query(ProviderQuery query, ProviderSchema schema, RuntimeBindings bindings)
     {
-        var collections = new Dictionary<string, IEnumerable<object>>(StringComparer.Ordinal);
-        foreach (var collection in schema.Collections)
+        Dictionary<string, IEnumerable<object>> collections = new Dictionary<string, IEnumerable<object>>(StringComparer.Ordinal);
+        foreach (ProviderCollectionSchema collection in schema.Collections)
         {
-            if (query.Collection is not null && query.Collection != collection.Name) continue;
+            if (query.Collection is not null && query.Collection != collection.Name)
+            {
+                continue;
+            }
+
             IEnumerable<object> values = Enumerate(collection.Name);
-            var filter = query.CollectionFilters?.GetValueOrDefault(collection.Name) ?? query.Filter;
-            if (filter is not null && bindings.Accessors.TryGetValue(collection.ItemType, out var accessors))
+            FilterExpression? filter = query.CollectionFilters?.GetValueOrDefault(collection.Name) ?? query.Filter;
+            if (filter is not null && bindings.Accessors.TryGetValue(collection.ItemType, out Dictionary<string, Func<object, object?>>? accessors))
+            {
                 values = values.Where(FilterCompiler.Compile(filter, accessors));
+            }
+
             collections[collection.Name] = values;
         }
         return new(collections);
@@ -31,7 +40,7 @@ public sealed class DeferredFormatSnapshot(
 
     private IEnumerable<object> Enumerate(string collection)
     {
-        foreach (var path in _paths.Value)
+        foreach (string path in _paths.Value)
         {
             Dictionary<string, List<object>> parsed;
             lock (_files)
@@ -53,8 +62,13 @@ public sealed class DeferredFormatSnapshot(
                 }
             }
             ExecutionStatistics.RecordInputFile(path);
-            if (parsed.TryGetValue(collection, out var values))
-                foreach (var value in values) yield return value;
+            if (parsed.TryGetValue(collection, out List<object>? values))
+            {
+                foreach (object value in values)
+                {
+                    yield return value;
+                }
+            }
         }
     }
 }

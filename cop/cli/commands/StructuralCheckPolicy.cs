@@ -1,3 +1,5 @@
+// Rejects source-text approximations in checks unless explicitly approved.
+
 using Cop.Lang;
 using Cop.Lang.Ast;
 using Cop.Lang.Interpreter;
@@ -31,6 +33,7 @@ internal sealed class StructuralCheckPolicy
 
     private readonly Dictionary<string, List<Entry>> _entries = new(StringComparer.Ordinal);
     private readonly HashSet<string> _exceptions;
+    private readonly HashSet<Entry> _approvedEntries = [];
     private readonly HashSet<(Entry Entry, bool Reporting, bool Approved)> _visited = [];
     private readonly List<CopDiagnostic> _diagnostics = [];
     private readonly SemanticModel _model;
@@ -51,72 +54,118 @@ internal sealed class StructuralCheckPolicy
         IReadOnlyList<(ModuleNode Module, string FilePath, string Source)> imported,
         IEnumerable<string> exceptions)
     {
-        var policy = new StructuralCheckPolicy(local, imported, exceptions);
+        StructuralCheckPolicy policy = new StructuralCheckPolicy(local, imported, exceptions);
         policy.Check();
         return policy._diagnostics;
     }
 
     private void Add(IEnumerable<(ModuleNode Module, string FilePath, string Source)> files, bool local)
     {
-        foreach (var (module, file, source) in files)
-            foreach (var declaration in module.Declarations)
+        foreach ((ModuleNode? module, string? file, string? source) in files)
+        {
+            foreach (Declaration declaration in module.Declarations)
             {
                 if (NameOf(declaration) is { } name)
                 {
-                    if (!_entries.TryGetValue(name, out var entries))
+                    if (!_entries.TryGetValue(name, out List<Entry>? entries))
+                    {
                         _entries[name] = entries = [];
+                    }
+
                     entries.Add(new(declaration, file, source, local));
                 }
                 if (declaration is TypeDecl type)
-                    foreach (var property in type.Properties.Where(p => p.ComputedExpr is not null))
+                {
+                    foreach (PropertyDecl? property in type.Properties.Where(p => p.ComputedExpr is not null))
                     {
-                        if (!_entries.TryGetValue(property.Name, out var properties))
+                        if (!_entries.TryGetValue(property.Name, out List<Entry>? properties))
+                        {
                             _entries[property.Name] = properties = [];
+                        }
+
                         properties.Add(new(new FunctionDecl(property.Name,
                             [new("item", new(type.Name))], property.Type,
                             new ExpressionBody(property.ComputedExpr!), Line: property.Line), file, source, local));
                     }
+                }
             }
+        }
     }
 
     private void Check()
     {
-        foreach (var name in _exceptions)
-            if (!_entries.TryGetValue(name, out var entries) || !entries.Any(e => e.Local))
-                _diagnostics.Add(new(CopDiagnosticSeverity.Error,
-                    $"Unknown text-check exception '{name}'. Name a local check binding or predicate; wildcards are not supported."));
-
-        var local = _entries.Values.SelectMany(e => e).Where(e => e.Local).ToList();
-        var referenced = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var entry in local)
+        foreach (string name in _exceptions)
         {
-            var references = new ReferenceCollector();
+            if (!_entries.TryGetValue(name, out List<Entry>? entries))
+            {
+                _diagnostics.Add(new(CopDiagnosticSeverity.Error,
+                    $"Unknown text-check exception '{name}'. " +
+                    "Name a check binding or predicate in this program or its imports; " +
+                    "wildcards are not supported."));
+                continue;
+            }
+
+            List<Entry> localEntries = entries.Where(e => e.Local).ToList();
+            if (localEntries.Count > 0)
+            {
+                _approvedEntries.UnionWith(localEntries);
+            }
+            else if (entries.Select(e => e.File).Distinct(StringComparer.Ordinal).Count() == 1)
+            {
+                _approvedEntries.UnionWith(entries);
+            }
+            else
+            {
+                _diagnostics.Add(new(CopDiagnosticSeverity.Error,
+                    $"Ambiguous text-check exception '{name}' is defined by multiple imports. " +
+                    "Approve a uniquely named check instead."));
+            }
+        }
+
+        List<Entry> local = _entries.Values.SelectMany(e => e).Where(e => e.Local).ToList();
+        HashSet<string> referenced = new HashSet<string>(StringComparer.Ordinal);
+        foreach (Entry? entry in local)
+        {
+            ReferenceCollector references = new ReferenceCollector();
             references.Visit(entry.Declaration);
             referenced.UnionWith(references.Names);
         }
 
         // Start at consumers, so a named exception covers its private helpers but not other callers.
-        foreach (var entry in local.Where(e => !referenced.Contains(NameOf(e.Declaration)!)))
+        foreach (Entry? entry in local.Where(e => !referenced.Contains(NameOf(e.Declaration)!)))
+        {
             VisitEntry(entry, reporting: false, approved: false);
-        foreach (var entry in local)
+        }
+
+        foreach (Entry? entry in local)
+        {
             if (!_visited.Any(v => ReferenceEquals(v.Entry, entry)))
+            {
                 VisitEntry(entry, reporting: false, approved: false);
+            }
+        }
     }
 
     private void VisitEntry(Entry entry, bool reporting, bool approved)
     {
-        approved |= entry.Local && _exceptions.Contains(NameOf(entry.Declaration)!);
-        if (!_visited.Add((entry, reporting, approved))) return;
+        approved |= _approvedEntries.Contains(entry);
+        if (!_visited.Add((entry, reporting, approved)))
+        {
+            return;
+        }
+
         new Walker(this, entry, reporting, approved).Visit(entry.Declaration);
     }
 
     private void Follow(string name, bool reporting, bool approved)
     {
-        if (_entries.TryGetValue(name, out var entries))
+        if (_entries.TryGetValue(name, out List<Entry>? entries))
         {
             // Resolve conservatively across overloads/namespaces rather than missing a text-reading helper.
-            foreach (var entry in entries)
+            foreach (Entry entry in entries)
+            {
                 VisitEntry(entry, reporting || (!entry.Local && name == "CHECK"), approved);
+            }
         }
     }
 
@@ -133,7 +182,11 @@ internal sealed class StructuralCheckPolicy
         internal HashSet<string> Names { get; } = new(StringComparer.Ordinal);
         protected override object? DefaultVisit(AstNode node)
         {
-            if (node is ForEachExpr loop) Visit(loop.Loop);
+            if (node is ForEachExpr loop)
+            {
+                Visit(loop.Loop);
+            }
+
             return null;
         }
         public override object? VisitIdentifierExpr(IdentifierExpr node)
@@ -157,19 +210,37 @@ internal sealed class StructuralCheckPolicy
 
         private TypeInfo? Infer(Expression expression) => policy._model.InferExpressionType(expression, _locals);
 
+        private bool IsRawMember(string member, Expression? receiver = null)
+        {
+            TypeInfo? type = receiver is null
+                ? (_locals.TryGetValue("item", out TypeInfo item) ? item : null)
+                : Infer(receiver);
+            return RawMembers.Contains(member) &&
+                !(member == "Content" && type is { Name: { } name } &&
+                    name.TrimEnd('?') == "Comment");
+        }
+
         private void CheckTextConversion(Expression expression, bool requireKnown = false)
         {
-            var type = expression is IdentifierExpr id && _locals.TryGetValue(id.Name, out var local)
+            TypeInfo? type = expression is IdentifierExpr id && _locals.TryGetValue(id.Name, out TypeInfo local)
                 ? local : Infer(expression);
             if (type is { } inferred && inferred.Name.TrimEnd('?') is "Line" or "Api" or "TypeReference")
+            {
                 Reject(expression, $"implicit {inferred.Name} text conversion");
+            }
             else if (type is null && requireKnown && !_reported.Any(r => r.Line == expression.Line))
+            {
                 Reject(expression, "unresolved text conversion (add a semantic type annotation)");
+            }
         }
 
         private void Reject(AstNode node, string member)
         {
-            if (approved || _reporting || !_reported.Add((node.Line, member))) return;
+            if (approved || _reporting || !_reported.Add((node.Line, member)))
+            {
+                return;
+            }
+
             policy._diagnostics.Add(new(CopDiagnosticSeverity.Error,
                 $"Strict structural check: '{member}' reads raw text instead of parsed code facts. " +
                 "Use Types, Methods, Statements, Calls, modifiers, names, or parent/child relationships. " +
@@ -180,38 +251,68 @@ internal sealed class StructuralCheckPolicy
 
         private void InScope(TypeInfo? item, Action action)
         {
-            var saved = _locals;
+            Dictionary<string, TypeInfo> saved = _locals;
             _locals = new(saved, StringComparer.Ordinal);
-            if (item is { } type) _locals["item"] = new(type.Name.TrimEnd('?'), false);
+            if (item is { } type)
+            {
+                _locals["item"] = new(type.Name.TrimEnd('?'), false);
+            }
+
             action();
             _locals = saved;
         }
 
         public override object? VisitFunctionDecl(FunctionDecl node)
         {
-            foreach (var parameter in node.Params)
+            foreach (Parameter parameter in node.Params)
+            {
                 if (parameter.Type is { } type)
+                {
                     _locals[parameter.Name] = new(type.Name.TrimEnd('?'), type.IsCollection);
+                }
+            }
+
             if (node.Params.FirstOrDefault()?.Type is { } first)
+            {
                 _locals["item"] = new(first.Name.TrimEnd('?'), first.IsCollection);
+            }
+
             return base.VisitFunctionDecl(node);
         }
 
         public override object? VisitIdentifierExpr(IdentifierExpr node)
         {
-            if (node.Name == "read") Reject(node, "read()");
-            if (RawMembers.Contains(node.Name) && !_locals.ContainsKey(node.Name) &&
+            if (node.Name == "read")
+            {
+                Reject(node, "read()");
+            }
+
+            if (IsRawMember(node.Name) && !_locals.ContainsKey(node.Name) &&
                 !policy._entries.ContainsKey(node.Name))
+            {
                 Reject(node, node.Name);
+            }
+
             if (!_locals.ContainsKey(node.Name))
+            {
                 policy.Follow(node.Name, _reporting, approved);
+            }
+
             return null;
         }
 
         public override object? VisitMemberExpr(MemberExpr node)
         {
-            if (RawMembers.Contains(node.Member)) Reject(node, node.Member);
-            if (TextOperations.Contains(node.Member)) CheckTextConversion(node.Object, requireKnown: true);
+            if (IsRawMember(node.Member, node.Object))
+            {
+                Reject(node, node.Member);
+            }
+
+            if (TextOperations.Contains(node.Member))
+            {
+                CheckTextConversion(node.Object, requireKnown: true);
+            }
+
             Visit(node.Object);
             // Qualified package functions and computed property helpers are followed as well.
             policy.Follow(node.Member, _reporting, approved);
@@ -222,7 +323,10 @@ internal sealed class StructuralCheckPolicy
         {
             if (node.Index is LiteralExpr { Value: string key })
             {
-                if (RawMembers.Contains(key)) Reject(node, key);
+                if (IsRawMember(key, node.Object))
+                {
+                    Reject(node, key);
+                }
             }
             else if (Infer(node.Object) is not { IsCollection: true } and not { Name: "string" })
             {
@@ -234,7 +338,7 @@ internal sealed class StructuralCheckPolicy
         public override object? VisitFilterExpr(FilterExpr node)
         {
             Visit(node.Collection);
-            var name = node.Predicate switch
+            string? name = node.Predicate switch
             {
                 IdentifierExpr id => id.Name,
                 CallExpr { Callee: IdentifierExpr id } => id.Name,
@@ -242,10 +346,13 @@ internal sealed class StructuralCheckPolicy
             };
             if (name is not null && (TextOperations.Contains(name) || name is "text" or "string" ||
                 policy._model.Callable(name)?.ParamTypes.FirstOrDefault() == "string"))
+            {
                 CheckTextConversion(node.Collection, requireKnown: true);
+            }
+
             InScope(Infer(node.Collection), () =>
             {
-                var saved = _implicitReceiver;
+                bool saved = _implicitReceiver;
                 _implicitReceiver = true;
                 Visit(node.Predicate);
                 _implicitReceiver = saved;
@@ -255,20 +362,33 @@ internal sealed class StructuralCheckPolicy
 
         public override object? VisitCallExpr(CallExpr node)
         {
-            var name = node.Callee switch
+            string? name = node.Callee switch
             {
                 IdentifierExpr id => id.Name,
                 MemberExpr member => member.Member,
                 _ => null
             };
-            if (name == "read") Reject(node, "read()");
+            if (name == "read")
+            {
+                Reject(node, "read()");
+            }
+
             if (name is "text" or "string")
-                foreach (var argument in node.Args) CheckTextConversion(argument, requireKnown: true);
+            {
+                foreach (Expression argument in node.Args)
+                {
+                    CheckTextConversion(argument, requireKnown: true);
+                }
+            }
+
             if (name == "Get" && node.Args.FirstOrDefault() is { } key)
             {
                 if (key is LiteralExpr { Value: string field })
                 {
-                    if (RawMembers.Contains(field)) Reject(node, field);
+                    if (IsRawMember(field, node.Callee is MemberExpr member ? member.Object : null))
+                    {
+                        Reject(node, field);
+                    }
                 }
                 else
                 {
@@ -276,26 +396,28 @@ internal sealed class StructuralCheckPolicy
                 }
             }
             Visit(node.Callee);
-            var receiver = node.Callee is MemberExpr m ? Infer(m.Object) : null;
-            var messageIndex = _implicitReceiver || node.Callee is MemberExpr ? 0 : 1;
-            var implicitReceiver = _implicitReceiver;
+            TypeInfo? receiver = node.Callee is MemberExpr m ? Infer(m.Object) : null;
+            int messageIndex = _implicitReceiver || node.Callee is MemberExpr ? 0 : 1;
+            bool implicitReceiver = _implicitReceiver;
             _implicitReceiver = false;
             InScope(receiver, () =>
             {
-                for (var i = 0; i < node.Args.Count; i++)
+                for (int i = 0; i < node.Args.Count; i++)
                 {
-                    var saved = _reporting;
+                    bool saved = _reporting;
                     // Only the message argument is presentation; check names/severities stay structural.
                     if (name is not null && MessageFunctions.Contains(name) &&
-                        (!policy._entries.TryGetValue(name, out var overloads) || !overloads.Any(e => e.Local)))
+                        (!policy._entries.TryGetValue(name, out List<Entry>? overloads) || !overloads.Any(e => e.Local)))
                     {
                         _reporting |= i == messageIndex;
                     }
                     if (name is not null && policy._model.Callable(name) is { } callable)
                     {
-                        var parameterIndex = i + (messageIndex == 0 ? 1 : 0);
+                        int parameterIndex = i + (messageIndex == 0 ? 1 : 0);
                         if (parameterIndex < callable.ParamTypes.Count && callable.ParamTypes[parameterIndex] == "string")
+                        {
                             CheckTextConversion(node.Args[i], requireKnown: true);
+                        }
                     }
                     Visit(node.Args[i]);
                     _reporting = saved;
@@ -307,23 +429,32 @@ internal sealed class StructuralCheckPolicy
 
         public override object? VisitInterpolatedStringExpr(InterpolatedStringExpr node)
         {
-            foreach (var part in node.Parts.OfType<ExpressionPart>())
+            foreach (ExpressionPart part in node.Parts.OfType<ExpressionPart>())
+            {
                 CheckTextConversion(part.Expr);
+            }
+
             return base.VisitInterpolatedStringExpr(node);
         }
 
         public override object? VisitBinaryExpr(BinaryExpr node)
         {
-            CheckTextConversion(node.Left);
-            CheckTextConversion(node.Right);
+            bool nullCheck = node.Op is BinaryOp.Equal or BinaryOp.NotEqual &&
+                (node.Left is LiteralExpr { Value: null } ||
+                 node.Right is LiteralExpr { Value: null });
+            if (!nullCheck)
+            {
+                CheckTextConversion(node.Left);
+                CheckTextConversion(node.Right);
+            }
             return base.VisitBinaryExpr(node);
         }
 
         public override object? VisitObjectExpr(ObjectExpr node)
         {
-            foreach (var field in node.Fields)
+            foreach (FieldInit field in node.Fields)
             {
-                var saved = _reporting;
+                bool saved = _reporting;
                 _reporting |= node.TypeHint == "Violation" && field.Name is "Message" or "Source";
                 Visit(field.Value);
                 _reporting = saved;
@@ -335,21 +466,33 @@ internal sealed class StructuralCheckPolicy
         {
             Visit(node.Value);
             if (node.TypeAnnotation is { } annotation)
+            {
                 _locals[node.Name] = new(annotation.Name, annotation.IsCollection);
+            }
             else if (Infer(node.Value) is { } type)
+            {
                 _locals[node.Name] = type;
+            }
+
             return null;
         }
 
         public override object? VisitLambdaExpr(LambdaExpr node)
         {
-            var saved = _locals;
+            Dictionary<string, TypeInfo> saved = _locals;
             _locals = new(saved, StringComparer.Ordinal);
-            foreach (var parameter in node.Params)
+            foreach (Parameter parameter in node.Params)
+            {
                 if (parameter.Type is { } type)
+                {
                     _locals[parameter.Name] = new(type.Name, type.IsCollection);
-                else if (parameter == node.Params[0] && _locals.TryGetValue("item", out var item))
+                }
+                else if (parameter == node.Params[0] && _locals.TryGetValue("item", out TypeInfo item))
+                {
                     _locals[parameter.Name] = item;
+                }
+            }
+
             Visit(node.Body);
             _locals = saved;
             return null;
@@ -360,15 +503,26 @@ internal sealed class StructuralCheckPolicy
             Visit(node.Collection);
             InScope(Infer(node.Collection), () =>
             {
-                if (_locals.TryGetValue("item", out var type)) _locals[node.Variable] = type;
-                foreach (var statement in node.Body) Visit(statement);
+                if (_locals.TryGetValue("item", out TypeInfo type))
+                {
+                    _locals[node.Variable] = type;
+                }
+
+                foreach (Statement statement in node.Body)
+                {
+                    Visit(statement);
+                }
             });
             return null;
         }
 
         protected override object? DefaultVisit(AstNode node)
         {
-            if (node is ForEachExpr loop) Visit(loop.Loop);
+            if (node is ForEachExpr loop)
+            {
+                Visit(loop.Loop);
+            }
+
             return null;
         }
     }

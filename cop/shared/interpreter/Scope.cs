@@ -1,3 +1,5 @@
+// Organizes lexical symbols and parent-scope lookup during semantic analysis.
+
 namespace Cop.Lang.Interpreter;
 
 /// <summary>
@@ -53,8 +55,11 @@ public sealed class Scope
     /// </summary>
     public Symbol? Resolve(string name)
     {
-        if (_symbols.TryGetValue(name, out var symbol))
+        if (_symbols.TryGetValue(name, out Symbol? symbol))
+        {
             return symbol;
+        }
+
         return Parent?.Resolve(name);
     }
 
@@ -63,7 +68,7 @@ public sealed class Scope
     /// </summary>
     public Symbol? ResolveLocal(string name)
     {
-        _symbols.TryGetValue(name, out var symbol);
+        _symbols.TryGetValue(name, out Symbol? symbol);
         return symbol;
     }
 

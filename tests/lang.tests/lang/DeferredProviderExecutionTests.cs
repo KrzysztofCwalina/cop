@@ -34,7 +34,9 @@ public class DeferredProviderExecutionTests
         var service = Service(provider);
         var result = service.QueryProvider("recording", new ProviderQuery
         {
-            RootPath = _root, Collection = "Items", Filter = new PropertyFilter("Active", true)
+            RootPath = _root,
+            Collection = "Items",
+            Filter = new PropertyFilter("Active", true)
         });
         Assert.That(Names(result), Is.EqualTo(new[] { "Alpha" }));
     }
@@ -191,7 +193,11 @@ public class DeferredProviderExecutionTests
         var program = $"let items = {access}\npredicate selected(p) => p.Name == 'Alpha'\ncommand MAIN = foreach items:selected => '{{item.Name}}'";
         var script = Path.Combine(_root, "main.cop");
         File.WriteAllText(script, program);
-        var result = Engine.Run(_root, _root, scriptFiles: [script], providerPackages: [CreateRecordingPackage()]);
+        var result = Engine.Run(_root, _root, new EngineRunOptions
+        {
+            ScriptFiles = [script],
+            ProviderPackages = [CreateRecordingPackage()],
+        });
         Assert.That(result.Errors.Concat(result.ParseErrors), Is.Empty);
         Assert.That(result.Outputs.Select(o => o.Message), Is.EqualTo(new[] { "Alpha" }));
         using var query = JsonDocument.Parse(File.ReadAllLines(Path.Combine(_root, "queries.jsonl")).Single());
@@ -212,7 +218,10 @@ public class DeferredProviderExecutionTests
             predicate selected(p) => hasPrefix && hasSuffix
             command MAIN = foreach {{expression}} => '{item.Name}'
             """);
-        var result = Engine.Run(_root, _root, providerPackages: [CreateRecordingPackage()]);
+        var result = Engine.Run(_root, _root, new EngineRunOptions
+        {
+            ProviderPackages = [CreateRecordingPackage()],
+        });
         Assert.That(result.Errors.Concat(result.ParseErrors), Is.Empty);
         Assert.That(result.Outputs.Select(o => o.Message), Is.EqualTo(new[] { "Alpha" }));
         using var query = JsonDocument.Parse(File.ReadAllLines(Path.Combine(_root, "queries.jsonl")).Single());
@@ -229,8 +238,13 @@ public class DeferredProviderExecutionTests
         File.Copy(typeof(RecordingQueryProvider).Assembly.Location, Path.Combine(package, "lib", "Lang.Tests.dll"));
         var metadata = new PackageMetadata
         {
-            Name = "recording", Version = "1.0.0", Title = "Query test", Description = "Query test",
-            Authors = "Cop", Provider = "clr", ProviderEntry = typeof(RecordingQueryProvider).FullName!,
+            Name = "recording",
+            Version = "1.0.0",
+            Title = "Query test",
+            Description = "Query test",
+            Authors = "Cop",
+            Provider = "clr",
+            ProviderEntry = typeof(RecordingQueryProvider).FullName!,
             ProviderAssembly = "Lang.Tests.dll"
         };
         return (package, metadata);
@@ -257,8 +271,12 @@ public class DeferredProviderExecutionTests
             command MAIN = foreach cb.Types:selected => '{item.Name}'
             """);
         var diagnostics = new List<string>();
-        var result = Engine.Run(_root, target, scriptFiles: [script],
-            additionalFeedPaths: [Path.Combine(RepoRoot, "packages")], diagLog: diagnostics.Add);
+        var result = Engine.Run(_root, target, new EngineRunOptions
+        {
+            ScriptFiles = [script],
+            AdditionalFeedPaths = [Path.Combine(RepoRoot, "packages")],
+            DiagnosticLog = diagnostics.Add,
+        });
         Assert.That(result.Errors.Concat(result.ParseErrors), Is.Empty);
         Assert.That(result.Outputs.Select(o => o.Message), Is.EqualTo(new[] { "Alpha" }));
         Assert.That(diagnostics, Has.Some.Contains($"Query {language}.Types"));
@@ -280,8 +298,12 @@ public class DeferredProviderExecutionTests
             command MAIN = foreach files():selected => '{item.Name}'
             """);
         var diagnostics = new List<string>();
-        var result = Engine.Run(_root, _root, scriptFiles: [script],
-            additionalFeedPaths: [Path.Combine(RepoRoot, "packages")], diagLog: diagnostics.Add);
+        var result = Engine.Run(_root, _root, new EngineRunOptions
+        {
+            ScriptFiles = [script],
+            AdditionalFeedPaths = [Path.Combine(RepoRoot, "packages")],
+            DiagnosticLog = diagnostics.Add,
+        });
         Assert.That(result.Errors.Concat(result.ParseErrors), Is.Empty);
         Assert.That(result.Outputs.Select(o => o.Message), Is.EqualTo(new[] { "Alpha.txt" }));
         Assert.That(diagnostics, Has.Some.Contains("Query filesystem.Files"));
@@ -340,8 +362,12 @@ public class DeferredProviderExecutionTests
             command MAIN = foreach parsed.{{collection}}:selected => '{item.{{property}}}'
             """);
         var diagnostics = new List<string>();
-        var result = Engine.Run(_root, target, scriptFiles: [script],
-            additionalFeedPaths: [Path.Combine(RepoRoot, "packages")], diagLog: diagnostics.Add);
+        var result = Engine.Run(_root, target, new EngineRunOptions
+        {
+            ScriptFiles = [script],
+            AdditionalFeedPaths = [Path.Combine(RepoRoot, "packages")],
+            DiagnosticLog = diagnostics.Add,
+        });
         Assert.That(result.Errors.Concat(result.ParseErrors), Is.Empty);
         Assert.That(result.Outputs.Select(o => o.Message), Is.EqualTo(new[] { expected }));
         Assert.That(diagnostics, Has.Some.Contains($"[query-result] {package}.{collection} returned=1"));
@@ -363,8 +389,12 @@ public class DeferredProviderExecutionTests
             command MAIN = foreach cb.Types:selected => '{item.Name}'
             """);
         var diagnostics = new List<string>();
-        var result = Engine.Run(_root, _root, scriptFiles: [script],
-            additionalFeedPaths: [Path.Combine(RepoRoot, "packages")], diagLog: diagnostics.Add);
+        var result = Engine.Run(_root, _root, new EngineRunOptions
+        {
+            ScriptFiles = [script],
+            AdditionalFeedPaths = [Path.Combine(RepoRoot, "packages")],
+            DiagnosticLog = diagnostics.Add,
+        });
         Assert.That(result.Errors.Concat(result.ParseErrors), Is.Empty);
         Assert.That(result.Outputs.Select(o => o.Message), Is.EqualTo(new[] { "Alpha", "Alpha" }));
         Assert.That(diagnostics, Has.Some.Contains("[query-result] csharp.Types returned=1"));

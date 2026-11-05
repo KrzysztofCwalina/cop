@@ -47,7 +47,10 @@ public class ErrorReportingTests
         try
         {
             File.WriteAllText(Path.Combine(scripts, "program.cop"), program);
-            var r = Engine.Run(scripts, target, additionalFeedPaths: [PackagesDir]);
+            var r = Engine.Run(scripts, target, new EngineRunOptions
+            {
+                AdditionalFeedPaths = [PackagesDir],
+            });
             return new RunResult(
                 r.HasParseErrors, r.ParseErrors.ToArray(),
                 r.HasFatalErrors, r.Errors.ToArray(),
@@ -409,7 +412,10 @@ public class ErrorReportingTests
             // The program imports the broken package but does NOT use its exports — it must still fail.
             File.WriteAllText(Path.Combine(scripts, "program.cop"), "import brokenpkg\ncommand main = print('ok')");
 
-            var r = Engine.Run(scripts, target, additionalFeedPaths: [feed]);
+            var r = Engine.Run(scripts, target, new EngineRunOptions
+            {
+                AdditionalFeedPaths = [feed],
+            });
 
             Assert.That(r.HasFatalErrors, Is.True, "importing a package that fails to parse must be fatal");
             Assert.That(string.Join(" | ", r.Errors), Does.Contain("Unexpected token"));
@@ -446,7 +452,10 @@ public class ErrorReportingTests
                 command main = foreach cb.Types => '{item.Name}'
                 """);
 
-            var r = Engine.Run(scripts, target, additionalFeedPaths: [PackagesDir]);
+            var r = Engine.Run(scripts, target, new EngineRunOptions
+            {
+                AdditionalFeedPaths = [PackagesDir],
+            });
 
             Assert.That(r.HasFatalErrors, Is.False,
                 "a malformed source file must surface but not abort the whole analysis: "
@@ -497,7 +506,10 @@ public class ErrorReportingTests
                 command main = foreach cb.Types => '{item.Name}'
                 """);
 
-            var r = Engine.Run(scripts, target, additionalFeedPaths: [PackagesDir]);
+            var r = Engine.Run(scripts, target, new EngineRunOptions
+            {
+                AdditionalFeedPaths = [PackagesDir],
+            });
 
             Assert.That(r.HasFatalErrors, Is.False, string.Join(" | ", r.Errors));
             var warnings = (r.Warnings ?? new List<string>()).Where(w => w.Contains("parse error")).ToArray();

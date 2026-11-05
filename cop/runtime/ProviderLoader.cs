@@ -1,3 +1,6 @@
+// Loads provider assemblies in an isolated AssemblyLoadContext, discovers and
+// instantiates DataProvider subclasses, and wires them into the Cop type system.
+
 using System.Reflection;
 using System.Runtime.Loader;
 using Cop.Core;
@@ -51,10 +54,14 @@ public static class ProviderLoader
 
         // Handle out-of-process providers (Node.js, Python)
         if (metadata.IsNodeProvider || metadata.IsPythonProvider)
+        {
             return LoadProcessProvider(packageDir, metadata, errors);
+        }
 
         if (!metadata.IsClrProvider)
+        {
             return null;
+        }
 
         if (string.IsNullOrEmpty(metadata.ProviderEntry))
         {
@@ -63,7 +70,7 @@ public static class ProviderLoader
         }
 
         // Find the provider DLL
-        var dllPath = ProviderCompatibility.FindAssembly(packageDir, metadata);
+        string? dllPath = ProviderCompatibility.FindAssembly(packageDir, metadata);
         if (dllPath is null)
         {
             errors.Add($"Provider assembly not found for package '{metadata.Name}'. Expected a .dll in '{Path.Combine(packageDir, "lib")}'.");
@@ -79,17 +86,21 @@ public static class ProviderLoader
             }
 
             // Load in isolated context
-            var alc = new ProviderLoadContext(dllPath);
-            var assembly = alc.LoadFromAssemblyPath(dllPath);
+            ProviderLoadContext alc = new ProviderLoadContext(dllPath);
+            Assembly assembly = alc.LoadFromAssemblyPath(dllPath);
 
             // Discover StreamProvider subclasses
-            foreach (var type in assembly.GetExportedTypes())
+            foreach (Type type in assembly.GetExportedTypes())
             {
-                if (type.IsAbstract) continue;
+                if (type.IsAbstract)
+                {
+                    continue;
+                }
+
                 if (typeof(StreamProvider).IsAssignableFrom(type))
                 {
-                    var instance = (StreamProvider)Activator.CreateInstance(type)!;
-                    var schema = ProviderSchema.FromJson(instance.GetSchema());
+                    StreamProvider instance = (StreamProvider)Activator.CreateInstance(type)!;
+                    ProviderSchema schema = ProviderSchema.FromJson(instance.GetSchema());
                     sourceProviders.Add(new LoadedStreamProvider(instance, schema, metadata.Name));
                 }
                 else if (typeof(SinkProvider).IsAssignableFrom(type) &&
@@ -97,17 +108,20 @@ public static class ProviderLoader
                          !typeof(FileWriteSink).IsAssignableFrom(type) &&
                          !typeof(ListAppendSink).IsAssignableFrom(type))
                 {
-                    var instance = (SinkProvider)Activator.CreateInstance(type)!;
+                    SinkProvider instance = (SinkProvider)Activator.CreateInstance(type)!;
                     sinkProviders.Add(new LoadedSinkProvider(instance, metadata.Name));
                 }
             }
 
             // If source/sink providers were found and no DataProvider entry, that's fine
-            var providerType = assembly.GetType(metadata.ProviderEntry);
+            Type? providerType = assembly.GetType(metadata.ProviderEntry);
             if (providerType is null)
             {
                 if (sourceProviders.Count > 0 || sinkProviders.Count > 0)
+                {
                     return null; // pure source/sink package — no DataProvider needed
+                }
+
                 errors.Add($"Provider entry type '{metadata.ProviderEntry}' not found in assembly '{dllPath}'.");
                 return null;
             }
@@ -115,22 +129,30 @@ public static class ProviderLoader
             if (!typeof(DataProvider).IsAssignableFrom(providerType))
             {
                 if (sourceProviders.Count > 0 || sinkProviders.Count > 0)
+                {
                     return null; // entry type is a StreamProvider/SinkProvider, not DataProvider
+                }
+
                 errors.Add($"Provider entry type '{metadata.ProviderEntry}' does not extend DataProvider.");
                 return null;
             }
 
-            var dataInstance = (DataProvider)Activator.CreateInstance(providerType)!;
-            var dataSchema = ProviderSchema.FromJson(dataInstance.GetSchema());
+            DataProvider dataInstance = (DataProvider)Activator.CreateInstance(providerType)!;
+            ProviderSchema dataSchema = ProviderSchema.FromJson(dataInstance.GetSchema());
             return new LoadedProvider(dataInstance, dataSchema, metadata.Name);
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
-            var detail = ex.Message;
+            string detail = ex.Message;
             if (string.IsNullOrWhiteSpace(detail))
+            {
                 detail = ex.InnerException?.Message ?? $"{ex.GetType().Name} (no detail)";
+            }
+
             if (ex.InnerException != null && !string.IsNullOrWhiteSpace(ex.InnerException.Message) && !detail.Contains(ex.InnerException.Message))
+            {
                 detail += $" -> {ex.InnerException.Message}";
+            }
 
             errors.Add($"Failed to load provider '{metadata.Name}' from '{dllPath}': {detail}");
             return null;
@@ -143,32 +165,45 @@ public static class ProviderLoader
     /// </summary>
     public static ProviderSchema RegisterSchema(DataProvider instance, TypeRegistry registry)
     {
-        var schema = ProviderSchema.FromJson(instance.GetSchema());
+        ProviderSchema schema = ProviderSchema.FromJson(instance.GetSchema());
         registry.RegisterProviderSchema(schema);
 
-        var bindings = instance.GetRuntimeBindings();
+        RuntimeBindings? bindings = instance.GetRuntimeBindings();
         if (bindings != null)
         {
-            foreach (var (clrType, copTypeName) in bindings.ClrTypeMappings)
+            foreach ((Type? clrType, string? copTypeName) in bindings.ClrTypeMappings)
+            {
                 registry.RegisterClrType(clrType, copTypeName);
-            foreach (var (typeName, accessors) in bindings.Accessors)
+            }
+
+            foreach ((string? typeName, Dictionary<string, Func<object, object?>>? accessors) in bindings.Accessors)
+            {
                 registry.RegisterAccessors(typeName, accessors);
+            }
+
             if (bindings.CollectionExtractors != null)
             {
-                foreach (var (collName, extractor) in bindings.CollectionExtractors)
+                foreach ((string? collName, Func<object, List<object>>? extractor) in bindings.CollectionExtractors)
+                {
                     registry.RegisterCollectionExtractor(collName, doc => extractor(doc.As<SourceFile>()));
+                }
             }
             if (bindings.MethodEvaluators != null)
             {
-                foreach (var ((typeName, methodName), evaluator) in bindings.MethodEvaluators)
+                foreach (((string? typeName, string? methodName), Func<object, List<object?>, object?>? evaluator) in bindings.MethodEvaluators)
+                {
                     registry.RegisterMethodEvaluator(typeName, methodName, evaluator);
+                }
             }
             if (bindings.TextConverters != null)
             {
-                foreach (var (typeName, converter) in bindings.TextConverters)
+                foreach ((string? typeName, Func<object, string>? converter) in bindings.TextConverters)
                 {
-                    var desc = registry.GetType(typeName);
-                    if (desc != null) desc.TextConverter = converter;
+                    TypeDescriptor? desc = registry.GetType(typeName);
+                    if (desc != null)
+                    {
+                        desc.TextConverter = converter;
+                    }
                 }
             }
         }
@@ -178,14 +213,14 @@ public static class ProviderLoader
 
     internal static Dictionary<string, List<object>> QueryCollections(DataProvider instance, ProviderSchema schema, ProviderQuery query, TypeRegistry? registry = null, Action<DataStore>? onStore = null)
     {
-        var result = instance.Query(query);
+        object? result = instance.Query(query);
         return MaterializeCollections(result, instance, schema, registry, onStore);
     }
 
     internal static IReadOnlyDictionary<string, IEnumerable<object>> QueryDeferredCollections(
         DataProvider instance, ProviderSchema schema, ProviderQuery query, Action<DataStore>? onStore = null)
     {
-        var result = instance.QueryDeferred(query);
+        object? result = instance.QueryDeferred(query);
         return result is DeferredProviderResult deferred
             ? deferred.Collections
             : MaterializeCollections(result, instance, schema, null, onStore)
@@ -213,16 +248,21 @@ public static class ProviderLoader
         registry?.RegisterDataTableAccessors(schema);
         registry?.WireDataStoreAccessors(schema, store);
 
-        var collections = new Dictionary<string, List<object>>(StringComparer.Ordinal);
-        var topLevelCollections = new HashSet<string>(schema.Collections.Select(c => c.Name), StringComparer.Ordinal);
-        foreach (var (collectionName, table) in store.Tables)
+        Dictionary<string, List<object>> collections = new Dictionary<string, List<object>>(StringComparer.Ordinal);
+        HashSet<string> topLevelCollections = new HashSet<string>(schema.Collections.Select(c => c.Name), StringComparer.Ordinal);
+        foreach ((string? collectionName, DataTable? table) in store.Tables)
         {
             if (!topLevelCollections.Contains(collectionName))
+            {
                 continue;
+            }
 
-            var items = new List<object>(table.Count);
+            List<object> items = new List<object>(table.Count);
             for (int i = 0; i < table.Count; i++)
+            {
                 items.Add(new RecordView(table, i));
+            }
+
             collections[collectionName] = items;
         }
 
@@ -232,7 +272,9 @@ public static class ProviderLoader
     private static Dictionary<string, List<object>> ConvertJsonToCollections(ProviderSchema schema, byte[] json, TypeRegistry? registry)
     {
         if (registry is not null)
+        {
             JsonCollectionDeserializer.RegisterDataObjectAccessors(registry, schema);
+        }
 
         return JsonCollectionDeserializer.Deserialize(json, schema);
     }
@@ -242,7 +284,7 @@ public static class ProviderLoader
     /// </summary>
     public static ProviderSchema RegisterSchema(StreamProvider instance, TypeRegistry registry)
     {
-        var schema = ProviderSchema.FromJson(instance.GetSchema());
+        ProviderSchema schema = ProviderSchema.FromJson(instance.GetSchema());
         registry.RegisterProviderSchema(schema);
         JsonCollectionDeserializer.RegisterDataObjectAccessors(registry, schema);
         return schema;
@@ -261,9 +303,9 @@ public static class ProviderLoader
     /// </summary>
     public static void RegisterStreamProvider(StreamProvider instance, ProviderSchema schema, string ns, TypeRegistry registry)
     {
-        foreach (var coll in schema.Collections)
+        foreach (ProviderCollectionSchema coll in schema.Collections)
         {
-            var qualifiedName = $"{ns}.{coll.Name}";
+            string qualifiedName = $"{ns}.{coll.Name}";
             registry.RegisterStreamingSource(qualifiedName, instance);
         }
     }
@@ -286,19 +328,23 @@ public static class ProviderLoader
     {
         try
         {
-            var collections = QueryCollections(instance, schema, query, registry);
-            foreach (var (collName, items) in collections)
+            Dictionary<string, List<object>> collections = QueryCollections(instance, schema, query, registry);
+            foreach ((string? collName, List<object>? items) in collections)
             {
-                var filtered = ApplyCollectionFilter(registry, schema, collName, items, query.CollectionFilters);
+                List<object> filtered = ApplyCollectionFilter(registry, schema, collName, items, query.CollectionFilters);
                 registry.AppendNamespacedCollection(ns, collName, filtered);
             }
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             if (errors != null)
+            {
                 errors.Add($"Provider '{instance}' query failed: {ex.Message}");
+            }
             else
+            {
                 throw;
+            }
         }
     }
 
@@ -310,12 +356,22 @@ public static class ProviderLoader
         TypeRegistry registry, ProviderSchema schema, string collName,
         List<object> items, IReadOnlyDictionary<string, FilterExpression>? collectionFilters)
     {
-        if (collectionFilters is null) return items;
-        if (!collectionFilters.TryGetValue(collName, out var filter)) return items;
+        if (collectionFilters is null)
+        {
+            return items;
+        }
 
-        var itemType = schema.Collections
+        if (!collectionFilters.TryGetValue(collName, out FilterExpression? filter))
+        {
+            return items;
+        }
+
+        string? itemType = schema.Collections
             .FirstOrDefault(c => c.Name.Equals(collName, StringComparison.Ordinal))?.ItemType;
-        if (itemType is null) return items;
+        if (itemType is null)
+        {
+            return items;
+        }
 
         return registry.ApplyPushdownFilter(itemType, items, filter);
     }
@@ -341,11 +397,11 @@ public static class ProviderLoader
             return null;
         }
 
-        var runtime = metadata.IsNodeProvider ? "node" : "python";
-        var entryScript = metadata.ProviderEntry;
+        string runtime = metadata.IsNodeProvider ? "node" : "python";
+        string entryScript = metadata.ProviderEntry;
 
         // Verify the entry script exists
-        var scriptPath = Path.Combine(packageDir, entryScript);
+        string scriptPath = Path.Combine(packageDir, entryScript);
         if (!File.Exists(scriptPath))
         {
             errors.Add($"Provider entry script not found for package '{metadata.Name}': '{scriptPath}'");
@@ -354,9 +410,9 @@ public static class ProviderLoader
 
         try
         {
-            var instance = new ProcessObjectProvider(runtime, entryScript, packageDir);
-            var schemaBytes = instance.GetSchema();
-            var schema = ProviderSchema.FromJson(schemaBytes);
+            ProcessObjectProvider instance = new ProcessObjectProvider(runtime, entryScript, packageDir);
+            ReadOnlyMemory<byte> schemaBytes = instance.GetSchema();
+            ProviderSchema schema = ProviderSchema.FromJson(schemaBytes);
             return new LoadedProvider(instance, schema, metadata.Name);
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
@@ -366,35 +422,4 @@ public static class ProviderLoader
         }
     }
 
-}
-
-/// <summary>
-/// Isolated assembly load context for provider DLLs.
-/// Shares the host assembly (cop.exe) with the default context
-/// to avoid type identity splits for DataProvider, SourceFile, etc.
-/// </summary>
-internal class ProviderLoadContext : AssemblyLoadContext
-{
-    private readonly AssemblyDependencyResolver _resolver;
-    private static readonly string HostAssemblyName = typeof(DataProvider).Assembly.GetName().Name!;
-
-    public ProviderLoadContext(string pluginPath) : base(isCollectible: false)
-    {
-        _resolver = new AssemblyDependencyResolver(pluginPath);
-    }
-
-    protected override Assembly? Load(AssemblyName assemblyName)
-    {
-        // Share the host assembly with the default context so provider types
-        // (ObjectProvider, SourceFile, etc.) have the same identity in both contexts
-        if (assemblyName.Name == HostAssemblyName)
-            return null; // falls back to default context
-
-        var assemblyPath = _resolver.ResolveAssemblyToPath(assemblyName);
-        if (assemblyPath is not null && File.Exists(assemblyPath))
-            return LoadFromAssemblyPath(assemblyPath);
-
-        // Fall back to default context (host cop.exe) for assemblies not shipped with the provider
-        return null;
-    }
 }

@@ -1,3 +1,5 @@
+// Coordinates parsing, binding, type checking, and syntax-tree evaluation.
+
 namespace Cop.Lang.Interpreter;
 
 using Cop.Lang.Ast;
@@ -52,14 +54,14 @@ public sealed class NewPipelineRunner
             return false;
         }
 
-        var copFiles = Directory.GetFiles(srcDir, "*.cop");
+        string[] copFiles = Directory.GetFiles(srcDir, "*.cop");
         Array.Sort(copFiles, StringComparer.Ordinal);
 
-        foreach (var file in copFiles)
+        foreach (string file in copFiles)
         {
             try
             {
-                var source = File.ReadAllText(file);
+                string source = File.ReadAllText(file);
                 _bridge.LoadSource(source, file);
             }
             catch (Exception ex)

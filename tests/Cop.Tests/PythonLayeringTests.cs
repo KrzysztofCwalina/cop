@@ -67,8 +67,12 @@ public class PythonLayeringTests
         File.WriteAllText(scriptPath, LayeringCheck);
         try
         {
-            return Engine.Run(Path.GetDirectoryName(scriptPath)!, workspaceRoot, commandName: "LAYERING",
-                additionalFeedPaths: feedPaths.ToArray(), scriptFiles: [scriptPath]);
+            return Engine.Run(Path.GetDirectoryName(scriptPath)!, workspaceRoot, new EngineRunOptions
+            {
+                CommandName = "LAYERING",
+                AdditionalFeedPaths = feedPaths.ToArray(),
+                ScriptFiles = [scriptPath],
+            });
         }
         finally
         {

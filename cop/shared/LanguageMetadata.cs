@@ -1,14 +1,6 @@
+// Supplies language keywords and built-in symbol descriptions to editor tooling.
+
 namespace Cop.Lang;
-
-/// <summary>
-/// A named language element surfaced to editor tooling, with a short human-readable detail.
-/// </summary>
-public readonly record struct MetadataEntry(string Name, string Detail);
-
-/// <summary>
-/// A reserved word with its presentation category (for syntax highlighting and completion).
-/// </summary>
-public readonly record struct KeywordEntry(string Name, string Detail, string Category);
 
 /// <summary>
 /// Editor/REPL presentation of cop's built-in language elements. Consumed by the language server

@@ -1,3 +1,5 @@
+// Manages SHA256 checksums of generated files and stores manifests in ~/.cop/checksums/
+
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -7,11 +9,6 @@ using System.Text.Json;
 
 namespace Cop.Core
 {
-    /// <summary>
-    /// Represents a checksum violation found during verification
-    /// </summary>
-    public record ChecksumViolation(string FilePath, string ViolationType, string? Expected, string? Actual);
-
     /// <summary>
     /// Manages SHA256 checksums of generated files and stores manifests in ~/.cop/checksums/
     /// </summary>
@@ -30,8 +27,8 @@ namespace Cop.Core
         {
             _projectFilePath = Path.GetFullPath(projectFilePath);
             _repoRoot = Path.GetFullPath(repoRoot);
-            
-            var userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+
+            string userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
             _checksumsDirectory = Path.Combine(userProfile, ".cop", "checksums");
         }
 
@@ -40,10 +37,10 @@ namespace Cop.Core
         /// </summary>
         public static string ComputeSha256(string filePath)
         {
-            using (var sha256 = SHA256.Create())
-            using (var fileStream = File.OpenRead(filePath))
+            using (SHA256 sha256 = SHA256.Create())
+            using (FileStream fileStream = File.OpenRead(filePath))
             {
-                var hash = sha256.ComputeHash(fileStream);
+                byte[] hash = sha256.ComputeHash(fileStream);
                 return BitConverter.ToString(hash).Replace("-", "").ToLowerInvariant();
             }
         }
@@ -53,9 +50,9 @@ namespace Cop.Core
         /// </summary>
         public static string ComputeSha256FromBytes(byte[] data)
         {
-            using (var sha256 = SHA256.Create())
+            using (SHA256 sha256 = SHA256.Create())
             {
-                var hash = sha256.ComputeHash(data);
+                byte[] hash = sha256.ComputeHash(data);
                 return BitConverter.ToString(hash).Replace("-", "").ToLowerInvariant();
             }
         }
@@ -65,8 +62,8 @@ namespace Cop.Core
         /// </summary>
         public string GetManifestPath()
         {
-            var projectPathBytes = Encoding.UTF8.GetBytes(_projectFilePath);
-            var projectHash = ComputeSha256FromBytes(projectPathBytes);
+            byte[] projectPathBytes = Encoding.UTF8.GetBytes(_projectFilePath);
+            string projectHash = ComputeSha256FromBytes(projectPathBytes);
             return Path.Combine(_checksumsDirectory, $"{projectHash}.json");
         }
 
@@ -84,9 +81,9 @@ namespace Cop.Core
                 files = fileChecksums
             };
 
-            var manifestPath = GetManifestPath();
-            var options = new JsonSerializerOptions { WriteIndented = true };
-            var json = JsonSerializer.Serialize(manifest, options);
+            string manifestPath = GetManifestPath();
+            JsonSerializerOptions options = new JsonSerializerOptions { WriteIndented = true };
+            string json = JsonSerializer.Serialize(manifest, options);
             File.WriteAllText(manifestPath, json);
         }
 
@@ -96,7 +93,7 @@ namespace Cop.Core
         /// <returns>Dictionary of file paths to checksums, or null if manifest doesn't exist</returns>
         public Dictionary<string, string>? LoadManifest()
         {
-            var manifestPath = GetManifestPath();
+            string manifestPath = GetManifestPath();
             if (!File.Exists(manifestPath))
             {
                 return null;
@@ -104,15 +101,15 @@ namespace Cop.Core
 
             try
             {
-                var json = File.ReadAllText(manifestPath);
-                using (var doc = JsonDocument.Parse(json))
+                string json = File.ReadAllText(manifestPath);
+                using (JsonDocument doc = JsonDocument.Parse(json))
                 {
-                    var root = doc.RootElement;
-                    if (root.TryGetProperty("files", out var filesElement) && 
+                    JsonElement root = doc.RootElement;
+                    if (root.TryGetProperty("files", out JsonElement filesElement) &&
                         filesElement.ValueKind == JsonValueKind.Object)
                     {
-                        var files = new Dictionary<string, string>();
-                        foreach (var property in filesElement.EnumerateObject())
+                        Dictionary<string, string> files = new Dictionary<string, string>();
+                        foreach (JsonProperty property in filesElement.EnumerateObject())
                         {
                             if (property.Value.ValueKind == JsonValueKind.String)
                             {
@@ -138,19 +135,19 @@ namespace Cop.Core
         /// <returns>List of checksum violations found, empty list if all files are valid</returns>
         public List<ChecksumViolation> Verify()
         {
-            var violations = new List<ChecksumViolation>();
-            var manifest = LoadManifest();
+            List<ChecksumViolation> violations = new List<ChecksumViolation>();
+            Dictionary<string, string>? manifest = LoadManifest();
 
             if (manifest == null)
             {
                 return violations;
             }
 
-            foreach (var kvp in manifest)
+            foreach (KeyValuePair<string, string> kvp in manifest)
             {
-                var relativePath = kvp.Key;
-                var expectedChecksum = kvp.Value;
-                var fullPath = Path.Combine(_repoRoot, relativePath);
+                string relativePath = kvp.Key;
+                string expectedChecksum = kvp.Value;
+                string fullPath = Path.Combine(_repoRoot, relativePath);
 
                 if (!File.Exists(fullPath))
                 {
@@ -165,7 +162,7 @@ namespace Cop.Core
                 {
                     try
                     {
-                        var actualChecksum = ComputeSha256(fullPath);
+                        string actualChecksum = ComputeSha256(fullPath);
                         if (actualChecksum != expectedChecksum)
                         {
                             violations.Add(new ChecksumViolation(
@@ -196,7 +193,7 @@ namespace Cop.Core
         /// </summary>
         public void AddFile(string relativePath, string checksum)
         {
-            var manifest = LoadManifest() ?? new Dictionary<string, string>();
+            Dictionary<string, string> manifest = LoadManifest() ?? new Dictionary<string, string>();
             manifest[relativePath] = checksum;
             SaveManifest(manifest);
         }
@@ -206,7 +203,7 @@ namespace Cop.Core
         /// </summary>
         public void RemoveFile(string relativePath)
         {
-            var manifest = LoadManifest();
+            Dictionary<string, string>? manifest = LoadManifest();
             if (manifest != null && manifest.ContainsKey(relativePath))
             {
                 manifest.Remove(relativePath);

@@ -28,12 +28,13 @@ public class SelfCheckStructureTests
     public void TearDown() => Directory.Delete(_root, recursive: true);
 
     [Test]
-    public void Issue054_AllSelfChecksPassStrictStructureWithoutExceptions()
+    public void Issue054_AllSelfChecksPassStrictStructureWithApprovedFormattingChecks()
     {
         var checks = Path.Combine(_repo, "cop-checks");
         var files = Directory.GetFiles(checks, "*.cop", SearchOption.AllDirectories);
         Assert.That(files, Has.Length.EqualTo(41));
-        var diagnostics = VerifyCommand.CollectDiagnostics(files, checks, File.ReadAllText, strictStructure: true);
+        var diagnostics = VerifyCommand.CollectDiagnostics(files, checks, File.ReadAllText,
+            strictStructure: true, allowTextChecks: ["hasTab", "hasTrailingWhitespace"]);
         Assert.That(diagnostics, Is.Empty, string.Join("\n", diagnostics.Select(d => d.Message)));
     }
 
@@ -118,20 +119,57 @@ public class SelfCheckStructureTests
         File.WriteAllText(Path.Combine(target, "Wrong.cop"),
             "export function misplaced(value : string) : string => intrinsic");
         File.WriteAllText(Path.Combine(target, "Sample.cs"),
-            "namespace Fixture; public interface IUnexpected { }");
+            """
+            // Fixture for the repository's interface policy.
+            namespace Fixture.Example;
+            /// <summary>A contract rejected by the repository's interface policy.</summary>
+            public interface IUnexpected
+            {
+                /// <summary>Executes the fixture operation.</summary>
+                void Run();
+            }
+            """);
         var checks = Path.Combine(_repo, "cop-checks");
         var main = Path.Combine(checks, "main.cop");
         var files = Directory.GetFiles(checks, "*.cop", SearchOption.AllDirectories)
             .Where(f => f != main).Order(StringComparer.Ordinal).Append(main).ToArray();
-        var result = Engine.Run(checks, target, scriptFiles: files,
-            additionalFeedPaths: [Path.Combine(_repo, "packages")]);
+        var result = Engine.Run(checks, target, new EngineRunOptions
+        {
+            ScriptFiles = files,
+            AdditionalFeedPaths = [Path.Combine(_repo, "packages")],
+        });
 
         Assert.That(result.HasFatalErrors, Is.False, string.Join("\n", result.Errors));
         Assert.That(result.Outputs.Select(o => o.Message), Is.EqualTo(new[]
         {
             "Wrong.cop(1): error: Intrinsic declaration must be in intrinsics.cop, not Wrong.cop",
-            "Sample.cs(1): error: Use an abstract class instead of interface IUnexpected (Sample.cs)"
+            "Sample.cs(4): error: Use an abstract class instead of interface IUnexpected (Sample.cs)"
         }));
+    }
+
+    [TestCase("tests")]
+    [TestCase("samples")]
+    [TestCase("examples")]
+    public void DefaultCSharpChecksExcludeNonProductionFixtures(string folder)
+    {
+        var target = Path.Combine(_root, "target");
+        var excluded = Path.Combine(target, folder);
+        Directory.CreateDirectory(excluded);
+        File.WriteAllText(Path.Combine(excluded, "Sample.cs"),
+            "namespace Fixture; public class sample { public void Run() { var value = Missing(); } }");
+        var checks = Path.Combine(_repo, "cop-checks");
+        var main = Path.Combine(checks, "main.cop");
+        var files = Directory.GetFiles(checks, "*.cop", SearchOption.AllDirectories)
+            .Where(f => f != main).Order(StringComparer.Ordinal).Append(main).ToArray();
+        var result = Engine.Run(checks, target, new EngineRunOptions
+        {
+            ScriptFiles = files,
+            AdditionalFeedPaths = [Path.Combine(_repo, "packages")],
+        });
+
+        Assert.That(result.HasFatalErrors, Is.False, string.Join("\n", result.Errors));
+        Assert.That(result.Outputs.Select(o => o.Message), Is.Empty);
+        Assert.That(result.ExitCode, Is.EqualTo(0));
     }
 
     [Test]
@@ -141,8 +179,11 @@ public class SelfCheckStructureTests
         var main = Path.Combine(checks, "main.cop");
         var files = Directory.GetFiles(checks, "*.cop", SearchOption.AllDirectories)
             .Where(f => f != main).Order(StringComparer.Ordinal).Append(main).ToArray();
-        var result = Engine.Run(checks, _repo, scriptFiles: files,
-            additionalFeedPaths: [Path.Combine(_repo, "packages")]);
+        var result = Engine.Run(checks, _repo, new EngineRunOptions
+        {
+            ScriptFiles = files,
+            AdditionalFeedPaths = [Path.Combine(_repo, "packages")],
+        });
 
         Assert.That(result.HasFatalErrors, Is.False, string.Join("\n", result.Errors));
         Assert.That(result.Outputs.Select(o => o.Message), Is.Empty);
@@ -168,8 +209,11 @@ public class SelfCheckStructureTests
 
         for (int run = 0; run < 2; run++)
         {
-            var result = Engine.Run(checks, target, scriptFiles: files,
-                additionalFeedPaths: [Path.Combine(_repo, "packages")]);
+            var result = Engine.Run(checks, target, new EngineRunOptions
+            {
+                ScriptFiles = files,
+                AdditionalFeedPaths = [Path.Combine(_repo, "packages")],
+            });
 
             Assert.That(result.HasFatalErrors, Is.False, string.Join("\n", result.Errors));
             Assert.That(result.Warnings!.Where(w => w.Contains("source analysis error")), Is.Empty);
@@ -195,7 +239,10 @@ public class SelfCheckStructureTests
             let codebase = codebase(csharp.parse())
             command MAIN = CHECK(no-regex)
             """);
-        var result = Engine.Run(_root, _repo, additionalFeedPaths: [Path.Combine(_repo, "packages")]);
+        var result = Engine.Run(_root, _repo, new EngineRunOptions
+        {
+            AdditionalFeedPaths = [Path.Combine(_repo, "packages")],
+        });
 
         Assert.That(result.HasParseErrors, Is.False, string.Join("\n", result.ParseErrors));
         Assert.That(result.HasFatalErrors, Is.False, string.Join("\n", result.Errors));
@@ -468,8 +515,10 @@ public class SelfCheckStructureTests
             $"Input.cs({line}): error: Caller policy rejects {names[line]}");
         for (int run = 0; run < 2; run++)
         {
-            var result = Engine.Run(_root, target,
-                additionalFeedPaths: [Path.Combine(_repo, "packages")]);
+            var result = Engine.Run(_root, target, new EngineRunOptions
+            {
+                AdditionalFeedPaths = [Path.Combine(_repo, "packages")],
+            });
 
             Assert.That(result.HasParseErrors, Is.False, string.Join("\n", result.ParseErrors));
             Assert.That(result.HasFatalErrors, Is.False, string.Join("\n", result.Errors));
@@ -520,8 +569,12 @@ public class SelfCheckStructureTests
         var checks = Path.Combine(_repo, "cop-checks");
         var files = Directory.GetFiles(checks, "*.cop", SearchOption.AllDirectories)
             .Order(StringComparer.Ordinal).Append(program).ToArray();
-        var result = Engine.Run(checks, target, commandName: "FILE_SCOPES", scriptFiles: files,
-            additionalFeedPaths: [Path.Combine(_repo, "packages")]);
+        var result = Engine.Run(checks, target, new EngineRunOptions
+        {
+            CommandName = "FILE_SCOPES",
+            ScriptFiles = files,
+            AdditionalFeedPaths = [Path.Combine(_repo, "packages")],
+        });
 
         Assert.That(result.HasParseErrors, Is.False, string.Join("\n", result.ParseErrors));
         Assert.That(result.HasFatalErrors, Is.False, string.Join("\n", result.Errors));
@@ -621,7 +674,10 @@ public class SelfCheckStructureTests
             command MAIN = CHECK(codebase.Types:toError(message))
             """);
 
-        var result = Engine.Run(_root, target, additionalFeedPaths: [Path.Combine(_repo, "packages")]);
+        var result = Engine.Run(_root, target, new EngineRunOptions
+        {
+            AdditionalFeedPaths = [Path.Combine(_repo, "packages")],
+        });
 
         Assert.That(result.HasFatalErrors, Is.False, string.Join("\n", result.Errors));
         Assert.That(result.Outputs.Select(o => o.Message), Is.EqualTo(new[]
@@ -656,7 +712,10 @@ public class SelfCheckStructureTests
             command MAIN = CHECK(no-regex)
             """);
 
-        var result = Engine.Run(_root, target, additionalFeedPaths: [Path.Combine(_repo, "packages")]);
+        var result = Engine.Run(_root, target, new EngineRunOptions
+        {
+            AdditionalFeedPaths = [Path.Combine(_repo, "packages")],
+        });
 
         Assert.That(result.HasFatalErrors, Is.False, string.Join("\n", result.Errors));
         Assert.That(result.Outputs.Select(o => o.Message), Is.EqualTo(new[]
@@ -750,7 +809,10 @@ public class SelfCheckStructureTests
             var setting = value is null ? "" : $"<{property}>{value}</{property}>";
             File.WriteAllText(Path.Combine(target, "Input.csproj"),
                 $"<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup>{setting}</PropertyGroup></Project>");
-            var result = Engine.Run(scripts, target, additionalFeedPaths: [Path.Combine(_repo, "packages")]);
+            var result = Engine.Run(scripts, target, new EngineRunOptions
+            {
+                AdditionalFeedPaths = [Path.Combine(_repo, "packages")],
+            });
 
             Assert.That(result.HasFatalErrors, Is.False, string.Join("\n", result.Errors));
             Assert.That(result.Outputs.Select(o => o.Message), Is.EqualTo(value == forbidden
@@ -784,8 +846,12 @@ public class SelfCheckStructureTests
             $"{path}({line}): error: {string.Format(message, line)}").ToArray();
         for (int run = 0; run < 2; run++)
         {
-            var result = Engine.Run(checks, target, commandName: "SELF_CHECK", scriptFiles: files,
-                additionalFeedPaths: [Path.Combine(_repo, "packages")]);
+            var result = Engine.Run(checks, target, new EngineRunOptions
+            {
+                CommandName = "SELF_CHECK",
+                ScriptFiles = files,
+                AdditionalFeedPaths = [Path.Combine(_repo, "packages")],
+            });
             Assert.That(result.HasParseErrors, Is.False, string.Join("\n", result.ParseErrors));
             Assert.That(result.HasFatalErrors, Is.False, string.Join("\n", result.Errors));
             Assert.That(result.Outputs.Select(o => o.Message), Is.EqualTo(expected), $"Run {run + 1}");

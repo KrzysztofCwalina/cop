@@ -1,3 +1,5 @@
+// Coordinates the interactive prompt, session commands, and input evaluation.
+
 using Cop.Lang;
 using Cop.Lang.Ast;
 using Cop.Providers;
@@ -50,17 +52,21 @@ public class ReplSession
 
             input = input.Trim();
             if (string.IsNullOrEmpty(input))
+            {
                 continue;
+            }
 
             // Handle built-in REPL commands
-            var bangResult = HandleBuiltinCommand(input);
+            BangResult bangResult = HandleBuiltinCommand(input);
             if (bangResult == BangResult.Exit)
             {
                 Console.WriteLine("Bye!");
                 return 0;
             }
             if (bangResult == BangResult.Handled)
+            {
                 continue;
+            }
 
             // Auto-reload if .cop files changed on disk
             AutoReloadIfNeeded();
@@ -68,9 +74,11 @@ public class ReplSession
             // Evaluate the input
             try
             {
-                var outputs = _evaluator.Evaluate(input);
-                foreach (var line in outputs)
+                List<string> outputs = _evaluator.Evaluate(input);
+                foreach (string line in outputs)
+                {
                     Console.WriteLine(line);
+                }
             }
             catch (Exception ex) when (ex is not OutOfMemoryException)
             {
@@ -83,11 +91,11 @@ public class ReplSession
 
     private void PrintBanner()
     {
-        var version = typeof(ReplSession).Assembly.GetName().Version;
-        var versionStr = version != null ? $"{version.Major}.{version.Minor}.{version.Build}" : "dev";
-        var dirName = Path.GetFileName(_scriptsDir);
-        var files = Directory.GetFiles(_scriptsDir, "*.cop", SearchOption.TopDirectoryOnly);
-        var fileNames = string.Join(", ", files.Select(Path.GetFileName));
+        Version? version = typeof(ReplSession).Assembly.GetName().Version;
+        string versionStr = version != null ? $"{version.Major}.{version.Minor}.{version.Build}" : "dev";
+        string dirName = Path.GetFileName(_scriptsDir);
+        string[] files = Directory.GetFiles(_scriptsDir, "*.cop", SearchOption.TopDirectoryOnly);
+        string fileNames = string.Join(", ", files.Select(Path.GetFileName));
 
         const string b = "\x1b[34m";   // blue (body/hat)
         const string c = "\x1b[96m";   // bright cyan (magnifying glass)
@@ -117,9 +125,11 @@ public class ReplSession
     private BangResult HandleBuiltinCommand(string input)
     {
         if (!input.EndsWith('!'))
+        {
             return BangResult.NotHandled;
+        }
 
-        var word = input[..^1].ToLowerInvariant();
+        string word = input[..^1].ToLowerInvariant();
 
         switch (word)
         {
@@ -154,7 +164,11 @@ public class ReplSession
 
     private void AutoReloadIfNeeded()
     {
-        if (!FilesChanged()) return;
+        if (!FilesChanged())
+        {
+            return;
+        }
+
         ReloadContext();
     }
 
@@ -176,11 +190,13 @@ public class ReplSession
 
     private Dictionary<string, DateTime> SnapshotTimestamps()
     {
-        var timestamps = new Dictionary<string, DateTime>(StringComparer.OrdinalIgnoreCase);
+        Dictionary<string, DateTime> timestamps = new Dictionary<string, DateTime>(StringComparer.OrdinalIgnoreCase);
         try
         {
-            foreach (var file in Directory.GetFiles(_scriptsDir, "*.cop", SearchOption.TopDirectoryOnly))
+            foreach (string file in Directory.GetFiles(_scriptsDir, "*.cop", SearchOption.TopDirectoryOnly))
+            {
                 timestamps[file] = File.GetLastWriteTimeUtc(file);
+            }
         }
         catch { }
         return timestamps;
@@ -190,15 +206,23 @@ public class ReplSession
     {
         try
         {
-            var currentFiles = Directory.GetFiles(_scriptsDir, "*.cop", SearchOption.TopDirectoryOnly);
+            string[] currentFiles = Directory.GetFiles(_scriptsDir, "*.cop", SearchOption.TopDirectoryOnly);
             if (currentFiles.Length != _fileTimestamps.Count)
-                return true;
-            foreach (var file in currentFiles)
             {
-                if (!_fileTimestamps.TryGetValue(file, out var lastWrite))
+                return true;
+            }
+
+            foreach (string file in currentFiles)
+            {
+                if (!_fileTimestamps.TryGetValue(file, out DateTime lastWrite))
+                {
                     return true;
+                }
+
                 if (File.GetLastWriteTimeUtc(file) != lastWrite)
+                {
                     return true;
+                }
             }
         }
         catch { return true; }
@@ -220,30 +244,36 @@ public class ReplSession
 
     private void PrintSource()
     {
-        var files = Directory.GetFiles(_scriptsDir, "*.cop", SearchOption.TopDirectoryOnly);
+        string[] files = Directory.GetFiles(_scriptsDir, "*.cop", SearchOption.TopDirectoryOnly);
         if (files.Length == 0)
         {
             Console.WriteLine("(no .cop files)");
             return;
         }
 
-        foreach (var filePath in files.OrderBy(f => f))
+        foreach (string? filePath in files.OrderBy(f => f))
         {
             if (files.Length > 1)
+            {
                 Console.WriteLine($"\x1b[36m── {Path.GetFileName(filePath)} ──\x1b[0m");
+            }
 
-            var lines = File.ReadAllLines(filePath);
+            string[] lines = File.ReadAllLines(filePath);
             for (int i = 0; i < lines.Length; i++)
+            {
                 Console.WriteLine($"\x1b[90m{i + 1,3}\x1b[0m {lines[i]}");
+            }
 
             if (files.Length > 1)
+            {
                 Console.WriteLine();
+            }
         }
     }
 
     private void PrintList()
     {
-        var commands = _context.Modules
+        List<string> commands = _context.Modules
             .SelectMany(m => m.Module.Declarations)
             .Where(d => d is CommandDecl || (d is FunctionDecl f && f.IsCommand))
             .Select(d => d is CommandDecl cmd ? cmd.Name : ((FunctionDecl)d).Name)
@@ -251,7 +281,7 @@ public class ReplSession
             .OrderBy(s => s)
             .ToList();
 
-        var lets = _context.Modules
+        List<string> lets = _context.Modules
             .SelectMany(m => m.Module.Declarations)
             .OfType<LetDecl>()
             .Select(l => l.Name)
@@ -259,49 +289,62 @@ public class ReplSession
             .OrderBy(s => s)
             .ToList();
 
-        var collections = _context.TypeRegistry.GetAllCollectionNames()
+        List<string> collections = _context.TypeRegistry.GetAllCollectionNames()
             .OrderBy(s => s)
             .ToList();
 
         if (commands.Count > 0)
         {
             Console.WriteLine("Commands:");
-            foreach (var c in commands)
+            foreach (string c in commands)
+            {
                 Console.WriteLine($"  {c}");
+            }
         }
         if (lets.Count > 0)
         {
             Console.WriteLine("Let bindings:");
-            foreach (var l in lets)
+            foreach (string l in lets)
+            {
                 Console.WriteLine($"  {l}");
+            }
         }
         if (collections.Count > 0)
         {
             Console.WriteLine("Collections:");
-            foreach (var c in collections)
+            foreach (string c in collections)
+            {
                 Console.WriteLine($"  {c}");
+            }
         }
         if (commands.Count == 0 && lets.Count == 0 && collections.Count == 0)
+        {
             Console.WriteLine("(nothing defined)");
+        }
     }
 
     private ReplContext InitializeContext()
     {
-        var errors = new List<string>();
-        var context = Engine.PrepareRepl(_scriptsDir, _rootPath, errors);
+        List<string> errors = new List<string>();
+        ReplContext? context = Engine.PrepareRepl(_scriptsDir, _rootPath, errors);
 
         if (context is null)
         {
             Console.Error.WriteLine("Failed to initialize REPL:");
-            foreach (var e in errors)
+            foreach (string e in errors)
+            {
                 Console.Error.WriteLine($"  {e}");
+            }
+
             return new ReplContext([], new TypeRegistry(), _rootPath, _scriptsDir, []);
         }
 
         if (errors.Count > 0)
         {
-            foreach (var e in errors)
+            foreach (string e in errors)
+            {
                 Console.Error.WriteLine($"\x1b[33mWarning: {e}\x1b[0m");
+            }
         }
 
         return context;

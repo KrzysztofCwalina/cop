@@ -1,3 +1,5 @@
+// Reuses compiled regular expressions within a bounded, thread-safe cache.
+
 using System.Collections.Concurrent;
 using System.Text.RegularExpressions;
 
@@ -18,15 +20,19 @@ internal static class RegexCache
     /// </summary>
     public static Regex Get(string pattern, RegexOptions options = RegexOptions.None)
     {
-        var key = (pattern, options);
-        if (_cache.TryGetValue(key, out var cached))
+        (string pattern, RegexOptions options) key = (pattern, options);
+        if (_cache.TryGetValue(key, out Regex? cached))
+        {
             return cached;
+        }
 
         // Evict all if over capacity (simple bounded strategy)
         if (_cache.Count >= MaxEntries)
+        {
             _cache.Clear();
+        }
 
-        var regex = new Regex(pattern, options);
+        Regex regex = new Regex(pattern, options);
         _cache.TryAdd(key, regex);
         return regex;
     }

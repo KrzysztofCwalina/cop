@@ -1,3 +1,5 @@
+// Removes signed tamper-protection locks from selected project files.
+
 using System;
 using System.CommandLine;
 using System.CommandLine.Parsing;
@@ -7,16 +9,18 @@ using Cop.Core;
 
 namespace Cop.Cli.Commands;
 
+/// <summary>Removes tamper-protection locks from project files.</summary>
 public static class UnlockCommand
 {
+    /// <summary>Creates the unlock command with optional file selection.</summary>
     public static Command Create()
     {
-        var filesArg = new Argument<string[]>("files")
+        Argument<string[]> filesArg = new Argument<string[]>("files")
         {
             Arity = ArgumentArity.ZeroOrMore,
             Description = "Files to unlock (or omit to unlock all locked files)"
         };
-        var command = new Command("unlock", "Unlock previously locked files")
+        Command command = new Command("unlock", "Unlock previously locked files")
         {
             filesArg
         };
@@ -26,10 +30,13 @@ public static class UnlockCommand
         return command;
     }
 
+    /// <summary>
+    /// Unlocks the selected files, or all locked files when none are specified.
+    /// </summary>
     public static void Execute(string[]? files)
     {
-        var rootDirectory = Directory.GetCurrentDirectory();
-        var lockFile = LockFile.Load(rootDirectory);
+        string rootDirectory = Directory.GetCurrentDirectory();
+        LockFile? lockFile = LockFile.Load(rootDirectory);
 
         if (lockFile == null || lockFile.Files.Count == 0)
         {
@@ -38,10 +45,10 @@ public static class UnlockCommand
         }
 
         // Verify key
-        var key = LockCommand.ReadKey("Signing key: ");
+        string key = LockCommand.ReadKey("Signing key: ");
 
         // Verify at least one existing signature to confirm key is correct
-        var sigResults = lockFile.VerifySignatures(key);
+        List<LockVerification> sigResults = lockFile.VerifySignatures(key);
         if (sigResults.Count > 0)
         {
             Console.Error.WriteLine("Error: Signing key does not match");
@@ -49,16 +56,20 @@ public static class UnlockCommand
         }
 
         // If no files specified, unlock all locked files
-        var filesToUnlock = (files == null || files.Length == 0)
+        string[] filesToUnlock = (files == null || files.Length == 0)
             ? lockFile.Files.Select(f => f.Key).ToArray()
             : files.Select(f => ResolveRelativePath(rootDirectory, f)).ToArray();
 
-        foreach (var relativePath in filesToUnlock)
+        foreach (string? relativePath in filesToUnlock)
         {
             if (lockFile.Unlock(relativePath))
+            {
                 Console.WriteLine($"Unlocked: {relativePath}");
+            }
             else
+            {
                 Console.Error.WriteLine($"Warning: '{relativePath}' was not locked");
+            }
         }
 
         lockFile.Save(rootDirectory);
@@ -66,7 +77,7 @@ public static class UnlockCommand
 
     private static string ResolveRelativePath(string rootDirectory, string file)
     {
-        var fullPath = Path.IsPathRooted(file)
+        string fullPath = Path.IsPathRooted(file)
             ? Path.GetFullPath(file)
             : Path.GetFullPath(Path.Combine(rootDirectory, file));
         return LockFile.NormalizePath(rootDirectory, fullPath);

@@ -1,3 +1,5 @@
+// Exposes Python-specific declaration and statement facts through runtime accessors.
+
 using Cop.Core;
 using Cop.Providers.SourceModel;
 
@@ -9,13 +11,16 @@ namespace Cop.Providers;
 /// </summary>
 public static class PythonBindings
 {
+    /// <summary>
+    /// Extends shared bindings with Python-specific source-model accessors.
+    /// </summary>
     public static RuntimeBindings Build()
     {
-        var bindings = CodeBindings.Build();
+        RuntimeBindings bindings = CodeBindings.Build();
 
         bindings.ClrTypeMappings[typeof(PythonTypeDeclaration)] = "PythonType";
 
-        var pythonAccessors = new Dictionary<string, Func<object, object?>>(bindings.Accessors["Type"])
+        Dictionary<string, Func<object, object?>> pythonAccessors = new Dictionary<string, Func<object, object?>>(bindings.Accessors["Type"])
         {
             ["IsDataclass"] = o => (object)((PythonTypeDeclaration)o).IsDataclass,
             ["IsEnum"] = o => (object)((PythonTypeDeclaration)o).IsEnum,
@@ -29,7 +34,7 @@ public static class PythonBindings
 
         bindings.ClrTypeMappings[typeof(PythonMethodDeclaration)] = "PythonMethod";
 
-        var pythonMethodAccessors = new Dictionary<string, Func<object, object?>>(bindings.Accessors["Method"])
+        Dictionary<string, Func<object, object?>> pythonMethodAccessors = new Dictionary<string, Func<object, object?>>(bindings.Accessors["Method"])
         {
             ["IsStaticmethod"] = o => (object)((PythonMethodDeclaration)o).IsStaticmethod,
             ["IsClassmethod"] = o => (object)((PythonMethodDeclaration)o).IsClassmethod,
@@ -42,7 +47,7 @@ public static class PythonBindings
 
         bindings.ClrTypeMappings[typeof(PythonStatementInfo)] = "PythonStatement";
 
-        var pythonStatementAccessors = new Dictionary<string, Func<object, object?>>(bindings.Accessors["Statement"])
+        Dictionary<string, Func<object, object?>> pythonStatementAccessors = new Dictionary<string, Func<object, object?>>(bindings.Accessors["Statement"])
         {
             ["IsWith"] = o => (object)((PythonStatementInfo)o).IsWith,
             ["IsAsyncWith"] = o => (object)((PythonStatementInfo)o).IsAsyncWith,

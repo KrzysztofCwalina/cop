@@ -278,7 +278,7 @@ public class ProviderWorkDeferralTests
             var original = new DeferredSourceCache(scope);
             Assert.That(original.Read(path, parser)!.Types.Single().Name, Is.EqualTo("Alpha"));
             original.Save([path]);
-            File.WriteAllBytes(cachePath, [1, 0, 0, 0, 1, 0, 0, 0]);
+            File.WriteAllBytes(cachePath, [2, 0, 0, 0, 1, 0, 0, 0]);
             parser.Reads.Clear();
             var error = Console.Error;
             using var diagnostics = new StringWriter();
@@ -471,6 +471,54 @@ public class ProviderWorkDeferralTests
         Assert.That(Read().Types.Single().Name, Is.EqualTo("Bravo"),
             "Matching timestamps and length do not prove that cached source contents are current.");
         Assert.That(Read().Types.Single().Name, Is.EqualTo("Bravo"));
+        Assert.That(ProviderErrors.Drain(), Is.Empty);
+    }
+
+    [Test]
+    [Platform("Win")]
+    public void Cop_SourceCache_InvalidatesEditsEvenWhenAllFileMetadataMatches()
+    {
+        string path = Path.Combine(_root, "same-metadata.cop");
+        string original = "type Alpha = { Name : string }";
+        string edited = "type Bravo = { Name : string }";
+        File.WriteAllText(path, original);
+        SourceFile Read()
+        {
+            CopProvider provider = new CopProvider();
+            DeferredProviderResult result = (DeferredProviderResult)provider.QueryDeferred(
+                new ProviderQuery { RootPath = _root, Collection = "Files" });
+            return result.Collections["Files"].Cast<SourceFile>().Single();
+        }
+
+        using SafeFileHandle handle = File.OpenHandle(
+            path, FileMode.Open, FileAccess.ReadWrite, FileShare.ReadWrite);
+        Assert.That(GetFileInformationByHandleEx(handle, 0, out FileBasicInfo metadata,
+            (uint)Marshal.SizeOf<FileBasicInfo>()), Is.True,
+            $"Win32 error {Marshal.GetLastWin32Error()}");
+        long originalLength = new FileInfo(path).Length;
+        Assert.That(Read().Types.Select(type => type.Name), Is.EqualTo(new[] { "Alpha" }));
+        Assert.That(Read().Types.Select(type => type.Name), Is.EqualTo(new[] { "Alpha" }));
+
+        RandomAccess.Write(handle, System.Text.Encoding.UTF8.GetBytes(edited), 0);
+        Assert.That(SetFileInformationByHandle(handle, 0, ref metadata,
+            (uint)Marshal.SizeOf<FileBasicInfo>()), Is.True,
+            $"Win32 error {Marshal.GetLastWin32Error()}");
+        Assert.That(new FileInfo(path).Length, Is.EqualTo(originalLength));
+        Assert.That(GetFileInformationByHandleEx(handle, 0, out FileBasicInfo restored,
+            (uint)Marshal.SizeOf<FileBasicInfo>()), Is.True,
+            $"Win32 error {Marshal.GetLastWin32Error()}");
+        Assert.That(
+            (restored.CreationTime, restored.LastAccessTime, restored.LastWriteTime,
+                restored.ChangeTime, restored.FileAttributes),
+            Is.EqualTo(
+                (metadata.CreationTime, metadata.LastAccessTime, metadata.LastWriteTime,
+                    metadata.ChangeTime, metadata.FileAttributes)));
+
+        Assert.That(Read().Types.Select(type => type.Name), Is.EqualTo(new[] { "Bravo" }),
+            "Matching file metadata must not allow stale Cop syntax to be reused.");
+        SourceFile cached = Read();
+        Assert.That(cached.Types.Select(type => type.Name), Is.EqualTo(new[] { "Bravo" }));
+        Assert.That(cached.RawText, Is.EqualTo(edited));
         Assert.That(ProviderErrors.Drain(), Is.Empty);
     }
 

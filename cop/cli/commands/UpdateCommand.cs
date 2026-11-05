@@ -1,3 +1,5 @@
+// Downloads Cop release assets and updates the installed executable.
+
 using System.IO.Compression;
 using System.Net.Http;
 using System.Net.Http.Json;
@@ -16,7 +18,10 @@ static class UpdateCommand
     public static int Execute(bool force = false, bool local = false)
     {
         if (local)
+        {
             return InstallLocal();
+        }
+
         return ExecuteAsync(force).GetAwaiter().GetResult();
     }
 
@@ -26,12 +31,15 @@ static class UpdateCommand
     {
         try
         {
-            var source = Environment.ProcessPath ?? throw new IOException("Cannot locate the running Cop executable.");
+            string source = Environment.ProcessPath ?? throw new IOException("Cannot locate the running Cop executable.");
             if (!Path.GetFileNameWithoutExtension(source).Equals("cop", StringComparison.OrdinalIgnoreCase)
                 || !string.IsNullOrEmpty(Assembly.GetExecutingAssembly().Location))
+            {
                 throw new IOException("Local installation requires the published Cop executable, not a dotnet host.");
-            var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-            var target = CopInstallation.InstallExecutable(source, home);
+            }
+
+            string home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+            string target = CopInstallation.InstallExecutable(source, home);
             CopInstallation.ConfigurePath(home);
             Console.WriteLine($"Installed at: {target}");
             return 0;
@@ -45,22 +53,22 @@ static class UpdateCommand
 
     static async Task<int> ExecuteAsync(bool force)
     {
-        var rid = GetCurrentRid();
+        string? rid = GetCurrentRid();
         if (rid == null)
         {
             Console.Error.WriteLine("Error: Could not determine platform. Supported: win-x64, win-arm64, linux-x64, linux-arm64, osx-x64, osx-arm64");
             return 1;
         }
 
-        var expectedAsset = $"cop-{rid}.zip";
+        string expectedAsset = $"cop-{rid}.zip";
         Console.WriteLine($"Platform: {rid}");
         Console.WriteLine("Checking for updates...");
 
-        using var http = new HttpClient();
+        using HttpClient http = new HttpClient();
         http.DefaultRequestHeaders.UserAgent.ParseAdd("cop-updater/1.0");
 
         // Get latest release
-        var releaseUrl = $"{GitHubApiBase}/repos/{RepoOwner}/{RepoName}/releases/latest";
+        string releaseUrl = $"{GitHubApiBase}/repos/{RepoOwner}/{RepoName}/releases/latest";
         HttpResponseMessage releaseResponse;
         try
         {
@@ -78,28 +86,31 @@ static class UpdateCommand
             return 1;
         }
 
-        var releaseJson = await releaseResponse.Content.ReadFromJsonAsync<JsonElement>();
-        var tagName = releaseJson.GetProperty("tag_name").GetString();
-        var assets = releaseJson.GetProperty("assets");
+        JsonElement releaseJson = await releaseResponse.Content.ReadFromJsonAsync<JsonElement>();
+        string? tagName = releaseJson.GetProperty("tag_name").GetString();
+        JsonElement assets = releaseJson.GetProperty("assets");
 
         // Already on the latest (or a newer local build)? Don't re-download — just say so.
         // `--force` reinstalls anyway (e.g. to repair a corrupted install, or to verify a release).
-        var currentVersion = Assembly.GetExecutingAssembly().GetName().Version;
+        Version? currentVersion = Assembly.GetExecutingAssembly().GetName().Version;
         if (!force && IsUpToDate(currentVersion, tagName))
         {
             Console.WriteLine($"cop is already up to date ({currentVersion}).");
-            var installed = InstallLocal();
+            int installed = InstallLocal();
             if (installed != 0)
+            {
                 return installed;
+            }
+
             Console.WriteLine("Use 'cop update --force' to reinstall.");
             return 0;
         }
 
         // Find matching asset
         string? downloadUrl = null;
-        foreach (var asset in assets.EnumerateArray())
+        foreach (JsonElement asset in assets.EnumerateArray())
         {
-            var name = asset.GetProperty("name").GetString();
+            string? name = asset.GetProperty("name").GetString();
             if (string.Equals(name, expectedAsset, StringComparison.OrdinalIgnoreCase))
             {
                 downloadUrl = asset.GetProperty("browser_download_url").GetString();
@@ -111,7 +122,7 @@ static class UpdateCommand
         {
             Console.Error.WriteLine($"Error: Release {tagName} does not have an asset for {rid}.");
             Console.Error.WriteLine($"Available assets:");
-            foreach (var asset in assets.EnumerateArray())
+            foreach (JsonElement asset in assets.EnumerateArray())
             {
                 Console.Error.WriteLine($"  {asset.GetProperty("name").GetString()}");
             }
@@ -134,25 +145,25 @@ static class UpdateCommand
 
         Console.WriteLine($"Downloaded {zipBytes.Length / (1024 * 1024)}MB. Installing...");
 
-        var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-        var installDir = CopInstallation.DirectoryPath(home);
-        var isWindows = RuntimeInformation.IsOSPlatform(OSPlatform.Windows);
-        var exeName = isWindows ? "cop.exe" : "cop";
+        string home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        string installDir = CopInstallation.DirectoryPath(home);
+        bool isWindows = RuntimeInformation.IsOSPlatform(OSPlatform.Windows);
+        string exeName = isWindows ? "cop.exe" : "cop";
 
         // Extract zip to temp directory
-        var tempDir = Path.Combine(Path.GetTempPath(), $"cop-update-{Guid.NewGuid():N}");
+        string tempDir = Path.Combine(Path.GetTempPath(), $"cop-update-{Guid.NewGuid():N}");
         Directory.CreateDirectory(tempDir);
 
         try
         {
-            using (var zipStream = new MemoryStream(zipBytes))
-            using (var archive = new ZipArchive(zipStream, ZipArchiveMode.Read))
+            using (MemoryStream zipStream = new MemoryStream(zipBytes))
+            using (ZipArchive archive = new ZipArchive(zipStream, ZipArchiveMode.Read))
             {
                 archive.ExtractToDirectory(tempDir);
             }
 
             // Find the main executable in the extracted files
-            var newExePath = Path.Combine(tempDir, exeName);
+            string newExePath = Path.Combine(tempDir, exeName);
 
             if (!File.Exists(newExePath))
             {
@@ -163,14 +174,20 @@ static class UpdateCommand
             CopInstallation.InstallExecutable(newExePath, home);
 
             // Copy any additional files (e.g., native libs) but skip the main exe
-            foreach (var file in Directory.GetFiles(tempDir))
+            foreach (string file in Directory.GetFiles(tempDir))
             {
-                var fileName = Path.GetFileName(file);
+                string fileName = Path.GetFileName(file);
                 if (string.Equals(fileName, exeName, StringComparison.OrdinalIgnoreCase))
+                {
                     continue;
-                var destPath = Path.Combine(installDir, fileName);
+                }
+
+                string destPath = Path.Combine(installDir, fileName);
                 if (File.Exists(destPath))
+                {
                     File.Delete(destPath);
+                }
+
                 File.Copy(file, destPath);
             }
 
@@ -214,13 +231,21 @@ static class UpdateCommand
     {
         string os;
         if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+        {
             os = "win";
+        }
         else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
+        {
             os = "linux";
+        }
         else if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+        {
             os = "osx";
+        }
         else
+        {
             return null;
+        }
 
         string arch = RuntimeInformation.OSArchitecture switch
         {
@@ -229,7 +254,11 @@ static class UpdateCommand
             _ => null!
         };
 
-        if (arch == null) return null;
+        if (arch == null)
+        {
+            return null;
+        }
+
         return $"{os}-{arch}";
     }
 }

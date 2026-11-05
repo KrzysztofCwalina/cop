@@ -1,3 +1,5 @@
+// Stores runtime bindings with parent environments for lexical lookup.
+
 namespace Cop.Lang.Interpreter;
 
 /// <summary>
@@ -32,10 +34,16 @@ public sealed class Environment
     /// </summary>
     public CopValue Lookup(string name)
     {
-        if (_bindings.TryGetValue(name, out var value))
+        if (_bindings.TryGetValue(name, out CopValue? value))
+        {
             return value;
+        }
+
         if (Parent is not null)
+        {
             return Parent.Lookup(name);
+        }
+
         return CopNull.Instance;
     }
 
@@ -45,9 +53,15 @@ public sealed class Environment
     public bool TryLookup(string name, out CopValue value)
     {
         if (_bindings.TryGetValue(name, out value!))
+        {
             return true;
+        }
+
         if (Parent is not null)
+        {
             return Parent.TryLookup(name, out value);
+        }
+
         value = CopNull.Instance;
         return false;
     }

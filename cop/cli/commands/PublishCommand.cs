@@ -1,3 +1,5 @@
+// Validates and publishes package versions from the CLI.
+
 using System;
 using System.CommandLine;
 using System.CommandLine.Parsing;
@@ -17,13 +19,31 @@ public static class PublishCommand
     // True if version is exactly three dot-separated numeric parts (X.Y.Z).
     private static bool IsSemVer3(string? version)
     {
-        if (string.IsNullOrEmpty(version)) return false;
-        var parts = version.Split('.');
-        if (parts.Length != 3) return false;
-        foreach (var p in parts)
+        if (string.IsNullOrEmpty(version))
         {
-            if (p.Length == 0) return false;
-            foreach (var c in p) if (c is < '0' or > '9') return false;
+            return false;
+        }
+
+        string[] parts = version.Split('.');
+        if (parts.Length != 3)
+        {
+            return false;
+        }
+
+        foreach (string p in parts)
+        {
+            if (p.Length == 0)
+            {
+                return false;
+            }
+
+            foreach (char c in p)
+            {
+                if (c is < '0' or > '9')
+                {
+                    return false;
+                }
+            }
         }
         return true;
     }
@@ -32,10 +52,13 @@ public static class PublishCommand
     /// Creates the publish command.
     /// </summary>
     /// <returns>A System.CommandLine.Command configured for the publish subcommand.</returns>
+    /// <summary>
+    /// Creates the package-publication command and its version options.
+    /// </summary>
     public static Command Create()
     {
-        var nameArgument = new Argument<string>("name");
-        var command = new Command("publish", "Validate and publish a package version")
+        Argument<string> nameArgument = new Argument<string>("name");
+        Command command = new Command("publish", "Validate and publish a package version")
         {
             nameArgument
         };
@@ -50,7 +73,7 @@ public static class PublishCommand
     /// </summary>
     private static int Execute(string name)
     {
-        var packagePath = LocalPackageSource.FindPackagePath("packages", name)
+        string packagePath = LocalPackageSource.FindPackagePath("packages", name)
             ?? Path.Combine("packages", name);
 
         // Step 1: Directory exists
@@ -60,7 +83,7 @@ public static class PublishCommand
             return 1;
         }
 
-        var metadataFile = Path.Combine(packagePath, PackageMetadata.MetadataFileName);
+        string metadataFile = Path.Combine(packagePath, PackageMetadata.MetadataFileName);
 
         // Step 2: Metadata file exists
         if (!File.Exists(metadataFile))
@@ -114,10 +137,10 @@ public static class PublishCommand
         }
 
         // Step 7: Required directories exist
-        var requiredDirs = new[] { "instructions", "skills", "src", "tests" };
-        foreach (var dir in requiredDirs)
+        string[] requiredDirs = new[] { "instructions", "skills", "src", "tests" };
+        foreach (string? dir in requiredDirs)
         {
-            var dirPath = Path.Combine(packagePath, dir);
+            string dirPath = Path.Combine(packagePath, dir);
             if (!Directory.Exists(dirPath))
             {
                 Console.Error.WriteLine($"Error: Required directory '{dir}/' does not exist.");
@@ -128,11 +151,11 @@ public static class PublishCommand
         // Step 8: No circular self-dependency
         if (metadata.Dependencies.Count > 0)
         {
-            foreach (var dep in metadata.Dependencies)
+            foreach (string dep in metadata.Dependencies)
             {
                 try
                 {
-                    var packageRef = PackageReference.Parse(dep);
+                    PackageReference packageRef = PackageReference.Parse(dep);
                     if (packageRef.PackageName == name)
                     {
                         Console.Error.WriteLine($"Error: Package has circular dependency on itself: {dep}");
@@ -147,7 +170,7 @@ public static class PublishCommand
             }
         }
 
-        var tagName = $"{name}/{metadata.Version}";
+        string tagName = $"{name}/{metadata.Version}";
 
         // Check if tag already exists
         if (TagExists(tagName))
@@ -159,7 +182,7 @@ public static class PublishCommand
         // Create git tag
         try
         {
-            var result = RunGitCommand($"tag {tagName}");
+            int result = RunGitCommand($"tag {tagName}");
             if (result != 0)
             {
                 Console.Error.WriteLine($"Error: Failed to create git tag '{tagName}'.");
@@ -185,7 +208,7 @@ public static class PublishCommand
     {
         try
         {
-            var process = new Process
+            Process process = new Process
             {
                 StartInfo = new ProcessStartInfo
                 {
@@ -215,7 +238,7 @@ public static class PublishCommand
     /// </summary>
     private static int RunGitCommand(string arguments)
     {
-        var process = new Process
+        Process process = new Process
         {
             StartInfo = new ProcessStartInfo
             {

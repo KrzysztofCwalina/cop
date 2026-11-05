@@ -1,3 +1,5 @@
+// Exposes parsed Bash scripts and commands through the provider query contract.
+
 using Cop.Core;
 using Cop.Providers.SourceModel;
 
@@ -9,6 +11,7 @@ namespace Cop.Providers.Bash;
 /// </summary>
 public sealed class BashProvider : DataProvider
 {
+    /// <inheritdoc />
     public override ReadOnlyMemory<byte> GetSchema() => _schema.ToJson();
 
     private static readonly ProviderSchema _schema = BuildSchema();
@@ -45,6 +48,7 @@ public sealed class BashProvider : DataProvider
     private static ProviderPropertySchema Opt(string name, string type = "string")
         => new() { Name = name, Type = type, Optional = true };
 
+    /// <inheritdoc />
     public override RuntimeBindings GetRuntimeBindings()
     {
         return new RuntimeBindings
@@ -63,31 +67,37 @@ public sealed class BashProvider : DataProvider
         };
     }
 
+    /// <inheritdoc />
     public override object? Query(ProviderQuery query)
     {
-        var result = (DeferredProviderResult)QueryDeferred(query);
+        DeferredProviderResult result = (DeferredProviderResult)QueryDeferred(query);
         return result.Collections.ToDictionary(c => c.Key, c => c.Value.ToList(), StringComparer.Ordinal);
     }
 
     private readonly Dictionary<string, DeferredFormatSnapshot> _snapshots = new(StringComparer.Ordinal);
 
+    /// <inheritdoc />
     public override object QueryDeferred(ProviderQuery query)
     {
-        if (query.RootPath is null) return new DeferredProviderResult(new Dictionary<string, IEnumerable<object>>());
-        var key = DeferredFormatSnapshot.Key(query);
-        var root = Path.GetFullPath(query.RootPath);
-        if (!_snapshots.TryGetValue(key, out var snapshot))
+        if (query.RootPath is null)
+        {
+            return new DeferredProviderResult(new Dictionary<string, IEnumerable<object>>());
+        }
+
+        string key = DeferredFormatSnapshot.Key(query);
+        string root = Path.GetFullPath(query.RootPath);
+        if (!_snapshots.TryGetValue(key, out DeferredFormatSnapshot? snapshot))
         {
             snapshot = new(() =>
             {
-                var paths = new List<string>();
+                List<string> paths = new List<string>();
                 CollectBashFiles(root, query.ExcludedDirectories, paths);
                 return paths;
             }, path =>
             {
-                var text = File.ReadAllText(path);
-                var file = new SourceFile(Path.GetRelativePath(root, path).Replace('\\', '/'), "bash", [], [], text);
-                var script = BashParser.Parse(text);
+                string text = File.ReadAllText(path);
+                SourceFile file = new SourceFile(Path.GetRelativePath(root, path).Replace('\\', '/'), "bash", [], [], text);
+                BashParser.BashParseResult script = BashParser.Parse(text);
                 return new()
                 {
                     ["Commands"] = script.Commands.Select(c => (object)(c with { File = file })).ToList(),
@@ -103,16 +113,26 @@ public sealed class BashProvider : DataProvider
     {
         try
         {
-            foreach (var file in Directory.GetFiles(dir))
+            foreach (string file in Directory.GetFiles(dir))
             {
                 if (BashExtensions.Contains(Path.GetExtension(file)))
+                {
                     result.Add(file);
+                }
             }
-            foreach (var subDir in Directory.GetDirectories(dir))
+            foreach (string subDir in Directory.GetDirectories(dir))
             {
-                if ((File.GetAttributes(subDir) & FileAttributes.ReparsePoint) != 0) continue;
-                var dirName = Path.GetFileName(subDir);
-                if (excluded is not null && excluded.Contains(dirName)) continue;
+                if ((File.GetAttributes(subDir) & FileAttributes.ReparsePoint) != 0)
+                {
+                    continue;
+                }
+
+                string dirName = Path.GetFileName(subDir);
+                if (excluded is not null && excluded.Contains(dirName))
+                {
+                    continue;
+                }
+
                 CollectBashFiles(subDir, excluded, result);
             }
         }

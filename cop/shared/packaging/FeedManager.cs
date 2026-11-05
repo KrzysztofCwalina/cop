@@ -1,3 +1,5 @@
+// Reads, updates, and persists the configured package-feed list.
+
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -26,7 +28,7 @@ namespace Cop.Core
         /// </summary>
         public FeedManager()
         {
-            var copDir = GetCopDirectory();
+            string copDir = GetCopDirectory();
             _feedsFilePath = Path.Combine(copDir, FeedsFileName);
             _feeds = new List<string> { DefaultFeed };
 
@@ -34,9 +36,9 @@ namespace Cop.Core
             {
                 try
                 {
-                    var json = File.ReadAllText(_feedsFilePath);
-                    var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
-                    var data = JsonSerializer.Deserialize<FeedsData>(json, options);
+                    string json = File.ReadAllText(_feedsFilePath);
+                    JsonSerializerOptions options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+                    FeedsData? data = JsonSerializer.Deserialize<FeedsData>(json, options);
 
                     if (data?.Feeds != null && data.Feeds.Count > 0)
                     {
@@ -44,7 +46,7 @@ namespace Cop.Core
                         _feeds.Clear();
                         _feeds.Add(DefaultFeed);
                         
-                        foreach (var feed in data.Feeds)
+                        foreach (string feed in data.Feeds)
                         {
                             if (feed != DefaultFeed && !_feeds.Contains(feed))
                             {
@@ -144,8 +146,8 @@ namespace Cop.Core
         /// </summary>
         public string GetCopDirectory()
         {
-            var userProfilePath = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-            var copDirPath = Path.Combine(userProfilePath, ".cop");
+            string userProfilePath = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+            string copDirPath = Path.Combine(userProfilePath, ".cop");
 
             if (!Directory.Exists(copDirPath))
             {
@@ -160,10 +162,17 @@ namespace Cop.Core
         /// </summary>
         public static bool IsLocalFeed(string feed)
         {
-            if (string.IsNullOrWhiteSpace(feed)) return false;
+            if (string.IsNullOrWhiteSpace(feed))
+            {
+                return false;
+            }
             // A local feed is any path that is rooted (absolute) or starts with . (relative)
             // but is NOT a github.com/... URL
-            if (feed.StartsWith("github.com", StringComparison.OrdinalIgnoreCase)) return false;
+            if (feed.StartsWith("github.com", StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
             return Path.IsPathRooted(feed) || feed.StartsWith(".", StringComparison.Ordinal);
         }
 
@@ -172,7 +181,7 @@ namespace Cop.Core
         /// </summary>
         private static bool IsValidGitHubFeedFormat(string feed)
         {
-            var parts = feed.Split('/', StringSplitOptions.RemoveEmptyEntries);
+            string[] parts = feed.Split('/', StringSplitOptions.RemoveEmptyEntries);
             return parts.Length == 3 && parts[0] == "github.com" && !string.IsNullOrEmpty(parts[1]) && !string.IsNullOrEmpty(parts[2]);
         }
 
@@ -183,12 +192,12 @@ namespace Cop.Core
         {
             try
             {
-                var copDir = GetCopDirectory();
+                string copDir = GetCopDirectory();
                 _feedsFilePath = Path.Combine(copDir, FeedsFileName);
 
-                var data = new FeedsData { Feeds = _feeds };
-                var options = new JsonSerializerOptions { WriteIndented = true };
-                var json = JsonSerializer.Serialize(data, options);
+                FeedsData data = new FeedsData { Feeds = _feeds };
+                JsonSerializerOptions options = new JsonSerializerOptions { WriteIndented = true };
+                string json = JsonSerializer.Serialize(data, options);
 
                 File.WriteAllText(_feedsFilePath, json);
             }

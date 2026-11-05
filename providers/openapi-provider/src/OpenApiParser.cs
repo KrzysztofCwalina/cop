@@ -1,3 +1,7 @@
+// Extracts OpenAPI paths and operations from JSON or YAML specifications.
+
+using System.Text;
+
 namespace Cop.Providers.OpenApi;
 
 /// <summary>
@@ -6,6 +10,9 @@ namespace Cop.Providers.OpenApi;
 /// </summary>
 public static class OpenApiParser
 {
+    /// <summary>
+    /// Contains the paths and operations extracted from an OpenAPI document.
+    /// </summary>
     public record OpenApiParseResult(List<OpenApiOperationInfo> Operations, List<OpenApiPathInfo> Paths);
 
     private static readonly HashSet<string> HttpMethods = new(StringComparer.OrdinalIgnoreCase)
@@ -13,14 +20,17 @@ public static class OpenApiParser
         "get", "post", "put", "delete", "patch", "head", "options"
     };
 
+    /// <summary>Extracts OpenAPI paths and operations from YAML source.</summary>
     public static OpenApiParseResult ParseYaml(string text)
     {
         if (!HasYamlOpenApiMarker(text))
+        {
             return Empty();
+        }
 
-        var operations = new List<OpenApiOperationInfo>();
-        var paths = new List<OpenApiPathInfo>();
-        var lines = text.Split('\n');
+        List<OpenApiOperationInfo> operations = new List<OpenApiOperationInfo>();
+        List<OpenApiPathInfo> paths = new List<OpenApiPathInfo>();
+        string[] lines = text.Split('\n');
 
         bool inPaths = false;
         int pathsIndent = -1;
@@ -30,15 +40,19 @@ public static class OpenApiParser
 
         for (int i = 0; i < lines.Length; i++)
         {
-            var raw = lines[i].TrimEnd('\r');
-            var contentTrim = raw.TrimStart(' ');
+            string raw = lines[i].TrimEnd('\r');
+            string contentTrim = raw.TrimStart(' ');
             if (contentTrim.Length == 0 || contentTrim[0] == '#')
+            {
                 continue;
+            }
 
             int indent = raw.Length - contentTrim.Length;
-            var work = StripInlineComment(contentTrim);
-            if (work.Length == 0 || !TrySplitKeyValue(work, out var key, out _))
+            string work = StripInlineComment(contentTrim);
+            if (work.Length == 0 || !TrySplitKeyValue(work, out string? key, out _))
+            {
                 continue;
+            }
 
             if (indent == 0 && key.Equals("paths", StringComparison.Ordinal))
             {
@@ -51,7 +65,9 @@ public static class OpenApiParser
             }
 
             if (!inPaths)
+            {
                 continue;
+            }
 
             if (indent <= pathsIndent)
             {
@@ -73,9 +89,11 @@ public static class OpenApiParser
             }
 
             if (currentPath.Length == 0 || indent <= currentPathIndent || !IsHttpMethod(key))
+            {
                 continue;
+            }
 
-            var details = ScanYamlOperation(lines, i, indent);
+            (string OperationId, bool HasSummary, bool HasResponses) details = ScanYamlOperation(lines, i, indent);
             operations.Add(new OpenApiOperationInfo(
                 key.ToUpperInvariant(),
                 currentPath,
@@ -88,11 +106,12 @@ public static class OpenApiParser
         return new OpenApiParseResult(operations, paths);
     }
 
+    /// <summary>Extracts OpenAPI paths and operations from JSON source.</summary>
     public static OpenApiParseResult ParseJson(string text)
     {
         try
         {
-            var parser = new JsonScanner(text);
+            JsonScanner parser = new JsonScanner(text);
             return parser.Parse();
         }
         catch
@@ -105,20 +124,24 @@ public static class OpenApiParser
 
     private static bool HasYamlOpenApiMarker(string text)
     {
-        var lines = text.Split('\n');
-        foreach (var line in lines)
+        string[] lines = text.Split('\n');
+        foreach (string line in lines)
         {
-            var raw = line.TrimEnd('\r');
-            var contentTrim = raw.TrimStart(' ');
+            string raw = line.TrimEnd('\r');
+            string contentTrim = raw.TrimStart(' ');
             if (contentTrim.Length == 0 || contentTrim[0] == '#' || contentTrim.StartsWith("---", StringComparison.Ordinal))
+            {
                 continue;
+            }
 
             int indent = raw.Length - contentTrim.Length;
-            var work = StripInlineComment(contentTrim);
+            string work = StripInlineComment(contentTrim);
             if (indent == 0
-                && TrySplitKeyValue(work, out var key, out _)
+                && TrySplitKeyValue(work, out string? key, out _)
                 && (key.Equals("openapi", StringComparison.Ordinal) || key.Equals("swagger", StringComparison.Ordinal)))
+            {
                 return true;
+            }
         }
 
         return false;
@@ -133,29 +156,43 @@ public static class OpenApiParser
 
         for (int j = operationIndex + 1; j < lines.Length; j++)
         {
-            var raw = lines[j].TrimEnd('\r');
-            var contentTrim = raw.TrimStart(' ');
+            string raw = lines[j].TrimEnd('\r');
+            string contentTrim = raw.TrimStart(' ');
             if (contentTrim.Length == 0 || contentTrim[0] == '#')
+            {
                 continue;
+            }
 
             int indent = raw.Length - contentTrim.Length;
             if (indent <= operationIndent)
+            {
                 break;
+            }
 
-            var work = StripInlineComment(contentTrim);
-            if (!TrySplitKeyValue(work, out var key, out var value))
+            string work = StripInlineComment(contentTrim);
+            if (!TrySplitKeyValue(work, out string? key, out string? value))
+            {
                 continue;
+            }
 
             childIndent ??= indent;
             if (indent != childIndent.Value)
+            {
                 continue;
+            }
 
             if (key.Equals("operationId", StringComparison.Ordinal))
+            {
                 operationId = value;
+            }
             else if (key.Equals("summary", StringComparison.Ordinal) || key.Equals("description", StringComparison.Ordinal))
+            {
                 hasSummary = true;
+            }
             else if (key.Equals("responses", StringComparison.Ordinal))
+            {
                 hasResponses = true;
+            }
         }
 
         return (operationId, hasSummary, hasResponses);
@@ -168,11 +205,18 @@ public static class OpenApiParser
         key = "";
         value = "";
         int colon = FindMappingColon(s);
-        if (colon < 0) return false;
+        if (colon < 0)
+        {
+            return false;
+        }
 
         key = Unquote(s[..colon].TrimEnd(' '));
-        if (key.Length == 0) return false;
-        var rest = s[(colon + 1)..].Trim(' ');
+        if (key.Length == 0)
+        {
+            return false;
+        }
+
+        string rest = s[(colon + 1)..].Trim(' ');
         value = Unquote(rest);
         return true;
     }
@@ -185,12 +229,18 @@ public static class OpenApiParser
             char c = s[i];
             if (quote != '\0')
             {
-                if (c == quote) quote = '\0';
+                if (c == quote)
+                {
+                    quote = '\0';
+                }
+
                 continue;
             }
             if (c == '\'' || c == '"') { quote = c; continue; }
             if (c == ':' && (i + 1 == s.Length || s[i + 1] == ' '))
+            {
                 return i;
+            }
         }
         return -1;
     }
@@ -203,12 +253,18 @@ public static class OpenApiParser
             char c = s[i];
             if (quote != '\0')
             {
-                if (c == quote) quote = '\0';
+                if (c == quote)
+                {
+                    quote = '\0';
+                }
+
                 continue;
             }
             if (c == '\'' || c == '"') { quote = c; continue; }
             if (c == '#' && (i == 0 || s[i - 1] == ' ' || s[i - 1] == '\t'))
+            {
                 return s[..i].TrimEnd(' ');
+            }
         }
         return s;
     }
@@ -219,7 +275,9 @@ public static class OpenApiParser
         {
             char a = s[0], b = s[^1];
             if ((a == '"' && b == '"') || (a == '\'' && b == '\''))
+            {
                 return s[1..^1];
+            }
         }
         return s;
     }
@@ -232,26 +290,38 @@ public static class OpenApiParser
         private readonly List<OpenApiPathInfo> _paths = [];
         private bool _hasMarker;
 
+        /// <summary>Creates a scanner for JSON-form OpenAPI source.</summary>
         public JsonScanner(string text) => _text = text;
 
+        /// <summary>Collects paths and operations from the JSON specification.</summary>
         public OpenApiParseResult Parse()
         {
             SkipWhitespace();
             if (!TryConsume('{'))
+            {
                 return Empty();
+            }
 
-            while (ReadProperty(out var name, out var line))
+            while (ReadProperty(out string? name, out int line))
             {
                 if (name.Equals("openapi", StringComparison.Ordinal) || name.Equals("swagger", StringComparison.Ordinal))
+                {
                     _hasMarker = true;
+                }
 
                 if (name.Equals("paths", StringComparison.Ordinal) && Peek() == '{')
+                {
                     ParsePathsObject();
+                }
                 else
+                {
                     SkipValue();
+                }
 
                 if (!ConsumeCommaOrEnd('}'))
+                {
                     break;
+                }
             }
 
             return _hasMarker ? new OpenApiParseResult(_operations, _paths) : Empty();
@@ -259,9 +329,12 @@ public static class OpenApiParser
 
         private void ParsePathsObject()
         {
-            if (!TryConsume('{')) return;
+            if (!TryConsume('{'))
+            {
+                return;
+            }
 
-            while (ReadProperty(out var path, out var line))
+            while (ReadProperty(out string? path, out int line))
             {
                 if (path.StartsWith("/", StringComparison.Ordinal) && Peek() == '{')
                 {
@@ -274,19 +347,24 @@ public static class OpenApiParser
                 }
 
                 if (!ConsumeCommaOrEnd('}'))
+                {
                     break;
+                }
             }
         }
 
         private void ParsePathItemObject(string path)
         {
-            if (!TryConsume('{')) return;
+            if (!TryConsume('{'))
+            {
+                return;
+            }
 
-            while (ReadProperty(out var method, out var line))
+            while (ReadProperty(out string? method, out int line))
             {
                 if (IsHttpMethod(method) && Peek() == '{')
                 {
-                    var details = ParseOperationObject();
+                    (string OperationId, bool HasSummary, bool HasResponses) details = ParseOperationObject();
                     _operations.Add(new OpenApiOperationInfo(
                         method.ToUpperInvariant(),
                         path,
@@ -301,7 +379,9 @@ public static class OpenApiParser
                 }
 
                 if (!ConsumeCommaOrEnd('}'))
+                {
                     break;
+                }
             }
         }
 
@@ -312,23 +392,34 @@ public static class OpenApiParser
             bool hasResponses = false;
 
             if (!TryConsume('{'))
+            {
                 return (operationId, hasSummary, hasResponses);
+            }
 
-            while (ReadProperty(out var name, out _))
+            while (ReadProperty(out string? name, out _))
             {
                 if (name.Equals("operationId", StringComparison.Ordinal) && Peek() == '"')
+                {
                     operationId = ParseString();
+                }
                 else
                 {
                     if (name.Equals("summary", StringComparison.Ordinal) || name.Equals("description", StringComparison.Ordinal))
+                    {
                         hasSummary = true;
+                    }
                     else if (name.Equals("responses", StringComparison.Ordinal))
+                    {
                         hasResponses = true;
+                    }
+
                     SkipValue();
                 }
 
                 if (!ConsumeCommaOrEnd('}'))
+                {
                     break;
+                }
             }
 
             return (operationId, hasSummary, hasResponses);
@@ -339,8 +430,16 @@ public static class OpenApiParser
             name = "";
             line = 0;
             SkipWhitespace();
-            if (Peek() == '}') return false;
-            if (Peek() != '"') return false;
+            if (Peek() == '}')
+            {
+                return false;
+            }
+
+            if (Peek() != '"')
+            {
+                return false;
+            }
+
             line = LineAt(_pos);
             name = ParseString();
             SkipWhitespace();
@@ -367,12 +466,18 @@ public static class OpenApiParser
                 return;
             }
             while (_pos < _text.Length && _text[_pos] != ',' && _text[_pos] != '}' && _text[_pos] != ']')
+            {
                 _pos++;
+            }
         }
 
         private void SkipComposite(char open, char close)
         {
-            if (!TryConsume(open)) return;
+            if (!TryConsume(open))
+            {
+                return;
+            }
+
             int depth = 1;
             while (_pos < _text.Length && depth > 0)
             {
@@ -382,20 +487,35 @@ public static class OpenApiParser
                     ParseString();
                     continue;
                 }
-                if (c == open) depth++;
-                else if (c == close) depth--;
+                if (c == open)
+                {
+                    depth++;
+                }
+                else if (c == close)
+                {
+                    depth--;
+                }
+
                 _pos++;
             }
         }
 
         private string ParseString()
         {
-            if (!TryConsume('"')) return "";
-            var sb = new System.Text.StringBuilder();
+            if (!TryConsume('"'))
+            {
+                return "";
+            }
+
+            StringBuilder sb = new System.Text.StringBuilder();
             while (_pos < _text.Length)
             {
                 char c = _text[_pos++];
-                if (c == '"') break;
+                if (c == '"')
+                {
+                    break;
+                }
+
                 if (c == '\\' && _pos < _text.Length)
                 {
                     char escaped = _text[_pos++];
@@ -423,15 +543,27 @@ public static class OpenApiParser
         private bool ConsumeCommaOrEnd(char end)
         {
             SkipWhitespace();
-            if (TryConsume(',')) return true;
-            if (TryConsume(end)) return false;
+            if (TryConsume(','))
+            {
+                return true;
+            }
+
+            if (TryConsume(end))
+            {
+                return false;
+            }
+
             return false;
         }
 
         private bool TryConsume(char c)
         {
             SkipWhitespace();
-            if (_pos >= _text.Length || _text[_pos] != c) return false;
+            if (_pos >= _text.Length || _text[_pos] != c)
+            {
+                return false;
+            }
+
             _pos++;
             return true;
         }
@@ -445,16 +577,23 @@ public static class OpenApiParser
         private void SkipWhitespace()
         {
             while (_pos < _text.Length && char.IsWhiteSpace(_text[_pos]))
+            {
                 _pos++;
+            }
         }
 
         private int LineAt(int index)
         {
             int line = 1;
             for (int i = 0; i < index && i < _text.Length; i++)
-                if (_text[i] == '\n') line++;
+            {
+                if (_text[i] == '\n')
+                {
+                    line++;
+                }
+            }
+
             return line;
         }
     }
 }
-

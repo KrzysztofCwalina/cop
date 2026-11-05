@@ -1,3 +1,5 @@
+// Exposes YAML documents and entries as source-linked provider collections.
+
 using System.Collections.Concurrent;
 using Cop.Core;
 using Cop.Providers.SourceModel;
@@ -11,6 +13,7 @@ namespace Cop.Providers.Yaml;
 /// </summary>
 public sealed class YamlProvider : DataProvider
 {
+    /// <inheritdoc />
     public override ReadOnlyMemory<byte> GetSchema() => _schema.ToJson();
 
     private static readonly ProviderSchema _schema = BuildSchema();
@@ -48,6 +51,7 @@ public sealed class YamlProvider : DataProvider
     private static ProviderPropertySchema Opt(string name, string type = "string")
         => new() { Name = name, Type = type, Optional = true };
 
+    /// <inheritdoc />
     public override RuntimeBindings GetRuntimeBindings()
     {
         return new RuntimeBindings
@@ -66,48 +70,59 @@ public sealed class YamlProvider : DataProvider
         };
     }
 
+    /// <inheritdoc />
     public override object? Query(ProviderQuery query)
     {
         if (query.RootPath is null)
+        {
             return new Dictionary<string, List<object>>();
+        }
 
-        var rootPath = query.RootPath;
-        var excluded = query.ExcludedDirectories;
+        string rootPath = query.RootPath;
+        IReadOnlySet<string>? excluded = query.ExcludedDirectories;
 
-        var filePaths = new List<string>();
+        List<string> filePaths = new List<string>();
         CollectYamlFiles(rootPath, excluded, filePaths);
 
-        var parsed = new ConcurrentBag<(SourceFile File, YamlParser.YamlParseResult Doc)>();
+        ConcurrentBag<(SourceFile File, YamlParser.YamlParseResult Doc)> parsed = new ConcurrentBag<(SourceFile File, YamlParser.YamlParseResult Doc)>();
         Parallel.ForEach(filePaths,
             new ParallelOptions { MaxDegreeOfParallelism = Environment.ProcessorCount },
             filePath =>
             {
                 try
                 {
-                    var text = File.ReadAllText(filePath);
-                    var relativePath = Path.GetRelativePath(rootPath, filePath).Replace('\\', '/');
-                    var sourceFile = new SourceFile(relativePath, "yaml", [], [], text);
-                    var doc = YamlParser.Parse(text);
+                    string text = File.ReadAllText(filePath);
+                    string relativePath = Path.GetRelativePath(rootPath, filePath).Replace('\\', '/');
+                    SourceFile sourceFile = new SourceFile(relativePath, "yaml", [], [], text);
+                    YamlParser.YamlParseResult doc = YamlParser.Parse(text);
                     ExecutionStatistics.RecordInputFile(filePath);
                     parsed.Add((sourceFile, doc));
                 }
                 catch { }
             });
 
-        var sorted = parsed.OrderBy(p => p.File.Path, StringComparer.Ordinal).ToList();
+        List<(SourceFile File, YamlParser.YamlParseResult Doc)> sorted = parsed.OrderBy(p => p.File.Path, StringComparer.Ordinal).ToList();
 
-        var entries = new List<object>();
-        var documents = new List<object>();
-        foreach (var (file, doc) in sorted)
+        List<object> entries = new List<object>();
+        List<object> documents = new List<object>();
+        foreach ((SourceFile? file, YamlParser.YamlParseResult? doc) in sorted)
         {
             entries.AddRange(doc.Entries.Select(e => (object)(e with { File = file })));
             documents.AddRange(doc.Documents.Select(d => (object)(d with { File = file })));
         }
 
-        var collections = new Dictionary<string, List<object>>(StringComparer.Ordinal);
-        var requested = query.Collection;
-        if (requested is null || requested == "Entries") collections["Entries"] = entries;
-        if (requested is null || requested == "Documents") collections["Documents"] = documents;
+        Dictionary<string, List<object>> collections = new Dictionary<string, List<object>>(StringComparer.Ordinal);
+        string? requested = query.Collection;
+        if (requested is null || requested == "Entries")
+        {
+            collections["Entries"] = entries;
+        }
+
+        if (requested is null || requested == "Documents")
+        {
+            collections["Documents"] = documents;
+        }
+
         return ApplyQueryFilters(query, collections);
     }
 
@@ -115,15 +130,21 @@ public sealed class YamlProvider : DataProvider
     {
         try
         {
-            foreach (var file in Directory.GetFiles(dir))
+            foreach (string file in Directory.GetFiles(dir))
             {
                 if (YamlExtensions.Contains(Path.GetExtension(file)))
+                {
                     result.Add(file);
+                }
             }
-            foreach (var subDir in Directory.GetDirectories(dir))
+            foreach (string subDir in Directory.GetDirectories(dir))
             {
-                var dirName = Path.GetFileName(subDir);
-                if (excluded is not null && excluded.Contains(dirName)) continue;
+                string dirName = Path.GetFileName(subDir);
+                if (excluded is not null && excluded.Contains(dirName))
+                {
+                    continue;
+                }
+
                 CollectYamlFiles(subDir, excluded, result);
             }
         }

@@ -1,5 +1,8 @@
+// Infers generic type arguments from function inputs and declared type constraints.
+
 namespace Cop.Lang.Interpreter;
 
+using System.Text;
 using Cop.Lang.Ast;
 
 /// <summary>
@@ -22,13 +25,17 @@ public static class GenericInference
     {
         // Check return type
         if (decl.ReturnType is not null && ContainsTypeVariable(decl.ReturnType))
+        {
             return true;
+        }
 
         // Check parameters
-        foreach (var param in decl.Params)
+        foreach (Parameter param in decl.Params)
         {
             if (param.Type is not null && ContainsTypeVariable(param.Type))
+            {
                 return true;
+            }
         }
 
         return false;
@@ -40,14 +47,17 @@ public static class GenericInference
     /// </summary>
     public static Dictionary<string, string> InferBindings(FunctionDecl decl, IReadOnlyList<CopValue> args)
     {
-        var bindings = new Dictionary<string, string>();
+        Dictionary<string, string> bindings = new Dictionary<string, string>();
 
         for (int i = 0; i < decl.Params.Count && i < args.Count; i++)
         {
-            var param = decl.Params[i];
-            if (param.Type is null) continue;
+            Parameter param = decl.Params[i];
+            if (param.Type is null)
+            {
+                continue;
+            }
 
-            var arg = ForceValue(args[i]);
+            CopValue arg = ForceValue(args[i]);
             UnifyType(param.Type, arg, bindings);
         }
 
@@ -60,18 +70,25 @@ public static class GenericInference
     /// </summary>
     public static string? ValidateConstraints(FunctionDecl decl, Dictionary<string, string> bindings, TypeRegistry registry)
     {
-        foreach (var param in decl.Params)
+        foreach (Parameter param in decl.Params)
         {
-            if (param.Type is null || param.Type.Constraint is null) continue;
+            if (param.Type is null || param.Type.Constraint is null)
+            {
+                continue;
+            }
 
-            var typeVar = param.Type.Name;
-            var constraint = param.Type.Constraint;
+            string typeVar = param.Type.Name;
+            string constraint = param.Type.Constraint;
 
-            if (!bindings.TryGetValue(typeVar, out var concreteType))
+            if (!bindings.TryGetValue(typeVar, out string? concreteType))
+            {
                 continue; // unresolved — can't check
+            }
 
             if (!registry.ConformsTo(concreteType, constraint))
+            {
                 return $"'{decl.Name}' requires {typeVar} to satisfy '{constraint}', but '{concreteType}' does not declare conformance to '{constraint}'";
+            }
         }
 
         return null;
@@ -86,18 +103,25 @@ public static class GenericInference
         if (typeRef.IsCollection)
         {
             // [T] → [int] if T=int
-            if (IsTypeVariable(typeRef.Name) && bindings.TryGetValue(typeRef.Name, out var bound))
+            if (IsTypeVariable(typeRef.Name) && bindings.TryGetValue(typeRef.Name, out string? bound))
+            {
                 return new TypeRef(bound, true, typeRef.Line);
+            }
+
             return typeRef;
         }
 
         // Simple type variable: T → int
-        if (IsTypeVariable(typeRef.Name) && bindings.TryGetValue(typeRef.Name, out var boundType))
+        if (IsTypeVariable(typeRef.Name) && bindings.TryGetValue(typeRef.Name, out string? boundType))
+        {
             return new TypeRef(boundType, false, typeRef.Line);
+        }
 
         // Function type signature: (R, T) => R — substitute within the string representation
         if (typeRef.Name.Contains("=>"))
+        {
             return new TypeRef(SubstituteFunctionType(typeRef.Name, bindings), false, typeRef.Line);
+        }
 
         return typeRef;
     }
@@ -108,9 +132,12 @@ public static class GenericInference
     /// </summary>
     public static string? ResolveReturnType(FunctionDecl decl, IReadOnlyDictionary<string, string> bindings)
     {
-        if (decl.ReturnType is null) return null;
+        if (decl.ReturnType is null)
+        {
+            return null;
+        }
 
-        var resolved = SubstituteTypeRef(decl.ReturnType, bindings);
+        TypeRef resolved = SubstituteTypeRef(decl.ReturnType, bindings);
         return resolved.IsCollection ? $"[{resolved.Name}]" : resolved.Name;
     }
 
@@ -138,18 +165,22 @@ public static class GenericInference
     /// </summary>
     public static string GetCollectionElementType(CopValue collection)
     {
-        var items = GetFirstItem(collection);
+        CopValue? items = GetFirstItem(collection);
         return items is not null ? GetValueTypeName(items) : "object";
     }
 
     private static bool ContainsTypeVariable(TypeRef typeRef)
     {
         if (IsTypeVariable(typeRef.Name))
+        {
             return true;
+        }
 
         // Check function type signatures like (R, T) => R
         if (typeRef.Name.Contains("=>"))
+        {
             return ContainsFunctionTypeVariable(typeRef.Name);
+        }
 
         return false;
     }
@@ -166,7 +197,9 @@ public static class GenericInference
                 bool prevBoundary = i == 0 || !char.IsLetterOrDigit(signature[i - 1]);
                 bool nextBoundary = i == signature.Length - 1 || !char.IsLetterOrDigit(signature[i + 1]);
                 if (prevBoundary && nextBoundary)
+                {
                     return true;
+                }
             }
         }
         return false;
@@ -179,7 +212,7 @@ public static class GenericInference
             // [T] matched against a collection → infer T from element type
             if (IsTypeVariable(declaredType.Name))
             {
-                var elementType = GetCollectionElementType(actualValue);
+                string elementType = GetCollectionElementType(actualValue);
                 TryBind(declaredType.Name, elementType, bindings);
             }
             return;
@@ -188,7 +221,7 @@ public static class GenericInference
         // Simple type variable: T matched against a value
         if (IsTypeVariable(declaredType.Name))
         {
-            var typeName = GetValueTypeName(actualValue);
+            string typeName = GetValueTypeName(actualValue);
             TryBind(declaredType.Name, typeName, bindings);
             return;
         }
@@ -199,12 +232,14 @@ public static class GenericInference
 
     private static void TryBind(string typeVar, string concreteType, Dictionary<string, string> bindings)
     {
-        if (bindings.TryGetValue(typeVar, out var existing))
+        if (bindings.TryGetValue(typeVar, out string? existing))
         {
             // Already bound — check consistency (first binding wins if conflict)
             // If existing is "object" (from empty collection), allow refinement
             if (existing == "object" && concreteType != "object")
+            {
                 bindings[typeVar] = concreteType;
+            }
         }
         else
         {
@@ -215,8 +250,8 @@ public static class GenericInference
     private static string SubstituteFunctionType(string signature, IReadOnlyDictionary<string, string> bindings)
     {
         // Replace type variables in function signatures like "(R, T) => R"
-        var result = signature;
-        foreach (var (typeVar, concreteType) in bindings)
+        string result = signature;
+        foreach ((string? typeVar, string? concreteType) in bindings)
         {
             // Replace standalone type variable occurrences
             result = ReplaceTypeVariable(result, typeVar, concreteType);
@@ -227,7 +262,7 @@ public static class GenericInference
     private static string ReplaceTypeVariable(string text, string typeVar, string replacement)
     {
         // Replace single-char type variables at word boundaries
-        var result = new System.Text.StringBuilder(text.Length);
+        StringBuilder result = new System.Text.StringBuilder(text.Length);
         for (int i = 0; i < text.Length; i++)
         {
             if (text[i] == typeVar[0])
@@ -248,12 +283,16 @@ public static class GenericInference
     private static CopValue? GetFirstItem(CopValue collection)
     {
         if (collection is CopList list && list.Items.Count > 0)
+        {
             return ForceValue(list.Items[0]);
+        }
 
         if (collection is CopLazyCollection lazy)
         {
-            foreach (var item in lazy.Enumerate())
+            foreach (CopValue item in lazy.Enumerate())
+            {
                 return ForceValue(item);
+            }
         }
 
         return null;
@@ -262,7 +301,10 @@ public static class GenericInference
     private static CopValue ForceValue(CopValue value)
     {
         while (value is CopThunk thunk)
+        {
             value = thunk.Force();
+        }
+
         return value;
     }
 }

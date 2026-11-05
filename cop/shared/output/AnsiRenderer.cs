@@ -1,3 +1,7 @@
+// Converts styled text spans into terminal escape sequences.
+
+using System.Text;
+
 namespace Cop.Lang;
 
 /// <summary>
@@ -37,10 +41,12 @@ public static class AnsiRenderer
     public static string Render(RichString richString)
     {
         if (!richString.Spans.Any(s => s.HasAnnotations))
+        {
             return richString.ToPlainText();
+        }
 
-        var sb = new System.Text.StringBuilder();
-        foreach (var span in richString.Spans)
+        StringBuilder sb = new System.Text.StringBuilder();
+        foreach (TextSpan span in richString.Spans)
         {
             if (!span.HasAnnotations)
             {
@@ -49,7 +55,7 @@ public static class AnsiRenderer
             }
 
             bool hasCode = false;
-            if (span.Annotations!.TryGetValue("color", out var color))
+            if (span.Annotations!.TryGetValue("color", out string? color))
             {
                 string? cc;
                 if (string.Equals(color, "auto", StringComparison.OrdinalIgnoreCase))
@@ -68,14 +74,17 @@ public static class AnsiRenderer
                     hasCode = true;
                 }
             }
-            if (span.Annotations.TryGetValue("weight", out var weight) && WeightCodes.TryGetValue(weight, out var wc))
+            if (span.Annotations.TryGetValue("weight", out string? weight) && WeightCodes.TryGetValue(weight, out string? wc))
             {
                 sb.Append(wc);
                 hasCode = true;
             }
 
             sb.Append(span.Text);
-            if (hasCode) sb.Append(Reset);
+            if (hasCode)
+            {
+                sb.Append(Reset);
+            }
         }
         return sb.ToString();
     }

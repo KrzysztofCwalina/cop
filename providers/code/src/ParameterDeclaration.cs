@@ -1,3 +1,5 @@
+// Represents parameter types, optionality, and passing modes.
+
 namespace Cop.Providers.SourceModel;
 
 public record ParameterDeclaration(

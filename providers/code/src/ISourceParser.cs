@@ -1,3 +1,5 @@
+// Defines source-parser capabilities and cache identities.
+
 using Cop.Providers.SourceModel;
 
 namespace Cop.Providers.SourceParsers;

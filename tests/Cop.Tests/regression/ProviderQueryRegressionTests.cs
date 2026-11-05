@@ -93,8 +93,11 @@ public class ProviderQueryRegressionTests
             command MAIN = foreach {{expression}} => '{item.Name}'
             """);
         var diagnostics = new List<string>();
-        var result = Engine.Run(_root, _root,
-            additionalFeedPaths: [Path.Combine(RepoRoot, "packages")], diagLog: diagnostics.Add);
+        var result = Engine.Run(_root, _root, new EngineRunOptions
+        {
+            AdditionalFeedPaths = [Path.Combine(RepoRoot, "packages")],
+            DiagnosticLog = diagnostics.Add,
+        });
         Assert.That(result.Errors.Concat(result.ParseErrors), Is.Empty);
         Assert.That(result.Outputs.Select(o => o.Message), Is.EqualTo(new[] { "AlphaClient" }));
         Assert.That(diagnostics, Has.Some.Contains(Path.Combine(RepoRoot, "packages", "languages", "csharp")));
@@ -150,7 +153,10 @@ public class ProviderQueryRegressionTests
     {
         File.WriteAllText(Path.Combine(_root, "input.json"), """[{"Name":"Alpha"},{"Name":"Beta"}]""");
         File.WriteAllText(Path.Combine(_root, "main.cop"), "import json\n" + program);
-        var result = Engine.Run(_root, _root, additionalFeedPaths: [Path.Combine(RepoRoot, "packages")]);
+        var result = Engine.Run(_root, _root, new EngineRunOptions
+        {
+            AdditionalFeedPaths = [Path.Combine(RepoRoot, "packages")],
+        });
         Assert.That(result.Errors.Concat(result.ParseErrors), Is.Empty);
         return result;
     }

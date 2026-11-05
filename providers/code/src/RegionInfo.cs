@@ -1,3 +1,5 @@
+// Represents named source regions and content hashes.
+
 using System.Security.Cryptography;
 using System.Text;
 
@@ -11,8 +13,8 @@ public record RegionInfo(string Name, int StartLine, int EndLine, string Content
 
     private static string ComputeHash(string content)
     {
-        var normalized = content.ReplaceLineEndings("\n").Trim();
-        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(normalized));
+        string normalized = content.ReplaceLineEndings("\n").Trim();
+        byte[] bytes = SHA256.HashData(Encoding.UTF8.GetBytes(normalized));
         return Convert.ToHexStringLower(bytes);
     }
 }

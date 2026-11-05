@@ -1,3 +1,5 @@
+// Represents source lines, their classification, and attached comments.
+
 namespace Cop.Providers.SourceModel;
 
 public record LineInfo(string Text, int Number)
@@ -8,4 +10,5 @@ public record LineInfo(string Text, int Number)
     public string Source => $"{File?.Path}:{Number}";
     public string PreviousText { get; init; } = "";
     public string NextText { get; init; } = "";
+    public List<CommentInfo> Comments { get; init; } = [];
 }

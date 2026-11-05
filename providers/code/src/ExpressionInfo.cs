@@ -1,3 +1,5 @@
+// Represents parsed expression trees and decoded literals.
+
 namespace Cop.Providers.SourceModel;
 
 /// <summary>
@@ -8,6 +10,7 @@ public sealed record ExpressionInfo(string Kind)
 {
     public string? Name { get; init; }
     public string? StringValue { get; init; }
+    public bool? BooleanValue { get; init; }
     public ExpressionInfo? Target { get; init; }
     public List<ExpressionInfo> Children { get; init; } = [];
 }

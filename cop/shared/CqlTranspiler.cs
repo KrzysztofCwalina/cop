@@ -1,3 +1,5 @@
+// Translates supported Cop syntax trees into CodeQL query source.
+
 using System.Text;
 
 namespace Cop.Lang;
@@ -65,6 +67,9 @@ public class CqlTranspiler
     private readonly Dictionary<string, List<FunctionDefinition>> _allFunctions;
     private readonly List<string> _errors = new();
 
+    /// <summary>
+    /// Creates a transpiler with predicates and functions from the main file and imports.
+    /// </summary>
     public CqlTranspiler(ScriptFile mainFile, List<ScriptFile> importedFiles)
     {
         _mainFile = mainFile;
@@ -72,11 +77,11 @@ public class CqlTranspiler
 
         // Build lookup of all predicates (local + imported)
         _allPredicates = new Dictionary<string, List<PredicateDefinition>>(StringComparer.OrdinalIgnoreCase);
-        foreach (var file in importedFiles.Append(mainFile))
+        foreach (ScriptFile? file in importedFiles.Append(mainFile))
         {
-            foreach (var pred in file.Predicates)
+            foreach (PredicateDefinition pred in file.Predicates)
             {
-                if (!_allPredicates.TryGetValue(pred.Name, out var list))
+                if (!_allPredicates.TryGetValue(pred.Name, out List<PredicateDefinition>? list))
                 {
                     list = new List<PredicateDefinition>();
                     _allPredicates[pred.Name] = list;
@@ -87,11 +92,11 @@ public class CqlTranspiler
 
         // Build lookup of all functions (local + imported)
         _allFunctions = new Dictionary<string, List<FunctionDefinition>>(StringComparer.OrdinalIgnoreCase);
-        foreach (var file in importedFiles.Append(mainFile))
+        foreach (ScriptFile? file in importedFiles.Append(mainFile))
         {
-            foreach (var func in file.Functions)
+            foreach (FunctionDefinition func in file.Functions)
             {
-                if (!_allFunctions.TryGetValue(func.Name, out var list))
+                if (!_allFunctions.TryGetValue(func.Name, out List<FunctionDefinition>? list))
                 {
                     list = new List<FunctionDefinition>();
                     _allFunctions[func.Name] = list;
@@ -107,53 +112,93 @@ public class CqlTranspiler
     /// </summary>
     public CqlTranspileResult Transpile()
     {
-        var outputs = new List<CqlQueryFile>();
+        List<CqlQueryFile> outputs = new List<CqlQueryFile>();
         _errors.Clear();
 
         // Phase 1: Validate — scan all collection references for unsupported providers
         ValidateCollectionReferences();
         if (_errors.Count > 0)
+        {
             return new CqlTranspileResult(outputs, _errors.ToList());
+        }
 
         // Phase 2: Transpile each exported let binding that looks like a check
-        foreach (var let in _mainFile.LetDeclarations)
+        foreach (LetDeclaration let in _mainFile.LetDeclarations)
         {
-            if (!let.IsExported) continue;
-            if (let.IsValueBinding) continue;
+            if (!let.IsExported)
+            {
+                continue;
+            }
 
-            var query = TryTranspileLet(let);
+            if (let.IsValueBinding)
+            {
+                continue;
+            }
+
+            CqlQueryFile? query = TryTranspileLet(let);
             if (query is not null)
+            {
                 outputs.Add(query);
+            }
         }
 
         // Phase 3: Transpile exported commands that reference collection-based checks
-        foreach (var cmd in _mainFile.Commands)
+        foreach (CommandBlock cmd in _mainFile.Commands)
         {
-            if (!cmd.IsExported) continue;
-            if (cmd.IsCommand) continue; // skip RUN commands
-            if (string.IsNullOrEmpty(cmd.Collection)) continue;
+            if (!cmd.IsExported)
+            {
+                continue;
+            }
 
-            var query = TryTranspileCommand(cmd);
+            if (cmd.IsCommand)
+            {
+                continue; // skip RUN commands
+            }
+
+            if (string.IsNullOrEmpty(cmd.Collection))
+            {
+                continue;
+            }
+
+            CqlQueryFile? query = TryTranspileCommand(cmd);
             if (query is not null)
+            {
                 outputs.Add(query);
+            }
         }
 
         // Phase 4: Transpile commands that delegate to an action like CHECK(letRef)
         // Pattern: command CHECK-TODOS = CHECK(todos) where CHECK is an imported command and todos is a local let
-        foreach (var cmd in _mainFile.Commands)
+        foreach (CommandBlock cmd in _mainFile.Commands)
         {
-            if (!cmd.IsCommand) continue;
-            if (string.IsNullOrEmpty(cmd.ActionName)) continue;
-            if (string.IsNullOrEmpty(cmd.Collection)) continue;
+            if (!cmd.IsCommand)
+            {
+                continue;
+            }
+
+            if (string.IsNullOrEmpty(cmd.ActionName))
+            {
+                continue;
+            }
+
+            if (string.IsNullOrEmpty(cmd.Collection))
+            {
+                continue;
+            }
 
             // See if the collection name references a local let binding
-            var let = _mainFile.LetDeclarations.FirstOrDefault(l =>
+            LetDeclaration? let = _mainFile.LetDeclarations.FirstOrDefault(l =>
                 string.Equals(l.Name, cmd.Collection, StringComparison.OrdinalIgnoreCase));
-            if (let is null || let.IsValueBinding) continue;
+            if (let is null || let.IsValueBinding)
+            {
+                continue;
+            }
 
-            var query = TryTranspileLet(let, overrideName: cmd.Name, overrideDoc: cmd.DocComment ?? let.DocComment);
+            CqlQueryFile? query = TryTranspileLet(let, overrideName: cmd.Name, overrideDoc: cmd.DocComment ?? let.DocComment);
             if (query is not null)
+            {
                 outputs.Add(query);
+            }
         }
 
         return new CqlTranspileResult(outputs, _errors.ToList());
@@ -161,21 +206,29 @@ public class CqlTranspiler
 
     private void ValidateCollectionReferences()
     {
-        var allLets = _mainFile.LetDeclarations;
-        foreach (var let in allLets)
+        List<LetDeclaration> allLets = _mainFile.LetDeclarations;
+        foreach (LetDeclaration let in allLets)
         {
-            if (let.IsValueBinding) continue;
-            var collName = NormalizeCollectionName(let.BaseCollection);
+            if (let.IsValueBinding)
+            {
+                continue;
+            }
+
+            string collName = NormalizeCollectionName(let.BaseCollection);
             if (!IsCodeCollection(collName))
             {
                 _errors.Add($"Error: Collection '{let.BaseCollection}' in let '{let.Name}' (line {let.Line}) cannot be transpiled to CodeQL. Only Code provider collections are supported.");
             }
         }
 
-        foreach (var cmd in _mainFile.Commands)
+        foreach (CommandBlock cmd in _mainFile.Commands)
         {
-            if (cmd.IsCommand || string.IsNullOrEmpty(cmd.Collection)) continue;
-            var collName = NormalizeCollectionName(cmd.Collection);
+            if (cmd.IsCommand || string.IsNullOrEmpty(cmd.Collection))
+            {
+                continue;
+            }
+
+            string collName = NormalizeCollectionName(cmd.Collection);
             if (!IsCodeCollection(collName))
             {
                 _errors.Add($"Error: Collection '{cmd.Collection}' in check '{cmd.Name}' (line {cmd.Line}) cannot be transpiled to CodeQL. Only Code provider collections are supported.");
@@ -191,15 +244,18 @@ public class CqlTranspiler
     private static string NormalizeCollectionName(string name)
     {
         // Strip namespace prefix: "Code.Types" → "Types", "csharp.Types" → "Types"
-        var dot = name.LastIndexOf('.');
+        int dot = name.LastIndexOf('.');
         if (dot >= 0)
+        {
             return name[(dot + 1)..];
+        }
+
         return name;
     }
 
     private CqlQueryFile? TryTranspileLet(LetDeclaration let, string? overrideName = null, string? overrideDoc = null)
     {
-        var collName = NormalizeCollectionName(let.BaseCollection);
+        string collName = NormalizeCollectionName(let.BaseCollection);
 
         if (UnsupportedCodeCollections.Contains(collName))
         {
@@ -211,9 +267,9 @@ public class CqlTranspiler
         string? language = null;
         string? severity = null;
         string? message = null;
-        var predicateFilters = new List<Expression>();
+        List<Expression> predicateFilters = new List<Expression>();
 
-        foreach (var filter in let.Filters)
+        foreach (Expression filter in let.Filters)
         {
             // Language filter: predicate "isCSharp", "isPython", "isJavaScript"
             if (filter is IdentifierExpr langId && IsLanguageFilter(langId.Name))
@@ -227,22 +283,29 @@ public class CqlTranspiler
             // transforms from imported packages not available at transpile time.
             if (filter is CallExpr { Target: null } fc)
             {
-                if (_allFunctions.TryGetValue(fc.Name, out var funcOverloads)
+                if (_allFunctions.TryGetValue(fc.Name, out List<FunctionDefinition>? funcOverloads)
                     && funcOverloads.Count > 0
                     && !string.IsNullOrEmpty(funcOverloads[0].ReturnType))
                 {
                     // Known function with return type — extract severity if available
-                    if (funcOverloads[0].FieldMappings.TryGetValue("Severity", out var sevExpr)
+                    if (funcOverloads[0].FieldMappings.TryGetValue("Severity", out Expression? sevExpr)
                         && sevExpr is LiteralExpr sevLit && sevLit.Value is string sevStr)
+                    {
                         severity = sevStr;
+                    }
+
                     if (fc.Args.Count > 0 && fc.Args[0] is LiteralExpr msgLit && msgLit.Value is string msgStr)
+                    {
                         message = msgStr;
+                    }
                 }
                 else if (!_allPredicates.ContainsKey(fc.Name))
                 {
                     // Unknown standalone call that isn't a predicate — treat as transform
                     if (fc.Args.Count > 0 && fc.Args[0] is LiteralExpr unknownMsgLit && unknownMsgLit.Value is string unknownMsg)
+                    {
                         message = unknownMsg;
+                    }
                 }
                 else
                 {
@@ -256,7 +319,7 @@ public class CqlTranspiler
         }
 
         // Determine the CodeQL base type
-        var (cqlType, cqlVar, extraWhere) = ResolveCollectionType(collName, predicateFilters);
+        (string? cqlType, string? cqlVar, string? extraWhere) = ResolveCollectionType(collName, predicateFilters);
         if (cqlType is null)
         {
             _errors.Add($"Error: Cannot determine CodeQL type for collection '{let.BaseCollection}' in let '{let.Name}' (line {let.Line}).");
@@ -264,13 +327,15 @@ public class CqlTranspiler
         }
 
         // Build where clauses from remaining predicate filters
-        var whereClauses = new List<string>();
+        List<string> whereClauses = new List<string>();
         if (extraWhere is not null)
-            whereClauses.Add(extraWhere);
-
-        foreach (var filter in predicateFilters)
         {
-            var clause = TryTranspileFilter(filter, cqlVar, collName);
+            whereClauses.Add(extraWhere);
+        }
+
+        foreach (Expression filter in predicateFilters)
+        {
+            string? clause = TryTranspileFilter(filter, cqlVar, collName);
             if (clause is null)
             {
                 _errors.Add($"Error: Cannot transpile filter in let '{let.Name}' (line {let.Line}): {QueryFingerprint.Serialize(filter)}");
@@ -280,10 +345,10 @@ public class CqlTranspiler
         }
 
         // Build the .ql file
-        var sb = new StringBuilder();
-        var effectiveName = overrideName ?? let.Name;
-        var queryName = SanitizeIdentifier(effectiveName);
-        var docComment = overrideDoc ?? let.DocComment ?? effectiveName;
+        StringBuilder sb = new StringBuilder();
+        string effectiveName = overrideName ?? let.Name;
+        string queryName = SanitizeIdentifier(effectiveName);
+        string docComment = overrideDoc ?? let.DocComment ?? effectiveName;
 
         // Metadata
         sb.AppendLine("/**");
@@ -291,13 +356,16 @@ public class CqlTranspiler
         sb.AppendLine($" * @description {docComment}");
         sb.AppendLine($" * @kind problem");
         if (severity is not null)
+        {
             sb.AppendLine($" * @problem.severity {severity}");
+        }
+
         sb.AppendLine($" * @id cop/{queryName}");
         sb.AppendLine(" */");
         sb.AppendLine();
 
         // Import
-        var langPack = language ?? "csharp"; // default to C# if no language filter
+        string langPack = language ?? "csharp"; // default to C# if no language filter
         sb.AppendLine($"import {langPack}");
         sb.AppendLine();
 
@@ -312,7 +380,7 @@ public class CqlTranspiler
         }
 
         // Select
-        var selectMsg = message is not null
+        string selectMsg = message is not null
             ? TranspileMessageTemplate(message, cqlVar)
             : $"\"{docComment}\"";
         sb.AppendLine($"select {cqlVar}, {selectMsg}");
@@ -323,7 +391,7 @@ public class CqlTranspiler
     private CqlQueryFile? TryTranspileCommand(CommandBlock cmd)
     {
         // Commands with collections are similar to let bindings
-        var collName = NormalizeCollectionName(cmd.Collection!);
+        string collName = NormalizeCollectionName(cmd.Collection!);
 
         if (UnsupportedCodeCollections.Contains(collName))
         {
@@ -332,9 +400,9 @@ public class CqlTranspiler
         }
 
         string? language = null;
-        var predicateFilters = new List<Expression>();
+        List<Expression> predicateFilters = new List<Expression>();
 
-        foreach (var filter in cmd.Filters)
+        foreach (Expression filter in cmd.Filters)
         {
             if (filter is IdentifierExpr langId && IsLanguageFilter(langId.Name))
             {
@@ -344,20 +412,22 @@ public class CqlTranspiler
             predicateFilters.Add(filter);
         }
 
-        var (cqlType, cqlVar, extraWhere) = ResolveCollectionType(collName, predicateFilters);
+        (string? cqlType, string? cqlVar, string? extraWhere) = ResolveCollectionType(collName, predicateFilters);
         if (cqlType is null)
         {
             _errors.Add($"Error: Cannot determine CodeQL type for collection '{cmd.Collection}' in check '{cmd.Name}' (line {cmd.Line}).");
             return null;
         }
 
-        var whereClauses = new List<string>();
+        List<string> whereClauses = new List<string>();
         if (extraWhere is not null)
-            whereClauses.Add(extraWhere);
-
-        foreach (var filter in predicateFilters)
         {
-            var clause = TryTranspileFilter(filter, cqlVar, collName);
+            whereClauses.Add(extraWhere);
+        }
+
+        foreach (Expression filter in predicateFilters)
+        {
+            string? clause = TryTranspileFilter(filter, cqlVar, collName);
             if (clause is null)
             {
                 _errors.Add($"Error: Cannot transpile filter in check '{cmd.Name}' (line {cmd.Line}): {QueryFingerprint.Serialize(filter)}");
@@ -366,8 +436,8 @@ public class CqlTranspiler
             whereClauses.Add(clause);
         }
 
-        var sb = new StringBuilder();
-        var queryName = SanitizeIdentifier(cmd.Name);
+        StringBuilder sb = new StringBuilder();
+        string queryName = SanitizeIdentifier(cmd.Name);
 
         sb.AppendLine("/**");
         sb.AppendLine($" * @name {cmd.DocComment ?? cmd.Name}");
@@ -385,7 +455,7 @@ public class CqlTranspiler
             sb.AppendLine(string.Join("\n  and ", whereClauses));
         }
 
-        var selectMsg = !string.IsNullOrEmpty(cmd.MessageTemplate)
+        string selectMsg = !string.IsNullOrEmpty(cmd.MessageTemplate)
             ? TranspileMessageTemplate(cmd.MessageTemplate, cqlVar)
             : $"\"{cmd.Name}\"";
         sb.AppendLine($"select {cqlVar}, {selectMsg}");
@@ -404,7 +474,7 @@ public class CqlTranspiler
         {
             case "Types":
                 // Look for Kind filter to narrow
-                var kindValue = ExtractKindFilter(filters);
+                string? kindValue = ExtractKindFilter(filters);
                 if (kindValue is not null)
                 {
                     return kindValue.ToLowerInvariant() switch
@@ -421,14 +491,16 @@ public class CqlTranspiler
 
             case "Statements" or "Calls":
                 // Must inspect Kind filter to determine CodeQL type
-                var stmtKind = ExtractKindFilter(filters);
-                if (stmtKind is not null && StatementKindToCqlClass.TryGetValue(stmtKind, out var cqlClass))
+                string? stmtKind = ExtractKindFilter(filters);
+                if (stmtKind is not null && StatementKindToCqlClass.TryGetValue(stmtKind, out string? cqlClass))
                 {
-                    var varName = cqlClass[0].ToString().ToLowerInvariant();
+                    string varName = cqlClass[0].ToString().ToLowerInvariant();
                     return (cqlClass, varName, null);
                 }
                 if (collName == "Calls")
+                {
                     return ("MethodAccess", "ma", null);
+                }
                 // Generic Statements without Kind narrowing — use Stmt
                 return ("Stmt", "s", null);
 
@@ -449,13 +521,13 @@ public class CqlTranspiler
     {
         for (int i = 0; i < filters.Count; i++)
         {
-            var f = filters[i];
+            Expression f = filters[i];
 
             // Binary: Kind == 'call' or Statement.Kind == 'call'
             if (f is BinaryExpr bin && bin.Operator == "==")
             {
-                var kindProp = ExtractPropertyName(bin.Left, "Kind") ?? ExtractPropertyName(bin.Right, "Kind");
-                var literal = (bin.Left as LiteralExpr)?.Value as string ?? (bin.Right as LiteralExpr)?.Value as string;
+                string? kindProp = ExtractPropertyName(bin.Left, "Kind") ?? ExtractPropertyName(bin.Right, "Kind");
+                string? literal = (bin.Left as LiteralExpr)?.Value as string ?? (bin.Right as LiteralExpr)?.Value as string;
                 if (kindProp is not null && literal is not null)
                 {
                     filters.RemoveAt(i);
@@ -475,7 +547,7 @@ public class CqlTranspiler
             // Narrowing predicate: isCall, isDeclaration
             if (f is IdentifierExpr id)
             {
-                var narrowKind = id.Name switch
+                string? narrowKind = id.Name switch
                 {
                     "isCall" => "call",
                     "isDeclaration" => "declaration",
@@ -488,9 +560,9 @@ public class CqlTranspiler
                 }
 
                 // Check if it's a user predicate whose body contains a Kind check
-                if (_allPredicates.TryGetValue(id.Name, out var predDefs))
+                if (_allPredicates.TryGetValue(id.Name, out List<PredicateDefinition>? predDefs))
                 {
-                    var kindFromPred = ExtractKindFromPredicateBody(predDefs[0].Body);
+                    string? kindFromPred = ExtractKindFromPredicateBody(predDefs[0].Body);
                     if (kindFromPred is not null)
                     {
                         // Don't remove the filter — the predicate has other conditions too.
@@ -512,10 +584,12 @@ public class CqlTranspiler
         // Direct: Kind == 'call' or Statement.Kind == 'call'
         if (body is BinaryExpr bin && bin.Operator == "==")
         {
-            var kindProp = ExtractPropertyName(bin.Left, "Kind") ?? ExtractPropertyName(bin.Right, "Kind");
-            var literal = (bin.Left as LiteralExpr)?.Value as string ?? (bin.Right as LiteralExpr)?.Value as string;
+            string? kindProp = ExtractPropertyName(bin.Left, "Kind") ?? ExtractPropertyName(bin.Right, "Kind");
+            string? literal = (bin.Left as LiteralExpr)?.Value as string ?? (bin.Right as LiteralExpr)?.Value as string;
             if (kindProp is not null && literal is not null)
+            {
                 return literal;
+            }
         }
 
         // AND chain: Kind == 'call' && other conditions
@@ -531,9 +605,15 @@ public class CqlTranspiler
     private static string? ExtractPropertyName(Expression expr, string expectedProp)
     {
         if (expr is IdentifierExpr id && string.Equals(id.Name, expectedProp, StringComparison.OrdinalIgnoreCase))
+        {
             return id.Name;
+        }
+
         if (expr is MemberAccessExpr ma && string.Equals(ma.Member, expectedProp, StringComparison.OrdinalIgnoreCase))
+        {
             return ma.Member;
+        }
+
         return null;
     }
 
@@ -569,7 +649,7 @@ public class CqlTranspiler
 
             // Negation of complex expression
             case UnaryExpr { Operator: "!" or "not" } un:
-                var inner = TryTranspileFilter(un.Operand, cqlVar, collName);
+                string? inner = TryTranspileFilter(un.Operand, cqlVar, collName);
                 return inner is not null ? $"not ({inner})" : null;
 
             default:
@@ -580,16 +660,19 @@ public class CqlTranspiler
     private string? TryTranspileIdentifier(string name, bool negated, string cqlVar, string collName)
     {
         // Check if it's a known user predicate
-        if (_allPredicates.TryGetValue(name, out var predDefs))
+        if (_allPredicates.TryGetValue(name, out List<PredicateDefinition>? predDefs))
         {
-            var inlined = TryInlinePredicateAsCql(predDefs[0], cqlVar, collName);
+            string? inlined = TryInlinePredicateAsCql(predDefs[0], cqlVar, collName);
             if (inlined is not null)
+            {
                 return negated ? $"not ({inlined})" : inlined;
+            }
+
             return null;
         }
 
         // Bool property on the type (e.g., Documented, Generic)
-        var accessor = GetPropertyAccessor(name, cqlVar, collName);
+        string? accessor = GetPropertyAccessor(name, cqlVar, collName);
         if (accessor is not null)
         {
             return negated ? $"not {accessor}" : accessor;
@@ -601,10 +684,13 @@ public class CqlTranspiler
     private string? TryTranspilePredicateCall(CallExpr pc, string cqlVar, string collName)
     {
         // Target.PredicateName(args) — target is property reference
-        var propName = GetTargetPropertyName(pc.Target!);
-        if (propName is null) return null;
+        string? propName = GetTargetPropertyName(pc.Target!);
+        if (propName is null)
+        {
+            return null;
+        }
 
-        var prefix = pc.Negated ? "not " : "";
+        string prefix = pc.Negated ? "not " : "";
 
         // Modifier flags: Modifiers:isSet(Public)
         if (propName == "Modifiers" && pc.Name is "isSet" or "isClear")
@@ -617,8 +703,11 @@ public class CqlTranspiler
         if (pc.Name == "contains" && pc.Args.Count == 1 && pc.Args[0] is LiteralExpr containsLit && containsLit.Value is string containsVal)
         {
             // Try as collection first
-            var collResult = TryTranspileCollectionContains(propName, containsVal, cqlVar, collName, pc.Negated);
-            if (collResult is not null) return collResult;
+            string? collResult = TryTranspileCollectionContains(propName, containsVal, cqlVar, collName, pc.Negated);
+            if (collResult is not null)
+            {
+                return collResult;
+            }
             // Fall through to string contains if not a collection
         }
 
@@ -630,10 +719,13 @@ public class CqlTranspiler
         // String operations: Name:startsWith('X')
         if (pc.Args.Count == 1 && pc.Args[0] is LiteralExpr lit && lit.Value is string strVal)
         {
-            var accessor = GetPropertyAccessor(propName, cqlVar, collName);
-            if (accessor is null) return null;
+            string? accessor = GetPropertyAccessor(propName, cqlVar, collName);
+            if (accessor is null)
+            {
+                return null;
+            }
 
-            var result = pc.Name switch
+            string? result = pc.Name switch
             {
                 "startsWith" or "sw" => $"{accessor}.toLowerCase().matches(\"{EscapeCqlString(strVal.ToLowerInvariant())}%\")",
                 "endsWith" or "ew" => $"{accessor}.toLowerCase().matches(\"%{EscapeCqlString(strVal.ToLowerInvariant())}\")",
@@ -642,18 +734,26 @@ public class CqlTranspiler
                 "matches" or "rx" => $"{accessor}.regexpMatch(\"{EscapeCqlRegex(strVal)}\")",
                 _ => null
             };
-            if (result is null) return null;
+            if (result is null)
+            {
+                return null;
+            }
+
             return prefix + result;
         }
 
         // Numeric operations: Size:greaterThan(100)
         if (pc.Args.Count == 1 && pc.Args[0] is LiteralExpr numLit && numLit.Value is int or long or double)
         {
-            var accessor = GetPropertyAccessor(propName, cqlVar, collName);
-            if (accessor is null) return null;
-            var numStr = numLit.Value.ToString();
+            string? accessor = GetPropertyAccessor(propName, cqlVar, collName);
+            if (accessor is null)
+            {
+                return null;
+            }
 
-            var result = pc.Name switch
+            string? numStr = numLit.Value.ToString();
+
+            string? result = pc.Name switch
             {
                 "greaterThan" or "gt" => $"{accessor} > {numStr}",
                 "lessThan" or "lt" => $"{accessor} < {numStr}",
@@ -662,24 +762,34 @@ public class CqlTranspiler
                 "equals" or "eq" => $"{accessor} = {numStr}",
                 _ => null
             };
-            if (result is null) return null;
+            if (result is null)
+            {
+                return null;
+            }
+
             return prefix + result;
         }
 
         // List-argument predicates: Extension:in(['.cs', '.vb'])
         if (pc.Name == "in" && pc.Args.Count == 1 && pc.Args[0] is ListLiteralExpr listLit)
         {
-            var accessor = GetPropertyAccessor(propName, cqlVar, collName);
-            if (accessor is null) return null;
+            string? accessor = GetPropertyAccessor(propName, cqlVar, collName);
+            if (accessor is null)
+            {
+                return null;
+            }
 
-            var values = new List<string>();
-            foreach (var elem in listLit.Elements)
+            List<string> values = new List<string>();
+            foreach (Expression elem in listLit.Elements)
             {
                 if (elem is not LiteralExpr elemLit || elemLit.Value is not string sv)
+                {
                     return null;
+                }
+
                 values.Add($"{accessor}.toLowerCase() = \"{EscapeCqlString(sv.ToLowerInvariant())}\"");
             }
-            var disj = $"({string.Join(" or ", values)})";
+            string disj = $"({string.Join(" or ", values)})";
             return pc.Negated ? $"not {disj}" : disj;
         }
 
@@ -688,7 +798,10 @@ public class CqlTranspiler
 
     private string? TryTranspileModifierCheck(CallExpr pc, string cqlVar, string collName)
     {
-        if (pc.Args.Count != 1) return null;
+        if (pc.Args.Count != 1)
+        {
+            return null;
+        }
 
         // The argument is the flag name (identifier or literal)
         string? flagName = pc.Args[0] switch
@@ -699,14 +812,21 @@ public class CqlTranspiler
             _ => null
         };
 
-        if (flagName is null || !ModifierToCqlPredicate.TryGetValue(flagName, out var cqlPred))
+        if (flagName is null || !ModifierToCqlPredicate.TryGetValue(flagName, out string? cqlPred))
+        {
             return null;
+        }
 
-        var result = $"{cqlVar}.{cqlPred}()";
+        string result = $"{cqlVar}.{cqlPred}()";
         if (pc.Name == "isClear" || pc.Negated)
+        {
             result = $"not {cqlVar}.{cqlPred}()";
+        }
+
         if (pc.Name == "isClear" && pc.Negated)
+        {
             result = $"{cqlVar}.{cqlPred}()"; // double negation
+        }
 
         return result;
     }
@@ -716,38 +836,52 @@ public class CqlTranspiler
         // Logical AND/OR
         if (bin.Operator == "&&")
         {
-            var left = TryTranspileFilter(bin.Left, cqlVar, collName);
-            var right = TryTranspileFilter(bin.Right, cqlVar, collName);
-            if (left is null || right is null) return null;
+            string? left = TryTranspileFilter(bin.Left, cqlVar, collName);
+            string? right = TryTranspileFilter(bin.Right, cqlVar, collName);
+            if (left is null || right is null)
+            {
+                return null;
+            }
+
             return $"({left})\n  and ({right})";
         }
 
         if (bin.Operator == "||")
         {
-            var left = TryTranspileFilter(bin.Left, cqlVar, collName);
-            var right = TryTranspileFilter(bin.Right, cqlVar, collName);
-            if (left is null || right is null) return null;
+            string? left = TryTranspileFilter(bin.Left, cqlVar, collName);
+            string? right = TryTranspileFilter(bin.Right, cqlVar, collName);
+            if (left is null || right is null)
+            {
+                return null;
+            }
+
             return $"({left})\n  or ({right})";
         }
 
         // Property comparison: Name == 'Foo', Line > 10
-        var (propName, op, literal) = ExtractComparisonParts(bin, cqlVar);
-        if (propName is null || literal is null) return null;
+        (string? propName, string? op, object? literal) = ExtractComparisonParts(bin, cqlVar);
+        if (propName is null || literal is null)
+        {
+            return null;
+        }
 
         // Special handling: Kind == 'value' → CodeQL instanceof
         if (string.Equals(propName, "Kind", StringComparison.OrdinalIgnoreCase)
             && op == "==" && literal is string kindVal
-            && StatementKindToCqlClass.TryGetValue(kindVal, out var cqlClass))
+            && StatementKindToCqlClass.TryGetValue(kindVal, out string? cqlClass))
         {
             return $"{cqlVar} instanceof {cqlClass}";
         }
 
-        var accessor = GetPropertyAccessor(propName, cqlVar, collName);
-        if (accessor is null) return null;
+        string? accessor = GetPropertyAccessor(propName, cqlVar, collName);
+        if (accessor is null)
+        {
+            return null;
+        }
 
         if (literal is string strLit)
         {
-            var cqlOp = op switch
+            string? cqlOp = op switch
             {
                 "==" => $"{accessor}.toLowerCase() = \"{EscapeCqlString(strLit.ToLowerInvariant())}\"",
                 "!=" => $"not {accessor}.toLowerCase() = \"{EscapeCqlString(strLit.ToLowerInvariant())}\"",
@@ -758,7 +892,7 @@ public class CqlTranspiler
 
         if (literal is int or long or double or float)
         {
-            var numStr = literal.ToString();
+            string? numStr = literal.ToString();
             return op switch
             {
                 "==" => $"{accessor} = {numStr}",
@@ -789,15 +923,17 @@ public class CqlTranspiler
     private static (string? PropName, string Op, object? Literal) ExtractComparisonParts(BinaryExpr bin, string cqlVar)
     {
         // Left is property, right is literal
-        var propName = GetTargetPropertyName(bin.Left);
+        string? propName = GetTargetPropertyName(bin.Left);
         if (propName is not null && bin.Right is LiteralExpr rightLit)
+        {
             return (propName, bin.Operator, rightLit.Value);
+        }
 
         // Right is property, left is literal — flip operator
         propName = GetTargetPropertyName(bin.Right);
         if (propName is not null && bin.Left is LiteralExpr leftLit)
         {
-            var flipped = bin.Operator switch
+            string flipped = bin.Operator switch
             {
                 ">" => "<",
                 "<" => ">",
@@ -825,25 +961,31 @@ public class CqlTranspiler
         // Keywords:contains('X') → similar exists pattern
         // MethodNames:contains('X') → exists(Method m | m = t.getAMethod() | m.getName().toLowerCase() = "x")
 
-        var accessor = GetCollectionAccessor(propName, cqlVar, collName);
-        if (accessor is null) return null;
+        CollectionAccessorInfo? accessor = GetCollectionAccessor(propName, cqlVar, collName);
+        if (accessor is null)
+        {
+            return null;
+        }
 
-        var lowerVal = EscapeCqlString(value.ToLowerInvariant());
-        var result = $"exists({accessor.ElementType} _elem | _elem = {accessor.Accessor} | _elem.toLowerCase() = \"{lowerVal}\")";
+        string lowerVal = EscapeCqlString(value.ToLowerInvariant());
+        string result = $"exists({accessor.ElementType} _elem | _elem = {accessor.Accessor} | _elem.toLowerCase() = \"{lowerVal}\")";
         return negated ? $"not " + result : result;
     }
 
     private string? TryTranspileCollectionAny(string propName, Expression predExpr, string cqlVar, string collName, bool negated)
     {
         // Parameters:any(hasXxx) → exists(Parameter p | p = m.getAParameter() | hasXxx_cql(p))
-        var accessor = GetCollectionAccessor(propName, cqlVar, collName);
-        if (accessor is null) return null;
+        CollectionAccessorInfo? accessor = GetCollectionAccessor(propName, cqlVar, collName);
+        if (accessor is null)
+        {
+            return null;
+        }
 
-        var elemVar = "_" + accessor.ElementType.ToLowerInvariant()[0];
+        string elemVar = "_" + accessor.ElementType.ToLowerInvariant()[0];
 
         // The predExpr is either a predicate name or an inline expression
         string? innerClause;
-        if (predExpr is IdentifierExpr predId && _allPredicates.TryGetValue(predId.Name, out var predDefs))
+        if (predExpr is IdentifierExpr predId && _allPredicates.TryGetValue(predId.Name, out List<PredicateDefinition>? predDefs))
         {
             innerClause = TryInlinePredicateAsCql(predDefs[0], elemVar, propName);
         }
@@ -852,9 +994,12 @@ public class CqlTranspiler
             innerClause = TryTranspileFilter(predExpr, elemVar, propName);
         }
 
-        if (innerClause is null) return null;
+        if (innerClause is null)
+        {
+            return null;
+        }
 
-        var result = $"exists({accessor.ElementType} {elemVar} | {elemVar} = {accessor.Accessor} | {innerClause})";
+        string result = $"exists({accessor.ElementType} {elemVar} | {elemVar} = {accessor.Accessor} | {innerClause})";
         return negated ? $"not " + result : result;
     }
 
@@ -864,9 +1009,11 @@ public class CqlTranspiler
     private static string? GetPropertyAccessor(string propName, string cqlVar, string collName)
     {
         // Normalize: if propName is "Statement.MemberName", extract "MemberName"
-        var dotIdx = propName.IndexOf('.');
+        int dotIdx = propName.IndexOf('.');
         if (dotIdx >= 0)
+        {
             propName = propName[(dotIdx + 1)..];
+        }
 
         return propName switch
         {
@@ -946,15 +1093,15 @@ public class CqlTranspiler
     /// </summary>
     private string TranspileMessageTemplate(string template, string cqlVar)
     {
-        var sb = new StringBuilder();
-        var i = 0;
-        var parts = new List<string>();
+        StringBuilder sb = new StringBuilder();
+        int i = 0;
+        List<string> parts = new List<string>();
 
         while (i < template.Length)
         {
             if (template[i] == '{')
             {
-                var end = template.IndexOf('}', i);
+                int end = template.IndexOf('}', i);
                 if (end < 0)
                 {
                     sb.Append(template[i..]);
@@ -968,15 +1115,17 @@ public class CqlTranspiler
                     sb.Clear();
                 }
 
-                var placeholder = template[(i + 1)..end];
+                string placeholder = template[(i + 1)..end];
                 // Strip style annotation: {text@style} → text
-                var atIdx = placeholder.IndexOf('@');
+                int atIdx = placeholder.IndexOf('@');
                 if (atIdx >= 0)
+                {
                     placeholder = placeholder[..atIdx];
+                }
 
                 // Resolve placeholder to CodeQL expression
                 // Common: item.Name, item.File.Path, item.Line
-                var cqlExpr = ResolvePlaceholder(placeholder, cqlVar);
+                string cqlExpr = ResolvePlaceholder(placeholder, cqlVar);
                 parts.Add(cqlExpr);
 
                 i = end + 1;
@@ -989,12 +1138,19 @@ public class CqlTranspiler
         }
 
         if (sb.Length > 0)
+        {
             parts.Add($"\"{EscapeCqlString(sb.ToString())}\"");
+        }
 
         if (parts.Count == 0)
+        {
             return "\"\"";
+        }
+
         if (parts.Count == 1)
+        {
             return parts[0];
+        }
 
         return string.Join(" + ", parts);
     }
@@ -1003,7 +1159,9 @@ public class CqlTranspiler
     {
         // Strip "item." prefix
         if (placeholder.StartsWith("item.", StringComparison.OrdinalIgnoreCase))
+        {
             placeholder = placeholder[5..];
+        }
 
         // Chain: File.Path → cqlVar.getFile().getRelativePath()
         return placeholder switch
@@ -1057,16 +1215,3 @@ public class CqlTranspiler
         return pattern.Replace("\\", "\\\\").Replace("\"", "\\\"");
     }
 }
-
-/// <summary>
-/// Result of a CodeQL transpilation.
-/// </summary>
-public record CqlTranspileResult(List<CqlQueryFile> Files, List<string> Errors)
-{
-    public bool HasErrors => Errors.Count > 0;
-}
-
-/// <summary>
-/// A single generated CodeQL query file.
-/// </summary>
-public record CqlQueryFile(string FileName, string Content);

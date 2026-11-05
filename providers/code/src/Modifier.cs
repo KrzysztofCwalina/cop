@@ -1,3 +1,5 @@
+// Defines language-independent declaration modifiers.
+
 namespace Cop.Providers.SourceModel;
 
 [Flags]

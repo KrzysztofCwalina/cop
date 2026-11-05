@@ -1,3 +1,5 @@
+// Defines providers that expose named sinks for output values.
+
 namespace Cop.Core;
 
 /// <summary>
@@ -41,7 +43,7 @@ public abstract class SinkProvider
     /// </summary>
     public override string ToString()
     {
-        var name = GetType().Name;
+        string name = GetType().Name;
         return name.EndsWith("Sink", StringComparison.Ordinal)
             ? name[..^"Sink".Length]
             : name;

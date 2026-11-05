@@ -1,3 +1,5 @@
+// Represents callable declarations, signatures, and statement bodies.
+
 namespace Cop.Providers.SourceModel;
 
 public record MethodDeclaration(
@@ -8,6 +10,9 @@ public record MethodDeclaration(
     List<ParameterDeclaration> Parameters,
     int Line)
 {
+    /// <summary>Parsed callable category; ordinary method declarations use "method".</summary>
+    public string Kind { get; init; } = "method";
+
     public string? ReceiverType { get; init; }
     public List<string> TypeParameters { get; init; } = [];
     public int? Column { get; init; }

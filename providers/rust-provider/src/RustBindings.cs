@@ -1,3 +1,5 @@
+// Exposes Rust-specific declaration and statement facts through runtime accessors.
+
 using Cop.Core;
 using Cop.Providers.SourceModel;
 
@@ -12,16 +14,19 @@ namespace Cop.Providers;
 /// </summary>
 public static class RustBindings
 {
+    /// <summary>
+    /// Extends shared bindings with Rust-specific source-model accessors.
+    /// </summary>
     public static RuntimeBindings Build()
     {
-        var bindings = CodeBindings.Build();
+        RuntimeBindings bindings = CodeBindings.Build();
 
         // Only Rust emits RustTypeDeclaration, so this mapping never affects other languages.
         bindings.ClrTypeMappings[typeof(RustTypeDeclaration)] = "RustType";
 
         // RustType accessors = all base Type accessors (which cast to the TypeDeclaration base,
         // so they work on the subclass too) + the Rust-only fields.
-        var rustAccessors = new Dictionary<string, Func<object, object?>>(bindings.Accessors["Type"])
+        Dictionary<string, Func<object, object?>> rustAccessors = new Dictionary<string, Func<object, object?>>(bindings.Accessors["Type"])
         {
             ["IsTrait"] = o => (object)((RustTypeDeclaration)o).IsTrait,
             ["IsImpl"] = o => (object)((RustTypeDeclaration)o).IsImpl,
@@ -34,7 +39,7 @@ public static class RustBindings
         bindings.Accessors["RustType"] = rustAccessors;
 
         bindings.ClrTypeMappings[typeof(RustMethodDeclaration)] = "RustMethod";
-        var rustMethodAccessors = new Dictionary<string, Func<object, object?>>(bindings.Accessors["Method"])
+        Dictionary<string, Func<object, object?>> rustMethodAccessors = new Dictionary<string, Func<object, object?>>(bindings.Accessors["Method"])
         {
             ["IsUnsafe"] = o => (object)((RustMethodDeclaration)o).IsUnsafe,
             ["IsConst"] = o => (object)((RustMethodDeclaration)o).IsConst,
@@ -43,7 +48,7 @@ public static class RustBindings
         bindings.Accessors["RustMethod"] = rustMethodAccessors;
 
         bindings.ClrTypeMappings[typeof(RustStatementInfo)] = "RustStatement";
-        var rustStatementAccessors = new Dictionary<string, Func<object, object?>>(bindings.Accessors["Statement"])
+        Dictionary<string, Func<object, object?>> rustStatementAccessors = new Dictionary<string, Func<object, object?>>(bindings.Accessors["Statement"])
         {
             ["IsMacroCall"] = o => (object)((RustStatementInfo)o).IsMacroCall,
             ["IsPanic"] = o => (object)((RustStatementInfo)o).IsPanic,

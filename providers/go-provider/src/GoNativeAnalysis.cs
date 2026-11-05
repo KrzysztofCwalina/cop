@@ -1,3 +1,5 @@
+// Merges native Go compiler type and symbol facts into parsed source files.
+
 using System.Collections.Concurrent;
 using System.Security.Cryptography;
 using System.Text;
@@ -26,24 +28,37 @@ internal static class GoNativeAnalysis
         ["GOPROXY"] = "off",
         ["GOSUMDB"] = "off"
     };
+    /// <summary>
+    /// Identifies the native Go analysis configuration for source caching.
+    /// </summary>
     public static string Identity(string? searchPath, bool injected)
     {
-        if (injected) return "native-protocol";
+        if (injected)
+        {
+            return "native-protocol";
+        }
+
         string? go = ToolchainProcess.FindExecutable("go", searchPath);
         if (go is not null)
         {
             string? helper = Helper(go);
-            if (helper is not null) return "go-ast:" + helper;
+            if (helper is not null)
+            {
+                return "go-ast:" + helper;
+            }
         }
         Warn("", go is null ? "Go toolchain is not installed" : "Go native helper is unavailable");
         return "go-syntax-fallback";
     }
 
+    /// <summary>Adds native Go type and binding facts to a parsed source file.</summary>
     public static SourceFile Enrich(SourceFile file, string? searchPath, Func<string, ToolchainResult>? request)
     {
         ToolchainResult result;
         if (request is not null)
+        {
             result = request(Request(file));
+        }
         else
         {
             string? go = ToolchainProcess.FindExecutable("go", searchPath);
@@ -54,7 +69,10 @@ internal static class GoNativeAnalysis
                 timeout: TimeSpan.FromSeconds(30)).GetAwaiter().GetResult();
         }
         if (result.Status != ToolchainStatus.Success)
+        {
             throw new InvalidOperationException($"Go native analysis {result.Status}: {result.Diagnostic ?? result.StandardError}");
+        }
+
         NativeResponse response;
         try
         {
@@ -63,10 +81,17 @@ internal static class GoNativeAnalysis
         }
         catch (JsonException ex) { throw new InvalidOperationException("Go native analysis returned invalid JSON.", ex); }
         if (response.Calls is null || response.Errors is null)
+        {
             throw new InvalidOperationException("Go native analysis returned an incomplete response.");
+        }
+
         file = Declarations(file, response);
         Apply(file, response);
-        if (response.Errors.Count == 0) file.ParseErrors.Clear();
+        if (response.Errors.Count == 0)
+        {
+            file.ParseErrors.Clear();
+        }
+
         file.ParseErrors.AddRange(response.Errors);
         if (request is null)
         {
@@ -87,29 +112,33 @@ internal static class GoNativeAnalysis
 
     private static string? Helper(string go)
     {
-        var executable = new FileInfo(go);
+        FileInfo executable = new FileInfo(go);
         string key = go + executable.Length + executable.LastWriteTimeUtc.Ticks;
         return Helpers.GetOrAdd(key, _ => new(() => Build(go))).Value;
     }
 
     private static string? Build(string go)
     {
-        using var resource = typeof(GoSourceParser).Assembly.GetManifestResourceStream("Cop.Go.Native")
+        using Stream resource = typeof(GoSourceParser).Assembly.GetManifestResourceStream("Cop.Go.Native")
             ?? throw new InvalidOperationException("Bundled Go helper resource is missing.");
-        using var reader = new StreamReader(resource);
+        using StreamReader reader = new StreamReader(resource);
         string source = reader.ReadToEnd();
-        using var semantics = typeof(GoSourceParser).Assembly.GetManifestResourceStream("Cop.Go.Semantics")
+        using Stream semantics = typeof(GoSourceParser).Assembly.GetManifestResourceStream("Cop.Go.Semantics")
             ?? throw new InvalidOperationException("Bundled Go semantics resource is missing.");
-        using var semanticReader = new StreamReader(semantics);
+        using StreamReader semanticReader = new StreamReader(semantics);
         string semanticSource = semanticReader.ReadToEnd();
-        var executable = new FileInfo(go);
+        FileInfo executable = new FileInfo(go);
         string identity = source + semanticSource + go + executable.Length + executable.LastWriteTimeUtc.Ticks
             + System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture
             + string.Join(";", EnvironmentOverrides.Select(p => $"{p.Key}={p.Value}"));
         string hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(identity)));
         string directory = Path.Combine(Path.GetTempPath(), "cop-native-go", hash);
         string binary = Path.Combine(directory, OperatingSystem.IsWindows() ? "analysis.exe" : "analysis");
-        if (File.Exists(binary)) return binary;
+        if (File.Exists(binary))
+        {
+            return binary;
+        }
+
         Directory.CreateDirectory(directory);
         string scratch = Path.Combine(directory, Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(scratch);
@@ -120,7 +149,7 @@ internal static class GoNativeAnalysis
             File.WriteAllText(input, source, new UTF8Encoding(false));
             string semanticInput = Path.Combine(scratch, "semantics.go");
             File.WriteAllText(semanticInput, semanticSource, new UTF8Encoding(false));
-            var result = ToolchainProcess.RunAsync(go, ["build", "-o", output, input, semanticInput], scratch,
+            ToolchainResult result = ToolchainProcess.RunAsync(go, ["build", "-o", output, input, semanticInput], scratch,
                 timeout: TimeSpan.FromMinutes(3), environment: EnvironmentOverrides).GetAwaiter().GetResult();
             if (result.Status != ToolchainStatus.Success)
             {
@@ -136,21 +165,34 @@ internal static class GoNativeAnalysis
 
     private static void Apply(SourceFile file, NativeResponse response)
     {
-        if (response.Statements is null) throw new InvalidOperationException("Go native analysis omitted statement structure.");
-        var methods = file.Types.SelectMany(t => t.Methods).Concat(file.Methods).Distinct().ToList();
-        foreach (var method in methods) method.Statements = [];
+        if (response.Statements is null)
+        {
+            throw new InvalidOperationException("Go native analysis omitted statement structure.");
+        }
+
+        List<MethodDeclaration> methods = file.Types.SelectMany(t => t.Methods).Concat(file.Methods).Distinct().ToList();
+        foreach (MethodDeclaration method in methods)
+        {
+            method.Statements = [];
+        }
+
         file.Statements.Clear();
-        var nodes = new Dictionary<string, StatementInfo>();
-        var parents = new List<(StatementInfo Node, string? Parent)>();
+        Dictionary<string, StatementInfo> nodes = new Dictionary<string, StatementInfo>();
+        List<(StatementInfo Node, string? Parent)> parents = new List<(StatementInfo Node, string? Parent)>();
         void Add(string id, string? parent, int methodLine, int methodColumn, StatementInfo node)
         {
-            if (!nodes.TryAdd(id, node)) throw new InvalidOperationException("Go native analysis returned duplicate syntax identities.");
+            if (!nodes.TryAdd(id, node))
+            {
+                throw new InvalidOperationException("Go native analysis returned duplicate syntax identities.");
+            }
+
             node.Method = methodLine > 0 ? methods.FirstOrDefault(m => m.Line == methodLine && m.Column == methodColumn) : null;
             node.Method?.Statements.Add(node);
             file.Statements.Add(node);
             parents.Add((node, parent));
         }
-        foreach (var fact in response.Statements)
+        foreach (NativeStatement fact in response.Statements)
+        {
             Add(fact.ID, fact.ParentID, fact.MethodLine, fact.MethodColumn,
                 new GoStatementInfo(fact.Kind, [], null, Null(fact.MemberName), [], fact.Line, fact.MethodLine > 0)
                 {
@@ -162,12 +204,17 @@ internal static class GoNativeAnalysis
                     IsErrorHandler = fact.ErrorHandler,
                     IsGenericErrorHandler = fact.Kind == "catch"
                 });
-        foreach (var fact in response.Calls!)
+        }
+
+        foreach (NativeCall fact in response.Calls!)
         {
             if (fact.Line <= 0 || fact.MemberName is null || fact.Arguments is null ||
                 fact.CallTarget is null || fact.ArgumentExpressions is null)
+            {
                 throw new InvalidOperationException("Go native analysis returned an invalid call.");
-            var call = new GoStatementInfo("call", [], string.IsNullOrEmpty(fact.TypeName) ? null : fact.TypeName,
+            }
+
+            GoStatementInfo call = new GoStatementInfo("call", [], string.IsNullOrEmpty(fact.TypeName) ? null : fact.TypeName,
                 fact.MemberName, fact.Arguments, fact.Line, fact.MethodLine > 0)
             {
                 Column = fact.Column,
@@ -178,10 +225,18 @@ internal static class GoNativeAnalysis
             };
             Add(fact.ID, fact.ParentID, fact.MethodLine, fact.MethodColumn, call);
         }
-        foreach (var (node, parent) in parents)
+        foreach ((StatementInfo? node, string? parent) in parents)
         {
-            if (string.IsNullOrEmpty(parent)) continue;
-            if (!nodes.TryGetValue(parent, out var owner)) throw new InvalidOperationException("Go native syntax parent is missing.");
+            if (string.IsNullOrEmpty(parent))
+            {
+                continue;
+            }
+
+            if (!nodes.TryGetValue(parent, out StatementInfo? owner))
+            {
+                throw new InvalidOperationException("Go native syntax parent is missing.");
+            }
+
             node.Parent = owner;
             owner._children.Add(node);
         }
@@ -191,12 +246,15 @@ internal static class GoNativeAnalysis
     private static SourceFile Declarations(SourceFile file, NativeResponse response)
     {
         if (response.Types is null || response.Methods is null || response.Imports is null)
+        {
             throw new InvalidOperationException("Go native analysis omitted declarations.");
-        var oldMethods = file.Types.SelectMany(t => t.Methods).Concat(file.Methods).Distinct().ToList();
+        }
+
+        List<MethodDeclaration> oldMethods = file.Types.SelectMany(t => t.Methods).Concat(file.Methods).Distinct().ToList();
         MethodDeclaration Method(NativeMethod m)
         {
-            var old = oldMethods.FirstOrDefault(o => o.Name == m.Name && o.ReceiverType == Null(m.Receiver));
-            var method = new MethodDeclaration(m.Name, Visibility(m.Name), [], m.ReturnTypeFact ?? Type(m.ReturnType),
+            MethodDeclaration? old = oldMethods.FirstOrDefault(o => o.Name == m.Name && o.ReceiverType == Null(m.Receiver));
+            GoMethodDeclaration method = new MethodDeclaration(m.Name, Visibility(m.Name), [], m.ReturnTypeFact ?? Type(m.ReturnType),
                 m.Parameters.Select(p => new ParameterDeclaration(p.Name, p.TypeFact ?? Type(p.Type)!, p.Variadic, false, false, p.Line)
                 { Column = p.Column, EndLine = p.EndLine, EndColumn = p.EndColumn }).ToList(), m.Line)
             {
@@ -208,11 +266,15 @@ internal static class GoNativeAnalysis
                 HasDocComment = m.Documented,
                 Statements = old?.Statements ?? []
             }.AsGo(m.PointerReceiver, m.NamedReturns, m.Parameters.Any(p => p.Variadic), m.TypeParameters.Count > 0);
-            foreach (var statement in method.Statements) statement.Method = method;
+            foreach (StatementInfo statement in method.Statements)
+            {
+                statement.Method = method;
+            }
+
             return method;
         }
-        var methods = response.Methods.Select(Method).ToList();
-        var types = response.Types.Select(t => new TypeDeclaration(t.Name,
+        List<MethodDeclaration> methods = response.Methods.Select(Method).ToList();
+        List<TypeDeclaration> types = response.Types.Select(t => new TypeDeclaration(t.Name,
             t.Kind == "alias" ? TypeKind.Alias : t.Kind == "interface" ? TypeKind.Interface : TypeKind.Struct,
             Visibility(t.Name), t.BaseTypes, [], [], t.Methods.Select(Method).ToList(), [], [], t.Line)
         {
@@ -225,12 +287,18 @@ internal static class GoNativeAnalysis
             Fields = t.Fields.Select(f => new FieldDeclaration(f.Name, f.TypeFact ?? Type(f.Type)!, Visibility(f.Name), f.Line)).ToList()
         }.AsGo(t.Kind == "interface", t.Kind == "struct", t.Kind == "alias", t.StructTags, t.Union, t.Underlying))
             .Cast<TypeDeclaration>().ToList();
-        foreach (var method in methods.Where(m => m.ReceiverType is not null))
+        foreach (MethodDeclaration? method in methods.Where(m => m.ReceiverType is not null))
+        {
             types.FirstOrDefault(t => t.Name == method.ReceiverType)?.Methods.Add(method);
-        var functions = methods.Where(m => m.ReceiverType is null).ToList();
+        }
+
+        List<MethodDeclaration> functions = methods.Where(m => m.ReceiverType is null).ToList();
         if (functions.Count > 0)
+        {
             types.Add(new TypeDeclaration(Path.GetFileNameWithoutExtension(file.Path) + " (functions)", TypeKind.Class,
                 Modifier.Public, [], [], [], functions, [], [], 0).AsGo());
+        }
+
         return file with
         {
             Types = types,
@@ -251,18 +319,30 @@ internal static class GoNativeAnalysis
     private record NativeSpan(int Line, int Column, int EndLine, int EndColumn);
     private sealed record NativeParameter(string Name, string Type, bool Variadic, int Line, int Column, int EndLine, int EndColumn)
         : NativeSpan(Line, Column, EndLine, EndColumn)
-    { public TypeReference? TypeFact { get; init; } }
+    {
+        /// <summary>Gets the compiler-resolved parameter type.</summary>
+        public TypeReference? TypeFact { get; init; }
+    }
     private sealed record NativeField(string Name, string Type, int Line, int Column, int EndLine, int EndColumn)
         : NativeSpan(Line, Column, EndLine, EndColumn)
-    { public TypeReference? TypeFact { get; init; } }
+    {
+        /// <summary>Gets the compiler-resolved field type.</summary>
+        public TypeReference? TypeFact { get; init; }
+    }
     private sealed record NativeMethod(string Name, string? Receiver, string? ReturnType, List<NativeParameter> Parameters,
         List<string> TypeParameters, bool PointerReceiver, bool NamedReturns, bool Documented,
         int Line, int Column, int EndLine, int EndColumn) : NativeSpan(Line, Column, EndLine, EndColumn)
-    { public TypeReference? ReturnTypeFact { get; init; } }
+    {
+        /// <summary>Gets the compiler-resolved return type.</summary>
+        public TypeReference? ReturnTypeFact { get; init; }
+    }
     private sealed record NativeType(string Name, string Kind, string? AliasTarget, List<string> BaseTypes,
         List<string> TypeParameters, List<NativeField> Fields, List<NativeMethod> Methods, bool StructTags, bool Union,
         bool Underlying, bool Documented, int Line, int Column, int EndLine, int EndColumn) : NativeSpan(Line, Column, EndLine, EndColumn)
-    { public TypeReference? AliasTargetFact { get; init; } }
+    {
+        /// <summary>Gets the compiler-resolved alias target.</summary>
+        public TypeReference? AliasTargetFact { get; init; }
+    }
     private sealed record NativeCall(string ID, string? ParentID, int MethodLine, int MethodColumn, int Line, int Column, int EndLine, int EndColumn,
         string? TypeName, string? MemberName, List<string>? Arguments, ExpressionInfo? CallTarget, List<ExpressionInfo>? ArgumentExpressions);
     private sealed record NativeStatement(string ID, string? ParentID, int MethodLine, int MethodColumn, string Kind, string? Condition,

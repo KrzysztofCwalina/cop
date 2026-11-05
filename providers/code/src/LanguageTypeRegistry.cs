@@ -1,3 +1,8 @@
+// Reconstructs language-specific declarations from cached source models.
+
+using System.Collections.Concurrent;
+using System.Runtime.Loader;
+
 namespace Cop.Providers.SourceModel;
 
 /// <summary>
@@ -26,13 +31,13 @@ internal static class LanguageCacheFactories<T>
 
     public static void Register(string tag, Func<T, IReadOnlyDictionary<string, bool>, T> factory)
     {
-        var context = System.Runtime.Loader.AssemblyLoadContext.GetLoadContext(factory.Method.Module.Assembly)
+        AssemblyLoadContext context = System.Runtime.Loader.AssemblyLoadContext.GetLoadContext(factory.Method.Module.Assembly)
             ?? System.Runtime.Loader.AssemblyLoadContext.Default;
         Factories.GetOrCreateValue(context)[tag] = factory;
     }
 
     public static T Reconstruct(string tag, T value, IReadOnlyDictionary<string, bool> flags,
         System.Runtime.Loader.AssemblyLoadContext context) =>
-        Factories.TryGetValue(context, out var factories) && factories.TryGetValue(tag, out var factory)
+        Factories.TryGetValue(context, out ConcurrentDictionary<string, Func<T, IReadOnlyDictionary<string, bool>, T>>? factories) && factories.TryGetValue(tag, out Func<T, IReadOnlyDictionary<string, bool>, T>? factory)
             ? factory(value, flags) : value;
 }

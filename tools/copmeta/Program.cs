@@ -1,3 +1,5 @@
+// Command-line entry point for regenerating or checking editor grammar metadata.
+
 using CopMeta;
 
 // copmeta - regenerates the data-driven keyword lists of the TextMate grammar
@@ -14,9 +16,19 @@ string? repoRoot = null;
 bool check = false;
 for (int i = 0; i < args.Length; i++)
 {
-    if (args[i] == "--repo-root" && i + 1 < args.Length) repoRoot = args[++i];
-    else if (args[i] == "--check") check = true;
-    else { Console.Error.WriteLine($"Unknown argument: {args[i]}"); return 2; }
+    if (args[i] == "--repo-root" && i + 1 < args.Length)
+    {
+        repoRoot = args[++i];
+    }
+    else if (args[i] == "--check")
+    {
+        check = true;
+    }
+    else
+    {
+        Console.Error.WriteLine($"Unknown argument: {args[i]}");
+        return 2;
+    }
 }
 
 repoRoot ??= FindRepoRoot(Directory.GetCurrentDirectory());
@@ -38,11 +50,14 @@ catch (Exception ex)
 
 static string? FindRepoRoot(string start)
 {
-    var dir = new DirectoryInfo(start);
+    DirectoryInfo? dir = new DirectoryInfo(start);
     while (dir is not null)
     {
         if (Directory.Exists(Path.Combine(dir.FullName, ".git")) || File.Exists(Path.Combine(dir.FullName, ".git")))
+        {
             return dir.FullName;
+        }
+
         dir = dir.Parent;
     }
     return null;

@@ -1,12 +1,17 @@
+// Loads Cop programs and packages, executes commands, and reports their results.
+
+using System.Diagnostics;
 using System.Net.Http;
 using System.Security;
 using System.Text.Json;
 using Cop.Core;
 using Cop.Lang;
+using Cop.Lang.Ast;
 using Cop.Providers;
 
 namespace Cop.Cli.Commands;
 
+/// <summary>Executes source programs or packages against a selected target.</summary>
 public static class RunCommand
 {
 
@@ -18,7 +23,7 @@ public static class RunCommand
         string scriptsDir;
         if (copFileArg != null && copFileArg.EndsWith(".cop", StringComparison.OrdinalIgnoreCase))
         {
-            var spec = new FileInfo(copFileArg);
+            FileInfo spec = new FileInfo(copFileArg);
             if (!spec.Exists)
             {
                 Console.Error.WriteLine($"Error: File '{spec.FullName}' not found");
@@ -32,21 +37,21 @@ public static class RunCommand
         }
 
         // Parse all .cop files in the directory
-        var scriptFilePaths = Directory.GetFiles(scriptsDir, "*.cop", SearchOption.AllDirectories);
+        string[] scriptFilePaths = Directory.GetFiles(scriptsDir, "*.cop", SearchOption.AllDirectories);
         if (scriptFilePaths.Length == 0)
         {
             Console.Error.WriteLine("Error: No .cop files found");
             return 1;
         }
 
-        var scriptFiles = new List<ScriptFile>();
-        var parseErrors = new List<string>();
+        List<ScriptFile> scriptFiles = new List<ScriptFile>();
+        List<string> parseErrors = new List<string>();
 
-        foreach (var path in scriptFilePaths)
+        foreach (string path in scriptFilePaths)
         {
             try
             {
-                var source = File.ReadAllText(path);
+                string source = File.ReadAllText(path);
                 scriptFiles.Add(Cop.Lang.Parser.CopParser.ParseFile(source, path));
             }
             catch (ParseException ex)
@@ -57,30 +62,33 @@ public static class RunCommand
 
         if (parseErrors.Count > 0)
         {
-            foreach (var error in parseErrors)
+            foreach (string error in parseErrors)
+            {
                 Console.Error.WriteLine(error);
+            }
+
             return 2;
         }
 
         // Resolve imports to find imported script files
-        var feedPaths = FindFeedPathsFromCwd();
-        var importedFiles = new List<ScriptFile>();
-        var importErrors = new List<string>();
-        foreach (var sf in scriptFiles)
+        string[] feedPaths = FindFeedPathsFromCwd();
+        List<ScriptFile> importedFiles = new List<ScriptFile>();
+        List<string> importErrors = new List<string>();
+        foreach (ScriptFile sf in scriptFiles)
         {
-            foreach (var imp in sf.Imports)
+            foreach (string imp in sf.Imports)
             {
-                foreach (var feed in feedPaths)
+                foreach (string feed in feedPaths)
                 {
-                    var pkgDir = ImportResolver.FindPackageDir(feed, imp);
+                    string? pkgDir = ImportResolver.FindPackageDir(feed, imp);
                     if (pkgDir is not null)
                     {
-                        var impFiles = Directory.GetFiles(pkgDir, "*.cop", SearchOption.AllDirectories);
-                        foreach (var impFile in impFiles)
+                        string[] impFiles = Directory.GetFiles(pkgDir, "*.cop", SearchOption.AllDirectories);
+                        foreach (string impFile in impFiles)
                         {
                             try
                             {
-                                var source = File.ReadAllText(impFile);
+                                string source = File.ReadAllText(impFile);
                                 importedFiles.Add(Cop.Lang.Parser.CopParser.ParseFile(source, impFile));
                             }
                             catch (Exception ex) when (ex is not OutOfMemoryException)
@@ -96,8 +104,11 @@ public static class RunCommand
 
         if (importErrors.Count > 0)
         {
-            foreach (var error in importErrors)
+            foreach (string error in importErrors)
+            {
                 Console.Error.WriteLine(error);
+            }
+
             return 2;
         }
 
@@ -105,37 +116,45 @@ public static class RunCommand
         int totalFiles = 0;
         bool hasErrors = false;
 
-        foreach (var sf in scriptFiles)
+        foreach (ScriptFile sf in scriptFiles)
         {
-            var transpiler = new CqlTranspiler(sf, importedFiles);
-            var result = transpiler.Transpile();
+            CqlTranspiler transpiler = new CqlTranspiler(sf, importedFiles);
+            CqlTranspileResult result = transpiler.Transpile();
 
             if (result.HasErrors)
             {
-                foreach (var error in result.Errors)
+                foreach (string error in result.Errors)
+                {
                     Console.Error.WriteLine(error);
+                }
+
                 hasErrors = true;
                 continue;
             }
 
             if (result.Files.Count == 0)
+            {
                 continue;
+            }
 
             // Write .ql files to codeql/ subdirectory next to the .cop file
-            var copDir = Path.GetDirectoryName(sf.FilePath) ?? scriptsDir;
-            var cqlDir = Path.Combine(copDir, "codeql");
+            string copDir = Path.GetDirectoryName(sf.FilePath) ?? scriptsDir;
+            string cqlDir = Path.Combine(copDir, "codeql");
             Directory.CreateDirectory(cqlDir);
 
-            foreach (var qlFile in result.Files)
+            foreach (CqlQueryFile qlFile in result.Files)
             {
-                var outPath = Path.Combine(cqlDir, qlFile.FileName);
+                string outPath = Path.Combine(cqlDir, qlFile.FileName);
                 File.WriteAllText(outPath, qlFile.Content);
                 Console.WriteLine($"  Generated: {Path.GetRelativePath(scriptsDir, outPath)}");
                 totalFiles++;
             }
         }
 
-        if (hasErrors) return 2;
+        if (hasErrors)
+        {
+            return 2;
+        }
 
         if (totalFiles == 0)
         {
@@ -152,16 +171,20 @@ public static class RunCommand
 
     public static int Execute(string? command, string[]? programArgs = null, string? target = null, string? format = null, string? commands = null, bool diag = false, bool onlyIfModified = false, string[]? providers = null, bool profileRules = false, ReviewOptions? reviewOptions = null)
     {
-        Engine.ProfileRules = profileRules;
+        Engine.IsRuleProfilingEnabled = profileRules;
         try { (reviewOptions ?? new ReviewOptions()).Validate(); }
         catch (ArgumentException ex) { Console.Error.WriteLine($"Error: {ex.Message}"); return 2; }
 
         // -om: skip analysis if no files modified in git working tree
         if (onlyIfModified && !HasModifiedFiles(target ?? Directory.GetCurrentDirectory()))
+        {
             return 0;
+        }
 
         if (command != null && IsUri(command))
+        {
             return ExecuteFromUri(command, programArgs, target, format, commands, diag, reviewOptions);
+        }
 
         string? commandName = null;
         string scriptsDir;
@@ -172,7 +195,7 @@ public static class RunCommand
         if (command != null && command.EndsWith(".cop", StringComparison.OrdinalIgnoreCase))
         {
             // .cop file mode: use file's directory as scriptsDir, load all .cop files there
-            var spec = new FileInfo(command);
+            FileInfo spec = new FileInfo(command);
             if (!spec.Exists) { Console.Error.WriteLine($"Error: File '{spec.FullName}' not found"); return 1; }
             scriptsDir = spec.DirectoryName ?? Directory.GetCurrentDirectory();
             // The analysis target defaults to the current working directory, NOT the
@@ -199,28 +222,35 @@ public static class RunCommand
         // Parse -c filter
         string[]? commandFilter = null;
         if (!string.IsNullOrEmpty(commands))
+        {
             commandFilter = commands.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        }
 
         // When a specific .cop file is named, scope commands to that file only
         string? implicitCommandFile = null;
         if (scopeToFile != null && commandFilter == null && commandName == null)
         {
-            var fileCommands = GetCommandNamesFromFile(scopeToFile);
+            string[]? fileCommands = GetCommandNamesFromFile(scopeToFile);
             if (fileCommands is null)
+            {
                 return 2; // the file failed to parse; the parse error was already reported.
+            }
+
             if (fileCommands.Length > 0)
             {
                 // Default to the primary MAIN command when present, so a bare run does
                 // NOT trigger opt-in commands (e.g. network-based AI checks, or DERIVED).
                 // Those stay available explicitly via -c AI / -c DERIVED.
-                var main = fileCommands.FirstOrDefault(c => c.Equals("MAIN", StringComparison.OrdinalIgnoreCase));
+                string? main = fileCommands.FirstOrDefault(c => c.Equals("MAIN", StringComparison.OrdinalIgnoreCase));
                 commandFilter = main is not null ? [main] : fileCommands;
             }
             else
             {
                 implicitCommandFile = TryCreateImplicitMainFile(scopeToFile);
                 if (implicitCommandFile is not null)
+                {
                     commandFilter = ["MAIN"];
+                }
                 else
                 {
                     Console.Error.WriteLine($"Error: No commands defined in '{command}'");
@@ -238,15 +268,17 @@ public static class RunCommand
         // instructions/*.md into the analysis target's .github/instructions/ (idempotent — a no-op
         // when the content is unchanged, so this does not churn the working tree on repeated runs).
         if (reviewOptions?.Scope != "pr")
+        {
             PlaceInstructionsForImports(scriptsDir, rootPath, diagLog);
+        }
 
         // Discover user-global check files (~/.cop/checks/) to include alongside project checks
-        var userCheckFiles = GetUserCheckFiles(diagLog);
+        string[] userCheckFiles = GetUserCheckFiles(diagLog);
 
         // Try streaming mode (auto-detect or by command name)
         try
         {
-            using var cts = new CancellationTokenSource();
+            using CancellationTokenSource cts = new CancellationTokenSource();
             Console.CancelKeyPress += (_, e) => { e.Cancel = true; cts.Cancel(); };
 
             Engine.RunStreamingAsync(scriptsDir, commandName, cts.Token, diagLog, additionalFeedPaths: FindFeedPathsFromCwd()).GetAwaiter().GetResult();
@@ -276,7 +308,7 @@ public static class RunCommand
             }
             else
             {
-                var projectFiles = Directory.GetFiles(scriptsDir, "*.cop", SearchOption.AllDirectories);
+                string[] projectFiles = Directory.GetFiles(scriptsDir, "*.cop", SearchOption.AllDirectories);
                 allScriptFiles = [.. projectFiles, .. userCheckFiles];
             }
             AutoRestoreImports(UserChecksDirectory, diagLog);
@@ -288,9 +320,9 @@ public static class RunCommand
             // providers and other files (including those grouped in subfolders such as
             // cop-checks/csharp/derived/) define checks that use the shared environment.
             // Place the target file LAST so its command definitions take priority.
-            var siblingFiles = Directory.GetFiles(scriptsDir, "*.cop", SearchOption.AllDirectories);
+            string[] siblingFiles = Directory.GetFiles(scriptsDir, "*.cop", SearchOption.AllDirectories);
             Array.Sort(siblingFiles, StringComparer.Ordinal);
-            var others = siblingFiles.Where(f =>
+            string[] others = siblingFiles.Where(f =>
                 !string.Equals(f, scopeToFile, StringComparison.OrdinalIgnoreCase) &&
                 !string.Equals(f, implicitCommandFile, StringComparison.OrdinalIgnoreCase)).ToArray();
             allScriptFiles = implicitCommandFile is not null
@@ -303,25 +335,30 @@ public static class RunCommand
         if (providers is { Length: > 0 })
         {
             providerPackages = [];
-            var providerFeedPaths = new List<string>(FindFeedPathsFromCwd());
-            var cachePath = PackageResolver.GlobalCachePath;
+            List<string> providerFeedPaths = new List<string>(FindFeedPathsFromCwd());
+            string cachePath = PackageResolver.GlobalCachePath;
             if (Directory.Exists(cachePath) && !providerFeedPaths.Contains(cachePath))
+            {
                 providerFeedPaths.Add(cachePath);
+            }
 
-            foreach (var providerName in providers)
+            foreach (string providerName in providers)
             {
                 string? pkgDir = null;
-                foreach (var feed in providerFeedPaths)
+                foreach (string feed in providerFeedPaths)
                 {
                     pkgDir = ImportResolver.FindPackageDir(feed, providerName);
-                    if (pkgDir != null) break;
+                    if (pkgDir != null)
+                    {
+                        break;
+                    }
                 }
                 if (pkgDir is null)
                 {
                     Console.Error.WriteLine($"Error: Provider package '{providerName}' not found. Use -p with a valid package name.");
                     return 2;
                 }
-                var metadata = PackageMetadata.TryLoadFromDirectory(pkgDir);
+                PackageMetadata? metadata = PackageMetadata.TryLoadFromDirectory(pkgDir);
                 if (metadata is null || !metadata.IsProvider)
                 {
                     Console.Error.WriteLine($"Error: Package '{providerName}' is not a provider (no lib/ with DLL).");
@@ -333,7 +370,17 @@ public static class RunCommand
 
         try
         {
-            var result = Engine.Run(scriptsDir, rootPath, commandName, programArgs, commandFilter, diagLog, additionalFeedPaths: FindFeedPathsFromCwd(), scriptFiles: allScriptFiles, providerPackages: providerPackages, reviewOptions: reviewOptions);
+            EngineResult result = Engine.Run(scriptsDir, rootPath, new EngineRunOptions
+            {
+                CommandName = commandName,
+                ProgramArgs = programArgs,
+                CommandFilter = commandFilter,
+                DiagnosticLog = diagLog,
+                AdditionalFeedPaths = FindFeedPathsFromCwd(),
+                ScriptFiles = allScriptFiles,
+                ProviderPackages = providerPackages,
+                ReviewOptions = reviewOptions,
+            });
             return HandleResult(result, format, rootPath);
         }
         catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or IOException)
@@ -363,35 +410,43 @@ public static class RunCommand
 
         // -om: skip analysis if no files modified in git working tree
         if (onlyIfModified && !HasModifiedFiles(rootPath))
+        {
             return 0;
+        }
 
         Action<string>? diagLog = diag ? msg => Console.Error.WriteLine(ColorDiagLine(msg)) : null;
 
         // Discover feed paths from both rootPath and CWD (includes global cache)
-        var feedPaths = PackageResolver.GetFeedPaths(rootPath);
-        var cwd = Directory.GetCurrentDirectory();
+        List<string> feedPaths = PackageResolver.GetFeedPaths(rootPath);
+        string cwd = Directory.GetCurrentDirectory();
         if (!string.Equals(Path.GetFullPath(cwd), Path.GetFullPath(rootPath), StringComparison.OrdinalIgnoreCase))
         {
-            foreach (var p in PackageResolver.GetFeedPaths(cwd))
+            foreach (string p in PackageResolver.GetFeedPaths(cwd))
             {
                 if (!feedPaths.Contains(p, StringComparer.OrdinalIgnoreCase))
+                {
                     feedPaths.Add(p);
+                }
             }
         }
 
         // Auto-restore any packages not found locally from configured GitHub feeds
-        var cachePath = PackageResolver.GlobalCachePath;
-        var missing = FindMissingPackages(packages, feedPaths, cachePath);
+        string cachePath = PackageResolver.GlobalCachePath;
+        List<string> missing = FindMissingPackages(packages, feedPaths, cachePath);
         if (missing.Count > 0)
         {
-            var restored = AutoRestorePackagesAsync(missing, cachePath).GetAwaiter().GetResult();
+            bool restored = AutoRestorePackagesAsync(missing, cachePath).GetAwaiter().GetResult();
             if (!restored)
+            {
                 return 2;
+            }
         }
 
         // Ensure cache path is in feed list after restore
         if (Directory.Exists(cachePath) && !feedPaths.Contains(cachePath))
+        {
             feedPaths.Add(cachePath);
+        }
 
         if (feedPaths.Count == 0)
         {
@@ -400,14 +455,14 @@ public static class RunCommand
         }
 
         // Convert rules filter
-        var rulesList = rules?.ToList() ?? [];
+        List<string> rulesList = rules?.ToList() ?? [];
 
         // Include user-global check files
-        var userCheckFiles = GetUserCheckFiles(diagLog);
+        string[] userCheckFiles = GetUserCheckFiles(diagLog);
 
         try
         {
-            var result = Engine.RunProject(feedPaths, [.. packages], rootPath, rulesList, diagLog: diagLog, additionalScriptFiles: userCheckFiles.Length > 0 ? userCheckFiles : null, providers: providers, reviewOptions: reviewOptions);
+            EngineResult result = Engine.RunProject(feedPaths, [.. packages], rootPath, rulesList, diagLog: diagLog, additionalScriptFiles: userCheckFiles.Length > 0 ? userCheckFiles : null, providers: providers, reviewOptions: reviewOptions);
             return HandleResult(result, format, rootPath);
         }
         catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or IOException)
@@ -429,27 +484,27 @@ public static class RunCommand
         try
         {
             // Download the .cop file
-            using var httpClient = new HttpClient();
+            using HttpClient httpClient = new HttpClient();
             httpClient.DefaultRequestHeaders.Add("User-Agent", "cop-cli");
 
-            var response = httpClient.GetAsync(uri).GetAwaiter().GetResult();
+            HttpResponseMessage response = httpClient.GetAsync(uri).GetAwaiter().GetResult();
             if (!response.IsSuccessStatusCode)
             {
                 Console.Error.WriteLine($"Error: Failed to download '{uri}' (HTTP {(int)response.StatusCode})");
                 return 1;
             }
 
-            var content = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+            string content = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
 
             // Save to temp directory with .cop extension
             tempDir = Path.Combine(Path.GetTempPath(), $"cop-remote-{Guid.NewGuid():N}");
             Directory.CreateDirectory(tempDir);
-            var tempFile = Path.Combine(tempDir, "remote.cop");
+            string tempFile = Path.Combine(tempDir, "remote.cop");
             File.WriteAllText(tempFile, content);
 
             // scriptsDir = temp dir, rootPath = CWD (or -t override)
-            var scriptsDir = tempDir;
-            var rootPath = !string.IsNullOrEmpty(target)
+            string scriptsDir = tempDir;
+            string rootPath = !string.IsNullOrEmpty(target)
                 ? Path.GetFullPath(target)
                 : Directory.GetCurrentDirectory();
 
@@ -464,13 +519,23 @@ public static class RunCommand
             // Parse -c filter
             string[]? commandFilter = null;
             if (!string.IsNullOrEmpty(commands))
+            {
                 commandFilter = commands.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            }
 
             // Pass CWD feed paths so locally-restored packages can resolve
-            var additionalFeedPaths = FindFeedPathsFromCwd();
+            string[] additionalFeedPaths = FindFeedPathsFromCwd();
 
             Action<string>? diagLog = diag ? msg => Console.Error.WriteLine(ColorDiagLine(msg)) : null;
-            var result = Engine.Run(scriptsDir, rootPath, commandName, programArgs, commandFilter, diagLog, additionalFeedPaths: additionalFeedPaths, reviewOptions: reviewOptions);
+            EngineResult result = Engine.Run(scriptsDir, rootPath, new EngineRunOptions
+            {
+                CommandName = commandName,
+                ProgramArgs = programArgs,
+                CommandFilter = commandFilter,
+                DiagnosticLog = diagLog,
+                AdditionalFeedPaths = additionalFeedPaths,
+                ReviewOptions = reviewOptions,
+            });
 
             return HandleResult(result, format, rootPath);
         }
@@ -507,35 +572,45 @@ public static class RunCommand
         // Fall back to string errors for any not covered by structured diagnostics
         if (result.Diagnostics is null or { Count: 0 })
         {
-            foreach (var error in result.ParseErrors)
+            foreach (string error in result.ParseErrors)
+            {
                 Console.Error.WriteLine(error);
+            }
         }
 
         if (result.Warnings is { Count: > 0 })
         {
-            foreach (var warning in result.Warnings)
+            foreach (string warning in result.Warnings)
+            {
                 Console.Error.WriteLine(FormatProviderWarning(warning,
                     !Console.IsErrorRedirected && !ConsoleMarkdown.NoColor));
+            }
         }
 
         if (result.HasParseErrors)
+        {
             return 2;
+        }
 
         if (result.HasFatalErrors)
         {
             // Only print string errors that aren't already represented by diagnostics
             if (result.Diagnostics is null or { Count: 0 })
             {
-                foreach (var error in result.Errors)
+                foreach (string error in result.Errors)
+                {
                     Console.Error.WriteLine(error);
+                }
             }
             else
             {
                 // Print non-diagnostic errors (e.g., runtime errors without source info)
-                foreach (var error in result.Errors)
+                foreach (string error in result.Errors)
                 {
                     if (!result.Diagnostics.Any(d => error.Contains(d.Message)))
+                    {
                         Console.Error.WriteLine(error);
+                    }
                 }
             }
             return 2;
@@ -549,16 +624,18 @@ public static class RunCommand
         }
         else
         {
-            foreach (var output in result.Outputs)
+            foreach (PrintOutput output in result.Outputs)
+            {
                 Console.WriteLine(AnsiRenderer.Render(output.Content));
+            }
         }
 
         // Write SAVE command outputs to files (paths are relative to codebase)
         if (result.FileOutputs is { Count: > 0 })
         {
-            foreach (var output in result.FileOutputs)
+            foreach (FileOutput output in result.FileOutputs)
             {
-                var filePath = Path.IsPathRooted(output.Path)
+                string? filePath = Path.IsPathRooted(output.Path)
                     ? null  // reject absolute paths
                     : Path.GetFullPath(Path.Combine(rootPath, output.Path));
 
@@ -568,9 +645,11 @@ public static class RunCommand
                     continue;
                 }
 
-                var dir = Path.GetDirectoryName(filePath);
+                string? dir = Path.GetDirectoryName(filePath);
                 if (dir is not null && !Directory.Exists(dir))
+                {
                     Directory.CreateDirectory(dir);
+                }
 
                 File.WriteAllText(filePath, output.Content);
                 Console.WriteLine($"SAVE: {output.Path}");
@@ -579,7 +658,7 @@ public static class RunCommand
 
         if (!isJson && result.Statistics is { } statistics)
         {
-            var elapsed = statistics.Elapsed.TotalSeconds.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture);
+            string elapsed = statistics.Elapsed.TotalSeconds.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture);
             Console.Error.WriteLine(
                 $"Summary: {statistics.InputFiles} input file{(statistics.InputFiles == 1 ? "" : "s")} processed, " +
                 $"{statistics.CommandsExecuted} command{(statistics.CommandsExecuted == 1 ? "" : "s")} executed in {elapsed}s.");
@@ -587,9 +666,14 @@ public static class RunCommand
 
         // Use explicit exit code from command if available (e.g., CHECK returns violation count)
         if (result.Warnings?.Any(w => w.StartsWith("Error:", StringComparison.Ordinal)) == true)
+        {
             return 1;
+        }
+
         if (result.ExitCode is not null)
+        {
             return result.ExitCode.Value != 0 ? 1 : 0;
+        }
 
         // Fallback: report output is success; CHECK-style violation output is failure.
         return result.Outputs.Any(IsViolationOutput) ? 1 : 0;
@@ -602,7 +686,7 @@ public static class RunCommand
 
     private static bool IsViolationOutput(PrintOutput output)
     {
-        var message = output.Message;
+        string message = output.Message;
         return message.Contains("): error:", StringComparison.OrdinalIgnoreCase) ||
                message.Contains("): warning:", StringComparison.OrdinalIgnoreCase) ||
                message.Contains("): info:", StringComparison.OrdinalIgnoreCase);
@@ -620,19 +704,21 @@ public static class RunCommand
             return null;
         }
 
-        var expressions = ExtractTopLevelExpressions(source);
+        List<string> expressions = ExtractTopLevelExpressions(source);
         if (expressions.Count == 0)
+        {
             return null;
+        }
 
-        var generatedSource = string.Join(Environment.NewLine,
+        string generatedSource = string.Join(Environment.NewLine,
         [
             "command MAIN = {",
             .. expressions.Select(e => $"print({e})"),
             "}"
         ]);
 
-        var scriptsDir = Path.GetDirectoryName(sourceFile) ?? Directory.GetCurrentDirectory();
-        var generatedPath = Path.Combine(scriptsDir, $".cop-implicit-{Guid.NewGuid():N}.cop");
+        string scriptsDir = Path.GetDirectoryName(sourceFile) ?? Directory.GetCurrentDirectory();
+        string generatedPath = Path.Combine(scriptsDir, $".cop-implicit-{Guid.NewGuid():N}.cop");
 
         try
         {
@@ -642,7 +728,13 @@ public static class RunCommand
         }
         catch
         {
-            try { if (File.Exists(generatedPath)) File.Delete(generatedPath); }
+            try
+            {
+                if (File.Exists(generatedPath))
+                {
+                    File.Delete(generatedPath);
+                }
+            }
             catch { /* best-effort cleanup */ }
             return null;
         }
@@ -650,15 +742,19 @@ public static class RunCommand
 
     private static List<string> ExtractTopLevelExpressions(string source)
     {
-        var expressions = new List<string>();
-        foreach (var rawLine in source.Replace("\r\n", "\n").Replace('\r', '\n').Split('\n'))
+        List<string> expressions = new List<string>();
+        foreach (string rawLine in source.Replace("\r\n", "\n").Replace('\r', '\n').Split('\n'))
         {
-            var line = StripLineComment(rawLine).Trim();
+            string line = StripLineComment(rawLine).Trim();
             if (line.Length == 0 || line.StartsWith("#", StringComparison.Ordinal))
+            {
                 continue;
+            }
 
             if (IsTopLevelDeclarationLine(line))
+            {
                 continue;
+            }
 
             if (line.StartsWith(":", StringComparison.Ordinal) ||
                 line.StartsWith(".", StringComparison.Ordinal) ||
@@ -667,7 +763,9 @@ public static class RunCommand
                 line.StartsWith(")", StringComparison.Ordinal) ||
                 line.StartsWith("]", StringComparison.Ordinal) ||
                 line.StartsWith("}", StringComparison.Ordinal))
+            {
                 return [];
+            }
 
             expressions.Add(line);
         }
@@ -677,13 +775,17 @@ public static class RunCommand
 
     private static string StripLineComment(string line)
     {
-        var inString = false;
-        for (var i = 0; i < line.Length; i++)
+        bool inString = false;
+        for (int i = 0; i < line.Length; i++)
         {
             if (line[i] == '\'' && (i == 0 || line[i - 1] != '\\'))
+            {
                 inString = !inString;
+            }
             else if (!inString && line[i] == '#')
+            {
                 return line[..i];
+            }
         }
 
         return line;
@@ -692,7 +794,9 @@ public static class RunCommand
     private static bool IsTopLevelDeclarationLine(string line)
     {
         if (line.StartsWith("export ", StringComparison.Ordinal))
+        {
             line = line["export ".Length..].TrimStart();
+        }
 
         return StartsWithWord(line, "import") ||
                StartsWithWord(line, "feed") ||
@@ -712,14 +816,17 @@ public static class RunCommand
     private static bool StartsWithWord(string value, string word)
     {
         if (!value.StartsWith(word, StringComparison.Ordinal))
+        {
             return false;
+        }
+
         return value.Length == word.Length || !char.IsLetterOrDigit(value[word.Length]) && value[word.Length] != '_';
     }
 
     private static void WriteOutputsAsJson(List<PrintOutput> outputs)
     {
         var items = outputs.Select(o => new { message = o.Message });
-        var json = JsonSerializer.Serialize(items, new JsonSerializerOptions { WriteIndented = true });
+        string json = JsonSerializer.Serialize(items, new JsonSerializerOptions { WriteIndented = true });
         Console.WriteLine(json);
     }
 
@@ -734,9 +841,14 @@ public static class RunCommand
         const string reset = "\x1b[0m";
 
         if (msg.StartsWith("[trace]"))
+        {
             return $"{cyan}{msg}{reset}";
+        }
+
         if (msg.StartsWith("[debug]"))
+        {
             return $"{magenta}{msg}{reset}";
+        }
         // [diag] and everything else
         return $"{gray}{msg}{reset}";
     }
@@ -754,8 +866,8 @@ public static class RunCommand
     {
         try
         {
-            var source = File.ReadAllText(filePath);
-            var module = Cop.Lang.Parser.CopParser.Parse(source, filePath);
+            string source = File.ReadAllText(filePath);
+            ModuleNode module = Cop.Lang.Parser.CopParser.Parse(source, filePath);
             return module.Declarations
                 .OfType<Cop.Lang.Ast.FunctionDecl>()
                 .Where(f => f.Name.Length > 0 && f.Name == f.Name.ToUpperInvariant())
@@ -796,22 +908,26 @@ public static class RunCommand
     private static string[] GetUserCheckFiles(Action<string>? diagLog)
     {
         if (NoUserChecks)
+        {
             return [];
+        }
 
-        var checksDir = UserChecksDirectory;
+        string checksDir = UserChecksDirectory;
         if (!Directory.Exists(checksDir))
+        {
             return [];
+        }
 
-        var files = new List<string>();
+        List<string> files = new List<string>();
 
         // 1. Top-level *.cop files are global (apply to all repos)
         files.AddRange(Directory.GetFiles(checksDir, "*.cop", SearchOption.TopDirectoryOnly));
 
         // 2. Repo-specific subdirectory (only if repo name matches)
-        var repoName = GetCurrentRepoName();
+        string? repoName = GetCurrentRepoName();
         if (repoName != null)
         {
-            var repoDir = Path.Combine(checksDir, repoName);
+            string repoDir = Path.Combine(checksDir, repoName);
             if (Directory.Exists(repoDir))
             {
                 files.AddRange(Directory.GetFiles(repoDir, "*.cop", SearchOption.AllDirectories));
@@ -820,7 +936,10 @@ public static class RunCommand
         }
 
         if (files.Count > 0)
+        {
             diagLog?.Invoke($"[diag] Including {files.Count} user check file(s) from {checksDir}");
+        }
+
         return files.ToArray();
     }
 
@@ -833,7 +952,10 @@ public static class RunCommand
     private static string? GetCurrentRepoName()
     {
         if (_repoNameResolved)
+        {
             return _cachedRepoName;
+        }
+
         _repoNameResolved = true;
 
         // Try git remote origin URL
@@ -847,27 +969,37 @@ public static class RunCommand
     {
         try
         {
-            var psi = new System.Diagnostics.ProcessStartInfo("git", "remote get-url origin")
+            ProcessStartInfo psi = new System.Diagnostics.ProcessStartInfo("git", "remote get-url origin")
             {
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
                 UseShellExecute = false,
                 CreateNoWindow = true
             };
-            using var proc = System.Diagnostics.Process.Start(psi);
-            if (proc == null) return null;
-            var output = proc.StandardOutput.ReadToEnd().Trim();
+            using Process? proc = System.Diagnostics.Process.Start(psi);
+            if (proc == null)
+            {
+                return null;
+            }
+
+            string output = proc.StandardOutput.ReadToEnd().Trim();
             proc.WaitForExit(3000);
-            if (proc.ExitCode != 0 || string.IsNullOrEmpty(output)) return null;
+            if (proc.ExitCode != 0 || string.IsNullOrEmpty(output))
+            {
+                return null;
+            }
 
             // Parse repo name from URL: https://github.com/org/repo.git → repo
             // Also handles: git@github.com:org/repo.git
-            var name = output.TrimEnd('/');
+            string name = output.TrimEnd('/');
             if (name.EndsWith(".git", StringComparison.OrdinalIgnoreCase))
+            {
                 name = name[..^4];
-            var lastSlash = name.LastIndexOf('/');
-            var lastColon = name.LastIndexOf(':');
-            var sep = Math.Max(lastSlash, lastColon);
+            }
+
+            int lastSlash = name.LastIndexOf('/');
+            int lastColon = name.LastIndexOf(':');
+            int sep = Math.Max(lastSlash, lastColon);
             return sep >= 0 ? name[(sep + 1)..] : null;
         }
         catch
@@ -880,18 +1012,26 @@ public static class RunCommand
     {
         try
         {
-            var psi = new System.Diagnostics.ProcessStartInfo("git", "rev-parse --show-toplevel")
+            ProcessStartInfo psi = new System.Diagnostics.ProcessStartInfo("git", "rev-parse --show-toplevel")
             {
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
                 UseShellExecute = false,
                 CreateNoWindow = true
             };
-            using var proc = System.Diagnostics.Process.Start(psi);
-            if (proc == null) return null;
-            var output = proc.StandardOutput.ReadToEnd().Trim();
+            using Process? proc = System.Diagnostics.Process.Start(psi);
+            if (proc == null)
+            {
+                return null;
+            }
+
+            string output = proc.StandardOutput.ReadToEnd().Trim();
             proc.WaitForExit(3000);
-            if (proc.ExitCode != 0 || string.IsNullOrEmpty(output)) return null;
+            if (proc.ExitCode != 0 || string.IsNullOrEmpty(output))
+            {
+                return null;
+            }
+
             return GetDirectoryName(output);
         }
         catch
@@ -902,7 +1042,7 @@ public static class RunCommand
 
     private static string? GetDirectoryName(string path)
     {
-        var name = Path.GetFileName(path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+        string name = Path.GetFileName(path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
         return string.IsNullOrEmpty(name) ? null : name;
     }
 
@@ -914,7 +1054,7 @@ public static class RunCommand
     {
         try
         {
-            var psi = new System.Diagnostics.ProcessStartInfo("git", "status --porcelain")
+            ProcessStartInfo psi = new System.Diagnostics.ProcessStartInfo("git", "status --porcelain")
             {
                 WorkingDirectory = workingDir,
                 RedirectStandardOutput = true,
@@ -922,11 +1062,19 @@ public static class RunCommand
                 UseShellExecute = false,
                 CreateNoWindow = true
             };
-            using var proc = System.Diagnostics.Process.Start(psi);
-            if (proc == null) return true;
-            var output = proc.StandardOutput.ReadToEnd();
+            using Process? proc = System.Diagnostics.Process.Start(psi);
+            if (proc == null)
+            {
+                return true;
+            }
+
+            string output = proc.StandardOutput.ReadToEnd();
             proc.WaitForExit(5000);
-            if (proc.ExitCode != 0) return true;
+            if (proc.ExitCode != 0)
+            {
+                return true;
+            }
+
             return !string.IsNullOrWhiteSpace(output);
         }
         catch
@@ -941,60 +1089,85 @@ public static class RunCommand
     /// </summary>
     private static void AutoRestoreImports(string scriptsDir, Action<string>? diagLog)
     {
-        var cachePath = PackageResolver.GlobalCachePath;
+        string cachePath = PackageResolver.GlobalCachePath;
 
-        var feedPaths = PackageResolver.GetFeedPaths();
-        foreach (var p in PackageResolver.GetFeedPaths(scriptsDir))
+        List<string> feedPaths = PackageResolver.GetFeedPaths();
+        foreach (string p in PackageResolver.GetFeedPaths(scriptsDir))
+        {
             if (!feedPaths.Contains(p, StringComparer.OrdinalIgnoreCase))
+            {
                 feedPaths.Add(p);
+            }
+        }
 
         // Parse all .cop files to collect imports
-        var imports = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var scriptFilePaths = Directory.GetFiles(scriptsDir, "*.cop", SearchOption.AllDirectories);
-        foreach (var path in scriptFilePaths)
+        HashSet<string> imports = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        string[] scriptFilePaths = Directory.GetFiles(scriptsDir, "*.cop", SearchOption.AllDirectories);
+        foreach (string path in scriptFilePaths)
         {
             try
             {
-                var source = File.ReadAllText(path);
-                var module = Cop.Lang.Parser.CopParser.Parse(source, path);
-                foreach (var imp in module.Declarations.OfType<Cop.Lang.Ast.ImportDecl>())
+                string source = File.ReadAllText(path);
+                ModuleNode module = Cop.Lang.Parser.CopParser.Parse(source, path);
+                foreach (ImportDecl imp in module.Declarations.OfType<Cop.Lang.Ast.ImportDecl>())
+                {
                     imports.Add(imp.ModuleName);
+                }
+
                 AddDeclaredFeedPaths(feedPaths, module, path);
             }
             catch { /* skip unparseable files */ }
         }
 
-        if (imports.Count == 0) return;
+        if (imports.Count == 0)
+        {
+            return;
+        }
 
-        var incompatibleProviders = new HashSet<string>(StringComparer.Ordinal);
+        HashSet<string> incompatibleProviders = new HashSet<string>(StringComparer.Ordinal);
         string? FindCompatiblePackage(string name) =>
             PackageResolver.FindPackageDir(name, feedPaths, error =>
             {
                 if (incompatibleProviders.Add(error))
+                {
                     diagLog?.Invoke($"[diag] Skipping local provider: {error}");
+                }
             });
 
         void ReportCompatibilityResolved()
         {
             if (incompatibleProviders.Count > 0)
+            {
                 Console.Error.WriteLine($"Info: Packages are ready for Cop {ProviderCompatibility.HostVersion}.");
+            }
         }
 
-        var pendingImports = new Queue<string>(imports);
-        while (pendingImports.TryDequeue(out var name))
+        Queue<string> pendingImports = new Queue<string>(imports);
+        while (pendingImports.TryDequeue(out string? name))
         {
             if (FindCompatiblePackage(name) is not { } packageDir)
+            {
                 continue;
-            foreach (var import in ReadPackageImports(packageDir))
+            }
+
+            foreach (string import in ReadPackageImports(packageDir))
+            {
                 if (imports.Add(import))
+                {
                     pendingImports.Enqueue(import);
+                }
+            }
         }
 
         // Find imports that can't be resolved from any known path
-        var missing = new List<string>();
-        foreach (var imp in imports)
+        List<string> missing = new List<string>();
+        foreach (string imp in imports)
+        {
             if (FindCompatiblePackage(imp) is null)
+            {
                 missing.Add(imp);
+            }
+        }
 
         if (missing.Count == 0)
         {
@@ -1003,9 +1176,9 @@ public static class RunCommand
         }
 
         // Try to restore from GitHub feeds
-        var feedManager = new FeedManager();
-        var feeds = feedManager.GetFeeds();
-        var githubFeeds = feeds
+        FeedManager feedManager = new FeedManager();
+        List<string> feeds = feedManager.GetFeeds();
+        List<string> githubFeeds = feeds
             .Where(f => f.StartsWith("github.com/", StringComparison.OrdinalIgnoreCase))
             .ToList();
 
@@ -1016,66 +1189,80 @@ public static class RunCommand
         }
 
         string? githubToken = ResolveGitHubToken();
-        using var httpClient = new HttpClient();
-        var source2 = new GitHubPackageSource(httpClient, githubToken);
+        using HttpClient httpClient = new HttpClient();
+        GitHubPackageSource source2 = new GitHubPackageSource(httpClient, githubToken);
 
         Directory.CreateDirectory(cachePath);
         if (!feedPaths.Contains(cachePath, StringComparer.OrdinalIgnoreCase))
+        {
             feedPaths.Add(cachePath);
+        }
 
         // BFS: download missing packages and their transitive imports
-        var queue = new Queue<string>(missing);
-        var downloaded = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var restoredCount = 0;
+        Queue<string> queue = new Queue<string>(missing);
+        HashSet<string> downloaded = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        int restoredCount = 0;
 
         if (missing.Count > 0)
         {
-            var feedCount = githubFeeds.Distinct().Count();
+            int feedCount = githubFeeds.Distinct().Count();
             if (incompatibleProviders.Count > 0)
+            {
                 Console.Error.WriteLine("Info: Local packages target a different Cop version. " +
                     "Preparing matching packages automatically; local files will not be changed.");
+            }
+
             Console.Error.WriteLine($"Auto-restoring {missing.Count} package(s) from {feedCount} feed(s)...");
         }
 
         while (queue.Count > 0)
         {
-            var pkgName = queue.Dequeue();
-            if (downloaded.Contains(pkgName)) continue;
+            string pkgName = queue.Dequeue();
+            if (downloaded.Contains(pkgName))
+            {
+                continue;
+            }
 
             if (FindCompatiblePackage(pkgName) is { } existingPackage)
             {
                 downloaded.Add(pkgName);
-                foreach (var import in ReadPackageImports(existingPackage))
+                foreach (string import in ReadPackageImports(existingPackage))
+                {
                     if (!downloaded.Contains(import))
                     {
                         imports.Add(import);
                         queue.Enqueue(import);
                     }
+                }
+
                 continue;
             }
 
             bool restored = false;
-            foreach (var feed in githubFeeds)
+            foreach (string feed in githubFeeds)
             {
                 try
                 {
-                    var pkgRef = PackageReference.Parse($"{feed}/{pkgName}");
+                    PackageReference pkgRef = PackageReference.Parse($"{feed}/{pkgName}");
                     Console.Error.Write($"  Restoring '{pkgName}' from {feed}...");
-                    var files = source2.DownloadPackageFilesAsync(pkgRef).GetAwaiter().GetResult();
+                    Dictionary<string, byte[]> files = source2.DownloadPackageFilesAsync(pkgRef).GetAwaiter().GetResult();
 
                     if (files.Count == 0) { Console.Error.WriteLine(" no files"); continue; }
 
                     // Write to temp directory first, then atomically move into place.
                     // This prevents concurrent cop processes from reading partially-written packages.
-                    var pkgDir = Path.Combine(cachePath, pkgName);
-                    var tempDir = Path.Combine(cachePath, $".{pkgName}.tmp.{Environment.ProcessId}");
+                    string pkgDir = Path.Combine(cachePath, pkgName);
+                    string tempDir = Path.Combine(cachePath, $".{pkgName}.tmp.{Environment.ProcessId}");
                     try
                     {
                         if (Directory.Exists(tempDir))
-                            Directory.Delete(tempDir, recursive: true);
-                        foreach (var (relativePath, content) in files)
                         {
-                            var destPath = ValidatePackagePath(relativePath, tempDir);
+                            Directory.Delete(tempDir, recursive: true);
+                        }
+
+                        foreach ((string? relativePath, byte[]? content) in files)
+                        {
+                            string destPath = ValidatePackagePath(relativePath, tempDir);
                             Directory.CreateDirectory(Path.GetDirectoryName(destPath)!);
                             File.WriteAllBytes(destPath, content);
                         }
@@ -1089,7 +1276,7 @@ public static class RunCommand
                     catch
                     {
                         // Clean up temp dir on any failure
-                        try { if (Directory.Exists(tempDir)) Directory.Delete(tempDir, recursive: true); } catch { }
+                        try { if (Directory.Exists(tempDir)) { Directory.Delete(tempDir, recursive: true); } } catch { }
                         throw;
                     }
 
@@ -1099,16 +1286,16 @@ public static class RunCommand
                     restoredCount++;
 
                     // Parse src/ .cop files to discover transitive imports (skip samples/)
-                    foreach (var (relPath, _) in files.Where(f =>
+                    foreach ((string? relPath, byte[] _) in files.Where(f =>
                         f.Key.EndsWith(".cop", StringComparison.OrdinalIgnoreCase) &&
                         f.Key.StartsWith("src/", StringComparison.OrdinalIgnoreCase)))
                     {
-                        var filePath = Path.Combine(pkgDir, relPath);
+                        string filePath = Path.Combine(pkgDir, relPath);
                         try
                         {
-                            var src = File.ReadAllText(filePath);
-                            var sf = Cop.Lang.Parser.CopParser.ParseFile(src, filePath);
-                            foreach (var imp in sf.Imports)
+                            string src = File.ReadAllText(filePath);
+                            ScriptFile sf = Cop.Lang.Parser.CopParser.ParseFile(src, filePath);
+                            foreach (string imp in sf.Imports)
                             {
                                 if (!downloaded.Contains(imp))
                                 {
@@ -1133,7 +1320,9 @@ public static class RunCommand
             }
 
             if (!restored)
+            {
                 Console.Error.WriteLine($"Warning: Package '{pkgName}' not found in any configured feed.");
+            }
         }
 
         if (restoredCount > 0)
@@ -1149,11 +1338,15 @@ public static class RunCommand
 
     private static void AddDeclaredFeedPaths(List<string> feedPaths, Cop.Lang.Ast.ModuleNode module, string filePath)
     {
-        foreach (var feed in Cop.Lang.Interpreter.ModuleLoader.ExtractFeedPaths(module,
+        foreach (string feed in Cop.Lang.Interpreter.ModuleLoader.ExtractFeedPaths(module,
             Path.GetDirectoryName(Path.GetFullPath(filePath))!))
         {
-            if (feedPaths.Contains(feed, StringComparer.OrdinalIgnoreCase)) continue;
-            var cacheIndex = feedPaths.FindIndex(p =>
+            if (feedPaths.Contains(feed, StringComparer.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            int cacheIndex = feedPaths.FindIndex(p =>
                 string.Equals(p, PackageResolver.GlobalCachePath, StringComparison.OrdinalIgnoreCase));
             feedPaths.Insert(cacheIndex < 0 ? feedPaths.Count : cacheIndex, feed);
         }
@@ -1170,23 +1363,37 @@ public static class RunCommand
     {
         try
         {
-            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            var queue = new Queue<string>();
-            var feedPaths = PackageResolver.GetFeedPaths();
-            foreach (var p in PackageResolver.GetFeedPaths(scriptsDir))
+            HashSet<string> seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            Queue<string> queue = new Queue<string>();
+            List<string> feedPaths = PackageResolver.GetFeedPaths();
+            foreach (string p in PackageResolver.GetFeedPaths(scriptsDir))
+            {
                 if (!feedPaths.Contains(p, StringComparer.OrdinalIgnoreCase))
+                {
                     feedPaths.Add(p);
+                }
+            }
 
             void EnqueueImportsFrom(string dir)
             {
-                if (!Directory.Exists(dir)) return;
-                foreach (var path in Directory.GetFiles(dir, "*.cop", SearchOption.AllDirectories))
+                if (!Directory.Exists(dir))
+                {
+                    return;
+                }
+
+                foreach (string path in Directory.GetFiles(dir, "*.cop", SearchOption.AllDirectories))
                 {
                     try
                     {
-                        var module = Cop.Lang.Parser.CopParser.Parse(File.ReadAllText(path), path);
-                        foreach (var imp in module.Declarations.OfType<Cop.Lang.Ast.ImportDecl>())
-                            if (seen.Add(imp.ModuleName)) queue.Enqueue(imp.ModuleName);
+                        ModuleNode module = Cop.Lang.Parser.CopParser.Parse(File.ReadAllText(path), path);
+                        foreach (ImportDecl imp in module.Declarations.OfType<Cop.Lang.Ast.ImportDecl>())
+                        {
+                            if (seen.Add(imp.ModuleName))
+                            {
+                                queue.Enqueue(imp.ModuleName);
+                            }
+                        }
+
                         AddDeclaredFeedPaths(feedPaths, module, path);
                     }
                     catch { /* skip unparseable files */ }
@@ -1194,25 +1401,36 @@ public static class RunCommand
             }
 
             EnqueueImportsFrom(scriptsDir);
-            if (queue.Count == 0) return;
+            if (queue.Count == 0)
+            {
+                return;
+            }
 
             while (queue.Count > 0)
             {
-                var name = queue.Dequeue();
+                string name = queue.Dequeue();
 
                 string? pkgDir = null;
-                foreach (var feed in feedPaths)
+                foreach (string feed in feedPaths)
                 {
                     pkgDir = ImportResolver.FindPackageDir(feed, name);
-                    if (pkgDir != null) break;
+                    if (pkgDir != null)
+                    {
+                        break;
+                    }
                 }
-                if (pkgDir == null) continue;
+                if (pkgDir == null)
+                {
+                    continue;
+                }
 
                 try
                 {
-                    var target = InstructionPlacement.PlaceFromPackageDir(repoRoot, pkgDir, out var wrote);
+                    string? target = InstructionPlacement.PlaceFromPackageDir(repoRoot, pkgDir, out bool wrote);
                     if (target != null && wrote)
+                    {
                         diagLog?.Invoke($"[diag] Placed instructions for '{name}' -> {target}");
+                    }
                 }
                 catch (Exception ex)
                 {
@@ -1220,7 +1438,7 @@ public static class RunCommand
                 }
 
                 // Follow the package's own imports (types/ takes priority over src/).
-                var typesDir = Path.Combine(pkgDir, "types");
+                string typesDir = Path.Combine(pkgDir, "types");
                 EnqueueImportsFrom(Directory.Exists(typesDir) ? typesDir : Path.Combine(pkgDir, "src"));
             }
         }
@@ -1235,15 +1453,17 @@ public static class RunCommand
     /// </summary>
     private static List<string> FindMissingPackages(string[] packages, List<string> feedPaths, string cachePath)
     {
-        var allPaths = new List<string>(feedPaths);
+        List<string> allPaths = new List<string>(feedPaths);
         if (Directory.Exists(cachePath))
+        {
             allPaths.Add(cachePath);
+        }
 
-        var missing = new List<string>();
-        foreach (var pkg in packages)
+        List<string> missing = new List<string>();
+        foreach (string pkg in packages)
         {
             bool found = false;
-            foreach (var feed in allPaths)
+            foreach (string feed in allPaths)
             {
                 if (ImportResolver.FindPackageDir(Path.GetFullPath(feed), pkg) is not null)
                 {
@@ -1252,7 +1472,9 @@ public static class RunCommand
                 }
             }
             if (!found)
+            {
                 missing.Add(pkg);
+            }
         }
         return missing;
     }
@@ -1274,10 +1496,10 @@ public static class RunCommand
 
     public static async Task<bool> AutoRestorePackagesAsync(List<string> packageNames, string cachePath)
     {
-        var feedManager = new FeedManager();
-        var feeds = feedManager.GetFeeds();
+        FeedManager feedManager = new FeedManager();
+        List<string> feeds = feedManager.GetFeeds();
 
-        var githubFeeds = feeds
+        List<string> githubFeeds = feeds
             .Where(f => f.StartsWith("github.com/", StringComparison.OrdinalIgnoreCase))
             .ToList();
 
@@ -1288,26 +1510,29 @@ public static class RunCommand
         }
 
         string? githubToken = ResolveGitHubToken();
-        using var httpClient = new HttpClient();
-        var source = new GitHubPackageSource(httpClient, githubToken);
+        using HttpClient httpClient = new HttpClient();
+        GitHubPackageSource source = new GitHubPackageSource(httpClient, githubToken);
 
         Directory.CreateDirectory(cachePath);
 
         // BFS: download requested packages, then their imports
-        var queue = new Queue<string>(packageNames);
-        var downloaded = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var restoredCount = 0;
+        Queue<string> queue = new Queue<string>(packageNames);
+        HashSet<string> downloaded = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        int restoredCount = 0;
 
         if (packageNames.Count > 0)
         {
-            var feedCount = githubFeeds.Distinct().Count();
+            int feedCount = githubFeeds.Distinct().Count();
             Console.Error.WriteLine($"Auto-restoring {packageNames.Count} package(s) from {feedCount} feed(s)...");
         }
 
         while (queue.Count > 0)
         {
-            var pkgName = queue.Dequeue();
-            if (downloaded.Contains(pkgName)) continue;
+            string pkgName = queue.Dequeue();
+            if (downloaded.Contains(pkgName))
+            {
+                continue;
+            }
 
             if (ImportResolver.FindPackageDir(cachePath, pkgName) is not null)
             {
@@ -1316,27 +1541,30 @@ public static class RunCommand
             }
 
             bool restored = false;
-            foreach (var feed in githubFeeds)
+            foreach (string feed in githubFeeds)
             {
                 try
                 {
-                    var pkgRef = PackageReference.Parse($"{feed}/{pkgName}");
+                    PackageReference pkgRef = PackageReference.Parse($"{feed}/{pkgName}");
                     Console.Error.Write($"  Restoring '{pkgName}' from {feed}...");
-                    var files = await source.DownloadPackageFilesAsync(pkgRef);
+                    Dictionary<string, byte[]> files = await source.DownloadPackageFilesAsync(pkgRef);
 
                     if (files.Count == 0) { Console.Error.WriteLine(" no files"); continue; }
 
                     // Write to temp directory first, then atomically move into place.
                     // This prevents concurrent cop processes from reading partially-written packages.
-                    var pkgDir = Path.Combine(cachePath, pkgName);
-                    var tempDir = Path.Combine(cachePath, $".{pkgName}.tmp.{Environment.ProcessId}");
+                    string pkgDir = Path.Combine(cachePath, pkgName);
+                    string tempDir = Path.Combine(cachePath, $".{pkgName}.tmp.{Environment.ProcessId}");
                     try
                     {
                         if (Directory.Exists(tempDir))
-                            Directory.Delete(tempDir, recursive: true);
-                        foreach (var (relativePath, content) in files)
                         {
-                            var destPath = ValidatePackagePath(relativePath, tempDir);
+                            Directory.Delete(tempDir, recursive: true);
+                        }
+
+                        foreach ((string? relativePath, byte[]? content) in files)
+                        {
+                            string destPath = ValidatePackagePath(relativePath, tempDir);
                             Directory.CreateDirectory(Path.GetDirectoryName(destPath)!);
                             await File.WriteAllBytesAsync(destPath, content);
                         }
@@ -1349,7 +1577,7 @@ public static class RunCommand
                     }
                     catch
                     {
-                        try { if (Directory.Exists(tempDir)) Directory.Delete(tempDir, recursive: true); } catch { }
+                        try { if (Directory.Exists(tempDir)) { Directory.Delete(tempDir, recursive: true); } } catch { }
                         throw;
                     }
 
@@ -1359,19 +1587,21 @@ public static class RunCommand
                     restoredCount++;
 
                     // Parse src/ .cop files to discover transitive imports (skip samples/)
-                    foreach (var (relPath, _) in files.Where(f =>
+                    foreach ((string? relPath, byte[] _) in files.Where(f =>
                         f.Key.EndsWith(".cop", StringComparison.OrdinalIgnoreCase) &&
                         f.Key.StartsWith("src/", StringComparison.OrdinalIgnoreCase)))
                     {
-                        var filePath = Path.Combine(pkgDir, relPath);
+                        string filePath = Path.Combine(pkgDir, relPath);
                         try
                         {
-                            var src = File.ReadAllText(filePath);
-                            var sf = Cop.Lang.Parser.CopParser.ParseFile(src, filePath);
-                            foreach (var imp in sf.Imports)
+                            string src = File.ReadAllText(filePath);
+                            ScriptFile sf = Cop.Lang.Parser.CopParser.ParseFile(src, filePath);
+                            foreach (string imp in sf.Imports)
                             {
                                 if (!downloaded.Contains(imp))
+                                {
                                     queue.Enqueue(imp);
+                                }
                             }
                         }
                         catch { /* skip unparseable files */ }
@@ -1406,38 +1636,48 @@ public static class RunCommand
 
     private static IEnumerable<string> ReadPackageImports(string packageDir)
     {
-        var srcDir = Path.Combine(packageDir, "src");
+        string srcDir = Path.Combine(packageDir, "src");
         if (!Directory.Exists(srcDir))
-            yield break;
-        foreach (var path in Directory.GetFiles(srcDir, "*.cop"))
         {
-            var module = Cop.Lang.Parser.CopParser.ParseWithRecovery(File.ReadAllText(path), path, out _);
-            foreach (var import in module.Declarations.OfType<Cop.Lang.Ast.ImportDecl>())
+            yield break;
+        }
+
+        foreach (string path in Directory.GetFiles(srcDir, "*.cop"))
+        {
+            ModuleNode module = Cop.Lang.Parser.CopParser.ParseWithRecovery(File.ReadAllText(path), path, out _);
+            foreach (ImportDecl import in module.Declarations.OfType<Cop.Lang.Ast.ImportDecl>())
+            {
                 yield return import.ModuleName;
+            }
         }
     }
 
     internal static string? ResolveGitHubToken()
     {
-        var token = Environment.GetEnvironmentVariable("GITHUB_TOKEN");
-        if (!string.IsNullOrWhiteSpace(token)) return token;
+        string? token = Environment.GetEnvironmentVariable("GITHUB_TOKEN");
+        if (!string.IsNullOrWhiteSpace(token))
+        {
+            return token;
+        }
 
         try
         {
-            var psi = new System.Diagnostics.ProcessStartInfo("gh", "auth token")
+            ProcessStartInfo psi = new System.Diagnostics.ProcessStartInfo("gh", "auth token")
             {
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
                 UseShellExecute = false,
                 CreateNoWindow = true
             };
-            using var proc = System.Diagnostics.Process.Start(psi);
+            using Process? proc = System.Diagnostics.Process.Start(psi);
             if (proc != null)
             {
-                var output = proc.StandardOutput.ReadToEnd().Trim();
+                string output = proc.StandardOutput.ReadToEnd().Trim();
                 proc.WaitForExit(5000);
                 if (proc.ExitCode == 0 && !string.IsNullOrEmpty(output))
+                {
                     return output;
+                }
             }
         }
         catch { }
@@ -1452,15 +1692,15 @@ public static class RunCommand
     private static string ValidatePackagePath(string relativePath, string baseDir)
     {
         // Normalize the path by combining with a dummy base and checking it stays within bounds
-        var testBase = Path.GetFullPath("dummy");
-        var testPath = Path.GetFullPath(Path.Combine("dummy", relativePath));
-        
+        string testBase = Path.GetFullPath("dummy");
+        string testPath = Path.GetFullPath(Path.Combine("dummy", relativePath));
+
         if (!testPath.StartsWith(testBase + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase) &&
             !testPath.Equals(testBase, StringComparison.OrdinalIgnoreCase))
         {
             throw new SecurityException($"Invalid package path (potential path traversal): {relativePath}");
         }
-        
+
         // Return the validated combined path
         return Path.Combine(baseDir, relativePath);
     }

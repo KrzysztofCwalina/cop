@@ -1,3 +1,5 @@
+// Represents property declarations and accessor availability.
+
 namespace Cop.Providers.SourceModel;
 
 public record PropertyDeclaration(string Name, TypeReference? Type, Modifier Modifiers, int Line)

@@ -1,3 +1,5 @@
+// Bridges the syntax-tree pipeline and the public source-model representation.
+
 namespace Cop.Lang.Interpreter;
 
 using Cop.Lang.Ast;
@@ -61,7 +63,7 @@ public sealed class LanguageBridge
     /// </summary>
     public void LoadSource(string source, string filePath = "<unknown>")
     {
-        var module = CopParser.Parse(source, filePath);
+        ModuleNode module = CopParser.Parse(source, filePath);
         _evaluator.EvalModule(module);
     }
 
@@ -70,7 +72,7 @@ public sealed class LanguageBridge
     /// </summary>
     public void LoadFile(string path)
     {
-        var source = File.ReadAllText(path);
+        string source = File.ReadAllText(path);
         LoadSource(source, path);
     }
 
@@ -84,7 +86,7 @@ public sealed class LanguageBridge
     /// </summary>
     public void RegisterCollection(string name, IReadOnlyList<DataObject> items)
     {
-        var copItems = items.Select(item =>
+        List<CopValue> copItems = items.Select(item =>
             (CopValue)new CopDynamicObject(item, DataObjectAdapter.Instance)).ToList();
         _evaluator.GlobalEnvironment.Define(name, new CopList(copItems));
     }
@@ -94,7 +96,7 @@ public sealed class LanguageBridge
     /// </summary>
     public void RegisterLazyCollection(string name, Func<IEnumerable<DataObject>> factory)
     {
-        var lazy = new CopLazyCollection(() =>
+        CopLazyCollection lazy = new CopLazyCollection(() =>
             factory().Select(item =>
                 (CopValue)new CopDynamicObject(item, DataObjectAdapter.Instance)));
         _evaluator.GlobalEnvironment.Define(name, lazy);
@@ -153,8 +155,8 @@ public sealed class LanguageBridge
     /// </summary>
     public CopValue EvalExpression(string exprSource)
     {
-        var source = $"command __eval__ = {exprSource}";
-        var module = CopParser.Parse(source, "<eval>");
+        string source = $"command __eval__ = {exprSource}";
+        ModuleNode module = CopParser.Parse(source, "<eval>");
         _evaluator.EvalModule(module);
         return _evaluator.RunCommand("__eval__");
     }

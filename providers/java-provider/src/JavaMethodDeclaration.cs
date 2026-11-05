@@ -1,3 +1,5 @@
+// Preserves Java method modifiers and generic facts through source caching.
+
 namespace Cop.Providers.SourceModel;
 
 /// <summary>
@@ -6,6 +8,9 @@ namespace Cop.Providers.SourceModel;
 /// </summary>
 public sealed record JavaMethodDeclaration : MethodDeclaration
 {
+    /// <summary>
+    /// Creates a Java method from its parsed signature and modifier facts.
+    /// </summary>
     public JavaMethodDeclaration(
         string name,
         Modifier modifiers,
@@ -27,6 +32,7 @@ public sealed record JavaMethodDeclaration : MethodDeclaration
         IsGeneric = isGeneric;
     }
 
+    /// <summary>Copies a shared method and adds Java-specific modifier facts.</summary>
     public JavaMethodDeclaration(
         MethodDeclaration source,
         bool isSynchronized = false,
@@ -58,8 +64,10 @@ public sealed record JavaMethodDeclaration : MethodDeclaration
     /// <summary>True when the method declares generic type parameters.</summary>
     public bool IsGeneric { get; init; }
 
+    /// <inheritdoc />
     public override string? LanguageTag => "java";
 
+    /// <inheritdoc />
     public override IReadOnlyList<KeyValuePair<string, bool>>? LanguageFlags =>
     [
         new("IsSynchronized", IsSynchronized),
@@ -69,16 +77,20 @@ public sealed record JavaMethodDeclaration : MethodDeclaration
         new("IsGeneric", IsGeneric),
     ];
 
+    /// <summary>
+    /// Registers reconstruction of Java method flags from cached declarations.
+    /// </summary>
     public static void RegisterCacheFactory() =>
         MethodTypeRegistry.Register("java", (baseDecl, flags) => new JavaMethodDeclaration(
             baseDecl,
-            isSynchronized: flags.TryGetValue("IsSynchronized", out var sync) && sync,
-            isNative: flags.TryGetValue("IsNative", out var native) && native,
-            isDefault: flags.TryGetValue("IsDefault", out var def) && def,
-            isStrictfp: flags.TryGetValue("IsStrictfp", out var strictfp) && strictfp,
-            isGeneric: flags.TryGetValue("IsGeneric", out var generic) && generic));
+            isSynchronized: flags.TryGetValue("IsSynchronized", out bool sync) && sync,
+            isNative: flags.TryGetValue("IsNative", out bool native) && native,
+            isDefault: flags.TryGetValue("IsDefault", out bool def) && def,
+            isStrictfp: flags.TryGetValue("IsStrictfp", out bool strictfp) && strictfp,
+            isGeneric: flags.TryGetValue("IsGeneric", out bool generic) && generic));
 }
 
+/// <summary>Converts shared method declarations to Java-specific declarations.</summary>
 public static class JavaMethodDeclarationExtensions
 {
     /// <summary>Wraps a common <see cref="MethodDeclaration"/> as a Java-specific one.</summary>

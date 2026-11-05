@@ -1,3 +1,5 @@
+// Coordinates bounded AI review of changed source files and validates findings.
+
 using System.Net.Http;
 using System.Text;
 using System.Text.Json;
@@ -6,6 +8,9 @@ using Cop.Lang;
 
 namespace Cop.Providers.Ai;
 
+/// <summary>
+/// Reviews repository changes against requirements using bounded model calls.
+/// </summary>
 public partial class AiProvider
 {
     private const int MaxReviewTurns = 8;
@@ -22,44 +27,61 @@ public partial class AiProvider
         try
         {
             if (args.Count != 2 || args[0] is not string requirement || string.IsNullOrWhiteSpace(requirement))
+            {
                 return One("ai.judge requires a non-empty requirement and a Codebase argument");
+            }
             // Preserve the Codebase-only contract, including validation of parsed source.
             SerializeCodebase(args[1], allowEmpty: true);
-            var codebase = (DataObject)args[1]!;
-            var snapshot = context.Changes;
+            DataObject codebase = (DataObject)args[1]!;
+            ChangeSnapshot snapshot = context.Changes;
             activeSnapshot = snapshot;
             snapshot.AssertUnchanged();
-            var files = Items(codebase, "Files").ToList();
-            var selectedPaths = files.Select(file =>
+            List<object> files = Items(codebase, "Files").ToList();
+            HashSet<string> selectedPaths = files.Select(file =>
             {
-                var fullPath = Member(file, "FullPath") as string;
+                string? fullPath = Member(file, "FullPath") as string;
                 if (string.IsNullOrWhiteSpace(fullPath) || !Path.IsPathFullyQualified(fullPath))
+                {
                     throw new InvalidOperationException(
                         "diff review requires absolute File.FullPath provenance; reparse the Codebase with an updated provider");
+                }
+
                 return snapshot.ToRepositoryPath(fullPath);
             }).ToHashSet(OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
-            var scopes = new List<(string Root, HashSet<string> Extensions)>();
-            foreach (var scope in Items(codebase, "SourceScopes"))
+            List<(string Root, HashSet<string> Extensions)> scopes = new List<(string Root, HashSet<string> Extensions)>();
+            foreach (object scope in Items(codebase, "SourceScopes"))
             {
                 if (Member(scope, "RootPath") is not string root || !Path.IsPathFullyQualified(root)
                     || !IsWithin(context.RootPath, root))
+                {
                     throw new InvalidOperationException("Codebase source scopes require absolute parser roots inside the review target");
-                var extensions = Items(scope, "Extensions").Select(value => value as string
+                }
+
+                HashSet<string> extensions = Items(scope, "Extensions").Select(value => value as string
                     ?? throw new InvalidOperationException("Codebase source-scope extensions must be strings"))
                     .ToHashSet(StringComparer.OrdinalIgnoreCase);
                 if (extensions.Count == 0 || extensions.Any(extension => !extension.StartsWith('.')
                     || extension.Length < 2 || extension.IndexOfAny(['/', '\\', ':']) >= 0))
+                {
                     throw new InvalidOperationException("Codebase source scopes require explicit source-file extensions");
+                }
+
                 scopes.Add((root, extensions));
             }
-            foreach (var group in files.Where(file => Member(file, "SourceRoot") is string root
+            foreach (IGrouping<string, object> group in files.Where(file => Member(file, "SourceRoot") is string root
                 && Path.IsPathFullyQualified(root)).GroupBy(file => (string)Member(file, "SourceRoot")!))
+            {
                 scopes.Add((group.Key, group.Select(file => Path.GetExtension(FilePath(file)))
                     .ToHashSet(StringComparer.OrdinalIgnoreCase)));
+            }
+
             if (files.Count == 0 && scopes.Count == 0)
+            {
                 throw new InvalidOperationException(
                     "the Codebase contains no files or parser source scopes; reparse with an updated provider to review deletions");
-            var subjects = snapshot.Files.Where(file => selectedPaths.Contains(file.Path)
+            }
+
+            List<ChangedFile> subjects = snapshot.Files.Where(file => selectedPaths.Contains(file.Path)
                 || (file.OldPath is not null && selectedPaths.Contains(file.OldPath))
                 || scopes.Any(scope => scope.Extensions.Contains(Path.GetExtension(file.Path))
                     && IsWithin(scope.Root, Path.Combine(snapshot.RepositoryRoot, file.Path)))).ToList();
@@ -71,16 +93,21 @@ public partial class AiProvider
                 snapshot.Log("ai.judge: no applicable changes in the supplied Codebase; skipped (0 model requests, not a completed review).");
                 return new List<object?>();
             }
-            foreach (var file in subjects)
+            foreach (ChangedFile file in subjects)
             {
                 if (file.IsBinary || string.IsNullOrWhiteSpace(file.Patch))
+                {
                     throw new InvalidOperationException(
                         $"cannot review changed subject '{file.Path}': binary or omitted patch; narrow the selected Codebase explicitly");
+                }
+
                 if (!file.IsDeleted && !selectedPaths.Contains(file.Path))
+                {
                     throw new InvalidOperationException(
                         $"changed source '{file.Path}' was omitted by the selected parser; review coverage is incomplete");
+                }
             }
-            var subject = JsonSerializer.Serialize(new
+            string subject = JsonSerializer.Serialize(new
             {
                 repository = snapshot.RepositoryRoot,
                 root = snapshot.RootPath,
@@ -102,15 +129,18 @@ public partial class AiProvider
                 "Use repository-relative paths and positive new-side changed line numbers. Line 0 is allowed only for " +
                 "a file-level deletion or rename. Findings outside selected changed hunks are protocol errors. " +
                 "Return [] only after completing review. Never claim success when context or tools are insufficient.";
-            var messages = new List<object>
+            List<object> messages = new List<object>
             {
                 new { role = "system", content = system },
                 new { role = "user", content = $"REQUIREMENT:\n{requirement}\n\nCHANGES UNDER REVIEW:\n{subject}" }
             };
             if (Encoding.UTF8.GetByteCount(JsonSerializer.Serialize(messages)) > MaxInitialBytes)
+            {
                 throw new InvalidOperationException(
                     $"initial diff exceeds {MaxInitialBytes} bytes; narrow the parsed Codebase (no subject was truncated)");
-            var config = LoadConfig(context.Options.AiConfigPath, out var error);
+            }
+
+            AiConfig? config = LoadConfig(context.Options.AiConfigPath, out string? error);
             if (config is null)
             {
                 snapshot.Log($"ai.judge: review failed (not a clean result): {error}");
@@ -122,15 +152,15 @@ public partial class AiProvider
             LogInteraction(config, system, "", "STARTED",
                 $"Limits: {MaxReviewTurns} requests, {MaxToolCalls} tools, {MaxInitialBytes} initial bytes, " +
                 $"{MaxExchangeBytes} exchanged bytes, {ReviewSeconds}s.");
-            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(ReviewSeconds));
-            var calls = 0;
-            var bytes = 0;
-            var acknowledged = false;
-            for (var turn = 0; turn < MaxReviewTurns; turn++)
+            using CancellationTokenSource timeout = new CancellationTokenSource(TimeSpan.FromSeconds(ReviewSeconds));
+            int calls = 0;
+            int bytes = 0;
+            bool acknowledged = false;
+            for (int turn = 0; turn < MaxReviewTurns; turn++)
             {
                 snapshot.AssertUnchanged();
                 timeout.Token.ThrowIfCancellationRequested();
-                var request = JsonSerializer.Serialize(new
+                string request = JsonSerializer.Serialize(new
                 {
                     model = config.Model, temperature = 0.0, messages,
                     tools = SourceTools(),
@@ -139,42 +169,63 @@ public partial class AiProvider
                 });
                 bytes += Encoding.UTF8.GetByteCount(request);
                 if (bytes > MaxExchangeBytes)
+                {
                     throw new InvalidOperationException("review context/exchange budget exhausted; narrow the Codebase");
-                using var req = new HttpRequestMessage(HttpMethod.Post, config.Endpoint);
+                }
+
+                using HttpRequestMessage req = new HttpRequestMessage(HttpMethod.Post, config.Endpoint);
                 if (!string.IsNullOrEmpty(config.ApiKey))
+                {
                     req.Headers.TryAddWithoutValidation("Authorization", $"Bearer {config.ApiKey}");
+                }
+
                 req.Content = new StringContent(request, Encoding.UTF8, "application/json");
-                using var response = await _http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, timeout.Token);
-                var body = await ReadBoundedResponse(response.Content, timeout.Token);
+                using HttpResponseMessage response = await _http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, timeout.Token);
+                string body = await ReadBoundedResponse(response.Content, timeout.Token);
                 bytes += Encoding.UTF8.GetByteCount(body);
                 LogInteraction(config, system, request, $"{(int)response.StatusCode} turn {turn + 1}", body);
                 if (!response.IsSuccessStatusCode)
+                {
                     throw new InvalidOperationException(
                         $"tool-capable LLM call failed ({(int)response.StatusCode}): {Truncate(body, 300)}");
+                }
+
                 if (bytes > MaxExchangeBytes)
+                {
                     throw new InvalidOperationException("review context/exchange budget exhausted; narrow the Codebase");
-                using var doc = JsonDocument.Parse(body);
-                var choice = doc.RootElement.GetProperty("choices")[0];
-                var message = choice.GetProperty("message");
-                var finish = choice.GetProperty("finish_reason").GetString();
-                if (message.TryGetProperty("tool_calls", out var toolCalls) && toolCalls.GetArrayLength() > 0)
+                }
+
+                using JsonDocument doc = JsonDocument.Parse(body);
+                JsonElement choice = doc.RootElement.GetProperty("choices")[0];
+                JsonElement message = choice.GetProperty("message");
+                string? finish = choice.GetProperty("finish_reason").GetString();
+                if (message.TryGetProperty("tool_calls", out JsonElement toolCalls) && toolCalls.GetArrayLength() > 0)
                 {
                     if (finish != "tool_calls")
+                    {
                         throw new InvalidOperationException("incomplete tool response; expected finish_reason=tool_calls");
+                    }
+
                     messages.Add(message.Clone());
-                    var ids = new HashSet<string>(StringComparer.Ordinal);
-                    foreach (var call in toolCalls.EnumerateArray())
+                    HashSet<string> ids = new HashSet<string>(StringComparer.Ordinal);
+                    foreach (JsonElement call in toolCalls.EnumerateArray())
                     {
                         if (++calls > MaxToolCalls)
+                        {
                             throw new InvalidOperationException("review tool-call budget exhausted; narrow the Codebase");
-                        var id = call.GetProperty("id").GetString();
+                        }
+
+                        string? id = call.GetProperty("id").GetString();
                         if (string.IsNullOrWhiteSpace(id) || !ids.Add(id)
                             || call.GetProperty("type").GetString() != "function")
+                        {
                             throw new InvalidOperationException("invalid source tool call identity or type");
-                        var function = call.GetProperty("function");
-                        var name = function.GetProperty("name").GetString();
-                        using var arguments = JsonDocument.Parse(function.GetProperty("arguments").GetString()!);
-                        var result = ExecuteSourceTool(snapshot, name, arguments.RootElement);
+                        }
+
+                        JsonElement function = call.GetProperty("function");
+                        string? name = function.GetProperty("name").GetString();
+                        using JsonDocument arguments = JsonDocument.Parse(function.GetProperty("arguments").GetString()!);
+                        string result = ExecuteSourceTool(snapshot, name, arguments.RootElement);
                         snapshot.AssertUnchanged();
                         timeout.Token.ThrowIfCancellationRequested();
                         messages.Add(new { role = "tool", tool_call_id = id, content = result });
@@ -185,13 +236,19 @@ public partial class AiProvider
                     continue;
                 }
                 if (!acknowledged)
+                {
                     throw new InvalidOperationException(
                         "endpoint did not honor required source tools; diff mode requires tool-calling support (no fallback)");
+                }
+
                 if (finish != "stop")
+                {
                     throw new InvalidOperationException($"incomplete review response (finish_reason={finish})");
-                var content = message.GetProperty("content").GetString()
+                }
+
+                string content = message.GetProperty("content").GetString()
                     ?? throw new InvalidOperationException("model response contained no review content");
-                var findings = ParseChangeFindings(content, subjects, snapshot);
+                List<object?> findings = ParseChangeFindings(content, subjects, snapshot);
                 snapshot.AssertUnchanged();
                 timeout.Token.ThrowIfCancellationRequested();
                 snapshot.Log($"ai.judge: review completed; {findings.Count} findings, {turn + 1} requests, {calls} tool calls.");
@@ -205,14 +262,17 @@ public partial class AiProvider
         {
             activeSnapshot?.Log($"ai.judge: review failed (not a clean result): {ex.Message}");
             if (activeConfig is not null)
+            {
                 LogInteraction(activeConfig, "", "", "FAILED (not a clean result)", ex.Message);
+            }
+
             return One($"ai.judge: change review failed: {ex.Message}");
         }
     }
 
     private static bool IsWithin(string root, string path)
     {
-        var relative = Path.GetRelativePath(Path.GetFullPath(root), Path.GetFullPath(path));
+        string relative = Path.GetRelativePath(Path.GetFullPath(root), Path.GetFullPath(path));
         return !Path.IsPathRooted(relative) && relative != ".."
             && !relative.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal);
     }
@@ -261,7 +321,10 @@ public partial class AiProvider
     private static string ExecuteSourceTool(ChangeSnapshot snapshot, string? name, JsonElement args)
     {
         if (args.ValueKind != JsonValueKind.Object)
+        {
             throw new InvalidOperationException("tool arguments must be an object");
+        }
+
         string[] fields = name switch
         {
             "read_source" => ["path", "start_line", "line_count", "side"],
@@ -270,50 +333,73 @@ public partial class AiProvider
         };
         if (args.EnumerateObject().Count() != fields.Length
             || args.EnumerateObject().Any(field => !fields.Contains(field.Name, StringComparer.Ordinal)))
+        {
             throw new InvalidOperationException("invalid source tool arguments");
+        }
+
         if (name == "search_source")
         {
-            var query = args.GetProperty("query").GetString();
-            var count = args.GetProperty("max_results").GetInt32();
+            string? query = args.GetProperty("query").GetString();
+            int count = args.GetProperty("max_results").GetInt32();
             if (string.IsNullOrWhiteSpace(query) || query.Length > 1024 || count is < 1 or > 40)
+            {
                 throw new InvalidOperationException("search query/result budget exceeded");
+            }
+
             return snapshot.SearchSource(query, count);
         }
-        var path = args.GetProperty("path").GetString()!;
-        var side = args.GetProperty("side").GetString()!;
-        var start = args.GetProperty("start_line").GetInt32();
-        var lines = args.GetProperty("line_count").GetInt32();
+        string path = args.GetProperty("path").GetString()!;
+        string side = args.GetProperty("side").GetString()!;
+        int start = args.GetProperty("start_line").GetInt32();
+        int lines = args.GetProperty("line_count").GetInt32();
         if (side is not ("head" or "base") || start < 1 || lines is < 1 or > 200)
+        {
             throw new InvalidOperationException("invalid source side or read range (maximum 200 lines)");
+        }
+
         return snapshot.ReadSource(path, start, lines, side);
     }
 
     private static List<object?> ParseChangeFindings(string content, List<ChangedFile> subjects, ChangeSnapshot snapshot)
     {
-        using var doc = JsonDocument.Parse(content);
+        using JsonDocument doc = JsonDocument.Parse(content);
         if (doc.RootElement.ValueKind != JsonValueKind.Array)
+        {
             throw new InvalidOperationException("final review must be a JSON array");
-        var findings = new List<object?>();
-        foreach (var value in doc.RootElement.EnumerateArray())
+        }
+
+        List<object?> findings = new List<object?>();
+        foreach (JsonElement value in doc.RootElement.EnumerateArray())
         {
             if (value.ValueKind != JsonValueKind.Object || value.EnumerateObject().Count() != 3
-                || !value.TryGetProperty("file", out var fileValue) || fileValue.ValueKind != JsonValueKind.String
-                || !value.TryGetProperty("line", out var lineValue) || !lineValue.TryGetInt32(out var line) || line < 0
-                || !value.TryGetProperty("message", out var messageValue) || messageValue.ValueKind != JsonValueKind.String
+                || !value.TryGetProperty("file", out JsonElement fileValue) || fileValue.ValueKind != JsonValueKind.String
+                || !value.TryGetProperty("line", out JsonElement lineValue) || !lineValue.TryGetInt32(out int line) || line < 0
+                || !value.TryGetProperty("message", out JsonElement messageValue) || messageValue.ValueKind != JsonValueKind.String
                 || string.IsNullOrWhiteSpace(messageValue.GetString()))
+            {
                 throw new InvalidOperationException("invalid final violation fields/types");
-            var path = fileValue.GetString()!;
+            }
+
+            string path = fileValue.GetString()!;
             if (Path.IsPathRooted(path) || path.Contains('\\') || path.Split('/').Any(part => part is "" or "." or ".."))
+            {
                 throw new InvalidOperationException($"invalid repository-relative finding path '{path}'");
-            var changed = subjects.SingleOrDefault(file => file.Path == path);
+            }
+
+            ChangedFile? changed = subjects.SingleOrDefault(file => file.Path == path);
             if (changed is null)
+            {
                 throw new InvalidOperationException($"finding outside selected changed files: '{path}'");
+            }
+
             if (line == 0 ? !(changed.IsDeleted || changed.OldPath is not null)
                 : changed.IsDeleted || !changed.Ranges.Any(range =>
                     range.NewCount > 0 && line >= range.NewStart && (long)line < (long)range.NewStart + range.NewCount))
+            {
                 throw new InvalidOperationException($"finding outside selected changed hunks: '{path}:{line}'");
+            }
             // CHECK consumes target-relative locations, whereas the review protocol uses repository-relative paths.
-            var targetPath = Path.GetRelativePath(snapshot.RootPath,
+            string targetPath = Path.GetRelativePath(snapshot.RootPath,
                 Path.Combine(snapshot.RepositoryRoot, path)).Replace('\\', '/');
             findings.Add(MakeViolation(messageValue.GetString()!, 0.8, targetPath, line, 0.7));
         }
@@ -322,14 +408,17 @@ public partial class AiProvider
 
     private static async Task<string> ReadBoundedResponse(HttpContent content, CancellationToken cancellation)
     {
-        await using var stream = await content.ReadAsStreamAsync(cancellation);
-        using var result = new MemoryStream();
-        var buffer = new byte[8192];
+        await using Stream stream = await content.ReadAsStreamAsync(cancellation);
+        using MemoryStream result = new MemoryStream();
+        byte[] buffer = new byte[8192];
         int count;
         while ((count = await stream.ReadAsync(buffer, cancellation)) > 0)
         {
             if (result.Length + count > MaxResponseBytes)
+            {
                 throw new InvalidOperationException($"model response exceeded {MaxResponseBytes} bytes (not truncated)");
+            }
+
             result.Write(buffer, 0, count);
         }
         return Encoding.UTF8.GetString(result.ToArray());

@@ -1,3 +1,5 @@
+// Stores provider tables and their shared UTF-8 string heap.
+
 namespace Cop.Core;
 
 /// <summary>
@@ -17,6 +19,9 @@ public class DataStore
     /// </summary>
     public byte[] StringHeap { get; }
 
+    /// <summary>
+    /// Wraps the supplied named tables and their shared UTF-8 string heap.
+    /// </summary>
     public DataStore(Dictionary<string, DataTable> tables, byte[] stringHeap)
     {
         Tables = tables;

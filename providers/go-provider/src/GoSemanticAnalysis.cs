@@ -1,3 +1,5 @@
+// Attaches deferred Go semantic analysis to parsed statements.
+
 using System.Text;
 using System.Text.Json;
 using Cop.Core;
@@ -28,13 +30,14 @@ internal static class GoSemanticAnalysis
         ["GOWORK"] = null
     };
 
+    /// <summary>Defers Go helper analysis until semantic facts are requested.</summary>
     public static void Attach(SourceFile file, string go, string helper)
     {
-        var analysis = new Lazy<bool>(() =>
+        Lazy<bool> analysis = new Lazy<bool>(() =>
         {
             string path = Path.GetFullPath(string.IsNullOrEmpty(file.FullPath) ? file.Path : file.FullPath);
             string directory = Path.GetDirectoryName(path)!;
-            var environment = new Dictionary<string, string?>(EnvironmentOverrides);
+            Dictionary<string, string?> environment = new Dictionary<string, string?>(EnvironmentOverrides);
             bool module = false;
             bool vendor = false;
             for (string? ancestor = directory; ancestor is not null; ancestor = Path.GetDirectoryName(ancestor))
@@ -51,17 +54,31 @@ internal static class GoSemanticAnalysis
                     vendor = File.Exists(Path.Combine(ancestor, "vendor", "modules.txt"));
                 }
             }
-            if (!module) environment["GO111MODULE"] = "off";
+            if (!module)
+            {
+                environment["GO111MODULE"] = "off";
+            }
+
             string[] arguments = module ? ["list", "-e", "-json", "-deps", vendor ? "-mod=vendor" : "-mod=readonly", "."]
                 : ["list", "-e", "-json", "-deps", "."];
             if (path.EndsWith("_test.go", StringComparison.Ordinal))
+            {
                 arguments = arguments[..^1].Concat(new[] { "-test", "." }).ToArray();
-            var listing = ToolchainProcess.RunAsync(go, arguments, directory,
+            }
+
+            ToolchainResult listing = ToolchainProcess.RunAsync(go, arguments, directory,
                 timeout: TimeSpan.FromMinutes(2), maxOutputCharacters: 16_777_216, environment: environment).GetAwaiter().GetResult();
             if (listing.Status != ToolchainStatus.Success)
+            {
                 throw new InvalidOperationException($"Go semantic package discovery {listing.Status}: {listing.Diagnostic ?? listing.StandardError}");
-            var packages = ReadPackages(listing.StandardOutput);
-            if (packages.Count == 0) throw new InvalidOperationException("Go semantic package discovery returned no package context.");
+            }
+
+            List<JsonElement> packages = ReadPackages(listing.StandardOutput);
+            if (packages.Count == 0)
+            {
+                throw new InvalidOperationException("Go semantic package discovery returned no package context.");
+            }
+
             string request = JsonSerializer.Serialize(new
             {
                 Path = Convert.ToBase64String(Encoding.UTF8.GetBytes(path)),
@@ -69,36 +86,53 @@ internal static class GoSemanticAnalysis
                 Semantic = true,
                 Packages = packages
             });
-            var result = ToolchainExecutionScope.RequestAsync(helper, [], Path.GetDirectoryName(helper)!, request,
+            ToolchainResult result = ToolchainExecutionScope.RequestAsync(helper, [], Path.GetDirectoryName(helper)!, request,
                 timeout: TimeSpan.FromMinutes(2), maxOutputCharacters: 16_777_216).GetAwaiter().GetResult();
             if (result.Status != ToolchainStatus.Success)
+            {
                 throw new InvalidOperationException($"Go semantic analysis {result.Status}: {result.Diagnostic ?? result.StandardError}");
-            var response = JsonSerializer.Deserialize<SemanticResponse>(result.StandardOutput, Json)
+            }
+
+            SemanticResponse response = JsonSerializer.Deserialize<SemanticResponse>(result.StandardOutput, Json)
                 ?? throw new InvalidOperationException("Go semantic analysis returned null.");
             if (response.Facts is null || response.Errors is null)
-                throw new InvalidOperationException("Go semantic analysis omitted bindings or diagnostics.");
-            foreach (string error in response.Errors) ProviderErrors.Report("Go semantic context: " + error);
-            foreach (var fact in response.Facts)
             {
-                var call = file.Statements.FirstOrDefault(s => s.Kind == "call" && s.Line == fact.Line && s.Column == fact.Column
+                throw new InvalidOperationException("Go semantic analysis omitted bindings or diagnostics.");
+            }
+
+            foreach (string error in response.Errors)
+            {
+                ProviderErrors.Report("Go semantic context: " + error);
+            }
+
+            foreach (SemanticFact fact in response.Facts)
+            {
+                StatementInfo? call = file.Statements.FirstOrDefault(s => s.Kind == "call" && s.Line == fact.Line && s.Column == fact.Column
                     && s.EndLine == fact.EndLine && s.EndColumn == fact.EndColumn);
-                if (call is null) throw new InvalidOperationException("Go semantic binding has no matching source call.");
+                if (call is null)
+                {
+                    throw new InvalidOperationException("Go semantic binding has no matching source call.");
+                }
+
                 call.ReceiverType = fact.ReceiverType;
                 call.ValueType = fact.ValueType;
                 call.ReferencedCallable = fact.Callable;
             }
             return true;
         });
-        foreach (var statement in file.Statements) statement.DeferSemanticAnalysis(analysis);
+        foreach (StatementInfo statement in file.Statements)
+        {
+            statement.DeferSemanticAnalysis(analysis);
+        }
     }
 
     private static List<JsonElement> ReadPackages(string json)
     {
-        var result = new List<JsonElement>();
-        var reader = new Utf8JsonReader(Encoding.UTF8.GetBytes(json), new JsonReaderOptions { AllowMultipleValues = true });
+        List<JsonElement> result = new List<JsonElement>();
+        Utf8JsonReader reader = new Utf8JsonReader(Encoding.UTF8.GetBytes(json), new JsonReaderOptions { AllowMultipleValues = true });
         while (reader.Read())
         {
-            using var document = JsonDocument.ParseValue(ref reader);
+            using JsonDocument document = JsonDocument.ParseValue(ref reader);
             result.Add(document.RootElement.Clone());
         }
         return result;

@@ -34,6 +34,7 @@ public class SourceCacheSerializerTests
             Assert.That(file.Usings, Is.EqualTo(new[] { "System", "System.Collections.Generic" }));
             Assert.That(file.Namespace, Is.EqualTo("Cop.Tests"));
             Assert.That(file.CommentLines.OrderBy(x => x).ToArray(), Is.EqualTo(new[] { 2, 5, 8 }));
+            Assert.That(file.Comments, Is.EqualTo(new[] { new CommentInfo("singleLine", " note", 2) }));
             Assert.That(file.Regions, Has.Count.EqualTo(1));
             Assert.That(file.Regions[0].Name, Is.EqualTo("Helpers"));
             Assert.That(file.Regions[0].StartLine, Is.EqualTo(30));
@@ -45,6 +46,7 @@ public class SourceCacheSerializerTests
             var type = file.Types[0];
             Assert.That(type.Name, Is.EqualTo("SampleType"));
             Assert.That(type.Kind, Is.EqualTo(TypeKind.Class));
+            Assert.That(type.AliasTarget?.GenericArguments[0].IsAnonymous, Is.True);
             Assert.That(type.Modifiers, Is.EqualTo(Modifier.Public | Modifier.Abstract));
             Assert.That(type.BaseTypes, Is.EqualTo(new[] { "BaseType", "IDisposable" }));
             Assert.That(type.Decorators, Is.EqualTo(new[] { "Serializable" }));
@@ -67,6 +69,7 @@ public class SourceCacheSerializerTests
             Assert.That(type.NestedTypes[0].Name, Is.EqualTo("Nested"));
             Assert.That(type.NestedTypes[0].Kind, Is.EqualTo(TypeKind.Struct));
             Assert.That(type.Constructors, Has.Count.EqualTo(1));
+            Assert.That(type.Constructors[0].Kind, Is.EqualTo("constructor"));
             Assert.That(type.Constructors[0].Parameters[0].DefaultValueText, Is.EqualTo("0"));
             Assert.That(type.Methods, Has.Count.EqualTo(1));
 
@@ -91,6 +94,8 @@ public class SourceCacheSerializerTests
             Assert.That(ifStatement.Kind, Is.EqualTo("if"));
             Assert.That(ifStatement.IsBraced, Is.True);
             Assert.That(ifStatement.Condition, Is.EqualTo("items.Count > 0"));
+            Assert.That(ifStatement.ConditionExpression?.Kind, Is.EqualTo("binary"));
+            Assert.That(ifStatement.ConditionExpression?.Name, Is.EqualTo("GreaterThanExpression"));
             Assert.That(ifStatement.Method, Is.SameAs(method));
             Assert.That(ifStatement.Parent, Is.Null);
             Assert.That(ifStatement.File, Is.Null);
@@ -109,8 +114,9 @@ public class SourceCacheSerializerTests
             Assert.That(childCall.ArgumentExpressions, Has.Count.EqualTo(1));
             Assert.That(childCall.ArgumentExpressions[0].Kind, Is.EqualTo("invocation"));
             Assert.That(childCall.ArgumentExpressions[0].Target?.Name, Is.EqualTo("format"));
-            Assert.That(childCall.ArgumentExpressions[0].Children, Has.Count.EqualTo(1));
+            Assert.That(childCall.ArgumentExpressions[0].Children, Has.Count.EqualTo(2));
             Assert.That(childCall.ArgumentExpressions[0].Children[0].StringValue, Is.EqualTo("decoded\nvalue"));
+            Assert.That(childCall.ArgumentExpressions[0].Children[1].BooleanValue, Is.True);
             Assert.That(childCall.Expression, Is.EqualTo("logger.Log(items)"));
             Assert.That(childCall.Method, Is.SameAs(method));
             Assert.That(childCall.Parent, Is.SameAs(ifStatement));
@@ -186,7 +192,7 @@ public class SourceCacheSerializerTests
             [],
             null,
             [new ParameterDeclaration("count", intType, false, false, true, 11) { DefaultValueText = "0" }],
-            11);
+            11) { Kind = "constructor" };
 
         var method = new MethodDeclaration(
             "Run",
@@ -208,6 +214,18 @@ public class SourceCacheSerializerTests
             Method = method,
             IsBraced = true,
             Condition = "items.Count > 0",
+            ConditionExpression = new("binary")
+            {
+                Name = "GreaterThanExpression",
+                Children =
+                [
+                    new("memberAccess")
+                    {
+                        Name = "Count", Target = new("identifier") { Name = "items" }
+                    },
+                    new("numericLiteral") { Name = "0" }
+                ]
+            },
             CopIgnore = "ignore-rule"
         };
 
@@ -224,7 +242,11 @@ public class SourceCacheSerializerTests
                 new("invocation")
                 {
                     Target = new("identifier") { Name = "format" },
-                    Children = [new("stringLiteral") { StringValue = "decoded\nvalue" }]
+                    Children =
+                    [
+                        new("stringLiteral") { StringValue = "decoded\nvalue" },
+                        new("booleanLiteral") { BooleanValue = true }
+                    ]
                 }
             ],
             Expression = "logger.Log(items)",
@@ -255,6 +277,9 @@ public class SourceCacheSerializerTests
         {
             HasDocComment = true,
             DocComment = "Type docs",
+            AliasTarget = new("IEnumerable", "System.Collections.Generic",
+                [new("", null, [], "<anonymous>") { IsAnonymous = true }],
+                "IEnumerable<anonymous>"),
             Fields = [new FieldDeclaration("_value", listOfString, Modifier.Private | Modifier.Readonly, 12)],
             Properties =
             [
@@ -279,7 +304,8 @@ public class SourceCacheSerializerTests
             Usings = ["System", "System.Collections.Generic"],
             Namespace = "Cop.Tests",
             Regions = [new RegionInfo("Helpers", 30, 40, "region body")],
-            CommentLines = [8, 2, 5]
+            CommentLines = [8, 2, 5],
+            Comments = [new("singleLine", " note", 2)]
         };
 
         file.Types[0] = file.Types[0] with { File = file };

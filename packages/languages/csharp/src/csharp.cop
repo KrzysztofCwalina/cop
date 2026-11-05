@@ -125,7 +125,8 @@ export type CSharpStatement = Statement & {
     IsYield : bool,
     IsGoto : bool,
     IsAwaitForeach : bool,
-    HasCatchFilter : bool
+    HasCatchFilter : bool,
+    IsUsingResource : bool
 }
 
 ## Narrows a Statement to a CSharpStatement (C# statements only), exposing C#-specific fields.
@@ -158,3 +159,7 @@ export predicate isAwaitForeach(CSharpStatement) => CSharpStatement.IsAwaitForea
 
 ## True for a `catch` clause with an exception filter (`when (...)`).
 export predicate hasCatchFilter(CSharpStatement) => CSharpStatement.HasCatchFilter
+
+## True for a call directly initializing a `using` or `await using` resource.
+## Calls nested in its arguments or body are not themselves using resources.
+export predicate isUsingResource(CSharpStatement) => CSharpStatement.IsUsingResource

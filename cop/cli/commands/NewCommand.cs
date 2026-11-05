@@ -1,16 +1,25 @@
+// Creates the source layout and metadata for a new Cop package.
+
 using System;
 using System.CommandLine;
 using System.CommandLine.Parsing;
 using System.IO;
+using Cop.Core;
 
 namespace Cop.Cli.Commands;
 
+/// <summary>
+/// Scaffolds package directories with their initial manifest and source.
+/// </summary>
 public static class NewCommand
 {
+    /// <summary>
+    /// Creates the package-scaffolding command with its required package name.
+    /// </summary>
     public static Command Create()
     {
-        var nameArg = new Argument<string>("name");
-        var command = new Command("new", "Scaffold a new package directory")
+        Argument<string> nameArg = new Argument<string>("name");
+        Command command = new Command("new", "Scaffold a new package directory")
         {
             nameArg
         };
@@ -23,15 +32,29 @@ public static class NewCommand
     // Valid package name: starts with a lowercase letter, then lowercase letters, digits, or hyphens.
     private static bool IsValidPackageName(string name)
     {
-        if (string.IsNullOrEmpty(name)) return false;
-        if (name[0] is < 'a' or > 'z') return false;
-        foreach (var c in name)
+        if (string.IsNullOrEmpty(name))
         {
-            if (!(c is >= 'a' and <= 'z' or >= '0' and <= '9') && c != '-') return false;
+            return false;
+        }
+
+        if (name[0] is < 'a' or > 'z')
+        {
+            return false;
+        }
+
+        foreach (char c in name)
+        {
+            if (!(c is >= 'a' and <= 'z' or >= '0' and <= '9') && c != '-')
+            {
+                return false;
+            }
         }
         return true;
     }
 
+    /// <summary>
+    /// Writes the initial directory layout and files for a named package.
+    /// </summary>
     public static void Execute(string name)
     {
         // Validate package name format
@@ -68,7 +91,7 @@ public static class NewCommand
             Directory.CreateDirectory(Path.Combine(packageDir, "tests"));
 
             // Create cop.json metadata file
-            var metadata = new Cop.Core.PackageMetadata
+            PackageMetadata metadata = new Cop.Core.PackageMetadata
             {
                 Name = name,
                 Version = "1.0.0",
@@ -97,6 +120,3 @@ TODO - Add package description.
         }
     }
 }
-
-
-

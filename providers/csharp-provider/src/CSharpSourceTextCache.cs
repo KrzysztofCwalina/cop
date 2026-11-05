@@ -1,3 +1,5 @@
+// Caches C# source text while validating current file contents.
+
 using System.IO.Compression;
 using System.Security.Cryptography;
 using System.Text;
@@ -14,7 +16,7 @@ internal sealed class CSharpSourceTextCache
 
     public CSharpSourceTextCache(string scope)
     {
-        var key = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(scope)));
+        string key = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(scope)));
         _path = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
             ".cop", "cache", $"csharp-text-{key}.bin");
         _entries = new(Load);
@@ -22,18 +24,20 @@ internal sealed class CSharpSourceTextCache
 
     public string Read(string path)
     {
-        var info = new FileInfo(path);
-        var length = info.Length;
-        var modified = info.LastWriteTimeUtc.Ticks;
-        var changed = OperatingSystem.IsWindows() ? SourceFileMetadata.ReadChangeTime(path) : 0;
-        using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
-        using var reader = new StreamReader(stream);
-        var text = reader.ReadToEnd();
+        FileInfo info = new FileInfo(path);
+        long length = info.Length;
+        long modified = info.LastWriteTimeUtc.Ticks;
+        long changed = OperatingSystem.IsWindows() ? SourceFileMetadata.ReadChangeTime(path) : 0;
+        using FileStream stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+        using StreamReader reader = new StreamReader(stream);
+        string text = reader.ReadToEnd();
         // Even native change times can collide or be restored; metadata is not content identity.
-        if (changed != 0 && _entries.Value.TryGetValue(path, out var cached)
+        if (changed != 0 && _entries.Value.TryGetValue(path, out Entry? cached)
             && cached.Length == length && cached.Modified == modified && cached.Changed == changed
             && string.Equals(cached.Text, text, StringComparison.Ordinal))
+        {
             return cached.Text;
+        }
 
         _entries.Value[path] = new(length, modified, changed, text);
         _changed = true;
@@ -42,21 +46,37 @@ internal sealed class CSharpSourceTextCache
 
     private Dictionary<string, Entry> Load()
     {
-        var result = new Dictionary<string, Entry>(StringComparer.Ordinal);
-        if (!File.Exists(_path)) return result;
+        Dictionary<string, Entry> result = new Dictionary<string, Entry>(StringComparer.Ordinal);
+        if (!File.Exists(_path))
+        {
+            return result;
+        }
+
         try
         {
-            using var stream = File.OpenRead(_path);
-            using var gzip = new GZipStream(stream, CompressionMode.Decompress);
-            using var reader = new BinaryReader(gzip, Encoding.UTF8);
-            if (reader.ReadInt32() != Version) return result;
-            var count = reader.ReadInt32();
+            using FileStream stream = File.OpenRead(_path);
+            using GZipStream gzip = new GZipStream(stream, CompressionMode.Decompress);
+            using BinaryReader reader = new BinaryReader(gzip, Encoding.UTF8);
+            if (reader.ReadInt32() != Version)
+            {
+                return result;
+            }
+
+            int count = reader.ReadInt32();
             if (count < 0 || count > 1_000_000)
+            {
                 throw new InvalidDataException("Invalid source-text cache entry count.");
+            }
+
             for (int i = 0; i < count; i++)
+            {
                 if (!result.TryAdd(reader.ReadString(),
                     new(reader.ReadInt64(), reader.ReadInt64(), reader.ReadInt64(), reader.ReadString())))
+                {
                     throw new InvalidDataException("Duplicate source-text cache entry.");
+                }
+            }
+
             return result;
         }
         catch (Exception ex) when (ex is IOException or InvalidDataException or FormatException or UnauthorizedAccessException)
@@ -68,20 +88,24 @@ internal sealed class CSharpSourceTextCache
 
     public void Save(IReadOnlyList<string> paths)
     {
-        if (!_changed || !OperatingSystem.IsWindows()) return;
-        var temporary = _path + "." + Guid.NewGuid().ToString("N") + ".tmp";
+        if (!_changed || !OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        string temporary = _path + "." + Guid.NewGuid().ToString("N") + ".tmp";
         try
         {
             Directory.CreateDirectory(Path.GetDirectoryName(_path)!);
-            using (var stream = File.Create(temporary))
-            using (var gzip = new GZipStream(stream, CompressionLevel.Fastest))
-            using (var writer = new BinaryWriter(gzip, Encoding.UTF8))
+            using (FileStream stream = File.Create(temporary))
+            using (GZipStream gzip = new GZipStream(stream, CompressionLevel.Fastest))
+            using (BinaryWriter writer = new BinaryWriter(gzip, Encoding.UTF8))
             {
                 writer.Write(Version);
                 writer.Write(paths.Count);
-                foreach (var path in paths)
+                foreach (string path in paths)
                 {
-                    var entry = _entries.Value[path];
+                    Entry entry = _entries.Value[path];
                     writer.Write(path);
                     writer.Write(entry.Length);
                     writer.Write(entry.Modified);

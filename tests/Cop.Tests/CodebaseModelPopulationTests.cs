@@ -369,7 +369,10 @@ public class CodebaseModelPopulationTests
     private static IReadOnlyList<string> RunCop(Fixture fixture, string copSource)
     {
         File.WriteAllText(Path.Combine(fixture.ScriptsDir, "main.cop"), copSource);
-        var result = Engine.Run(fixture.ScriptsDir, fixture.TargetDir, additionalFeedPaths: [PackagesDir]);
+        var result = Engine.Run(fixture.ScriptsDir, fixture.TargetDir, new EngineRunOptions
+        {
+            AdditionalFeedPaths = [PackagesDir],
+        });
 
         Assert.That(result.HasParseErrors, Is.False, "Parse errors: " + string.Join(Environment.NewLine, result.ParseErrors));
         Assert.That(result.HasFatalErrors, Is.False, "Fatal errors: " + string.Join(Environment.NewLine, result.Errors));

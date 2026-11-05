@@ -1,25 +1,10 @@
+// Runs external toolchain processes with captured output and cancellation support.
+
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Text;
 
 namespace Cop.Core;
-
-public enum ToolchainStatus
-{
-    Success,
-    Unavailable,
-    Failed,
-    TimedOut,
-    OutputLimitExceeded
-}
-
-public sealed record ToolchainResult(
-    ToolchainStatus Status,
-    string? ExecutablePath,
-    int? ExitCode,
-    string StandardOutput,
-    string StandardError,
-    string? Diagnostic);
 
 /// <summary>Runs installed optional toolchains without a shell, downloads, or configuration changes.</summary>
 public static class ToolchainProcess
@@ -33,22 +18,34 @@ public static class ToolchainProcess
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
         if (Path.IsPathFullyQualified(name))
+        {
             return IsExecutable(name) ? Path.GetFullPath(name) : null;
-        if (name.IndexOfAny([Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar]) >= 0)
-            throw new ArgumentException("Tool names must be bare names or absolute paths.", nameof(name));
+        }
 
-        var extensions = OperatingSystem.IsWindows() && !Path.HasExtension(name)
+        if (name.IndexOfAny([Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar]) >= 0)
+        {
+            throw new ArgumentException("Tool names must be bare names or absolute paths.", nameof(name));
+        }
+
+        string[] extensions = OperatingSystem.IsWindows() && !Path.HasExtension(name)
             ? new[] { ".exe", ".com" }
             : new[] { "" };
-        foreach (var entry in (searchPath ?? Environment.GetEnvironmentVariable("PATH") ?? "")
+        foreach (string entry in (searchPath ?? Environment.GetEnvironmentVariable("PATH") ?? "")
             .Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries))
         {
-            var directory = entry.Trim().Trim('"');
-            if (!Path.IsPathFullyQualified(directory)) continue;
-            foreach (var extension in extensions)
+            string directory = entry.Trim().Trim('"');
+            if (!Path.IsPathFullyQualified(directory))
             {
-                var candidate = Path.Combine(directory, name + extension);
-                if (IsExecutable(candidate)) return Path.GetFullPath(candidate);
+                continue;
+            }
+
+            foreach (string? extension in extensions)
+            {
+                string candidate = Path.Combine(directory, name + extension);
+                if (IsExecutable(candidate))
+                {
+                    return Path.GetFullPath(candidate);
+                }
             }
         }
         return null;
@@ -56,10 +53,17 @@ public static class ToolchainProcess
 
     private static bool IsExecutable(string path)
     {
-        if (!File.Exists(path)) return false;
+        if (!File.Exists(path))
+        {
+            return false;
+        }
+
         if (OperatingSystem.IsWindows())
+        {
             return Path.GetExtension(path).Equals(".exe", StringComparison.OrdinalIgnoreCase)
                 || Path.GetExtension(path).Equals(".com", StringComparison.OrdinalIgnoreCase);
+        }
+
         return (File.GetUnixFileMode(path) &
             (UnixFileMode.UserExecute | UnixFileMode.GroupExecute | UnixFileMode.OtherExecute)) != 0;
     }
@@ -82,21 +86,33 @@ public static class ToolchainProcess
     {
         ArgumentNullException.ThrowIfNull(arguments);
         ArgumentException.ThrowIfNullOrWhiteSpace(workingDirectory);
-        var duration = timeout ?? TimeSpan.FromSeconds(30);
+        TimeSpan duration = timeout ?? TimeSpan.FromSeconds(30);
         if (duration <= TimeSpan.Zero || duration.TotalMilliseconds > uint.MaxValue - 1)
+        {
             throw new ArgumentOutOfRangeException(nameof(timeout));
-        if (maxOutputCharacters <= 0) throw new ArgumentOutOfRangeException(nameof(maxOutputCharacters));
+        }
+
+        if (maxOutputCharacters <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(maxOutputCharacters));
+        }
+
         if (!Directory.Exists(workingDirectory))
+        {
             throw new DirectoryNotFoundException($"Toolchain working directory does not exist: {workingDirectory}");
+        }
+
         cancellationToken.ThrowIfCancellationRequested();
 
-        var path = FindExecutable(executable);
+        string? path = FindExecutable(executable);
         if (path is null)
+        {
             return new(ToolchainStatus.Unavailable, null, null, "", "", $"Toolchain '{executable}' is not installed on PATH.");
+        }
 
-        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        using CancellationTokenSource deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         deadline.CancelAfter(duration);
-        using var process = new Process
+        using Process process = new Process
         {
             StartInfo = new ProcessStartInfo(path)
             {
@@ -111,34 +127,55 @@ public static class ToolchainProcess
                 StandardErrorEncoding = Encoding.UTF8
             }
         };
-        foreach (var argument in arguments) process.StartInfo.ArgumentList.Add(argument);
+        foreach (string argument in arguments)
+        {
+            process.StartInfo.ArgumentList.Add(argument);
+        }
+
         if (environment is not null)
-            foreach (var (name, value) in environment) process.StartInfo.Environment[name] = value;
-        using var containment = new ToolchainProcessContainment();
+        {
+            foreach ((string? name, string? value) in environment)
+            {
+                process.StartInfo.Environment[name] = value;
+            }
+        }
+
+        using ToolchainProcessContainment containment = new ToolchainProcessContainment();
         try
         {
             if (!process.Start())
+            {
                 return new(ToolchainStatus.Failed, path, null, "", "", $"Could not start toolchain '{path}'.");
+            }
+
             containment.Attach(process);
         }
         catch (Win32Exception ex)
         {
-            try { if (!process.HasExited) process.Kill(entireProcessTree: true); }
+            try { if (!process.HasExited)
+                {
+                    process.Kill(entireProcessTree: true);
+                }
+            }
             catch (InvalidOperationException) { }
             return new(ex.NativeErrorCode is 2 or 3 ? ToolchainStatus.Unavailable : ToolchainStatus.Failed,
                 path, null, "", "", $"Cannot start toolchain '{path}': {ex.Message}");
         }
 
-        var stdout = new StringBuilder();
-        var stderr = new StringBuilder();
+        StringBuilder stdout = new StringBuilder();
+        StringBuilder stderr = new StringBuilder();
         int outputCharacters = 0;
         async Task ReadAsync(StreamReader reader, StringBuilder destination)
         {
-            var buffer = new char[4096];
+            char[] buffer = new char[4096];
             while (true)
             {
                 int count = await reader.ReadAsync(buffer.AsMemory(), deadline.Token).ConfigureAwait(false);
-                if (count == 0) return;
+                if (count == 0)
+                {
+                    return;
+                }
+
                 int total = Interlocked.Add(ref outputCharacters, count);
                 int accepted = Math.Clamp(maxOutputCharacters - (total - count), 0, count);
                 destination.Append(buffer, 0, accepted);
@@ -152,11 +189,14 @@ public static class ToolchainProcess
         async Task WriteAsync()
         {
             if (standardInput is not null)
+            {
                 await process.StandardInput.WriteAsync(standardInput.AsMemory(), deadline.Token).ConfigureAwait(false);
+            }
+
             process.StandardInput.Close();
         }
 
-        var work = Task.WhenAll(ReadAsync(process.StandardOutput, stdout),
+        Task work = Task.WhenAll(ReadAsync(process.StandardOutput, stdout),
             ReadAsync(process.StandardError, stderr), WriteAsync(), process.WaitForExitAsync(deadline.Token));
         ToolchainStatus status;
         string? diagnostic = null;
@@ -164,7 +204,10 @@ public static class ToolchainProcess
         {
             await work.WaitAsync(deadline.Token).ConfigureAwait(false);
             status = process.ExitCode == 0 ? ToolchainStatus.Success : ToolchainStatus.Failed;
-            if (status == ToolchainStatus.Failed) diagnostic = $"Toolchain '{path}' exited with code {process.ExitCode}.";
+            if (status == ToolchainStatus.Failed)
+            {
+                diagnostic = $"Toolchain '{path}' exited with code {process.ExitCode}.";
+            }
         }
         catch (Exception ex) when (ex is OperationCanceledException or OutputLimitException or IOException)
         {
@@ -180,7 +223,11 @@ public static class ToolchainProcess
             try
             {
                 containment.Terminate();
-                if (!process.HasExited) process.Kill(entireProcessTree: true);
+                if (!process.HasExited)
+                {
+                    process.Kill(entireProcessTree: true);
+                }
+
                 await process.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(2)).ConfigureAwait(false);
             }
             catch (Exception cleanup) when (cleanup is Win32Exception or InvalidOperationException or TimeoutException)

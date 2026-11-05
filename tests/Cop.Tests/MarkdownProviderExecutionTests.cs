@@ -35,7 +35,10 @@ public class MarkdownProviderExecutionTests
                 foreach parsed.Headings => '{item.Level}|{item.Text}'
             }
             """);
-        var result = Engine.Run(_root, _root, additionalFeedPaths: [_packages]);
+        var result = Engine.Run(_root, _root, new EngineRunOptions
+        {
+            AdditionalFeedPaths = [_packages],
+        });
         Assert.That(result.ParseErrors, Is.Empty);
         Assert.That(result.Errors, Is.Empty, string.Join("\n", result.Errors));
         Assert.That(result.Outputs.Select(output => output.Message),
@@ -51,7 +54,10 @@ public class MarkdownProviderExecutionTests
             command MAIN = foreach markdown.parse().Documents
                 => '{item.File.Path}|{item.Children.Count}'
             """);
-        var result = Engine.Run(_root, _root, additionalFeedPaths: [_packages]);
+        var result = Engine.Run(_root, _root, new EngineRunOptions
+        {
+            AdditionalFeedPaths = [_packages],
+        });
         Assert.That(result.Errors, Is.Empty, string.Join("\n", result.Errors));
         Assert.That(result.Outputs.Select(output => output.Message),
             Is.EqualTo(new[] { "a.md|1", "rules.md|1" }));
@@ -64,7 +70,10 @@ public class MarkdownProviderExecutionTests
             import markdown
             command MAIN = foreach markdown.parse('missing.md').Documents => item.Text
             """);
-        var result = Engine.Run(_root, _root, additionalFeedPaths: [_packages]);
+        var result = Engine.Run(_root, _root, new EngineRunOptions
+        {
+            AdditionalFeedPaths = [_packages],
+        });
         Assert.That(result.HasFatalErrors, Is.True);
         Assert.That(string.Join("\n", result.Errors), Does.Contain("Markdown path not found"));
         Assert.That(result.Outputs, Is.Empty);

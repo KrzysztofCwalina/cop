@@ -55,7 +55,10 @@ public class DocumentedOperationsExecutionTests
             if (withCSharpFixture)
                 File.WriteAllText(Path.Combine(target, "Fixture.cs"), FixtureCSharp);
 
-            var result = Engine.Run(scripts, target, additionalFeedPaths: [PackagesDir]);
+            var result = Engine.Run(scripts, target, new EngineRunOptions
+            {
+                AdditionalFeedPaths = [PackagesDir],
+            });
 
             Assert.That(result.HasParseErrors, Is.False, string.Join(Environment.NewLine, result.ParseErrors));
             Assert.That(result.HasFatalErrors, Is.False, string.Join(Environment.NewLine, result.Errors));
@@ -452,7 +455,10 @@ public class DocumentedOperationsExecutionTests
         {
             File.WriteAllText(Path.Combine(scripts, "program.cop"), "command main = fail('boom')");
 
-            var result = Engine.Run(scripts, target, additionalFeedPaths: [PackagesDir]);
+            var result = Engine.Run(scripts, target, new EngineRunOptions
+            {
+                AdditionalFeedPaths = [PackagesDir],
+            });
 
             Assert.That(result.HasFatalErrors, Is.True, "fail() must terminate with a fatal error");
             Assert.That(string.Join(" ", result.Errors), Does.Contain("boom"));

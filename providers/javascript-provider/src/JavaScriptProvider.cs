@@ -1,3 +1,5 @@
+// Registers JavaScript parsing, project discovery, schemas, and runtime bindings.
+
 using Cop.Core;
 using Cop.Providers.SourceModel;
 using Cop.Providers.SourceParsers;
@@ -10,40 +12,48 @@ namespace Cop.Providers;
 public class JavaScriptProvider : DataProvider
 {
 
+    /// <inheritdoc />
     public override ReadOnlyMemory<byte> GetSchema() => JavaScriptSchema.GetJson();
 
+    /// <inheritdoc />
     public override RuntimeBindings GetRuntimeBindings() => JavaScriptBindings.Build();
 
+    /// <inheritdoc />
     public override IReadOnlyDictionary<string, object?> GetQueryMetadata(ProviderQuery query) =>
         CodeBindings.SourceMetadata(query, ".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs", ".mts", ".cts");
+    /// <inheritdoc />
     public override string QueryResultType => "Codebase";
 
+    /// <inheritdoc />
     public override object QueryDeferred(ProviderQuery query)
     {
         JavaScriptTypeDeclaration.RegisterCacheFactory();
         JavaScriptMethodDeclaration.RegisterCacheFactory();
         JavaScriptStatementInfo.RegisterCacheFactory();
-        var parsers = new SourceParserRegistry();
+        SourceParserRegistry parsers = new SourceParserRegistry();
         parsers.Register(new JavaScriptSourceParser());
         return CodeCollectionBuilder.CollectDeferred(parsers, query, this,
             () => JavaScriptProjectDiscovery.Discover(query.RootPath!, query.ExcludedDirectories));
     }
 
+    /// <inheritdoc />
     public override object? Query(ProviderQuery query)
     {
         JavaScriptTypeDeclaration.RegisterCacheFactory();
         JavaScriptMethodDeclaration.RegisterCacheFactory();
         JavaScriptStatementInfo.RegisterCacheFactory();
-        var parsers = new SourceParserRegistry();
+        SourceParserRegistry parsers = new SourceParserRegistry();
         parsers.Register(new JavaScriptSourceParser());
-        var collections = CodeCollectionBuilder.CollectAndParse(parsers, query, this);
+        Dictionary<string, List<object>> collections = CodeCollectionBuilder.CollectAndParse(parsers, query, this);
 
         // Discover projects from package.json
         if (query.RootPath is not null)
         {
-            var projects = JavaScriptProjectDiscovery.Discover(query.RootPath, query.ExcludedDirectories);
+            List<ProjectInfo> projects = JavaScriptProjectDiscovery.Discover(query.RootPath, query.ExcludedDirectories);
             if (query.Collection == null || query.Collection == "Projects")
+            {
                 collections["Projects"] = projects.Cast<object>().ToList();
+            }
         }
 
         return ApplyQueryFilters(query, collections);

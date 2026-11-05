@@ -1,12 +1,11 @@
 # C# checks — correctness, style, and Framework Design Guidelines
 
 import code
-import code
 import csharp
 
 let cb = codebase(csharp.parse())
 
-# Honor `// cop-ignore: <check>` comments — exempt the next statement/line from these checks.
+# Honor `// cop-ignore: <check>` comments on the next statement or line.
 predicate notIgnored(Statement) =>
     isUnsuppressed(Statement)
 predicate lineNotIgnored(Line) =>
@@ -16,17 +15,34 @@ predicate lineNotIgnored(Line) =>
 
 # Typing
 
-predicate isVarDeclaration(Statement) => Statement.Kind == 'declaration' && Statement.Keywords:contains('var')
+# Anonymous types, including generic arguments, have no explicit C# type spelling.
+predicate containsAnonymousType(TypeReference) =>
+    TypeReference.IsAnonymous == true ||
+    TypeReference.GenericArguments:any(containsAnonymousType)
 
-predicate isDynamicDeclaration(Statement) => Statement.Kind == 'declaration' && Statement.Keywords:contains('dynamic')
+predicate isVarDeclaration(Statement) =>
+    Statement.Kind == declaration &&
+    Statement.Keywords:contains('var') &&
+    (Statement.ValueType == nic ||
+        !Statement.ValueType:containsAnonymousType)
+
+predicate isDynamicDeclaration(Statement) =>
+    Statement.Kind == 'declaration' &&
+    Statement.Keywords:contains('dynamic')
 
 ## Disallow implicit typing with var — use explicit types
-export let var-declarations = cb.Statements:isVarDeclaration:notIgnored
-    :toError('Do not use \'var\' for {item.MemberName}', nameof(var-declarations))
+export function varDeclarations(cb: Codebase) : [Violation] =>
+    cb.Statements:isVarDeclaration:notIgnored
+        :toError('Do not use \'var\' for {item.MemberName}', nameof(var-declarations))
+
+export let var-declarations = varDeclarations(cb)
 
 ## Disallow dynamic typing
-export let dynamic-declarations = cb.Statements:isDynamicDeclaration:notIgnored
-    :toError('Do not use \'dynamic\'', nameof(dynamic-declarations))
+export function dynamicDeclarations(cb: Codebase) : [Violation] =>
+    cb.Statements:isDynamicDeclaration:notIgnored
+        :toError('Do not use \'dynamic\'', nameof(dynamic-declarations))
+
+export let dynamic-declarations = dynamicDeclarations(cb)
 
 # Async and threading
 
@@ -35,14 +51,31 @@ predicate isThreadSleep(Statement) =>
     hasTypeName(Statement, ['Thread']) &&
     hasMemberName(Statement, ['Sleep'])
 
-predicate isConfigureAwaitTrue(Statement) => Statement.Kind == 'call'
-    && Statement.MemberName == 'ConfigureAwait' && Statement.Arguments:contains('true')
+predicate isConfigureAwaitTrue(Statement) =>
+    Statement.Kind == call &&
+    Statement.MemberName == 'ConfigureAwait' &&
+    Statement.ArgumentExpressions.Count == 1 &&
+    Statement.ArgumentExpressions[0].Kind == booleanLiteral &&
+    Statement.ArgumentExpressions[0].BooleanValue == true
 
 predicate isGetAwaiterGetResult(Statement) => Statement.Kind == 'call'
     && Statement.MemberName == 'GetResult'
 
-predicate isTaskCompletionSourceNew(Statement) => Statement.Kind == 'call'
-    && Statement.TypeName == 'TaskCompletionSource'
+predicate hasAsyncContinuationsOption(CodeExpression) =>
+    (CodeExpression.Kind == memberAccess &&
+        CodeExpression.Name == 'RunContinuationsAsynchronously' &&
+        CodeExpression.Target != nic &&
+        CodeExpression.Target.Name == 'TaskCreationOptions') ||
+    (CodeExpression.Kind == binary &&
+        CodeExpression.Name == 'BitwiseOrExpression' &&
+        CodeExpression.Children:any(hasAsyncContinuationsOption))
+
+predicate isTaskCompletionSourceNew(Statement) =>
+    Statement.Kind == call &&
+    Statement.MemberName == nic &&
+    Statement.ValueType.Name == 'TaskCompletionSource' &&
+    Statement.ValueType.Namespace == 'System.Threading.Tasks' &&
+    !Statement.ArgumentExpressions:any(hasAsyncContinuationsOption)
 
 # Sync-blocking call patterns (reusable by any check)
 export predicate isSyncBlockingCall(Statement) =>
@@ -50,30 +83,57 @@ export predicate isSyncBlockingCall(Statement) =>
     hasMemberName(Statement, ['Wait', 'GetResult'])
 
 # Statement is inside an async method
-export predicate isInAsyncMethod(Statement) => Statement.Method != nic && Statement.Method.Modifiers:isSet(Async)
+export predicate isInAsyncMethod(Statement) =>
+    Statement.Method != nic &&
+    Statement.Method.Modifiers:isSet(Async)
 
 # Statement is inside a non-async method
-export predicate isInSyncMethod(Statement) => Statement.Method != nic && Statement.Method.Modifiers:isClear(Async)
+export predicate isInSyncMethod(Statement) =>
+    Statement.Method != nic &&
+    Statement.Method.Modifiers:isClear(Async)
 
 ## Use Task.Delay instead of blocking Thread.Sleep
-export let thread-sleep-calls = cb.Statements:isThreadSleep:notIgnored
-    :toError('Use Task.Delay instead of Thread.Sleep', nameof(thread-sleep-calls))
+export function threadSleepCalls(cb: Codebase) : [Violation] =>
+    cb.Statements:isThreadSleep:notIgnored
+        :toError('Use Task.Delay instead of Thread.Sleep', nameof(thread-sleep-calls))
+
+export let thread-sleep-calls = threadSleepCalls(cb)
 
 ## ConfigureAwait(true) is the default and should not be used explicitly
-export let configure-await-true-calls = cb.Statements:isConfigureAwaitTrue:notIgnored
-    :toWarning('Do not use ConfigureAwait(true) — it is the default', nameof(configure-await-true-calls))
+export function configureAwaitTrueCalls(cb: Codebase) : [Violation] =>
+    cb.Statements:isConfigureAwaitTrue:notIgnored
+        :toWarning(
+            'Do not use ConfigureAwait(true) — it is the default',
+            nameof(configure-await-true-calls))
+
+export let configure-await-true-calls = configureAwaitTrueCalls(cb)
 
 ## Do not block on async code with GetAwaiter().GetResult()
-export let sync-over-async-calls = cb.Statements:isGetAwaiterGetResult:notIgnored
-    :toWarning('Do not use GetAwaiter().GetResult() — use await instead', nameof(sync-over-async-calls))
+export function syncOverAsyncCalls(cb: Codebase) : [Violation] =>
+    cb.Statements:isGetAwaiterGetResult:notIgnored
+        :toWarning(
+            'Do not use GetAwaiter().GetResult() — use await instead',
+            nameof(sync-over-async-calls))
+
+export let sync-over-async-calls = syncOverAsyncCalls(cb)
 
 ## TaskCompletionSource should be created with RunContinuationsAsynchronously
-export let bare-task-completion-sources = cb.Statements:isTaskCompletionSourceNew:notIgnored
-    :toWarning('Use TaskCompletionSource<T>(TaskCreationOptions.RunContinuationsAsynchronously)', nameof(bare-task-completion-sources))
+export function bareTaskCompletionSources(cb: Codebase) : [Violation] =>
+    cb.Statements:isTaskCompletionSourceNew:notIgnored
+        :toWarning(
+            'Create TaskCompletionSource with RunContinuationsAsynchronously',
+            nameof(bare-task-completion-sources))
+
+export let bare-task-completion-sources = bareTaskCompletionSources(cb)
 
 ## Do not use sync-blocking calls (.Wait(), .GetResult()) inside async methods (AZC0103)
-export let sync-wait-in-async = cb.Statements:isSyncBlockingCall:isInAsyncMethod:notIgnored
-    :toError('Do not use {item.MemberName} in async method — use await instead', nameof(sync-wait-in-async))
+export function syncWaitInAsync(cb: Codebase) : [Violation] =>
+    cb.Statements:isSyncBlockingCall:isInAsyncMethod:notIgnored
+        :toError(
+            'Do not use {item.MemberName} in async method — use await instead',
+            nameof(sync-wait-in-async))
+
+export let sync-wait-in-async = syncWaitInAsync(cb)
 
 # Console output
 
@@ -81,9 +141,26 @@ predicate isConsoleCall(Statement) =>
     Statement.Kind == call &&
     hasTypeName(Statement, ['Console'])
 
+predicate isExecutableProject(Project) =>
+    hasProjectPropertyValue(Project, 'OutputType', 'Exe') ||
+    hasProjectPropertyValue(Project, 'OutputType', 'WinExe')
+
+function consoleCallsOutsideFiles(statements: [Statement], executable-files: [string])
+    : [Statement] =>
+    statements:isConsoleCall:notIgnored
+        .Where(!item.File.FullPath:in(executable-files) &&
+            !item.File.Path:in(executable-files))
+
 ## Avoid Console output in library code
-export let console-calls = cb.Statements:isConsoleCall:notIgnored
-    :toWarning('Don\'t use Console.{item.MemberName} in library code', nameof(console-calls))
+export function consoleCalls(cb: Codebase) : [Violation] =>
+    consoleCallsOutsideFiles(cb.Statements, reduce(cb.Projects:isExecutableProject,
+        (files, project) => files +
+            (project.SourceFiles == nic ? [] : project.SourceFiles), []))
+        :toWarning(
+            'Don\'t use Console.{item.MemberName} in library code',
+            nameof(console-calls))
+
+export let console-calls = consoleCalls(cb)
 
 # Exception handling
 
@@ -99,16 +176,31 @@ predicate isSwallowingBaseException(Statement) =>
     isUnrethrowingGenericHandler(Statement)
 
 ## Catch specific exception types instead of bare Exception
-export let base-exception-catches = cb.Statements:isCatchingBaseException:notIgnored
-    :toWarning('Catch a specific exception type instead of Exception', nameof(base-exception-catches))
+export function baseExceptionCatches(cb: Codebase) : [Violation] =>
+    cb.Statements:isCatchingBaseException:notIgnored
+        :toWarning(
+            'Catch a specific exception type instead of Exception',
+            nameof(base-exception-catches))
+
+export let base-exception-catches = baseExceptionCatches(cb)
 
 ## Do not swallow base exceptions — always rethrow
-export let swallowed-exceptions = cb.Statements:isSwallowingBaseException:notIgnored
-    :toWarning('Do not swallow Exception — rethrow or catch a specific type', nameof(swallowed-exceptions))
+export function swallowedExceptions(cb: Codebase) : [Violation] =>
+    cb.Statements:isSwallowingBaseException:notIgnored
+        :toWarning(
+            'Do not swallow Exception — rethrow or catch a specific type',
+            nameof(swallowed-exceptions))
+
+export let swallowed-exceptions = swallowedExceptions(cb)
 
 ## Empty catch — catches base Exception and does absolutely nothing
-export let empty-catches = cb.Statements:isEmptyCatch:notIgnored
-    :toError('Empty catch block swallows all exceptions silently', nameof(empty-catches))
+export function emptyCatches(cb: Codebase) : [Violation] =>
+    cb.Statements:isEmptyCatch:notIgnored
+        :toError(
+            'Empty catch block swallows all exceptions silently',
+            nameof(empty-catches))
+
+export let empty-catches = emptyCatches(cb)
 
 # Banned APIs
 
@@ -118,8 +210,11 @@ predicate isUriToString(Statement) => Statement.Kind == 'call'
     && Statement.TypeName != nic && Statement.TypeName:matches('[Uu]ri')
 
 ## Banned API: Uri.ToString() — use Uri.AbsoluteUri for consistent output
-export let uri-tostring = cb.Statements:isUriToString:notIgnored
-    :toWarning('Use Uri.AbsoluteUri instead of Uri.ToString()', nameof(uri-tostring))
+export function uriTostring(cb: Codebase) : [Violation] =>
+    cb.Statements:isUriToString:notIgnored
+        :toWarning('Use Uri.AbsoluteUri instead of Uri.ToString()', nameof(uri-tostring))
+
+export let uri-tostring = uriTostring(cb)
 
 # Naming
 
@@ -137,60 +232,126 @@ let csharpKeywords = ['abstract' 'as' 'base' 'bool' 'break' 'byte' 'case' 'catch
 predicate hasKeywordName(Type) => csharpKeywords:contains(Type.Name)
 
 ## CA1716: Type names should not match C# reserved keywords
-export let type-name-is-keyword = cb.Types:hasKeywordName
-    :toWarning('CA1716: Type name {item.Name} matches a C# reserved keyword', nameof(type-name-is-keyword))
+export function typeNameIsKeyword(cb: Codebase) : [Violation] =>
+    cb.Types:hasKeywordName
+        :toWarning(
+            'CA1716: Type name {item.Name} matches a C# reserved keyword',
+            nameof(type-name-is-keyword))
+
+export let type-name-is-keyword = typeNameIsKeyword(cb)
 
 # Code analysis rules
 
 # CA1812: Avoid uninstantiated internal classes
-predicate isInternalNonAbstract(Type) => Type.Kind == 'Class' && Type:!isPublic && Type:!isAbstract
+predicate isInternalConcreteClass(Type) =>
+    Type.Kind == Class &&
+    Type:!isPublic &&
+    Type:!isAbstract &&
+    Type:!isStatic
 
-## CA1812: Internal classes should be instantiated (heuristic)
-export let uninstantiated-internal = cb.Types:isInternalNonAbstract
-    :toWarning('CA1812: Internal class {item.Name} may not be instantiated — consider making it public or removing it', nameof(uninstantiated-internal))
+function internalTypesWithoutCalls(types: [Type], constructedNames: [string]) : [Type] =>
+    types:isInternalConcreteClass
+        .Where(!constructedNames:contains(declarationIdentity(item)))
+
+function declarationIdentity(Type) : string =>
+    '{Type.Namespace}:{Type.Name}:{Type.TypeParameters.Count}'
+
+function referenceIdentity(reference: TypeReference) : string =>
+    '{reference.Namespace}:{reference.Name}:{reference.GenericArguments.Count}'
+
+## CA1812: Find concrete internal classes without a constructor call in this codebase.
+## Reflection and construction in unparsed source are not visible to this heuristic.
+export function uninstantiatedInternal(cb: Codebase) : [Violation] =>
+    internalTypesWithoutCalls(cb.Types, cb.Calls
+        .Where(item.MemberName == nic && item.ValueType.Name != nic)
+        .Select(referenceIdentity(item.ValueType)))
+        :toWarning(
+            'CA1812: No constructor call found for internal class {item.Name}',
+            nameof(uninstantiated-internal))
+
+export let uninstantiated-internal = uninstantiatedInternal(cb)
 
 # CA2000: IDisposable not in using statement
-predicate isUsingStatement(Statement) => Statement.Kind == 'using'
-predicate isDisposableNew(Statement) => Statement.Kind == 'call'
-    && Statement.MemberName == nic && Statement.TypeName != nic
-    && Statement.ConstructedTypeInterfaces:contains('IDisposable')
-    && !Statement.Ancestors:any(isUsingStatement)
+predicate isDisposableNew(CSharpStatement) => CSharpStatement.Kind == call
+    && CSharpStatement.MemberName == nic
+    && CSharpStatement.ConstructedTypeInterfaces:contains('IDisposable')
+    && !CSharpStatement.IsUsingResource
 
 ## CA2000: Dispose objects before losing scope
-export let undisposed-new = cb.Statements:isDisposableNew:notIgnored
-    :toWarning('CA2000: {item.TypeName} implements IDisposable but is not in a using statement', nameof(undisposed-new))
+export function undisposedNew(cb: Codebase) : [Violation] =>
+    cb.Statements:asCSharp:isDisposableNew:notIgnored
+        :toWarning(
+            'CA2000: Review disposal or ownership of {item.TypeName}',
+            nameof(undisposed-new))
+
+export let undisposed-new = undisposedNew(cb)
 
 # Project files
 
 # TODO: readme-install-package and cpm-compliance checks require a text/line provider
-# for .md and .csproj files. Removed broken provider('markdown')/provider('xml') fallbacks.
+# for .md and .csproj files.
 
 ## Combined correctness checks
-export let csharp-correctness-checks = var-declarations + dynamic-declarations + thread-sleep-calls + console-calls + base-exception-catches + swallowed-exceptions + configure-await-true-calls + sync-over-async-calls + bare-task-completion-sources + sync-wait-in-async + uri-tostring + type-name-is-keyword + uninstantiated-internal + undisposed-new
+export function csharpCorrectnessChecks(cb: Codebase) : [Violation] =>
+    varDeclarations(cb) +
+    dynamicDeclarations(cb) +
+    threadSleepCalls(cb) +
+    consoleCalls(cb) +
+    baseExceptionCatches(cb) +
+    swallowedExceptions(cb) +
+    configureAwaitTrueCalls(cb) +
+    syncOverAsyncCalls(cb) +
+    bareTaskCompletionSources(cb) +
+    syncWaitInAsync(cb) +
+    uriTostring(cb) +
+    typeNameIsKeyword(cb) +
+    uninstantiatedInternal(cb) +
+    undisposedNew(cb)
+
+export let csharp-correctness-checks = csharpCorrectnessChecks(cb)
 
 ## Style Checks (StyleCop)
 
 # SA1302: Interface names must begin with 'I' followed by an uppercase letter
-predicate isMissingIPrefix(Type) => Type.Kind == 'Interface' && !Type.Name:matches('^I[A-Z]')
+predicate isMissingIPrefix(Type) =>
+    Type.Kind == 'Interface' &&
+    !Type.Name:matches('^I[A-Z]')
 
 # SA1300: Type names must begin with an uppercase letter (PascalCase)
 predicate hasLowercaseTypeName(Type) => Type.Name:matches('^[a-z]')
 
 # SA1300: Public method names must begin with an uppercase letter (PascalCase)
-predicate isLowercasePublicMethod(Method) => Method:isPublic && Method.Name:matches('^[a-z]')
+predicate isLowercasePublicMethod(Method) =>
+    Method:isPublic &&
+    Method.Name:matches('^[a-z]')
 predicate hasLowercasePublicMethod(Type) => Type.Methods:any(isLowercasePublicMethod)
 
 ## SA1302: Interface names must begin with 'I' followed by an uppercase letter
-export let interface-prefix = cb.Types:isMissingIPrefix
-    :toWarning('SA1302: Interface {item.Name} should begin with \'I\' followed by an uppercase letter', nameof(interface-prefix))
+export function interfacePrefix(cb: Codebase) : [Violation] =>
+    cb.Types:isMissingIPrefix
+        :toWarning(
+            'SA1302: Interface {item.Name} needs an I + uppercase prefix',
+            nameof(interface-prefix))
+
+export let interface-prefix = interfacePrefix(cb)
 
 ## SA1300: Type names must begin with an uppercase letter (PascalCase)
-export let type-name-casing = cb.Types:hasLowercaseTypeName
-    :toWarning('SA1300: Type {item.Name} should begin with an uppercase letter', nameof(type-name-casing))
+export function typeNameCasing(cb: Codebase) : [Violation] =>
+    cb.Types:hasLowercaseTypeName
+        :toWarning(
+            'SA1300: Type {item.Name} should begin with an uppercase letter',
+            nameof(type-name-casing))
+
+export let type-name-casing = typeNameCasing(cb)
 
 ## SA1300: Public method names must begin with an uppercase letter (PascalCase)
-export let method-name-casing = cb.Types:hasLowercasePublicMethod
-    :toWarning('SA1300: {item.Name} has a public method that should begin with an uppercase letter', nameof(method-name-casing))
+export function methodNameCasing(cb: Codebase) : [Violation] =>
+    cb.Types:hasLowercasePublicMethod
+        :toWarning(
+            'SA1300: Public methods on {item.Name} need uppercase names',
+            nameof(method-name-casing))
+
+export let method-name-casing = methodNameCasing(cb)
 
 # File structure
 
@@ -198,20 +359,39 @@ export let method-name-casing = cb.Types:hasLowercasePublicMethod
 predicate hasMultipleTypesInFile(Type) => Type.File.Types.Count > 1
 
 # SA1633: File must have a header (first line should be a comment)
-predicate isMissingFileHeader(Line) => Line.Number == 1 && !Line.Text:matches('^(\s*/[/*]|#)')
+predicate isMissingFileHeader(Line) =>
+    Line.Number == 1 &&
+    Line.Kind != comment
 
 ## SA1402: A file may only contain a single type
-export let single-type-per-file = cb.Types:hasMultipleTypesInFile
-    :toWarning('SA1402: {item.Name} — file should contain only a single type', nameof(single-type-per-file))
+export function singleTypePerFile(cb: Codebase) : [Violation] =>
+    cb.Types:hasMultipleTypesInFile
+        :toWarning(
+            'SA1402: {item.Name} — file should contain only a single type',
+            nameof(single-type-per-file))
+
+export let single-type-per-file = singleTypePerFile(cb)
 
 ## SA1633: File must have a header
-export let file-header-required = cb.Lines:isMissingFileHeader:lineNotIgnored
-    :toWarning('SA1633: File should begin with a header comment', nameof(file-header-required))
+export function fileHeaderRequired(cb: Codebase) : [Violation] =>
+    cb.Lines:isMissingFileHeader:lineNotIgnored
+        :toWarning(
+            'SA1633: File should begin with a header comment',
+            nameof(file-header-required))
+
+export let file-header-required = fileHeaderRequired(cb)
 
 # Whitespace and formatting
 
 # SA1005: Single-line comment must begin with a space after //
-predicate isCommentMissingSpace(Line) => Line.Text:matches('//[^ /!]')
+predicate isUnspacedComment(Comment) =>
+    Comment.Kind == 'singleLine' &&
+    Comment.Content.Length > 0 &&
+    !Comment.Content:startsWith(' ') &&
+    !Comment.Content:startsWith('/') &&
+    !Comment.Content:startsWith('!')
+predicate isCommentMissingSpace(Line) =>
+    Line.Comments:any(isUnspacedComment)
 
 # SA1027: Code must not contain tabs
 predicate hasTab(Line) => Line.Text:matches('\t')
@@ -220,99 +400,222 @@ predicate hasTab(Line) => Line.Text:matches('\t')
 predicate hasTrailingWhitespace(Line) => Line.Text:matches('[ \t]+$')
 
 # SA1106: Code must not contain empty statements (stray semicolons)
-predicate isEmptyStatement(Line) => Line.Text:matches('^\s*;\s*$')
+predicate isEmptyStatement(Statement) =>
+    Statement.Kind == empty
 
 # SA1122: Use string.Empty for empty strings in comparisons
-predicate hasEmptyStringLiteral(Line) => Line.Text:matches('(==|!=)\s*""') || Line.Text:matches('""\s*(==|!=)')
+predicate isEmptyStringLiteral(CodeExpression) =>
+    CodeExpression.Kind == stringLiteral &&
+    CodeExpression.StringValue == ''
+predicate isEmptyStringComparison(CodeExpression) =>
+    CodeExpression.Kind == binary &&
+    CodeExpression.Name:in(['EqualsExpression', 'NotEqualsExpression']) &&
+    CodeExpression.Children:any(isEmptyStringLiteral)
+predicate containsEmptyStringComparison(CodeExpression) =>
+    isEmptyStringComparison ||
+    CodeExpression.Children:any(containsEmptyStringComparison)
+predicate hasEmptyStringLiteral(Statement) =>
+    (Statement.ValueExpression.Kind != nic &&
+        Statement.ValueExpression:containsEmptyStringComparison) ||
+    (Statement.ConditionExpression.Kind != nic &&
+        Statement.ConditionExpression:containsEmptyStringComparison) ||
+    Statement.ArgumentExpressions:any(containsEmptyStringComparison)
 
 ## SA1005: Single-line comment must begin with a space after //
-export let comment-spacing = cb.Lines:isCommentMissingSpace:lineNotIgnored
-    :toWarning('SA1005: Single-line comment should begin with a space', nameof(comment-spacing))
+export function commentSpacing(cb: Codebase) : [Violation] =>
+    cb.Lines:isCommentMissingSpace:lineNotIgnored
+        :toWarning(
+            'SA1005: Single-line comment should begin with a space',
+            nameof(comment-spacing))
+
+export let comment-spacing = commentSpacing(cb)
 
 ## SA1027: Code must not contain tabs
-export let no-tabs = cb.Lines:hasTab:lineNotIgnored
-    :toWarning('SA1027: Use spaces instead of tabs', nameof(no-tabs))
+export function noTabs(cb: Codebase) : [Violation] =>
+    cb.Lines:hasTab:lineNotIgnored
+        :toWarning('SA1027: Use spaces instead of tabs', nameof(no-tabs))
+
+export let no-tabs = noTabs(cb)
 
 ## SA1028: Code must not contain trailing whitespace
-export let no-trailing-whitespace = cb.Lines:hasTrailingWhitespace:lineNotIgnored
-    :toWarning('SA1028: Remove trailing whitespace', nameof(no-trailing-whitespace))
+export function noTrailingWhitespace(cb: Codebase) : [Violation] =>
+    cb.Lines:hasTrailingWhitespace:lineNotIgnored
+        :toWarning('SA1028: Remove trailing whitespace', nameof(no-trailing-whitespace))
+
+export let no-trailing-whitespace = noTrailingWhitespace(cb)
 
 ## SA1106: Code must not contain empty statements
-export let no-empty-statements = cb.Lines:isEmptyStatement:lineNotIgnored
-    :toWarning('SA1106: Remove empty statement', nameof(no-empty-statements))
+export function noEmptyStatements(cb: Codebase) : [Violation] =>
+    cb.Statements:isEmptyStatement:notIgnored
+        :toWarning('SA1106: Remove empty statement', nameof(no-empty-statements))
+
+export let no-empty-statements = noEmptyStatements(cb)
 
 ## SA1122: Use string.Empty instead of ""
-export let use-string-empty = cb.Lines:hasEmptyStringLiteral:lineNotIgnored
-    :toWarning('SA1122: Use string.Empty instead of ""', nameof(use-string-empty))
+export function useStringEmpty(cb: Codebase) : [Violation] =>
+    cb.Statements:hasEmptyStringLiteral:notIgnored
+        :toWarning('SA1122: Use string.Empty instead of ""', nameof(use-string-empty))
+
+export let use-string-empty = useStringEmpty(cb)
 
 # Braces
 
 # SA1503: Braces must not be omitted from control flow
+predicate isElseIf(Statement) =>
+    Statement.Kind == else &&
+    Statement.Children.Count == 1 &&
+    Statement.Children[0].Kind == if
+
 predicate isMissingBraces(Statement) => Statement.Braced == false
-    && (Statement.Kind == 'if' || Statement.Kind == 'else' || Statement.Kind == 'for' || Statement.Kind == 'foreach' || Statement.Kind == 'while')
+    && !isElseIf
+    && (Statement.Kind == 'if' ||
+        Statement.Kind == 'else' ||
+        Statement.Kind == 'for' ||
+        Statement.Kind == 'foreach' ||
+        Statement.Kind == 'while')
 
 ## SA1503: Braces must not be omitted
-export let required-braces = cb.Statements:isMissingBraces:notIgnored
-    :toWarning('SA1503: Braces must not be omitted from control flow statement', nameof(required-braces))
+export function requiredBraces(cb: Codebase) : [Violation] =>
+    cb.Statements:isMissingBraces:notIgnored
+        :toWarning(
+            'SA1503: Braces must not be omitted from control flow statement',
+            nameof(required-braces))
+
+export let required-braces = requiredBraces(cb)
 
 # Documentation
 
 # SA1600: Public elements should be documented (have XML doc comments)
 predicate isPublicUndocumented(Type) => Type:isPublic && !Type.Documented
 predicate isUndocumentedPublicMethod(Method) => Method:isPublic && !Method.Documented
-predicate hasUndocumentedPublicMethod(Type) => Type.Methods:any(isUndocumentedPublicMethod)
+predicate hasUndocumentedPublicMethod(Type) =>
+    Type.Methods:any(isUndocumentedPublicMethod)
 
 # SA1600: Public properties should be documented
-predicate isUndocumentedPublicProperty(Property) => Property:isPublic && !Property.Documented
-predicate hasUndocumentedPublicProperty(Type) => Type.Properties:any(isUndocumentedPublicProperty)
+predicate isUndocumentedPublicProperty(Property) =>
+    Property:isPublic &&
+    !Property.Documented
+predicate hasUndocumentedPublicProperty(Type) =>
+    Type.Properties:any(isUndocumentedPublicProperty)
 
 ## SA1600: Public elements should be documented
-export let public-documented = cb.Types:isPublicUndocumented
-    :toWarning('SA1600: Public type {item.Name} should have XML documentation', nameof(public-documented))
+export function publicDocumented(cb: Codebase) : [Violation] =>
+    cb.Types:isPublicUndocumented
+        :toWarning(
+            'SA1600: Public type {item.Name} should have XML documentation',
+            nameof(public-documented))
 
-export let public-method-documented = cb.Types:hasUndocumentedPublicMethod
-    :toWarning('SA1600: {item.Name} has a public method without XML documentation', nameof(public-method-documented))
+export let public-documented = publicDocumented(cb)
+
+export function publicMethodDocumented(cb: Codebase) : [Violation] =>
+    cb.Types:hasUndocumentedPublicMethod
+        :toWarning(
+            'SA1600: {item.Name} has a public method without XML documentation',
+            nameof(public-method-documented))
+
+export let public-method-documented = publicMethodDocumented(cb)
 
 ## SA1600: Public properties should be documented
-export let public-property-documented = cb.Types:hasUndocumentedPublicProperty
-    :toWarning('SA1600: {item.Name} has a public property without XML documentation', nameof(public-property-documented))
+export function publicPropertyDocumented(cb: Codebase) : [Violation] =>
+    cb.Types:hasUndocumentedPublicProperty
+        :toWarning(
+            'SA1600: {item.Name} has a public property without XML documentation',
+            nameof(public-property-documented))
+
+export let public-property-documented = publicPropertyDocumented(cb)
 
 # Fields
 
 # SA1401: Fields should be private (non-const, non-static-readonly public fields are bad)
-predicate isPublicNonConstField(Field) => Field:isPublic && Field:!isConst && !(Field:isStatic && Field:isReadonly)
+predicate isPublicNonConstField(Field) =>
+    Field:isPublic &&
+    Field:!isConst &&
+    !(Field:isStatic &&
+    Field:isReadonly)
 predicate hasPublicField(Type) => Type.Fields:any(isPublicNonConstField)
 
 # .editorconfig naming: private fields should start with _
-predicate isPrivateFieldMissingUnderscore(Field) => Field:isPrivate && Field:!isStatic && !Field.Name:matches('^_')
-predicate hasPrivateFieldNamingViolation(Type) => Type.Fields:any(isPrivateFieldMissingUnderscore)
+predicate isPrivateFieldMissingUnderscore(Field) =>
+    Field:isPrivate &&
+    Field:!isStatic &&
+    !Field.Name:matches('^_')
+predicate hasPrivateFieldNamingViolation(Type) =>
+    Type.Fields:any(isPrivateFieldMissingUnderscore)
 
 # .editorconfig naming: private static fields should start with s_
-predicate isStaticFieldMissingSPrefix(Field) => Field:isPrivate && Field:isStatic && Field:!isConst && !Field.Name:matches('^s_')
-predicate hasStaticFieldNamingViolation(Type) => Type.Fields:any(isStaticFieldMissingSPrefix)
+predicate isStaticFieldMissingSPrefix(Field) =>
+    Field:isPrivate &&
+    Field:isStatic &&
+    Field:!isConst &&
+    !Field.Name:matches('^s_')
+predicate hasStaticFieldNamingViolation(Type) =>
+    Type.Fields:any(isStaticFieldMissingSPrefix)
 
 # .editorconfig naming: constants should be PascalCase
-predicate isConstFieldNotPascalCase(Field) => Field:isConst && !Field.Name:matches('^[A-Z]')
+predicate isConstFieldNotPascalCase(Field) =>
+    Field:isConst &&
+    !Field.Name:matches('^[A-Z]')
 predicate hasConstNamingViolation(Type) => Type.Fields:any(isConstFieldNotPascalCase)
 
-## SA1401: Fields should be private (only on public/protected types — internal structs with public fields are a valid perf pattern)
-export let no-public-fields = cb.Types:isPublic:hasPublicField
-    :toWarning('SA1401: {item.Name} has a public non-const field; use a property instead', nameof(no-public-fields))
+## SA1401: Fields on public or protected types should be private.
+## Internal structs may expose fields for performance.
+export function noPublicFields(cb: Codebase) : [Violation] =>
+    cb.Types:isPublic:hasPublicField
+        :toWarning(
+            'SA1401: {item.Name} has a public non-const field; use a property instead',
+            nameof(no-public-fields))
+
+export let no-public-fields = noPublicFields(cb)
 
 ## .editorconfig naming: private field underscore prefix
-export let private-field-naming = cb.Types:hasPrivateFieldNamingViolation
-    :toWarning('{item.Name} has a private field that should start with underscore (_)', nameof(private-field-naming))
+export function privateFieldNaming(cb: Codebase) : [Violation] =>
+    cb.Types:hasPrivateFieldNamingViolation
+        :toWarning(
+            '{item.Name} has a private field that should start with underscore (_)',
+            nameof(private-field-naming))
+
+export let private-field-naming = privateFieldNaming(cb)
 
 ## .editorconfig naming: static field s_ prefix
-export let static-field-naming = cb.Types:hasStaticFieldNamingViolation
-    :toWarning('{item.Name} has a private static field that should start with s_', nameof(static-field-naming))
+export function staticFieldNaming(cb: Codebase) : [Violation] =>
+    cb.Types:hasStaticFieldNamingViolation
+        :toWarning(
+            '{item.Name} has a private static field that should start with s_',
+            nameof(static-field-naming))
+
+export let static-field-naming = staticFieldNaming(cb)
 
 ## .editorconfig naming: const PascalCase
-export let const-naming = cb.Types:hasConstNamingViolation
-    :toWarning('{item.Name} has a constant that should be PascalCase', nameof(const-naming))
+export function constNaming(cb: Codebase) : [Violation] =>
+    cb.Types:hasConstNamingViolation
+        :toWarning(
+            '{item.Name} has a constant that should be PascalCase',
+            nameof(const-naming))
+
+export let const-naming = constNaming(cb)
 
 ## Combined style checks
-export let csharp-style-checks = interface-prefix + type-name-casing + method-name-casing + single-type-per-file + comment-spacing + no-tabs + no-trailing-whitespace + no-empty-statements + use-string-empty + file-header-required + public-documented + public-method-documented + no-public-fields + private-field-naming + static-field-naming + const-naming + required-braces + public-property-documented
+export function csharpStyleChecks(cb: Codebase) : [Violation] =>
+    interfacePrefix(cb) +
+    typeNameCasing(cb) +
+    methodNameCasing(cb) +
+    singleTypePerFile(cb) +
+    commentSpacing(cb) +
+    noTabs(cb) +
+    noTrailingWhitespace(cb) +
+    noEmptyStatements(cb) +
+    useStringEmpty(cb) +
+    fileHeaderRequired(cb) +
+    publicDocumented(cb) +
+    publicMethodDocumented(cb) +
+    noPublicFields(cb) +
+    privateFieldNaming(cb) +
+    staticFieldNaming(cb) +
+    constNaming(cb) +
+    requiredBraces(cb) +
+    publicPropertyDocumented(cb)
+
+export let csharp-style-checks = csharpStyleChecks(cb)
 
 ## Framework Design Guidelines — Naming
 
@@ -325,75 +628,134 @@ let exception-base-names = [
 predicate isExceptionBase(Type) =>
     derivesFromAny(Type, exception-base-names)
 
-predicate isMissingExceptionSuffix(Type) => Type:isExceptionBase && !Type.Name:endsWith('Exception')
+predicate isMissingExceptionSuffix(Type) =>
+    Type:isExceptionBase &&
+    !Type.Name:endsWith('Exception')
 
 ## FDG: Types inheriting from Exception must end with 'Exception'
-export let exception-suffix = cb.Types:isMissingExceptionSuffix
-    :toWarning('FDG Naming: {item.Name} inherits from Exception but does not end with Exception', nameof(exception-suffix))
+export function exceptionSuffix(cb: Codebase) : [Violation] =>
+    cb.Types:isMissingExceptionSuffix
+        :toWarning(
+            '{item.Name} derives from Exception; use an Exception suffix',
+            nameof(exception-suffix))
+
+export let exception-suffix = exceptionSuffix(cb)
 
 # Types inheriting from Attribute must end with 'Attribute'
 predicate isAttributeBase(Type) =>
     derivesFromAny(Type, ['Attribute'])
-predicate isMissingAttributeSuffix(Type) => Type:isAttributeBase && !Type.Name:endsWith('Attribute')
+predicate isMissingAttributeSuffix(Type) =>
+    Type:isAttributeBase &&
+    !Type.Name:endsWith('Attribute')
 
 ## FDG: Types inheriting from Attribute must end with 'Attribute'
-export let attribute-suffix = cb.Types:isMissingAttributeSuffix
-    :toWarning('FDG Naming: {item.Name} inherits from Attribute but does not end with Attribute', nameof(attribute-suffix))
+export function attributeSuffix(cb: Codebase) : [Violation] =>
+    cb.Types:isMissingAttributeSuffix
+        :toWarning(
+            '{item.Name} derives from Attribute; use an Attribute suffix',
+            nameof(attribute-suffix))
+
+export let attribute-suffix = attributeSuffix(cb)
 
 # Types inheriting from EventArgs must end with 'EventArgs'
 predicate isEventArgsBase(Type) =>
     derivesFromAny(Type, ['EventArgs'])
-predicate isMissingEventArgsSuffix(Type) => Type:isEventArgsBase && !Type.Name:endsWith('EventArgs')
+predicate isMissingEventArgsSuffix(Type) =>
+    Type:isEventArgsBase &&
+    !Type.Name:endsWith('EventArgs')
 
 ## FDG: Types inheriting from EventArgs must end with 'EventArgs'
-export let eventargs-suffix = cb.Types:isMissingEventArgsSuffix
-    :toWarning('FDG Naming: {item.Name} inherits from EventArgs but does not end with EventArgs', nameof(eventargs-suffix))
+export function eventargsSuffix(cb: Codebase) : [Violation] =>
+    cb.Types:isMissingEventArgsSuffix
+        :toWarning(
+            '{item.Name} derives from EventArgs; use an EventArgs suffix',
+            nameof(eventargs-suffix))
+
+export let eventargs-suffix = eventargsSuffix(cb)
 
 # Types inheriting from Stream must end with 'Stream'
 predicate isStreamBase(Type) =>
     derivesFromAny(Type, ['Stream'])
-predicate isMissingStreamSuffix(Type) => Type:isStreamBase && !Type.Name:endsWith('Stream')
+predicate isMissingStreamSuffix(Type) =>
+    Type:isStreamBase &&
+    !Type.Name:endsWith('Stream')
 
 ## FDG: Types inheriting from Stream must end with 'Stream'
-export let stream-suffix = cb.Types:isMissingStreamSuffix
-    :toWarning('FDG Naming: {item.Name} inherits from Stream but does not end with Stream', nameof(stream-suffix))
+export function streamSuffix(cb: Codebase) : [Violation] =>
+    cb.Types:isMissingStreamSuffix
+        :toWarning(
+            'FDG Naming: {item.Name} inherits from Stream but does not end with Stream',
+            nameof(stream-suffix))
+
+export let stream-suffix = streamSuffix(cb)
 
 # Classes should not use Hungarian notation (C prefix)
+let familiar-c-prefixes =
+    '^(CSharp|Cli[a-z]|Client|Cloud|Clone|Clos|Cluster|Collection|Column|Comma|' +
+    'Compar|Compil|Compo|Comput|Concat|Concurr|Config|Connect|Console|Constraint|' +
+    'Convert|Crypt|Custom|Context|Contract|Controller|Cursor)'
+
 predicate hasHungarianPrefix(Type) => Type.Kind == 'Class'
     && Type.Name:matches('^C[A-Z][a-z]')
-    && !Type.Name:matches('^(CSharp|Cli[a-z]|Client|Cloud|Clone|Clos|Cluster|Collection|Column|Comma|Compar|Compil|Compo|Comput|Concat|Concurr|Config|Connect|Console|Constraint|Convert|Crypt|Custom|Context|Contract|Controller|Cursor)')
+    && !Type.Name:matches(familiar-c-prefixes)
 
 ## FDG: Classes should not use Hungarian notation (C prefix)
-export let no-hungarian-prefix = cb.Types:hasHungarianPrefix
-    :toWarning('FDG Naming: {item.Name} uses Hungarian C prefix — remove it', nameof(no-hungarian-prefix))
+export function noHungarianPrefix(cb: Codebase) : [Violation] =>
+    cb.Types:hasHungarianPrefix
+        :toWarning(
+            'FDG Naming: {item.Name} uses Hungarian C prefix — remove it',
+            nameof(no-hungarian-prefix))
 
-# Parameters must use camelCase (start with lowercase)
-# NOTE: disabled — requires Method.Parameters sub-collection which is not yet available
-# predicate isUppercaseParam(Statement) => Statement.Kind:equals('parameter') && Statement.MemberName:matches('^[A-Z]')
-# predicate hasUppercaseParam(Type) => Type.Statements:any(isUppercaseParam)
-# export let param-camel-case = Types:hasUppercaseParam
-#     :toWarning('FDG Naming: {item.Name} has a parameter that does not use camelCase')
+export let no-hungarian-prefix = noHungarianPrefix(cb)
 
 # Boolean properties should use affirmative naming (Is/Has/Can/Should/Was/Will)
+let affirmative-bool-prefixes =
+    '^(Is|Has|Can|Should|Was|Will|Are|Supports|Allows|Needs|Contains|Includes|' +
+    'Requires|Enables)'
+let descriptive-bool-prefixes =
+    '^(Exists|Enabled|Visible|Active|Valid|Available|Ready|Empty|Open|Closed|' +
+    'Connected|Locked)'
+
 predicate isBoolProperty(Property) => Property:isPublic && Property.Type.Name == 'bool'
 predicate hasBadBoolName(Property) => Property:isBoolProperty
-    && !Property.Name:matches('^(Is|Has|Can|Should|Was|Will|Are|Supports|Allows|Needs|Contains|Includes|Requires|Enables)')
-    && !Property.Name:matches('^(Exists|Enabled|Visible|Active|Valid|Available|Ready|Empty|Open|Closed|Connected|Locked)')
+    && !Property.Name:matches(affirmative-bool-prefixes)
+    && !Property.Name:matches(descriptive-bool-prefixes)
 predicate hasBadBoolProperty(Type) => Type.Properties:any(hasBadBoolName)
 
 ## FDG: Boolean properties should use affirmative naming
-export let bool-property-naming = cb.Types:hasBadBoolProperty
-    :toInfo('FDG Naming: {item.Name} has a bool property that may need affirmative naming (Is/Has/Can/Should)', nameof(bool-property-naming))
+export function boolPropertyNaming(cb: Codebase) : [Violation] =>
+    cb.Types:hasBadBoolProperty
+        :toInfo(
+            'Name bool properties on {item.Name} with Is, Has, Can, or similar',
+            nameof(bool-property-naming))
+
+export let bool-property-naming = boolPropertyNaming(cb)
 
 # Namespace should have at least two segments (Company.Product)
-predicate hasShortNamespace(Type) => Type.File.Namespace != nic && !Type.File.Namespace:contains('.')
+predicate hasShortNamespace(Type) =>
+    Type.File.Namespace != nic &&
+    !Type.File.Namespace:contains('.')
 
 ## FDG: Namespace should have at least two segments
-export let namespace-segments = cb.Types:hasShortNamespace
-    :toInfo('FDG Naming: Namespace {item.File.Namespace} should have at least two segments (e.g., Company.Product)', nameof(namespace-segments))
+export function namespaceSegments(cb: Codebase) : [Violation] =>
+    cb.Types:hasShortNamespace
+        :toInfo(
+            'Namespace {item.File.Namespace} needs two segments, e.g. Company.Product',
+            nameof(namespace-segments))
+
+export let namespace-segments = namespaceSegments(cb)
 
 ## Combined FDG naming checks
-export let fdg-naming = exception-suffix + attribute-suffix + eventargs-suffix + stream-suffix + no-hungarian-prefix + bool-property-naming + namespace-segments
+export function fdgNaming(cb: Codebase) : [Violation] =>
+    exceptionSuffix(cb) +
+    attributeSuffix(cb) +
+    eventargsSuffix(cb) +
+    streamSuffix(cb) +
+    noHungarianPrefix(cb) +
+    boolPropertyNaming(cb) +
+    namespaceSegments(cb)
+
+export let fdg-naming = fdgNaming(cb)
 
 ## Framework Design Guidelines — Type Design
 
@@ -402,64 +764,129 @@ predicate hasEnumBadSuffix(Type) => Type.Kind == 'Enum'
     && (Type.Name:endsWith('Enum') || Type.Name:endsWith('Flags'))
 
 ## FDG: Enum types should not use Enum/Flags suffix
-export let enum-no-suffix = cb.Types:hasEnumBadSuffix
-    :toWarning('FDG Type Design: Enum {item.Name} should not use Enum/Flags suffix', nameof(enum-no-suffix))
+export function enumNoSuffix(cb: Codebase) : [Violation] =>
+    cb.Types:hasEnumBadSuffix
+        :toWarning(
+            'FDG Type Design: Enum {item.Name} should not use Enum/Flags suffix',
+            nameof(enum-no-suffix))
+
+export let enum-no-suffix = enumNoSuffix(cb)
 
 # [Flags] enums should use plural names
 predicate isFlagsEnum(Type) =>
     Type.Kind == Enum &&
     hasDecorator(Type, 'Flags')
-predicate hasFlagsSingularName(Type) => Type:isFlagsEnum && !Type.Name:matches('[sx]$|ies$|ata$')
+predicate hasFlagsSingularName(Type) =>
+    Type:isFlagsEnum &&
+    !Type.Name:matches('[sx]$|ies$|ata$')
 
 ## FDG: [Flags] enums should use plural names
-export let flags-plural-name = cb.Types:hasFlagsSingularName
-    :toWarning('FDG Type Design: [Flags] enum {item.Name} should use a plural name', nameof(flags-plural-name))
+export function flagsPluralName(cb: Codebase) : [Violation] =>
+    cb.Types:hasFlagsSingularName
+        :toWarning(
+            'FDG Type Design: [Flags] enum {item.Name} should use a plural name',
+            nameof(flags-plural-name))
+
+export let flags-plural-name = flagsPluralName(cb)
 
 # Abstract classes should have a protected constructor (not public)
 predicate isPublicCtor(Method) => Method.Modifiers:isSet(Public)
-predicate hasAbstractPublicCtor(Type) => Type:isAbstract && Type.Constructors:any(isPublicCtor)
+predicate hasAbstractPublicCtor(Type) =>
+    Type:isAbstract &&
+    Type.Constructors:any(isPublicCtor)
 
 ## FDG: Abstract classes should have protected constructors
-export let abstract-protected-ctor = cb.Types:hasAbstractPublicCtor
-    :toWarning('FDG Type Design: Abstract class {item.Name} should have protected constructors, not public', nameof(abstract-protected-ctor))
+export function abstractProtectedCtor(cb: Codebase) : [Violation] =>
+    cb.Types:hasAbstractPublicCtor
+        :toWarning(
+            '{item.Name}: make abstract-class constructors protected',
+            nameof(abstract-protected-ctor))
+
+export let abstract-protected-ctor = abstractProtectedCtor(cb)
 
 # Static classes should not have instance members
-predicate isInstanceMethod(Method) => Method:!isStatic && Method.Name != '.ctor'
-predicate hasStaticWithInstanceMember(Type) => Type:isStatic && Type.Methods:any(isInstanceMethod)
+predicate isInstanceMethod(Method) =>
+    Method:!isStatic &&
+    Method.Kind:in(['method', 'operator', 'destructor']) &&
+    Method.Name != '.ctor'
+predicate isInstanceField(Field) =>
+    Field:!isStatic &&
+    Field:!isConst
+predicate isInstanceProperty(Property) =>
+    Property:!isStatic
+predicate isInstanceEvent(Event) =>
+    Event:!isStatic
+predicate hasStaticWithInstanceMember(Type) =>
+    Type:isStatic &&
+    (Type.Methods:any(isInstanceMethod) ||
+        Type.Fields:any(isInstanceField) ||
+        Type.Properties:any(isInstanceProperty) ||
+        Type.Events:any(isInstanceEvent))
 
 ## FDG: Static classes should not have instance members
-export let static-no-instance = cb.Types:hasStaticWithInstanceMember
-    :toWarning('FDG Type Design: Static class {item.Name} should not have instance members', nameof(static-no-instance))
+export function staticNoInstance(cb: Codebase) : [Violation] =>
+    cb.Types:hasStaticWithInstanceMember
+        :toWarning(
+            'FDG Type Design: Static class {item.Name} should not have instance members',
+            nameof(static-no-instance))
+
+export let static-no-instance = staticNoInstance(cb)
 
 # Marker interfaces (no members) should be avoided
 predicate isMarkerInterface(Type) => Type.Kind == 'Interface'
     && Type.Methods.Count == 0 && Type.Properties.Count == 0 && Type.Events.Count == 0
 
 ## FDG: Marker interfaces should be avoided
-export let no-marker-interfaces = cb.Types:isMarkerInterface
-    :toInfo('FDG Type Design: Interface {item.Name} has no members — consider using an attribute instead', nameof(no-marker-interfaces))
+export function noMarkerInterfaces(cb: Codebase) : [Violation] =>
+    cb.Types:isMarkerInterface
+        :toInfo(
+            '{item.Name} has no members; consider an attribute instead',
+            nameof(no-marker-interfaces))
+
+export let no-marker-interfaces = noMarkerInterfaces(cb)
 
 # Classes with only static members should be marked static
 predicate hasAllMethodsStatic(Type) => Type.Kind == 'Class'
     && Type:!isStatic && Type:!isAbstract
     && Type.Methods.Count > 0
     && Type.Methods:none(isInstanceMethod)
+    && Type.Fields:none(isInstanceField)
+    && Type.Constructors.Count == 0
     && Type.Properties.Count == 0
     && Type.Events.Count == 0
 
 ## FDG: Classes with only static members should be static
-export let should-be-static = cb.Types:hasAllMethodsStatic
-    :toInfo('FDG Type Design: {item.Name} has only static members — consider making it a static class', nameof(should-be-static))
+export function shouldBeStatic(cb: Codebase) : [Violation] =>
+    cb.Types:hasAllMethodsStatic
+        :toInfo(
+            '{item.Name} has only static members; consider a static class',
+            nameof(should-be-static))
+
+export let should-be-static = shouldBeStatic(cb)
 
 # Structs should be small (4 or fewer fields)
 predicate isLargeStruct(Type) => Type.Kind == 'Struct' && Type.Fields.Count > 4
 
 ## FDG: Structs should be small
-export let struct-size = cb.Types:isLargeStruct
-    :toInfo('FDG Type Design: Struct {item.Name} has {item.Fields.Count} fields — consider using a class for large data types', nameof(struct-size))
+export function structSize(cb: Codebase) : [Violation] =>
+    cb.Types:isLargeStruct
+        :toInfo(
+            '{item.Name} has {item.Fields.Count} fields; consider a class',
+            nameof(struct-size))
+
+export let struct-size = structSize(cb)
 
 ## Combined FDG type design checks
-export let fdg-type-design = enum-no-suffix + flags-plural-name + abstract-protected-ctor + static-no-instance + no-marker-interfaces + should-be-static + struct-size
+export function fdgTypeDesign(cb: Codebase) : [Violation] =>
+    enumNoSuffix(cb) +
+    flagsPluralName(cb) +
+    abstractProtectedCtor(cb) +
+    staticNoInstance(cb) +
+    noMarkerInterfaces(cb) +
+    shouldBeStatic(cb) +
+    structSize(cb)
+
+export let fdg-type-design = fdgTypeDesign(cb)
 
 ## Framework Design Guidelines — Member Design
 
@@ -470,26 +897,48 @@ predicate hasExcessiveParams(Method) =>
 predicate hasTooManyParams(Type) => Type.Methods:any(hasExcessiveParams)
 
 ## FDG: Methods should not have more than 5 parameters
-export let max-parameters = cb.Types:hasTooManyParams
-    :toWarning('FDG Member Design: {item.Name} has a public method with more than 5 parameters', nameof(max-parameters))
+export function maxParameters(cb: Codebase) : [Violation] =>
+    cb.Types:hasTooManyParams
+        :toWarning(
+            '{item.Name}: public methods should have at most 5 parameters',
+            nameof(max-parameters))
+
+export let max-parameters = maxParameters(cb)
 
 # Write-only properties (setter without getter)
-predicate isWriteOnlyProp(Property) => Property:isPublic && Property:hasSetter && !Property:hasGetter
+predicate isWriteOnlyProp(Property) =>
+    Property:isPublic &&
+    Property:hasSetter &&
+    !Property:hasGetter
 predicate hasWriteOnlyProp(Type) => Type.Properties:any(isWriteOnlyProp)
 
 ## FDG: No write-only properties
-export let no-write-only-properties = cb.Types:hasWriteOnlyProp
-    :toWarning('FDG Member Design: {item.Name} has a write-only property — add a getter', nameof(no-write-only-properties))
+export function noWriteOnlyProperties(cb: Codebase) : [Violation] =>
+    cb.Types:hasWriteOnlyProp
+        :toWarning(
+            'FDG Member Design: {item.Name} has a write-only property — add a getter',
+            nameof(no-write-only-properties))
+
+export let no-write-only-properties = noWriteOnlyProperties(cb)
 
 # Extension methods should be in *Extensions classes
 predicate isExtensionMethod(Method) => Method:isStatic && Method.Parameters.Count > 0
     && Method.Decorators:contains('Extension')
-predicate hasExtensionMethods(Type) => Type:isStatic && Type.Methods:any(isExtensionMethod)
-predicate isExtensionClassBadName(Type) => Type:hasExtensionMethods && !Type.Name:endsWith('Extensions')
+predicate hasExtensionMethods(Type) =>
+    Type:isStatic &&
+    Type.Methods:any(isExtensionMethod)
+predicate isExtensionClassBadName(Type) =>
+    Type:hasExtensionMethods &&
+    !Type.Name:endsWith('Extensions')
 
 ## FDG: Extension methods should be in *Extensions classes
-export let extension-class-naming = cb.Types:isExtensionClassBadName
-    :toWarning('FDG Member Design: {item.Name} contains extension methods but does not end with Extensions', nameof(extension-class-naming))
+export function extensionClassNaming(cb: Codebase) : [Violation] =>
+    cb.Types:isExtensionClassBadName
+        :toWarning(
+            '{item.Name}: extension-method containers need an Extensions suffix',
+            nameof(extension-class-naming))
+
+export let extension-class-naming = extensionClassNaming(cb)
 
 # Constructors with too many parameters (prefer options/builder)
 predicate hasCtorTooManyParams(Method) =>
@@ -497,28 +946,55 @@ predicate hasCtorTooManyParams(Method) =>
 predicate hasComplexCtor(Type) => Type.Constructors:any(hasCtorTooManyParams)
 
 ## FDG: Constructors should not have too many parameters
-export let ctor-parameter-count = cb.Types:hasComplexCtor
-    :toInfo('FDG Member Design: {item.Name} has a constructor with more than 5 parameters — consider an options type', nameof(ctor-parameter-count))
+export function ctorParameterCount(cb: Codebase) : [Violation] =>
+    cb.Types:hasComplexCtor
+        :toInfo(
+            '{item.Name}: group constructor parameters in an options type',
+            nameof(ctor-parameter-count))
+
+export let ctor-parameter-count = ctorParameterCount(cb)
 
 # Boolean parameters in public methods (prefer enum or overloads)
 predicate isBoolParam(Parameter) => Parameter.Type.Name == 'bool'
-predicate isPublicMethodWithBoolParam(Method) => Method:isPublic && Method.Parameters:any(isBoolParam)
+predicate isPublicMethodWithBoolParam(Method) =>
+    Method:isPublic &&
+    Method.Parameters:any(isBoolParam)
 predicate hasBoolParam(Type) => Type.Methods:any(isPublicMethodWithBoolParam)
 
 ## FDG: Avoid bool parameters in public methods
-export let avoid-bool-params = cb.Types:hasBoolParam
-    :toInfo('FDG Member Design: {item.Name} has a public method with a bool parameter — consider an enum or separate overloads', nameof(avoid-bool-params))
+export function avoidBoolParams(cb: Codebase) : [Violation] =>
+    cb.Types:hasBoolParam
+        :toInfo(
+            '{item.Name}: replace public bool parameters with named options',
+            nameof(avoid-bool-params))
+
+export let avoid-bool-params = avoidBoolParams(cb)
 
 # Properties that return arrays (prefer ReadOnlyCollection or IReadOnlyList)
-predicate isArrayProperty(Property) => Property:isPublic && Property.Type.Name:matches('\\[\\]$')
+predicate isArrayProperty(Property) =>
+    Property:isPublic &&
+    Property.Type.Name:matches('\\[\\]$')
 predicate hasArrayProperty(Type) => Type.Properties:any(isArrayProperty)
 
 ## FDG: Properties should not return arrays
-export let no-array-properties = cb.Types:hasArrayProperty
-    :toInfo('FDG Member Design: {item.Name} exposes an array property — consider IReadOnlyList<T> instead', nameof(no-array-properties))
+export function noArrayProperties(cb: Codebase) : [Violation] =>
+    cb.Types:hasArrayProperty
+        :toInfo(
+            '{item.Name}: prefer IReadOnlyList<T> to public array properties',
+            nameof(no-array-properties))
+
+export let no-array-properties = noArrayProperties(cb)
 
 ## Combined FDG member design checks
-export let fdg-member-design = max-parameters + no-write-only-properties + extension-class-naming + ctor-parameter-count + avoid-bool-params + no-array-properties
+export function fdgMemberDesign(cb: Codebase) : [Violation] =>
+    maxParameters(cb) +
+    noWriteOnlyProperties(cb) +
+    extensionClassNaming(cb) +
+    ctorParameterCount(cb) +
+    avoidBoolParams(cb) +
+    noArrayProperties(cb)
+
+export let fdg-member-design = fdgMemberDesign(cb)
 
 ## Framework Design Guidelines — Exception Design
 
@@ -530,11 +1006,18 @@ let extended-exception-base-names = exception-base-names + [
 predicate isExceptionType(Type) =>
     Type.Kind == Class &&
     derivesFromAny(Type, extended-exception-base-names)
-predicate hasExceptionBadName(Type) => Type:isExceptionType && !Type.Name:endsWith('Exception')
+predicate hasExceptionBadName(Type) =>
+    Type:isExceptionType &&
+    !Type.Name:endsWith('Exception')
 
 ## FDG: Custom exceptions must end in 'Exception'
-export let exception-naming = cb.Types:hasExceptionBadName
-    :toError('FDG Exceptions: {item.Name} derives from Exception but does not end with Exception', nameof(exception-naming))
+export function exceptionNaming(cb: Codebase) : [Violation] =>
+    cb.Types:hasExceptionBadName
+        :toError(
+            '{item.Name}: exception types need an Exception suffix',
+            nameof(exception-naming))
+
+export let exception-naming = exceptionNaming(cb)
 
 # Custom exceptions should have standard constructors
 predicate isParameterlessCtor(Method) => Method.Parameters.Count == 0
@@ -546,8 +1029,13 @@ predicate isMissingStandardCtors(Type) => Type:isExceptionType
         || !Type.Constructors:any(isMessageAndInnerCtor))
 
 ## FDG: Custom exceptions should have standard constructors
-export let exception-standard-ctors = cb.Types:isMissingStandardCtors
-    :toWarning('FDG Exceptions: {item.Name} should have 3 standard constructors: (), (string), (string, Exception)', nameof(exception-standard-ctors))
+export function exceptionStandardCtors(cb: Codebase) : [Violation] =>
+    cb.Types:isMissingStandardCtors
+        :toWarning(
+            '{item.Name}: add (), (string), and (string, Exception) constructors',
+            nameof(exception-standard-ctors))
+
+export let exception-standard-ctors = exceptionStandardCtors(cb)
 
 # Do not throw banned exception types
 predicate isThrowingBannedException(Statement) => Statement.Kind == 'throw'
@@ -560,33 +1048,66 @@ predicate isThrowingBannedException(Statement) => Statement.Kind == 'throw'
         || Statement.TypeName == 'AccessViolationException')
 
 ## FDG: Do not throw banned exception types
-export let no-banned-throws = cb.Statements:isThrowingBannedException:notIgnored
-    :toError('FDG Exceptions: Do not throw {item.TypeName} — use a more specific exception type', nameof(no-banned-throws))
+export function noBannedThrows(cb: Codebase) : [Violation] =>
+    cb.Statements:isThrowingBannedException:notIgnored
+        :toError(
+            'Throw a more specific exception than {item.TypeName}',
+            nameof(no-banned-throws))
+
+export let no-banned-throws = noBannedThrows(cb)
 
 # Methods with Try* prefix should return bool
 predicate isBadTryMethod(Method) => Method:isPublic && Method.Name:startsWith('Try')
-    && Method.ReturnType != nic && Method.ReturnType.Name != 'bool'
+    && Method.ReturnType.Name != nic && Method.ReturnType.Name != 'bool'
 predicate hasBadTryMethod(Type) => Type.Methods:any(isBadTryMethod)
 
 ## FDG: Try* methods should return bool
-export let try-pattern-returns-bool = cb.Types:hasBadTryMethod
-    :toWarning('FDG Exceptions: {item.Name} has a Try* method that does not return bool', nameof(try-pattern-returns-bool))
+export function tryPatternReturnsBool(cb: Codebase) : [Violation] =>
+    cb.Types:hasBadTryMethod
+        :toWarning(
+            'FDG Exceptions: {item.Name} has a Try* method that does not return bool',
+            nameof(try-pattern-returns-bool))
+
+export let try-pattern-returns-bool = tryPatternReturnsBool(cb)
 
 # Do not catch OperationCanceledException without rethrowing
 predicate isCatchingCancellation(Statement) => Statement.ErrorHandler == true
     && Statement.TypeName == 'OperationCanceledException' && !Statement.Rethrows
 
 ## FDG: Do not swallow OperationCanceledException
-export let no-swallow-cancellation = cb.Statements:isCatchingCancellation:notIgnored
-    :toError('FDG Exceptions: Do not swallow OperationCanceledException — always rethrow', nameof(no-swallow-cancellation))
+export function noSwallowCancellation(cb: Codebase) : [Violation] =>
+    cb.Statements:isCatchingCancellation:notIgnored
+        :toError(
+            'FDG Exceptions: Do not swallow OperationCanceledException — always rethrow',
+            nameof(no-swallow-cancellation))
+
+export let no-swallow-cancellation = noSwallowCancellation(cb)
 
 ## Combined FDG exception design checks
-export let fdg-exceptions = exception-naming + exception-standard-ctors + no-banned-throws + try-pattern-returns-bool + no-swallow-cancellation
+export function fdgExceptions(cb: Codebase) : [Violation] =>
+    exceptionNaming(cb) +
+    exceptionStandardCtors(cb) +
+    noBannedThrows(cb) +
+    tryPatternReturnsBool(cb) +
+    noSwallowCancellation(cb)
+
+export let fdg-exceptions = fdgExceptions(cb)
 
 ## Combined FDG checks
-export let fdg-checks = fdg-naming + fdg-type-design + fdg-member-design + fdg-exceptions
+export function fdgChecks(cb: Codebase) : [Violation] =>
+    fdgNaming(cb) +
+    fdgTypeDesign(cb) +
+    fdgMemberDesign(cb) +
+    fdgExceptions(cb)
+
+export let fdg-checks = fdgChecks(cb)
 
 ## All C# checks combined
-export let csharp-checks = csharp-correctness-checks + csharp-style-checks + fdg-checks
+export function csharpChecks(cb: Codebase) : [Violation] =>
+    csharpCorrectnessChecks(cb) +
+    csharpStyleChecks(cb) +
+    fdgChecks(cb)
+
+export let csharp-checks = csharpChecks(cb)
 
 command MAIN = CHECK(csharp-checks)

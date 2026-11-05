@@ -1,3 +1,8 @@
+// Adds C# control-flow and resource-initializer facts to the shared statement model.
+
+using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
+
 namespace Cop.Providers.SourceModel;
 
 /// <summary>
@@ -20,12 +25,40 @@ public sealed class CSharpStatementInfo : StatementInfo
         List<string> arguments, int line, bool isInMethod, Microsoft.CodeAnalysis.SyntaxNode? syntax = null)
         : base(kind, keywords, typeName, memberName, arguments, line, isInMethod)
     {
-        if (syntax is null) return;
-        var span = syntax.GetLocation().GetLineSpan();
+        if (syntax is null)
+        {
+            return;
+        }
+
+        FileLinePositionSpan span = syntax.GetLocation().GetLineSpan();
         Column = span.StartLinePosition.Character + 1;
         EndLine = span.EndLinePosition.Line + 1;
         EndColumn = span.EndLinePosition.Character + 1;
         SyntaxStart = syntax.SpanStart;
+        IsUsingResource = kind == "call" && IsUsingResourceExpression(syntax);
+    }
+
+    private static bool IsUsingResourceExpression(SyntaxNode syntax)
+    {
+        while (syntax.Parent is ParenthesizedExpressionSyntax parenthesized)
+        {
+            syntax = parenthesized;
+        }
+
+        if (syntax.Parent is UsingStatementSyntax statement)
+        {
+            return ReferenceEquals(statement.Expression, syntax);
+        }
+
+        if (syntax.Parent is not EqualsValueClauseSyntax initializer
+            || initializer.Parent is not VariableDeclaratorSyntax variable
+            || variable.Parent is not VariableDeclarationSyntax declaration)
+        {
+            return false;
+        }
+
+        return declaration.Parent is UsingStatementSyntax
+            || declaration.Parent is LocalDeclarationStatementSyntax { UsingKeyword.RawKind: not 0 };
     }
 
     /// <summary>True for a C# lock statement.</summary>
@@ -54,4 +87,7 @@ public sealed class CSharpStatementInfo : StatementInfo
 
     /// <summary>True for a catch clause with an exception filter (when (...)).</summary>
     public bool HasCatchFilter { get; init; }
+
+    /// <summary>True when this call directly initializes a using or await using resource.</summary>
+    public bool IsUsingResource { get; init; }
 }

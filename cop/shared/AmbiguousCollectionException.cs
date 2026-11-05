@@ -1,3 +1,5 @@
+// Reports collection names that cannot be resolved to a single provider namespace.
+
 namespace Cop.Lang;
 
 /// <summary>

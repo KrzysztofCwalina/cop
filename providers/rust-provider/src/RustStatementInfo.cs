@@ -1,3 +1,5 @@
+// Preserves Rust-specific statement identities through the shared source cache.
+
 namespace Cop.Providers.SourceModel;
 
 /// <summary>
@@ -46,8 +48,10 @@ public sealed class RustStatementInfo : StatementInfo
     /// <summary>True for a panic-like macro (<c>panic!</c> / <c>todo!</c> / <c>unimplemented!</c> / <c>unreachable!</c>).</summary>
     public bool IsPanic => Kind == "throw";
 
+    /// <inheritdoc />
     public override string? LanguageTag => "rust";
 
+    /// <inheritdoc />
     public override IReadOnlyList<KeyValuePair<string, bool>>? LanguageFlags => [];
 
     /// <summary>Registers the cache reconstruction factory so cached Rust statements load back as

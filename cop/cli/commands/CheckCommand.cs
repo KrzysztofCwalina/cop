@@ -1,3 +1,5 @@
+// Runs analysis packages against a target directory using the check command.
+
 using System.CommandLine;
 using Cop.Lang;
 using Cop.Lang.Ast;
@@ -11,19 +13,22 @@ namespace Cop.Cli.Commands;
 /// </summary>
 public static class CheckCommand
 {
+    /// <summary>
+    /// Creates the package-check command and its target and output options.
+    /// </summary>
     public static Command Create()
     {
-        var packagesArg = new Argument<string[]>("packages")
+        Argument<string[]> packagesArg = new Argument<string[]>("packages")
         {
             Arity = ArgumentArity.OneOrMore,
             Description = "One or more package names to run (e.g., csharp-checks json-checks)"
         };
-        var targetOption = new Option<string>("-t") { Description = "Target directory to analyze (default: current directory)" };
-        var rulesOption = new Option<string>("-c") { Description = "Comma-separated list of specific checks to run (default: all)" };
-        var formatOption = new Option<string>("-f") { Description = "Output format: text (default) or json" };
+        Option<string> targetOption = new Option<string>("-t") { Description = "Target directory to analyze (default: current directory)" };
+        Option<string> rulesOption = new Option<string>("-c") { Description = "Comma-separated list of specific checks to run (default: all)" };
+        Option<string> formatOption = new Option<string>("-f") { Description = "Output format: text (default) or json" };
         formatOption.DefaultValueFactory = _ => "text";
-        var diagOption = new Option<bool>("-d") { Description = "Print diagnostic timing to stderr" };
-        var command = new Command("check", "Run analysis packages against the target directory")
+        Option<bool> diagOption = new Option<bool>("-d") { Description = "Print diagnostic timing to stderr" };
+        Command command = new Command("check", "Run analysis packages against the target directory")
         {
             packagesArg,
             targetOption,
@@ -33,16 +38,18 @@ public static class CheckCommand
         };
         command.SetAction(parseResult =>
         {
-            var packages = parseResult.GetValue(packagesArg)!;
-            var target = parseResult.GetValue(targetOption);
-            var rules = parseResult.GetValue(rulesOption);
-            var format = parseResult.GetValue(formatOption);
-            var isDiag = parseResult.GetValue(diagOption);
+            string[] packages = parseResult.GetValue(packagesArg)!;
+            string? target = parseResult.GetValue(targetOption);
+            string? rules = parseResult.GetValue(rulesOption);
+            string? format = parseResult.GetValue(formatOption);
+            bool isDiag = parseResult.GetValue(diagOption);
 
             string rootPath = target != null ? Path.GetFullPath(target) : Directory.GetCurrentDirectory();
             string[]? rulesFilter = null;
             if (!string.IsNullOrEmpty(rules))
+            {
                 rulesFilter = rules.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            }
 
             return RunCommand.ExecutePackages(packages, rootPath, rulesFilter, format, isDiag);
         });
@@ -57,8 +64,8 @@ public static class CheckCommand
     /// </summary>
     public static int ExecuteFromConfig()
     {
-        var cwd = Directory.GetCurrentDirectory();
-        var copFiles = Directory.GetFiles(cwd, "*.cop", SearchOption.TopDirectoryOnly);
+        string cwd = Directory.GetCurrentDirectory();
+        string[] copFiles = Directory.GetFiles(cwd, "*.cop", SearchOption.TopDirectoryOnly);
 
         if (copFiles.Length == 0)
         {
@@ -67,22 +74,26 @@ public static class CheckCommand
         }
 
         // Parse .cop files to understand what they contain
-        var imports = new List<string>();
+        List<string> imports = new List<string>();
         bool hasOwnLogic = false;
 
-        foreach (var file in copFiles)
+        foreach (string file in copFiles)
         {
             try
             {
-                var source = File.ReadAllText(file);
-                var module = CopParser.Parse(source, file);
+                string source = File.ReadAllText(file);
+                ModuleNode module = CopParser.Parse(source, file);
 
-                foreach (var decl in module.Declarations)
+                foreach (Declaration decl in module.Declarations)
                 {
                     if (decl is ImportDecl imp)
+                    {
                         imports.Add(imp.ModuleName);
+                    }
                     else if (decl is FunctionDecl || decl is LetDecl || decl is CommandDecl)
+                    {
                         hasOwnLogic = true;
+                    }
                 }
             }
             catch { /* skip unparseable files */ }

@@ -113,8 +113,11 @@ public class ReleasePackageCompatibilityTests
             var main = Path.Combine(root, "main.cop");
             File.WriteAllText(main, "import fixture\ncommand MAIN = print(selected)");
 
-            var result = Engine.Run(root, root, additionalFeedPaths: [Path.Combine(root, "fallback")],
-                scriptFiles: [main]);
+            var result = Engine.Run(root, root, new EngineRunOptions
+            {
+                AdditionalFeedPaths = [Path.Combine(root, "fallback")],
+                ScriptFiles = [main],
+            });
             Assert.That(result.HasParseErrors, Is.False, string.Join("\n", result.ParseErrors));
             Assert.That(result.Errors, Is.Empty, string.Join("\n", result.Errors));
             Assert.That(result.Outputs.Select(o => o.Message), Is.EqualTo(new[] { "MATCHING" }));

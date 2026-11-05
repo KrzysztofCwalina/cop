@@ -1,3 +1,5 @@
+// Installs or updates the Cop Visual Studio Code extension.
+
 using System.IO.Compression;
 using System.Net.Http;
 using System.Net.Http.Json;
@@ -21,11 +23,11 @@ static class VscodeCommand
     {
         Console.WriteLine("Installing VS Code extension...");
 
-        using var http = new HttpClient();
+        using HttpClient http = new HttpClient();
         http.DefaultRequestHeaders.UserAgent.ParseAdd("cop-vscode/1.0");
 
         // Get latest release
-        var releaseUrl = $"{GitHubApiBase}/repos/{RepoOwner}/{RepoName}/releases/latest";
+        string releaseUrl = $"{GitHubApiBase}/repos/{RepoOwner}/{RepoName}/releases/latest";
         HttpResponseMessage releaseResponse;
         try
         {
@@ -43,15 +45,15 @@ static class VscodeCommand
             return 1;
         }
 
-        var releaseJson = await releaseResponse.Content.ReadFromJsonAsync<JsonElement>();
-        var tagName = releaseJson.GetProperty("tag_name").GetString() ?? "unknown";
-        var assets = releaseJson.GetProperty("assets");
+        JsonElement releaseJson = await releaseResponse.Content.ReadFromJsonAsync<JsonElement>();
+        string tagName = releaseJson.GetProperty("tag_name").GetString() ?? "unknown";
+        JsonElement assets = releaseJson.GetProperty("assets");
 
         // Find the VS Code extension asset
         string? downloadUrl = null;
-        foreach (var asset in assets.EnumerateArray())
+        foreach (JsonElement asset in assets.EnumerateArray())
         {
-            var name = asset.GetProperty("name").GetString();
+            string? name = asset.GetProperty("name").GetString();
             if (string.Equals(name, AssetName, StringComparison.OrdinalIgnoreCase))
             {
                 downloadUrl = asset.GetProperty("browser_download_url").GetString();
@@ -80,33 +82,38 @@ static class VscodeCommand
 
         // Read version from package.json inside the zip
         string version = "0.0.0";
-        using (var zipStream = new MemoryStream(zipBytes))
-        using (var archive = new ZipArchive(zipStream, ZipArchiveMode.Read))
+        using (MemoryStream zipStream = new MemoryStream(zipBytes))
+        using (ZipArchive archive = new ZipArchive(zipStream, ZipArchiveMode.Read))
         {
-            var packageEntry = archive.GetEntry("package.json");
+            ZipArchiveEntry? packageEntry = archive.GetEntry("package.json");
             if (packageEntry != null)
             {
-                using var reader = new StreamReader(packageEntry.Open());
-                var packageJson = JsonDocument.Parse(await reader.ReadToEndAsync());
-                if (packageJson.RootElement.TryGetProperty("version", out var ver))
+                using StreamReader reader = new StreamReader(packageEntry.Open());
+                JsonDocument packageJson = JsonDocument.Parse(await reader.ReadToEndAsync());
+                if (packageJson.RootElement.TryGetProperty("version", out JsonElement ver))
+                {
                     version = ver.GetString() ?? version;
+                }
             }
         }
 
         // Install to ~/.vscode/extensions/cop.cop-language-<version>
-        var extensionsDir = Path.Combine(
+        string extensionsDir = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
             ".vscode", "extensions");
-        var targetDir = Path.Combine(extensionsDir, $"cop.cop-language-{version}");
+        string targetDir = Path.Combine(extensionsDir, $"cop.cop-language-{version}");
 
         // Clean previous installation
         if (Directory.Exists(targetDir))
+        {
             Directory.Delete(targetDir, recursive: true);
+        }
+
         Directory.CreateDirectory(targetDir);
 
         // Extract
-        using (var zipStream = new MemoryStream(zipBytes))
-        using (var archive = new ZipArchive(zipStream, ZipArchiveMode.Read))
+        using (MemoryStream zipStream = new MemoryStream(zipBytes))
+        using (ZipArchive archive = new ZipArchive(zipStream, ZipArchiveMode.Read))
         {
             archive.ExtractToDirectory(targetDir);
         }

@@ -1,3 +1,5 @@
+// Registers the shared code-model schema and interpreter bindings.
+
 using Cop.Core;
 
 namespace Cop.Providers;

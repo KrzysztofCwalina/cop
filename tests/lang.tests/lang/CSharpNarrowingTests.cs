@@ -67,8 +67,11 @@ public class CSharpNarrowingTests
         try
         {
             var diag = new List<string>();
-            var result = Engine.Run(programDir, targetDir,
-                diagLog: diag.Add, additionalFeedPaths: [PackagesDir]);
+            var result = Engine.Run(programDir, targetDir, new EngineRunOptions
+            {
+                DiagnosticLog = diag.Add,
+                AdditionalFeedPaths = [PackagesDir],
+            });
 
             Assert.That(result.HasFatalErrors, Is.False,
                 "Errors: " + string.Join("; ", result.Errors) + ". Diag: " + string.Join("; ", diag));
@@ -116,8 +119,11 @@ public class CSharpNarrowingTests
         try
         {
             var diag = new List<string>();
-            var result = Engine.Run(programDir, targetDir,
-                diagLog: diag.Add, additionalFeedPaths: [PackagesDir]);
+            var result = Engine.Run(programDir, targetDir, new EngineRunOptions
+            {
+                DiagnosticLog = diag.Add,
+                AdditionalFeedPaths = [PackagesDir],
+            });
 
             Assert.That(result.HasFatalErrors, Is.False,
                 "Errors: " + string.Join("; ", result.Errors) + ". Diag: " + string.Join("; ", diag));

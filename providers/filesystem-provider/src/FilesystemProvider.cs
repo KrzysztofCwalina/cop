@@ -1,3 +1,5 @@
+// Enumerates files and directories for filesystem package queries.
+
 using System.Text.Json;
 using Cop.Core;
 
@@ -12,10 +14,11 @@ public class FilesystemProvider : DataProvider
 {
 
 
+    /// <inheritdoc />
     public override ReadOnlyMemory<byte> GetSchema()
     {
-        var buffer = new MemoryStream();
-        using var w = new Utf8JsonWriter(buffer);
+        MemoryStream buffer = new MemoryStream();
+        using Utf8JsonWriter w = new Utf8JsonWriter(buffer);
         w.WriteStartObject();
 
         w.WriteStartArray("types"u8);
@@ -59,7 +62,7 @@ public class FilesystemProvider : DataProvider
 
         w.WriteEndObject();
         w.Flush();
-        return buffer.TryGetBuffer(out var segment)
+        return buffer.TryGetBuffer(out ArraySegment<byte> segment)
             ? segment.AsMemory()
             : buffer.ToArray();
     }
@@ -68,7 +71,11 @@ public class FilesystemProvider : DataProvider
     {
         w.WriteStartObject();
         w.WriteString("name"u8, name);
-        if (type.Length > 0) w.WriteString("type"u8, type);
+        if (type.Length > 0)
+        {
+            w.WriteString("type"u8, type);
+        }
+
         w.WriteEndObject();
     }
 
@@ -80,24 +87,28 @@ public class FilesystemProvider : DataProvider
         w.WriteEndObject();
     }
 
+    /// <inheritdoc />
     public override object? Query(ProviderQuery query)
     {
-        var rootPath = Path.GetFullPath(query.RootPath
+        string rootPath = Path.GetFullPath(query.RootPath
             ?? throw new ArgumentException("RootPath is required for FilesystemProvider."));
 
-        var requested = query.Collection;
+        string? requested = query.Collection;
         bool wantFiles = requested is null || requested == "Files";
         bool wantFolders = requested is null || requested == "Folders";
 
         // Use per-collection filters when available, fall back to combined Filter
-        var fileFilter = query.CollectionFilters?.GetValueOrDefault("Files") ?? query.Filter;
-        var folderFilter = query.CollectionFilters?.GetValueOrDefault("Folders") ?? query.Filter;
+        FilterExpression? fileFilter = query.CollectionFilters?.GetValueOrDefault("Files") ?? query.Filter;
+        FilterExpression? folderFilter = query.CollectionFilters?.GetValueOrDefault("Folders") ?? query.Filter;
         int maxDepth = Math.Min(ExtractMaxDepth(fileFilter), ExtractMaxDepth(folderFilter));
-        if (maxDepth == -1) maxDepth = Math.Max(ExtractMaxDepth(fileFilter), ExtractMaxDepth(folderFilter));
+        if (maxDepth == -1)
+        {
+            maxDepth = Math.Max(ExtractMaxDepth(fileFilter), ExtractMaxDepth(folderFilter));
+        }
 
-        var db = new DataStoreBuilder();
-        var files = wantFiles ? db.AddTable("Files", "File", stride: 8) : null;
-        var folders = wantFolders ? db.AddTable("Folders", "Folder", stride: 8) : null;
+        DataStoreBuilder db = new DataStoreBuilder();
+        DataTableBuilder? files = wantFiles ? db.AddTable("Files", "File", stride: 8) : null;
+        DataTableBuilder? folders = wantFolders ? db.AddTable("Folders", "Folder", stride: 8) : null;
 
         ScanDirectory(rootPath, rootPath, files, folders, query.ExcludedDirectories, fileFilter, folderFilter, maxDepth, DateTime.UtcNow, depth: 0);
 
@@ -109,7 +120,9 @@ public class FilesystemProvider : DataProvider
         IReadOnlySet<string>? excludedDirs, FilterExpression? fileFilter, FilterExpression? folderFilter, int maxDepth, DateTime now, int depth)
     {
         if (maxDepth >= 0 && depth > maxDepth)
+        {
             return;
+        }
 
         IEnumerable<string> childDirs;
         IEnumerable<string> childFiles;
@@ -122,22 +135,25 @@ public class FilesystemProvider : DataProvider
         catch (UnauthorizedAccessException) { return; }
         catch (IOException) { return; }
 
-        var relativePath = Path.GetRelativePath(root, dir).Replace('\\', '/');
-        if (relativePath == ".") relativePath = "";
+        string relativePath = Path.GetRelativePath(root, dir).Replace('\\', '/');
+        if (relativePath == ".")
+        {
+            relativePath = "";
+        }
 
         // Write files directly to the DataTableBuilder
         int fileCount = 0;
         if (files is not null)
         {
-            foreach (var filePath in childFiles)
+            foreach (string filePath in childFiles)
             {
                 fileCount++;
-                var fi = new FileInfo(filePath);
-                var fileRelPath = Path.GetRelativePath(root, filePath).Replace('\\', '/');
-                var minutesSinceModified = (int)(now - fi.LastWriteTimeUtc).TotalMinutes;
-                var size = fi.Length;
-                var name = fi.Name;
-                var ext = fi.Extension;
+                FileInfo fi = new FileInfo(filePath);
+                string fileRelPath = Path.GetRelativePath(root, filePath).Replace('\\', '/');
+                int minutesSinceModified = (int)(now - fi.LastWriteTimeUtc).TotalMinutes;
+                long size = fi.Length;
+                string name = fi.Name;
+                string ext = fi.Extension;
                 ExecutionStatistics.RecordInputFile(filePath);
 
                 if (!FilterEvaluator.Matches(fileFilter, prop => prop switch
@@ -152,7 +168,9 @@ public class FilesystemProvider : DataProvider
                     "Source" => fileRelPath,
                     _ => throw new ArgumentException($"Unknown File property in filter: '{prop}'")
                 }))
+                {
                     continue;
+                }
 
                 int row = files.AddRow();
                 long pathRef = files.PackString(fileRelPath);
@@ -168,7 +186,7 @@ public class FilesystemProvider : DataProvider
         }
         else
         {
-            foreach (var path in childFiles)
+            foreach (string path in childFiles)
             {
                 fileCount++;
                 ExecutionStatistics.RecordInputFile(path);
@@ -176,22 +194,24 @@ public class FilesystemProvider : DataProvider
         }
 
         // Enumerate child directories, prune excluded, and recurse
-        var includedDirs = new List<string>();
+        List<string> includedDirs = new List<string>();
         int subfolderCount = 0;
-        foreach (var childDir in childDirs)
+        foreach (string childDir in childDirs)
         {
             subfolderCount++;
-            var dirName = Path.GetFileName(childDir);
+            string dirName = Path.GetFileName(childDir);
             if (excludedDirs is null || !excludedDirs.Contains(dirName))
+            {
                 includedDirs.Add(childDir);
+            }
         }
 
         // Write folder directly to the DataTableBuilder (skip root)
         if (folders is not null && relativePath.Length > 0)
         {
-            var dirName = Path.GetFileName(dir);
-            var dirInfo = new DirectoryInfo(dir);
-            var minutesSinceModified = (int)(now - dirInfo.LastWriteTimeUtc).TotalMinutes;
+            string dirName = Path.GetFileName(dir);
+            DirectoryInfo dirInfo = new DirectoryInfo(dir);
+            int minutesSinceModified = (int)(now - dirInfo.LastWriteTimeUtc).TotalMinutes;
             bool empty = subfolderCount == 0 && fileCount == 0;
 
             if (FilterEvaluator.Matches(folderFilter, prop => prop switch
@@ -220,7 +240,7 @@ public class FilesystemProvider : DataProvider
             }
         }
 
-        foreach (var childDir in includedDirs)
+        foreach (string childDir in includedDirs)
         {
             ScanDirectory(childDir, root, files, folders, excludedDirs, fileFilter, folderFilter, maxDepth, now, depth + 1);
         }
@@ -234,9 +254,12 @@ public class FilesystemProvider : DataProvider
     /// </summary>
     private static int ExtractMaxDepth(FilterExpression? filter)
     {
-        if (filter is null) return -1;
+        if (filter is null)
+        {
+            return -1;
+        }
 
-        foreach (var condition in Flatten(filter))
+        foreach (FilterExpression condition in Flatten(filter))
         {
             switch (condition)
             {
@@ -253,9 +276,13 @@ public class FilesystemProvider : DataProvider
     {
         if (expr is AndFilter and)
         {
-            foreach (var c in and.Conditions)
-                foreach (var inner in Flatten(c))
+            foreach (FilterExpression c in and.Conditions)
+            {
+                foreach (FilterExpression inner in Flatten(c))
+                {
                     yield return inner;
+                }
+            }
         }
         else
         {

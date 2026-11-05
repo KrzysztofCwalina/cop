@@ -1,3 +1,5 @@
+// Extracts PowerShell commands and script settings with a lexical fallback.
+
 using System.Text;
 
 namespace Cop.Providers.PowerShell;
@@ -8,6 +10,7 @@ namespace Cop.Providers.PowerShell;
 /// </summary>
 public static class PowerShellParser
 {
+    /// <summary>Contains parsed PowerShell commands and script-wide settings.</summary>
     public record PowerShellParseResult(List<PowerShellCommandInfo> Commands, PowerShellScriptInfo Script);
 
     private static readonly HashSet<string> PowerShellKeywords = new(StringComparer.OrdinalIgnoreCase)
@@ -18,12 +21,13 @@ public static class PowerShellParser
         "workflow"
     };
 
+    /// <summary>Extracts commands and script settings from PowerShell source.</summary>
     public static PowerShellParseResult Parse(string text)
     {
-        var commands = new List<PowerShellCommandInfo>();
-        var lines = text.Split('\n');
+        List<PowerShellCommandInfo> commands = new List<PowerShellCommandInfo>();
+        string[] lines = text.Split('\n');
 
-        var logical = new StringBuilder();
+        StringBuilder logical = new StringBuilder();
         int logicalStartLine = 1;
         bool hasPendingContinuation = false;
         bool inBlockComment = false;
@@ -33,60 +37,81 @@ public static class PowerShellParser
         for (int i = 0; i < lines.Length; i++)
         {
             int lineNo = i + 1;
-            var raw = lines[i].TrimEnd('\r');
+            string raw = lines[i].TrimEnd('\r');
             if (hereString != '\0')
             {
-                if (raw.StartsWith($"{hereString}@", StringComparison.Ordinal)) hereString = '\0';
+                if (raw.StartsWith($"{hereString}@", StringComparison.Ordinal))
+                {
+                    hereString = '\0';
+                }
+
                 continue;
             }
-            var trimmedRaw = raw.TrimEnd();
+            string trimmedRaw = raw.TrimEnd();
             if (trimmedRaw.EndsWith("@'", StringComparison.Ordinal) || trimmedRaw.EndsWith("@\"", StringComparison.Ordinal))
             {
                 hereString = trimmedRaw[^1];
                 raw = trimmedRaw[..^2] + "''";
             }
-            var stripped = StripComments(raw, ref inBlockComment);
+            string stripped = StripComments(raw, ref inBlockComment);
 
             if (ContainsStrictMode(stripped))
+            {
                 usesStrictMode = true;
+            }
 
             if (!hasPendingContinuation)
+            {
                 logicalStartLine = lineNo;
+            }
 
-            var working = stripped.TrimEnd();
+            string working = stripped.TrimEnd();
             bool continued = EndsWithContinuation(working);
             if (continued)
+            {
                 working = working[..^1].TrimEnd();
+            }
 
             if (logical.Length > 0 && working.Length > 0)
+            {
                 logical.Append(' ');
+            }
+
             logical.Append(working);
 
             hasPendingContinuation = continued;
             if (continued)
+            {
                 continue;
+            }
 
             AddCommands(commands, logical.ToString(), logicalStartLine);
             logical.Clear();
         }
 
         if (logical.Length > 0)
+        {
             AddCommands(commands, logical.ToString(), logicalStartLine);
+        }
 
         return new PowerShellParseResult(commands, new PowerShellScriptInfo(usesStrictMode));
     }
 
     private static void AddCommands(List<PowerShellCommandInfo> commands, string logicalLine, int line)
     {
-        var text = logicalLine.Trim();
+        string text = logicalLine.Trim();
         if (text.Length == 0)
-            return;
-
-        foreach (var segment in SplitSimpleCommands(text))
         {
-            var name = GetCommandName(segment);
+            return;
+        }
+
+        foreach (string segment in SplitSimpleCommands(text))
+        {
+            string name = GetCommandName(segment);
             if (name.Length == 0 || PowerShellKeywords.Contains(name))
+            {
                 continue;
+            }
 
             commands.Add(new PowerShellCommandInfo(name, text, line));
         }
@@ -94,11 +119,13 @@ public static class PowerShellParser
 
     private static bool ContainsStrictMode(string line)
     {
-        foreach (var segment in SplitSimpleCommands(line))
+        foreach (string segment in SplitSimpleCommands(line))
         {
-            var name = GetCommandName(segment);
+            string name = GetCommandName(segment);
             if (name.Equals("Set-StrictMode", StringComparison.OrdinalIgnoreCase))
+            {
                 return true;
+            }
         }
 
         return false;
@@ -106,7 +133,7 @@ public static class PowerShellParser
 
     private static List<string> SplitSimpleCommands(string text)
     {
-        var parts = new List<string>();
+        List<string> parts = new List<string>();
         int start = 0;
         char quote = '\0';
         bool escaped = false;
@@ -130,7 +157,10 @@ public static class PowerShellParser
             if (quote != '\0')
             {
                 if (c == quote)
+                {
                     quote = '\0';
+                }
+
                 continue;
             }
 
@@ -142,12 +172,18 @@ public static class PowerShellParser
 
             int separatorLength = 0;
             if (c is ';' or '|' or '(' or ')' or '{' or '}')
+            {
                 separatorLength = (c == '|' && i + 1 < text.Length && text[i + 1] == '|') ? 2 : 1;
+            }
             else if (c == '&' && i + 1 < text.Length && text[i + 1] == '&')
+            {
                 separatorLength = 2;
+            }
 
             if (separatorLength == 0)
+            {
                 continue;
+            }
 
             AddPart(parts, text[start..i]);
             i += separatorLength - 1;
@@ -160,32 +196,44 @@ public static class PowerShellParser
 
     private static void AddPart(List<string> parts, string part)
     {
-        var trimmed = part.Trim();
+        string trimmed = part.Trim();
         if (trimmed.Length > 0)
+        {
             parts.Add(trimmed);
+        }
     }
 
     private static string GetCommandName(string segment)
     {
-        var tokens = Tokenize(segment);
+        List<string> tokens = Tokenize(segment);
         int i = 0;
 
         if (tokens.Count > 0 && tokens[0].StartsWith('$'))
         {
             int assignment = segment.IndexOf('=');
-            if (assignment < 0 || assignment + 1 >= segment.Length) return "";
+            if (assignment < 0 || assignment + 1 >= segment.Length)
+            {
+                return "";
+            }
+
             return GetCommandName(segment[(assignment + 1)..]);
         }
 
         while (i < tokens.Count && IsNoiseToken(tokens[i]))
+        {
             i++;
+        }
 
         if (i >= tokens.Count)
+        {
             return "";
+        }
 
-        var name = tokens[i];
+        string name = tokens[i];
         if (IsAssignmentLike(name))
+        {
             return "";
+        }
 
         return name;
     }
@@ -198,8 +246,8 @@ public static class PowerShellParser
 
     private static List<string> Tokenize(string segment)
     {
-        var tokens = new List<string>();
-        var current = new StringBuilder();
+        List<string> tokens = new List<string>();
+        StringBuilder current = new StringBuilder();
         char quote = '\0';
         bool escaped = false;
 
@@ -221,9 +269,14 @@ public static class PowerShellParser
             if (quote != '\0')
             {
                 if (c == quote)
+                {
                     quote = '\0';
+                }
                 else
+                {
                     current.Append(c);
+                }
+
                 continue;
             }
 
@@ -257,14 +310,16 @@ public static class PowerShellParser
         }
 
         if (current.Length > 0)
+        {
             tokens.Add(current.ToString());
+        }
 
         return tokens;
     }
 
     private static string StripComments(string line, ref bool inBlockComment)
     {
-        var result = new StringBuilder(line.Length);
+        StringBuilder result = new StringBuilder(line.Length);
         char quote = '\0';
         bool escaped = false;
 
@@ -301,7 +356,10 @@ public static class PowerShellParser
             {
                 result.Append(c);
                 if (c == quote)
+                {
                     quote = '\0';
+                }
+
                 continue;
             }
 
@@ -321,7 +379,9 @@ public static class PowerShellParser
             }
 
             if (c == '#')
+            {
                 break;
+            }
 
             result.Append(c);
         }
@@ -333,7 +393,9 @@ public static class PowerShellParser
     {
         int backtickCount = 0;
         for (int i = line.Length - 1; i >= 0 && line[i] == '`'; i--)
+        {
             backtickCount++;
+        }
 
         return backtickCount % 2 == 1 && !EndsInsideQuote(line);
     }
@@ -359,12 +421,17 @@ public static class PowerShellParser
             if (quote != '\0')
             {
                 if (c == quote)
+                {
                     quote = '\0';
+                }
+
                 continue;
             }
 
             if (c == '\'' || c == '"')
+            {
                 quote = c;
+            }
         }
 
         return quote != '\0';

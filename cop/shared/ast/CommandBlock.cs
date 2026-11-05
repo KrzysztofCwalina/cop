@@ -1,5 +1,10 @@
+// Represents executable command blocks and their statements.
+
 namespace Cop.Lang;
 
+/// <summary>
+/// Describes a command's query source, output expression, and execution options.
+/// </summary>
 public record CommandBlock(
     string Name,
     string MessageTemplate,
@@ -21,20 +26,3 @@ public record CommandBlock(
     string? PathOverride = null,
     bool IsAsync = false,
     bool IsIntrinsic = false);
-
-/// <summary>
-/// Represents the target sink in a chained pipeline: foreach Source => Transform => Sink
-/// </summary>
-public record SinkTarget(string Name, List<object>? Args = null)
-{
-    /// <summary>
-    /// The qualified sink name (e.g., "http.Send", "console.WriteLine", "file.Write").
-    /// </summary>
-    public string Name { get; init; } = Name;
-
-    /// <summary>
-    /// Optional arguments (e.g., file path for file.Write('path')).
-    /// </summary>
-    public List<object>? Args { get; init; } = Args;
-}
-

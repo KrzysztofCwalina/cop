@@ -1,3 +1,5 @@
+// Groups parsed declarations, statements, comments, and imports by source file.
+
 namespace Cop.Providers.SourceModel;
 
 public record SourceFile(
@@ -47,6 +49,9 @@ public record SourceFile(
     /// </summary>
     public HashSet<int> CommentLines { get; init; } = [];
 
+    /// <summary>Comments identified by the language parser, never by scanning string literals.</summary>
+    public List<CommentInfo> Comments { get; init; } = [];
+
     /// <summary>
     /// Syntax errors the parser detected in this file. Populated by parsers that can report them
     /// (e.g. the C# parser surfaces Roslyn's syntax diagnostics). The collection builder forwards
@@ -58,14 +63,21 @@ public record SourceFile(
     /// <summary>Shares one memoized semantic analysis across this file's syntax-derived objects.</summary>
     public void DeferSemanticAnalysis(Action analyze)
     {
-        var semantics = new Lazy<bool>(() => { analyze(); return true; });
+        Lazy<bool> semantics = new Lazy<bool>(() => { analyze(); return true; });
         void Attach(TypeDeclaration type)
         {
             type.DeferredSemantics = semantics;
-            foreach (var nested in type.NestedTypes) Attach(nested);
+            foreach (TypeDeclaration nested in type.NestedTypes)
+            {
+                Attach(nested);
+            }
         }
-        foreach (var type in Types) Attach(type);
-        foreach (var statement in Statements)
+        foreach (TypeDeclaration type in Types)
+        {
+            Attach(type);
+        }
+
+        foreach (StatementInfo statement in Statements)
         {
             statement.DeferredSemantics = semantics;
             statement.DeferSemanticAnalysis(semantics);
@@ -74,7 +86,10 @@ public record SourceFile(
 
     public void DeferTypeNameAnalysis(Action analyze)
     {
-        var typeNames = new Lazy<bool>(() => { analyze(); return true; });
-        foreach (var statement in Statements) statement.DeferredTypeNames = typeNames;
+        Lazy<bool> typeNames = new Lazy<bool>(() => { analyze(); return true; });
+        foreach (StatementInfo statement in Statements)
+        {
+            statement.DeferredTypeNames = typeNames;
+        }
     }
 }

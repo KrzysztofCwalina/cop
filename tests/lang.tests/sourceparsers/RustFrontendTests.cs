@@ -377,7 +377,10 @@ public class RustFrontendTests
             if (copied) File.Copy(_frontend, deployed);
             for (int pass = 0; pass < 2; pass++)
             {
-                var result = Engine.Run(program, _root, additionalFeedPaths: [_packages]);
+                var result = Engine.Run(program, _root, new EngineRunOptions
+                {
+                    AdditionalFeedPaths = [_packages],
+                });
                 Assert.That(result.HasFatalErrors, Is.False, string.Join("; ", result.Errors));
                 Assert.That(result.Outputs.Select(o => o.Message), Is.EqualTo(new[]
                 {

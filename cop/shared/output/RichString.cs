@@ -1,3 +1,7 @@
+// Composes text and style spans without embedding terminal escape sequences.
+
+using System.Text;
+
 namespace Cop.Lang;
 
 /// <summary>
@@ -17,11 +21,22 @@ public class RichString
     /// </summary>
     public string ToPlainText()
     {
-        if (Spans.Count == 0) return "";
-        if (Spans.Count == 1) return Spans[0].Text;
-        var sb = new System.Text.StringBuilder();
-        foreach (var span in Spans)
+        if (Spans.Count == 0)
+        {
+            return "";
+        }
+
+        if (Spans.Count == 1)
+        {
+            return Spans[0].Text;
+        }
+
+        StringBuilder sb = new System.Text.StringBuilder();
+        foreach (TextSpan span in Spans)
+        {
             sb.Append(span.Text);
+        }
+
         return sb.ToString();
     }
 
@@ -31,14 +46,21 @@ public class RichString
     /// </summary>
     public static IReadOnlyDictionary<string, string>? ParseAnnotation(string? annotation)
     {
-        if (string.IsNullOrEmpty(annotation)) return null;
-
-        var result = new Dictionary<string, string>();
-        foreach (var part in annotation.Split('-'))
+        if (string.IsNullOrEmpty(annotation))
         {
-            var trimmed = part.Trim();
-            if (trimmed.Length == 0) continue;
-            var eq = trimmed.IndexOf('=');
+            return null;
+        }
+
+        Dictionary<string, string> result = new Dictionary<string, string>();
+        foreach (string part in annotation.Split('-'))
+        {
+            string trimmed = part.Trim();
+            if (trimmed.Length == 0)
+            {
+                continue;
+            }
+
+            int eq = trimmed.IndexOf('=');
             if (eq >= 0)
             {
                 result[trimmed[..eq].Trim()] = trimmed[(eq + 1)..].Trim();
@@ -47,9 +69,13 @@ public class RichString
             {
                 // Shorthand: bare word maps to "color" unless it's a known style key
                 if (trimmed is "bold" or "italic" or "underline" or "dim" or "strikethrough")
+                {
                     result["weight"] = trimmed;
+                }
                 else
+                {
                     result["color"] = trimmed;
+                }
             }
         }
         return result.Count > 0 ? result : null;

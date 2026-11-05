@@ -1,3 +1,5 @@
+// Contains external toolchain process trees so their lifetime follows the host request.
+
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
@@ -12,14 +14,22 @@ internal sealed class ToolchainProcessContainment : IDisposable
 
     public ToolchainProcessContainment()
     {
-        if (!OperatingSystem.IsWindows()) return;
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
         _job = CreateJobObjectW(IntPtr.Zero, null);
-        if (_job.IsInvalid) throw new Win32Exception(Marshal.GetLastWin32Error());
-        var limits = new ExtendedLimitInformation();
+        if (_job.IsInvalid)
+        {
+            throw new Win32Exception(Marshal.GetLastWin32Error());
+        }
+
+        ExtendedLimitInformation limits = new ExtendedLimitInformation();
         limits.BasicLimitInformation.LimitFlags = 0x2000; // JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
         if (!SetInformationJobObject(_job, 9, ref limits, (uint)Marshal.SizeOf<ExtendedLimitInformation>()))
         {
-            var error = Marshal.GetLastWin32Error();
+            int error = Marshal.GetLastWin32Error();
             _job.Dispose();
             throw new Win32Exception(error, "Cannot configure toolchain process ownership.");
         }
@@ -28,23 +38,38 @@ internal sealed class ToolchainProcessContainment : IDisposable
     public void Attach(Process process)
     {
         if (_job is not null && !AssignProcessToJobObject(_job, process.Handle))
+        {
             throw new Win32Exception(Marshal.GetLastWin32Error(), "Cannot contain toolchain process.");
+        }
     }
 
     public void Terminate()
     {
         if (_job is not null && !TerminateJobObject(_job, 1))
+        {
             throw new Win32Exception(Marshal.GetLastWin32Error(), "Cannot terminate toolchain process descendants.");
+        }
+
         if (_job is not null)
         {
-            var timer = Stopwatch.StartNew();
+            Stopwatch timer = Stopwatch.StartNew();
             while (true)
             {
-                if (!QueryInformationJobObject(_job, 1, out var accounting, (uint)Marshal.SizeOf<AccountingInformation>(), IntPtr.Zero))
+                if (!QueryInformationJobObject(_job, 1, out AccountingInformation accounting, (uint)Marshal.SizeOf<AccountingInformation>(), IntPtr.Zero))
+                {
                     throw new Win32Exception(Marshal.GetLastWin32Error(), "Cannot inspect toolchain process cleanup.");
-                if (accounting.ActiveProcesses == 0) break;
+                }
+
+                if (accounting.ActiveProcesses == 0)
+                {
+                    break;
+                }
+
                 if (timer.Elapsed > TimeSpan.FromSeconds(2))
+                {
                     throw new TimeoutException("Toolchain descendants did not exit after job termination.");
+                }
+
                 Thread.Sleep(10);
             }
         }

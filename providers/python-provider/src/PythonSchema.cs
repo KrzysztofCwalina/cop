@@ -1,3 +1,5 @@
+// Extends the shared source schema with Python declaration and statement facts.
+
 using Cop.Core;
 
 namespace Cop.Providers;
@@ -10,13 +12,14 @@ public static class PythonSchema
 {
     private static readonly ProviderSchema _schema = Build();
 
+    /// <summary>Serializes the Python provider schema as UTF-8 JSON.</summary>
     public static ReadOnlyMemory<byte> GetJson() => _schema.ToJson();
 
     private static ProviderSchema Build()
     {
-        var baseSchema = CodeSchema.Get();
+        ProviderSchema baseSchema = CodeSchema.Get();
 
-        var types = new List<ProviderTypeSchema>(baseSchema.Types)
+        List<ProviderTypeSchema> types = new List<ProviderTypeSchema>(baseSchema.Types)
         {
             new()
             {

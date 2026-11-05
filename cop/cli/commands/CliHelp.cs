@@ -1,3 +1,5 @@
+// Renders the CLI usage overview and command-specific help.
+
 using System.Linq;
 
 namespace Cop.Cli.Commands;
@@ -170,7 +172,7 @@ internal static class CliHelp
 
     public static void PrintCommandHelp(string verb)
     {
-        if (!Commands.TryGetValue(verb, out var c))
+        if (!Commands.TryGetValue(verb, out CommandHelp? c))
         {
             PrintMainHelp();
             return;
@@ -187,16 +189,20 @@ internal static class CliHelp
         // Options (or, for `package`, subcommands), always including the universal -h. Option flags
         // are green; subcommands get the same command-word emphasis as the main list.
         Section(c.OptionsLabel);
-        var opts = c.Options.Append(("-h", "show this help")).ToArray();
+        (string, string)[] opts = c.Options.Append(("-h", "show this help")).ToArray();
         if (c.OptionsLabel == "commands")
+        {
             CommandRows(opts);
+        }
         else
+        {
             Rows(Option, opts);
+        }
 
         if (c.Examples.Length > 0)
         {
             Section("examples");
-            foreach (var ex in c.Examples)
+            foreach (string ex in c.Examples)
             {
                 Console.Write("  ");
                 WriteSignature(ex);
@@ -219,7 +225,7 @@ internal static class CliHelp
     private static void Rows(ConsoleColor leftColor, params (string Left, string Right)[] rows)
     {
         int width = rows.Max(r => r.Left.Length);
-        foreach (var (left, right) in rows)
+        foreach ((string? left, string? right) in rows)
         {
             Console.Write("  ");
             Write(left, leftColor);
@@ -233,7 +239,7 @@ internal static class CliHelp
     private static void CommandRows(params (string Left, string Right)[] rows)
     {
         int width = rows.Max(r => r.Left.Length);
-        foreach (var (left, right) in rows)
+        foreach ((string? left, string? right) in rows)
         {
             Console.Write("  ");
             WriteSignature(left);
@@ -252,22 +258,35 @@ internal static class CliHelp
     {
         if (!Color) { Console.Write(signature); return; }
 
-        var parts = signature.Split(' ');
+        string[] parts = signature.Split(' ');
         bool hasCopPrefix = parts.Length > 0 && parts[0] == "cop";
         int cmdIndex = hasCopPrefix ? 1 : 0;
         for (int i = 0; i < parts.Length; i++)
         {
-            if (i > 0) Console.Write(' ');
-            if (i == 0 && hasCopPrefix) Write(parts[i], Label);   // dim the repeated "cop"
-            else if (i == cmdIndex) Write(parts[i], Command);     // the command word — emphasized
-            else Console.Write(parts[i]);                         // arguments/options — default colour
+            if (i > 0)
+            {
+                Console.Write(' ');
+            }
+
+            if (i == 0 && hasCopPrefix)
+            {
+                Write(parts[i], Label);   // dim the repeated "cop"
+            }
+            else if (i == cmdIndex)
+            {
+                Write(parts[i], Command);     // the command word — emphasized
+            }
+            else
+            {
+                Console.Write(parts[i]);                         // arguments/options — default colour
+            }
         }
     }
 
     private static void Write(string text, ConsoleColor color)
     {
         if (!Color) { Console.Write(text); return; }
-        var prev = Console.ForegroundColor;
+        ConsoleColor prev = Console.ForegroundColor;
         Console.ForegroundColor = color;
         Console.Write(text);
         Console.ForegroundColor = prev;

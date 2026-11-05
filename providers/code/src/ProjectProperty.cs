@@ -1,3 +1,5 @@
+// Represents a parsed project-property name and value.
+
 namespace Cop.Providers.SourceModel;
 
 /// <summary>

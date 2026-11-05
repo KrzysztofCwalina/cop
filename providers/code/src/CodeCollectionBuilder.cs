@@ -1,3 +1,7 @@
+// Discovers source files and builds the shared code-model collections.
+
+using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.Security.Cryptography;
 using Cop.Core;
 using Cop.Lang;
@@ -20,11 +24,15 @@ public static class CodeCollectionBuilder
     public static DeferredProviderResult CollectDeferred(SourceParserRegistry parsers, ProviderQuery query,
         DataProvider owner, Func<List<ProjectInfo>>? discoverProjects = null)
     {
-        if (query.RootPath is null) return new(new Dictionary<string, IEnumerable<object>>());
-        var key = Path.GetFullPath(query.RootPath) + "\n" +
+        if (query.RootPath is null)
+        {
+            return new(new Dictionary<string, IEnumerable<object>>());
+        }
+
+        string key = Path.GetFullPath(query.RootPath) + "\n" +
             string.Join("\n", (query.ExcludedDirectories ?? new HashSet<string>()).Order(StringComparer.Ordinal));
-        var snapshots = DeferredSnapshots.GetOrCreateValue(owner);
-        if (!snapshots.TryGetValue(key, out var snapshot))
+        Dictionary<string, DeferredSourceSnapshot> snapshots = DeferredSnapshots.GetOrCreateValue(owner);
+        if (!snapshots.TryGetValue(key, out DeferredSourceSnapshot? snapshot))
         {
             snapshot = new(parsers, query, discoverProjects: discoverProjects);
             snapshots.Add(key, snapshot);
@@ -41,17 +49,21 @@ public static class CodeCollectionBuilder
     public static Dictionary<string, List<object>> CollectAndParse(SourceParserRegistry parsers, ProviderQuery query, DataProvider? owner)
     {
         if (query.RootPath is null)
+        {
             return new();
+        }
 
-        var rootPath = query.RootPath;
-        var excluded = query.ExcludedDirectories;
-        var snapshotKey = Path.GetFullPath(rootPath) + "\n" +
+        string rootPath = query.RootPath;
+        IReadOnlySet<string>? excluded = query.ExcludedDirectories;
+        string snapshotKey = Path.GetFullPath(rootPath) + "\n" +
             string.Join("\n", (excluded ?? new HashSet<string>()).Order(StringComparer.Ordinal));
-        var snapshots = owner is null ? null : Snapshots.GetOrCreateValue(owner);
-        if (snapshots?.TryGetValue(snapshotKey, out var snapshot) == true)
+        Dictionary<string, List<SourceFile>>? snapshots = owner is null ? null : Snapshots.GetOrCreateValue(owner);
+        if (snapshots?.TryGetValue(snapshotKey, out List<SourceFile>? snapshot) == true)
+        {
             return ExtractCollections(snapshot, query.Collection, query.CollectionFilters, query.Filter);
+        }
 
-        var filePaths = new List<string>();
+        List<string> filePaths = new List<string>();
         CollectSourceFiles(rootPath, parsers, excluded, filePaths);
 
         // Retry with exponential backoff if 0 files found but directory is non-empty.
@@ -60,15 +72,18 @@ public static class CodeCollectionBuilder
         {
             try
             {
-                var hasAnyEntries = Directory.EnumerateFileSystemEntries(rootPath).Any();
+                bool hasAnyEntries = Directory.EnumerateFileSystemEntries(rootPath).Any();
                 if (hasAnyEntries)
                 {
                     int[] retryDelaysMs = [200, 1000, 3000];
-                    foreach (var delay in retryDelaysMs)
+                    foreach (int delay in retryDelaysMs)
                     {
                         Thread.Sleep(delay);
                         CollectSourceFiles(rootPath, parsers, excluded, filePaths);
-                        if (filePaths.Count > 0) break;
+                        if (filePaths.Count > 0)
+                        {
+                            break;
+                        }
                     }
                     if (filePaths.Count == 0)
                     {
@@ -81,10 +96,10 @@ public static class CodeCollectionBuilder
         }
 
         // Compute cache fingerprint from file stats (fast: just stat calls, no file reading)
-        var fingerprint = ComputeFingerprint(rootPath, filePaths, parsers);
-        var canCache = filePaths.All(path => parsers.GetParser(Path.GetExtension(path))!.CanCache(path));
-        var cachePath = GetCachePath(rootPath);
-        var cachedFiles = canCache
+        byte[] fingerprint = ComputeFingerprint(rootPath, filePaths, parsers);
+        bool canCache = filePaths.All(path => parsers.GetParser(Path.GetExtension(path))!.CanCache(path));
+        string cachePath = GetCachePath(rootPath);
+        List<SourceFile>? cachedFiles = canCache
             ? SourceCacheSerializer.TryLoad(cachePath, fingerprint, owner?.GetType().Assembly ?? parsers.CacheAssembly) : null;
 
         List<SourceFile> sorted;
@@ -109,15 +124,25 @@ public static class CodeCollectionBuilder
             }
         }
 
-        foreach (var file in sorted)
+        foreach (SourceFile file in sorted)
         {
-            if (!parsers.GetParser(Path.GetExtension(file.Path))!.SupportsCrossFileMembers) continue;
+            if (!parsers.GetParser(Path.GetExtension(file.Path))!.SupportsCrossFileMembers)
+            {
+                continue;
+            }
+
             void DeferMembers(TypeDeclaration type)
             {
                 type.DeferMembers(() => ResolveReceiverMembers(type, file, sorted));
-                foreach (var nested in type.NestedTypes) DeferMembers(nested);
+                foreach (TypeDeclaration nested in type.NestedTypes)
+                {
+                    DeferMembers(nested);
+                }
             }
-            foreach (var type in file.Types) DeferMembers(type);
+            foreach (TypeDeclaration type in file.Types)
+            {
+                DeferMembers(type);
+            }
         }
         snapshots?.Add(snapshotKey, sorted);
         return ExtractCollections(sorted, query.Collection, query.CollectionFilters, query.Filter);
@@ -128,30 +153,35 @@ public static class CodeCollectionBuilder
     /// </summary>
     private static List<SourceFile> ParseAllFiles(List<string> filePaths, string rootPath, SourceParserRegistry parsers)
     {
-        var parseErrors = new System.Collections.Concurrent.ConcurrentBag<string>();
-        var sourceFiles = new System.Collections.Concurrent.ConcurrentBag<SourceFile>();
-        var diagThresholdMs = GetParseDiagThresholdMs();
+        ConcurrentBag<string> parseErrors = new System.Collections.Concurrent.ConcurrentBag<string>();
+        ConcurrentBag<SourceFile> sourceFiles = new System.Collections.Concurrent.ConcurrentBag<SourceFile>();
+        long diagThresholdMs = GetParseDiagThresholdMs();
         Parallel.ForEach(filePaths,
             new ParallelOptions { MaxDegreeOfParallelism = Environment.ProcessorCount },
             filePath =>
             {
-                var ext = Path.GetExtension(filePath);
-                var parser = parsers.GetParser(ext);
-                if (parser == null) return;
+                string ext = Path.GetExtension(filePath);
+                ISourceParser? parser = parsers.GetParser(ext);
+                if (parser == null)
+                {
+                    return;
+                }
 
                 SourceFile? sourceFile;
                 try
                 {
-                    using var stream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
-                    using var reader = new StreamReader(stream);
-                    var text = reader.ReadToEnd();
+                    using FileStream stream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+                    using StreamReader reader = new StreamReader(stream);
+                    string text = reader.ReadToEnd();
                     if (diagThresholdMs >= 0)
                     {
-                        var sw = System.Diagnostics.Stopwatch.StartNew();
+                        Stopwatch sw = System.Diagnostics.Stopwatch.StartNew();
                         sourceFile = parser.Parse(filePath, text);
                         sw.Stop();
                         if (sw.ElapsedMilliseconds >= diagThresholdMs)
+                        {
                             Console.Error.WriteLine($"[parse-diag] {sw.ElapsedMilliseconds,6} ms  {text.Length,8} chars  {filePath}");
+                        }
                     }
                     else
                     {
@@ -164,10 +194,13 @@ public static class CodeCollectionBuilder
                     return;
                 }
 
-                if (sourceFile == null) return;
+                if (sourceFile == null)
+                {
+                    return;
+                }
 
-                var relativePath = Path.GetRelativePath(rootPath, filePath).Replace('\\', '/');
-                var normalizedFile = sourceFile with
+                string relativePath = Path.GetRelativePath(rootPath, filePath).Replace('\\', '/');
+                SourceFile normalizedFile = sourceFile with
                 {
                     Path = relativePath, FullPath = Path.GetFullPath(filePath), SourceRoot = Path.GetFullPath(rootPath)
                 };
@@ -176,8 +209,10 @@ public static class CodeCollectionBuilder
 
                 // A parser that detected syntax errors (e.g. Roslyn) reports them here so they are
                 // not hidden behind the partial model it still produced.
-                foreach (var pe in normalizedFile.ParseErrors)
+                foreach (string pe in normalizedFile.ParseErrors)
+                {
                     parseErrors.Add(pe);
+                }
             });
 
         // Forward parse errors to the engine via the shared sink so a file that failed to parse is
@@ -186,8 +221,10 @@ public static class CodeCollectionBuilder
         // repo may legitimately contain .cs snippet/region fixtures that aren't compilable units.)
         if (!parseErrors.IsEmpty)
         {
-            foreach (var err in parseErrors)
+            foreach (string err in parseErrors)
+            {
                 Cop.Core.ProviderErrors.Report(err);
+            }
         }
 
         return sourceFiles.OrderBy(f => f.Path, StringComparer.Ordinal).ToList();
@@ -210,8 +247,11 @@ public static class CodeCollectionBuilder
         {
             FullPath = Path.GetFullPath(Path.Combine(rootPath, file.Path)), SourceRoot = Path.GetFullPath(rootPath)
         }).ToList();
-        foreach (var file in cachedFiles)
+        foreach (SourceFile file in cachedFiles)
+        {
             LinkReferences(file);
+        }
+
         return cachedFiles;
     }
 
@@ -220,71 +260,117 @@ public static class CodeCollectionBuilder
     /// </summary>
     internal static void LinkReferences(SourceFile file)
     {
-        var seen = new HashSet<StatementInfo>(ReferenceEqualityComparer.Instance);
+        HashSet<StatementInfo> seen = new HashSet<StatementInfo>(ReferenceEqualityComparer.Instance);
         void LinkStatement(StatementInfo statement, MethodDeclaration? method, StatementInfo? parent)
         {
-            if (method is not null) statement.Method = method;
-            if (parent is not null) statement.Parent = parent;
-            if (!seen.Add(statement)) return;
+            if (method is not null)
+            {
+                statement.Method = method;
+            }
+
+            if (parent is not null)
+            {
+                statement.Parent = parent;
+            }
+
+            if (!seen.Add(statement))
+            {
+                return;
+            }
+
             statement.File = file;
-            var stmtLine = statement.Line;
+            int stmtLine = statement.Line;
             if (stmtLine >= 2 && stmtLine <= file.Lines.Count + 1 && file.CommentLines.Contains(stmtLine - 1))
             {
-                var prevLineText = file.Lines[stmtLine - 2]; // 0-indexed
-                var idx = prevLineText.IndexOf("cop-ignore:", StringComparison.Ordinal);
+                string prevLineText = file.Lines[stmtLine - 2]; // 0-indexed
+                int idx = prevLineText.IndexOf("cop-ignore:", StringComparison.Ordinal);
                 if (idx >= 0)
+                {
                     statement.CopIgnore = prevLineText[(idx + "cop-ignore:".Length)..].Trim();
+                }
             }
-            foreach (var child in statement.Children)
+            foreach (StatementInfo child in statement.Children)
+            {
                 LinkStatement(child, method ?? statement.Method, statement);
+            }
         }
 
         void LinkMethod(MethodDeclaration method)
         {
             method.File = file;
-            foreach (var statement in method.Statements)
+            foreach (StatementInfo statement in method.Statements)
+            {
                 LinkStatement(statement, method, null);
+            }
         }
         void LinkType(TypeDeclaration type)
         {
             type.File = file;
-            foreach (var method in type.DeclaredMethods) LinkMethod(method);
-            foreach (var constructor in type.Constructors) LinkMethod(constructor);
-            foreach (var nested in type.NestedTypes) LinkType(nested);
+            foreach (MethodDeclaration method in type.DeclaredMethods)
+            {
+                LinkMethod(method);
+            }
+
+            foreach (MethodDeclaration constructor in type.Constructors)
+            {
+                LinkMethod(constructor);
+            }
+
+            foreach (TypeDeclaration nested in type.NestedTypes)
+            {
+                LinkType(nested);
+            }
         }
-        foreach (var type in file.Types) LinkType(type);
-        foreach (var method in file.Methods)
+        foreach (TypeDeclaration type in file.Types)
+        {
+            LinkType(type);
+        }
+
+        foreach (MethodDeclaration method in file.Methods)
+        {
             LinkMethod(method);
-        foreach (var statement in file.Statements)
+        }
+
+        foreach (StatementInfo statement in file.Statements)
+        {
             LinkStatement(statement, null, null);
+        }
 
         for (int i = 0; i < file.Regions.Count; i++)
         {
             if (file.Regions[i].File is null)
+            {
                 file.Regions[i] = file.Regions[i] with { File = file };
+            }
         }
     }
 
     internal static List<MethodDeclaration> ResolveReceiverMembers(
         TypeDeclaration type, SourceFile owner, IEnumerable<SourceFile> sourceFiles)
     {
-        var comparer = OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
-        var scope = type.Namespace ?? owner.Namespace;
-        var files = sourceFiles.Where(file => file.Language == owner.Language
+        StringComparer comparer = OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
+        string? scope = type.Namespace ?? owner.Namespace;
+        List<SourceFile> files = sourceFiles.Where(file => file.Language == owner.Language
             && comparer.Equals(Path.GetDirectoryName(file.FullPath), Path.GetDirectoryName(owner.FullPath))).ToList();
         IEnumerable<TypeDeclaration> AllTypes(IEnumerable<TypeDeclaration> types)
         {
-            foreach (var candidate in types)
+            foreach (TypeDeclaration candidate in types)
             {
                 yield return candidate;
-                foreach (var nested in AllTypes(candidate.NestedTypes)) yield return nested;
+                foreach (TypeDeclaration nested in AllTypes(candidate.NestedTypes))
+                {
+                    yield return nested;
+                }
             }
         }
-        var owners = files.SelectMany(file => AllTypes(file.Types)
+        List<TypeDeclaration> owners = files.SelectMany(file => AllTypes(file.Types)
             .Where(candidate => candidate.Name == type.Name && (candidate.Namespace ?? file.Namespace) == scope))
             .Distinct<TypeDeclaration>(ReferenceEqualityComparer.Instance).ToList();
         if (owners.Count != 1 || !ReferenceEquals(owners[0], type))
+        {
             return type.DeclaredMethods;
+        }
+
         return type.DeclaredMethods.Concat(files.Where(file => file.Namespace == scope)
                 .SelectMany(file => file.Methods).Where(method => method.ReceiverType == type.Name))
             .Distinct<MethodDeclaration>(ReferenceEqualityComparer.Instance).ToList();
@@ -296,20 +382,20 @@ public static class CodeCollectionBuilder
     /// </summary>
     private static byte[] ComputeFingerprint(string rootPath, List<string> filePaths, SourceParserRegistry parsers)
     {
-        using var sha = SHA256.Create();
-        using var ms = new MemoryStream();
-        using var writer = new BinaryWriter(ms);
+        using SHA256 sha = SHA256.Create();
+        using MemoryStream ms = new MemoryStream();
+        using BinaryWriter writer = new BinaryWriter(ms);
 
         // Sort for deterministic fingerprint regardless of discovery order
-        var sorted = filePaths.OrderBy(p => p, StringComparer.Ordinal);
-        foreach (var path in sorted)
+        IOrderedEnumerable<string> sorted = filePaths.OrderBy(p => p, StringComparer.Ordinal);
+        foreach (string? path in sorted)
         {
-            var relative = Path.GetRelativePath(rootPath, path);
+            string relative = Path.GetRelativePath(rootPath, path);
             writer.Write(relative);
             writer.Write(parsers.GetParser(Path.GetExtension(path))!.GetCacheIdentity(path));
             try
             {
-                var info = new FileInfo(path);
+                FileInfo info = new FileInfo(path);
                 writer.Write(info.Length);
                 writer.Write(info.LastWriteTimeUtc.Ticks);
             }
@@ -328,9 +414,9 @@ public static class CodeCollectionBuilder
     /// </summary>
     internal static string GetCachePath(string rootPath)
     {
-        var hash = Convert.ToHexStringLower(
+        string hash = Convert.ToHexStringLower(
             SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(rootPath)));
-        var cacheDir = Path.Combine(
+        string cacheDir = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
             ".cop", "cache");
         return Path.Combine(cacheDir, $"source-{hash[..16]}.bin");
@@ -350,31 +436,38 @@ public static class CodeCollectionBuilder
         IReadOnlyDictionary<string, FilterExpression>? collectionFilters,
         FilterExpression? filter)
     {
-        foreach (var file in sourceFiles)
+        foreach (SourceFile file in sourceFiles)
+        {
             if (file.FullPath.Length > 0)
+            {
                 ExecutionStatistics.RecordInputFile(file.FullPath);
-        var extractors = CodeBindings.BuildExtractors();
-        var accessors = collectionFilters is not null || filter is not null ? CodeBindings.BuildAccessors() : null;
-        var collectionItemTypes = GetCollectionItemTypes();
-        var collections = new Dictionary<string, List<object>>();
+            }
+        }
 
-        foreach (var (name, extractor) in extractors)
+        Dictionary<string, Func<object, List<object>>> extractors = CodeBindings.BuildExtractors();
+        Dictionary<string, Dictionary<string, Func<object, object?>>>? accessors = collectionFilters is not null || filter is not null ? CodeBindings.BuildAccessors() : null;
+        Dictionary<string, string> collectionItemTypes = GetCollectionItemTypes();
+        Dictionary<string, List<object>> collections = new Dictionary<string, List<object>>();
+
+        foreach ((string? name, Func<object, List<object>>? extractor) in extractors)
         {
             if (collection != null && collection != name)
+            {
                 continue;
+            }
 
             // Compile a filter predicate for this collection if available
             Func<object, bool>? predicate = null;
-            var effectiveFilter = collectionFilters?.GetValueOrDefault(name) ?? filter;
+            FilterExpression? effectiveFilter = collectionFilters?.GetValueOrDefault(name) ?? filter;
             if (effectiveFilter is not null &&
-                collectionItemTypes.TryGetValue(name, out var itemType) &&
-                accessors!.TryGetValue(itemType, out var typeAccessors))
+                collectionItemTypes.TryGetValue(name, out string? itemType) &&
+                accessors!.TryGetValue(itemType, out Dictionary<string, Func<object, object?>>? typeAccessors))
             {
                 predicate = FilterCompiler.Compile(effectiveFilter, typeAccessors);
             }
 
-            var items = new List<object>();
-            foreach (var file in sourceFiles)
+            List<object> items = new List<object>();
+            foreach (SourceFile file in sourceFiles)
             {
                 if (predicate is null)
                 {
@@ -382,10 +475,12 @@ public static class CodeCollectionBuilder
                 }
                 else
                 {
-                    foreach (var item in extractor(file))
+                    foreach (object item in extractor(file))
                     {
                         if (predicate(item))
+                        {
                             items.Add(item);
+                        }
                     }
                 }
             }
@@ -421,16 +516,18 @@ public static class CodeCollectionBuilder
         // directory's files, then recurse only into non-excluded, non-reparse-point subdirectories.
         try
         {
-            foreach (var file in Directory.EnumerateFiles(rootDir, "*", new EnumerationOptions
+            foreach (string file in Directory.EnumerateFiles(rootDir, "*", new EnumerationOptions
             {
                 RecurseSubdirectories = false,
                 IgnoreInaccessible = !isRoot,  // propagate root errors, skip subdirectory errors
                 AttributesToSkip = FileAttributes.System
             }))
             {
-                var ext = Path.GetExtension(file);
+                string ext = Path.GetExtension(file);
                 if (parsers.GetParser(ext) != null)
+                {
                     result.Add(file);
+                }
             }
         }
         catch (UnauthorizedAccessException) when (!isRoot) { }
@@ -450,11 +547,14 @@ public static class CodeCollectionBuilder
         catch (UnauthorizedAccessException) when (!isRoot) { return; }
         catch (IOException) when (!isRoot) { return; }
 
-        foreach (var subDir in subDirs)
+        foreach (string subDir in subDirs)
         {
-            var dirName = Path.GetFileName(subDir);
+            string dirName = Path.GetFileName(subDir);
             if (excluded is not null && excluded.Contains(dirName))
+            {
                 continue;
+            }
+
             CollectSourceFiles(subDir, parsers, excluded, result, isRoot: false);
         }
     }

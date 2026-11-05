@@ -1,3 +1,7 @@
+// Extracts YAML documents and scalar entries with source-location metadata.
+
+using System.Text;
+
 namespace Cop.Providers.Yaml;
 
 /// <summary>
@@ -12,35 +16,45 @@ namespace Cop.Providers.Yaml;
 /// </summary>
 public static class YamlParser
 {
+    /// <summary>
+    /// Contains scalar entries and document boundaries parsed from YAML.
+    /// </summary>
     public record YamlParseResult(List<YamlEntryInfo> Entries, List<YamlDocumentInfo> Documents);
 
     private record Frame(int Indent, string Segment);
 
+    /// <summary>Extracts YAML entries and document boundaries from source text.</summary>
     public static YamlParseResult Parse(string text)
     {
-        var entries = new List<YamlEntryInfo>();
-        var documents = new List<YamlDocumentInfo>();
-        var lines = text.Split('\n');
+        List<YamlEntryInfo> entries = new List<YamlEntryInfo>();
+        List<YamlDocumentInfo> documents = new List<YamlDocumentInfo>();
+        string[] lines = text.Split('\n');
 
-        var stack = new List<Frame>();
+        List<Frame> stack = new List<Frame>();
         int docIndex = 0;
         bool documentOpened = false;
 
         for (int i = 0; i < lines.Length; i++)
         {
-            var raw = lines[i].TrimEnd('\r');
+            string raw = lines[i].TrimEnd('\r');
             int lineNo = i + 1;
 
-            var contentTrim = raw.TrimStart(' ');
+            string contentTrim = raw.TrimStart(' ');
             if (contentTrim.Length == 0 || contentTrim[0] == '#')
+            {
                 continue;
+            }
 
             int indent = raw.Length - contentTrim.Length;
 
             // Document separators.
             if (contentTrim.StartsWith("---"))
             {
-                if (documentOpened) docIndex++;
+                if (documentOpened)
+                {
+                    docIndex++;
+                }
+
                 documents.Add(new YamlDocumentInfo(docIndex, lineNo));
                 documentOpened = true;
                 stack.Clear();
@@ -59,9 +73,11 @@ public static class YamlParser
                 documentOpened = true;
             }
 
-            var work = StripInlineComment(contentTrim);
+            string work = StripInlineComment(contentTrim);
             if (work.Length == 0)
+            {
                 continue;
+            }
 
             // Sequence item: "- ...." or a bare "-".
             if (work == "-" || work.StartsWith("- "))
@@ -74,10 +90,12 @@ public static class YamlParser
 
                 string itemContent = work.Length <= 2 ? "" : work[2..].TrimStart(' ');
                 if (itemContent.Length == 0)
+                {
                     continue;
+                }
 
                 // "- key: value" — the element's first mapping key, sitting after the dash.
-                if (TrySplitKeyValue(itemContent, out var seqKey, out var seqValue))
+                if (TrySplitKeyValue(itemContent, out string? seqKey, out string? seqValue))
                 {
                     int keyIndent = indent + (work.Length - itemContent.Length);
                     string keyPath = seqPath + "." + seqKey;
@@ -94,7 +112,7 @@ public static class YamlParser
             }
 
             // Mapping entry: "key: value" or "key:".
-            if (TrySplitKeyValue(work, out var key, out var value))
+            if (TrySplitKeyValue(work, out string? key, out string? value))
             {
                 PopTo(stack, indent, inclusive: true);
                 string mapPrefix = PathOf(stack);
@@ -112,14 +130,20 @@ public static class YamlParser
     private static void PopTo(List<Frame> stack, int indent, bool inclusive)
     {
         while (stack.Count > 0 && stack[^1].Indent >= indent)
+        {
             stack.RemoveAt(stack.Count - 1);
+        }
     }
 
     private static string PathOf(List<Frame> stack)
     {
-        if (stack.Count == 0) return "";
-        var sb = new System.Text.StringBuilder();
-        foreach (var f in stack)
+        if (stack.Count == 0)
+        {
+            return "";
+        }
+
+        StringBuilder sb = new System.Text.StringBuilder();
+        foreach (Frame f in stack)
         {
             if (f.Segment == "[]")
             {
@@ -127,8 +151,15 @@ public static class YamlParser
             }
             else
             {
-                if (sb.Length > 0 && sb[^1] != ']') sb.Append('.');
-                else if (sb.Length > 0 && sb[^1] == ']') sb.Append('.');
+                if (sb.Length > 0 && sb[^1] != ']')
+                {
+                    sb.Append('.');
+                }
+                else if (sb.Length > 0 && sb[^1] == ']')
+                {
+                    sb.Append('.');
+                }
+
                 sb.Append(f.Segment);
             }
         }
@@ -142,11 +173,18 @@ public static class YamlParser
         key = "";
         value = "";
         int colon = FindMappingColon(s);
-        if (colon < 0) return false;
+        if (colon < 0)
+        {
+            return false;
+        }
 
         key = Unquote(s[..colon].TrimEnd(' '));
-        if (key.Length == 0) return false;
-        var rest = s[(colon + 1)..].Trim(' ');
+        if (key.Length == 0)
+        {
+            return false;
+        }
+
+        string rest = s[(colon + 1)..].Trim(' ');
         value = Unquote(rest);
         return true;
     }
@@ -161,12 +199,18 @@ public static class YamlParser
             char c = s[i];
             if (quote != '\0')
             {
-                if (c == quote) quote = '\0';
+                if (c == quote)
+                {
+                    quote = '\0';
+                }
+
                 continue;
             }
             if (c == '\'' || c == '"') { quote = c; continue; }
             if (c == ':' && (i + 1 == s.Length || s[i + 1] == ' '))
+            {
                 return i;
+            }
         }
         return -1;
     }
@@ -175,21 +219,40 @@ public static class YamlParser
     // so they are not parsed as entries. Returns the index of the last consumed line.
     private static int SkipBlockScalar(string[] lines, int index, int keyIndent, string value)
     {
-        var v = value.TrimEnd(' ');
-        if (v.Length == 0) return index;
+        string v = value.TrimEnd(' ');
+        if (v.Length == 0)
+        {
+            return index;
+        }
+
         char c0 = v[0];
-        if (c0 != '|' && c0 != '>') return index;
+        if (c0 != '|' && c0 != '>')
+        {
+            return index;
+        }
         // Remaining chars (if any) must be block indicators (+, -, digits) only.
         for (int k = 1; k < v.Length; k++)
-            if (v[k] != '+' && v[k] != '-' && !char.IsDigit(v[k])) return index;
+        {
+            if (v[k] != '+' && v[k] != '-' && !char.IsDigit(v[k]))
+            {
+                return index;
+            }
+        }
 
         int j = index + 1;
         for (; j < lines.Length; j++)
         {
-            var raw = lines[j].TrimEnd('\r');
-            if (raw.Trim().Length == 0) continue; // blank lines belong to the scalar
+            string raw = lines[j].TrimEnd('\r');
+            if (raw.Trim().Length == 0)
+            {
+                continue; // blank lines belong to the scalar
+            }
+
             int ind = raw.Length - raw.TrimStart(' ').Length;
-            if (ind <= keyIndent) break;
+            if (ind <= keyIndent)
+            {
+                break;
+            }
         }
         return j - 1;
     }
@@ -203,12 +266,18 @@ public static class YamlParser
             char c = s[i];
             if (quote != '\0')
             {
-                if (c == quote) quote = '\0';
+                if (c == quote)
+                {
+                    quote = '\0';
+                }
+
                 continue;
             }
             if (c == '\'' || c == '"') { quote = c; continue; }
             if (c == '#' && (i == 0 || s[i - 1] == ' ' || s[i - 1] == '\t'))
+            {
                 return s[..i].TrimEnd(' ');
+            }
         }
         return s;
     }
@@ -220,7 +289,9 @@ public static class YamlParser
         {
             char a = s[0], b = s[^1];
             if ((a == '"' && b == '"') || (a == '\'' && b == '\''))
+            {
                 return s[1..^1];
+            }
         }
         return s;
     }

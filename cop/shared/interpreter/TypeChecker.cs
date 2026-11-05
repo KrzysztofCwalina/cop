@@ -1,3 +1,5 @@
+// Checks expression types and declaration compatibility before execution.
+
 namespace Cop.Lang.Interpreter;
 
 using Cop.Lang.Ast;
@@ -56,11 +58,14 @@ public sealed partial class TypeChecker
         IEnumerable<ModuleNode> allModules,
         IEnumerable<(ModuleNode Module, string FilePath, string Source)> filesToCheck)
     {
-        var checker = new TypeChecker();
-        var files = filesToCheck.ToList();
+        TypeChecker checker = new TypeChecker();
+        List<(ModuleNode Module, string FilePath, string Source)> files = filesToCheck.ToList();
         checker.BuildModel(allModules, files.Select(f => f.Module));
-        foreach (var (module, filePath, source) in files)
+        foreach ((ModuleNode? module, string? filePath, string? source) in files)
+        {
             checker.CheckModule(module, filePath, source);
+        }
+
         return checker._diagnostics;
     }
 
@@ -72,33 +77,58 @@ public sealed partial class TypeChecker
     /// </summary>
     private void BuildModel(IEnumerable<ModuleNode> allModules, IEnumerable<ModuleNode> letScope)
     {
-        foreach (var module in allModules)
+        foreach (ModuleNode module in allModules)
+        {
             IndexModule(module);
-        var scope = letScope.ToList();
+        }
+
+        List<ModuleNode> scope = letScope.ToList();
         for (int round = 0; round < 2; round++)
-            foreach (var module in scope)
-                foreach (var decl in module.Declarations)
+        {
+            foreach (ModuleNode? module in scope)
+            {
+                foreach (Declaration decl in module.Declarations)
+                {
                     if (decl is LetDecl ld)
+                    {
                         _topLevelLets[ld.Name] =
                             ld.TypeAnnotation is not null ? ToIT(ld.TypeAnnotation) : InferExpr(ld.Value);
+                    }
+                }
+            }
+        }
     }
 
     // ── Model building ──────────────────────────────────────────────────────
 
     private void IndexModule(ModuleNode module)
     {
-        foreach (var decl in module.Declarations)
+        foreach (Declaration decl in module.Declarations)
         {
             switch (decl)
             {
                 case TypeDecl td:
                     _knownTypes.Add(td.Name);
-                    var bases = _bases.TryGetValue(td.Name, out var b) ? b : (_bases[td.Name] = new(StringComparer.Ordinal));
-                    if (!string.IsNullOrEmpty(td.BaseType)) bases.Add(td.BaseType);
-                    if (td.Traits is not null) foreach (var t in td.Traits) bases.Add(t);
-                    var props = _props.TryGetValue(td.Name, out var p) ? p : (_props[td.Name] = new(StringComparer.Ordinal));
-                    foreach (var pd in td.Properties)
+                    HashSet<string> bases = _bases.TryGetValue(td.Name, out HashSet<string>? b) ? b : (_bases[td.Name] = new(StringComparer.Ordinal));
+                    if (!string.IsNullOrEmpty(td.BaseType))
+                    {
+                        bases.Add(td.BaseType);
+                    }
+
+                    if (td.Traits is not null)
+                    {
+                        foreach (string t in td.Traits)
+                        {
+                            bases.Add(t);
+                        }
+                    }
+
+                    Dictionary<string, TypeRef> props = _props.TryGetValue(td.Name, out Dictionary<string, TypeRef>? p) ? p : (_props[td.Name] = new(StringComparer.Ordinal));
+                    foreach (PropertyDecl pd in td.Properties)
+                    {
                         props[pd.Name] = pd.Type;
+                    }
+
                     break;
 
                 case EnumDecl ed:
@@ -112,8 +142,8 @@ public sealed partial class TypeChecker
                     break;
 
                 case FunctionDecl fn:
-                    var sigs = _funcs.TryGetValue(fn.Name, out var s) ? s : (_funcs[fn.Name] = []);
-                    var ps = fn.Params.Select(pp => pp.Type).ToList();
+                    List<Sig> sigs = _funcs.TryGetValue(fn.Name, out List<Sig>? s) ? s : (_funcs[fn.Name] = []);
+                    List<TypeRef?> ps = fn.Params.Select(pp => pp.Type).ToList();
                     bool variadic = ps.Count > 0 && ps[^1] is { IsCollection: true };
                     sigs.Add(new Sig(fn.Name, ps, variadic, fn.ReturnType, fn.IsPredicate, fn));
                     // A narrowing predicate (`predicate p(T) : NarrowType => ...`) narrows the
@@ -125,7 +155,7 @@ public sealed partial class TypeChecker
                         && !string.Equals(fn.ReturnType.Name, "bool", StringComparison.Ordinal)
                         && fn.Params.Count == 1)
                     {
-                        var list = _narrowings.TryGetValue(fn.Name, out var nl) ? nl : (_narrowings[fn.Name] = []);
+                        List<(TypeRef? Input, TypeRef Output)> list = _narrowings.TryGetValue(fn.Name, out List<(TypeRef? Input, TypeRef Output)>? nl) ? nl : (_narrowings[fn.Name] = []);
                         list.Add((fn.Params[0].Type, fn.ReturnType));
                     }
                     break;
@@ -139,8 +169,10 @@ public sealed partial class TypeChecker
     {
         _file = filePath;
         _src = source;
-        foreach (var decl in module.Declarations)
+        foreach (Declaration decl in module.Declarations)
+        {
             CheckDeclaration(decl);
+        }
     }
 
     private void CheckDeclaration(Declaration decl)
@@ -149,16 +181,27 @@ public sealed partial class TypeChecker
         switch (decl)
         {
             case FunctionDecl fn:
-                foreach (var prm in fn.Params)
+                foreach (Parameter prm in fn.Params)
+                {
                     _locals[prm.Name] = prm.Type is null ? null : ToIT(prm.Type);
-                if (fn.Guard is not null) WalkExpr(fn.Guard);
+                }
+
+                if (fn.Guard is not null)
+                {
+                    WalkExpr(fn.Guard);
+                }
+
                 CheckBody(fn.Body);
                 break;
             case LetDecl ld:
                 WalkExpr(ld.Value);
                 break;
             case CommandDecl cmd:
-                foreach (var st in cmd.Body) CheckStatement(st);
+                foreach (Statement st in cmd.Body)
+                {
+                    CheckStatement(st);
+                }
+
                 break;
         }
     }
@@ -168,7 +211,7 @@ public sealed partial class TypeChecker
         switch (body)
         {
             case ExpressionBody eb: WalkExpr(eb.Expr); break;
-            case BlockBody bb: foreach (var st in bb.Statements) CheckStatement(st); break;
+            case BlockBody bb: foreach (Statement st in bb.Statements) { CheckStatement(st); } break;
         }
     }
 
@@ -183,7 +226,11 @@ public sealed partial class TypeChecker
             case ExpressionStatement es: WalkExpr(es.Expr); break;
             case ForEachStatement fe:
                 WalkExpr(fe.Collection);
-                foreach (var s in fe.Body) CheckStatement(s);
+                foreach (Statement s in fe.Body)
+                {
+                    CheckStatement(s);
+                }
+
                 break;
         }
     }
@@ -198,17 +245,28 @@ public sealed partial class TypeChecker
             case UnaryExpr ue: WalkExpr(ue.Operand); break;
             case CallExpr ce:
                 WalkExpr(ce.Callee);
-                foreach (var a in ce.Args) WalkExpr(a);
+                foreach (Expression a in ce.Args)
+                {
+                    WalkExpr(a);
+                }
+
                 CheckDirectCall(ce);
                 break;
             case MemberExpr me: WalkExpr(me.Object); break;
             case IndexExpr ie: WalkExpr(ie.Object); WalkExpr(ie.Index); break;
             case ConditionalExpr c: WalkExpr(c.Condition); WalkExpr(c.Then); WalkExpr(c.Else); break;
-            case MatchExpr m: WalkExpr(m.Discriminant); foreach (var arm in m.Arms) WalkExpr(arm.Body); break;
-            case ListExpr l: foreach (var el in l.Elements) WalkExpr(el); break;
-            case ObjectExpr o: foreach (var f in o.Fields) WalkExpr(f.Value); break;
+            case MatchExpr m: WalkExpr(m.Discriminant); foreach (MatchArm arm in m.Arms) { WalkExpr(arm.Body); } break;
+            case ListExpr l: foreach (Expression el in l.Elements) { WalkExpr(el); } break;
+            case ObjectExpr o: foreach (FieldInit f in o.Fields) { WalkExpr(f.Value); } break;
             case InterpolatedStringExpr s:
-                foreach (var part in s.Parts) if (part is ExpressionPart ep) WalkExpr(ep.Expr);
+                foreach (StringPart part in s.Parts)
+                {
+                    if (part is ExpressionPart ep)
+                    {
+                        WalkExpr(ep.Expr);
+                    }
+                }
+
                 break;
             case FilterExpr fe:
                 WalkExpr(fe.Collection);
@@ -216,7 +274,11 @@ public sealed partial class TypeChecker
                 break;
             case ForEachExpr fee:
                 WalkExpr(fee.Loop.Collection);
-                foreach (var s in fee.Loop.Body) CheckStatement(s);
+                foreach (Statement s in fee.Loop.Body)
+                {
+                    CheckStatement(s);
+                }
+
                 break;
         }
     }
@@ -224,9 +286,17 @@ public sealed partial class TypeChecker
     /// <summary>Checks a direct call <c>f(args)</c> against the declared signature(s) of f.</summary>
     private void CheckDirectCall(CallExpr call)
     {
-        if (call.Callee is not IdentifierExpr id) return;
-        if (!_funcs.TryGetValue(id.Name, out var overloads)) return;
-        var argTypes = call.Args.Select(InferExpr).ToList();
+        if (call.Callee is not IdentifierExpr id)
+        {
+            return;
+        }
+
+        if (!_funcs.TryGetValue(id.Name, out List<Sig>? overloads))
+        {
+            return;
+        }
+
+        List<IT?> argTypes = call.Args.Select(InferExpr).ToList();
         CheckAgainstOverloads(id.Name, overloads, argTypes, call.Line);
     }
 
@@ -236,7 +306,7 @@ public sealed partial class TypeChecker
     /// </summary>
     private void CheckFilter(FilterExpr filter)
     {
-        var elem = ElementType(InferExpr(filter.Collection));
+        IT? elem = ElementType(InferExpr(filter.Collection));
 
         switch (filter.Predicate)
         {
@@ -244,15 +314,22 @@ public sealed partial class TypeChecker
                 // collection:predicate  → predicate(element). Skip builtin pseudo-predicates
                 // (e.g. `:empty`) whose runtime semantics differ from any same-named declared
                 // function.
-                if (!BuiltinFilterNames.Contains(pid.Name) && _funcs.TryGetValue(pid.Name, out var preds))
+                if (!BuiltinFilterNames.Contains(pid.Name) && _funcs.TryGetValue(pid.Name, out List<Sig>? preds))
+                {
                     CheckAgainstOverloads(pid.Name, preds, [elem], filter.Line);
+                }
+
                 break;
             case CallExpr pcall when pcall.Callee is IdentifierExpr mid:
                 // collection:method(args) → method(element, args...)
-                foreach (var a in pcall.Args) WalkExpr(a);
-                if (!BuiltinFilterNames.Contains(mid.Name) && _funcs.TryGetValue(mid.Name, out var methods))
+                foreach (Expression a in pcall.Args)
                 {
-                    var args = new List<IT?> { elem };
+                    WalkExpr(a);
+                }
+
+                if (!BuiltinFilterNames.Contains(mid.Name) && _funcs.TryGetValue(mid.Name, out List<Sig>? methods))
+                {
+                    List<IT?> args = new List<IT?> { elem };
                     args.AddRange(pcall.Args.Select(InferExpr));
                     CheckAgainstOverloads(mid.Name, methods, args, filter.Line);
                 }
@@ -267,18 +344,24 @@ public sealed partial class TypeChecker
     private void CheckAgainstOverloads(string name, List<Sig> overloads, List<IT?> args, int line)
     {
         // If any overload plausibly accepts the args, accept (overload resolution is permissive).
-        foreach (var sig in overloads)
+        foreach (Sig sig in overloads)
+        {
             if (Accepts(sig, args, out _))
+            {
                 return;
+            }
+        }
 
         // No overload accepts. Find the most specific concrete mismatch to report (single-overload
         // case gives the clearest message; with multiple overloads we only report if every overload
         // fails for the SAME definite reason on the same argument).
         if (overloads.Count == 1)
         {
-            Accepts(overloads[0], args, out var mismatch);
+            Accepts(overloads[0], args, out string? mismatch);
             if (mismatch is not null)
+            {
                 Report(mismatch, line);
+            }
         }
     }
 
@@ -295,15 +378,22 @@ public sealed partial class TypeChecker
         // Arity: too few fixed args, or too many when not variadic — but only treat as a hard
         // mismatch when we are confident (variadic/param-array semantics make this fuzzy, so we
         // do NOT flag arity here to stay conservative; argument-type checking is the focus).
-        if (!sig.LastIsVariadic && args.Count > sig.Params.Count) return true;  // skip (lenient)
-        if (args.Count < fixedCount) return true;                                // skip (lenient)
+        if (!sig.LastIsVariadic && args.Count > sig.Params.Count)
+        {
+            return true;  // skip (lenient)
+        }
+
+        if (args.Count < fixedCount)
+        {
+            return true;                                // skip (lenient)
+        }
 
         for (int i = 0; i < args.Count; i++)
         {
-            var expected = i < sig.Params.Count ? sig.Params[i]
+            TypeRef? expected = i < sig.Params.Count ? sig.Params[i]
                          : (sig.LastIsVariadic ? sig.Params[^1] : null);
-            var actual = args[i];
-            if (!Assignable(actual, expected, out var why))
+            IT? actual = args[i];
+            if (!Assignable(actual, expected, out string? why))
             {
                 mismatch = $"'{sig.Name}' argument {i + 1} expects {Describe(expected)}, got {Describe(actual)}{why}";
                 return false;
@@ -321,18 +411,38 @@ public sealed partial class TypeChecker
     private bool Assignable(IT? actual, TypeRef? expected, out string why)
     {
         why = "";
-        if (expected is null) return true;                      // untyped parameter
-        if (actual is null) return true;                        // unknown argument type
-        var exp = expected.Name;
-        if (GenericInference.IsTypeVariable(exp)) return true;  // generic parameter
-        var expl = exp.ToLowerInvariant();
-        if (expl is "object" or "any") return true;             // top type
+        if (expected is null)
+        {
+            return true;                      // untyped parameter
+        }
+
+        if (actual is null)
+        {
+            return true;                        // unknown argument type
+        }
+
+        string exp = expected.Name;
+        if (GenericInference.IsTypeVariable(exp))
+        {
+            return true;  // generic parameter
+        }
+
+        string expl = exp.ToLowerInvariant();
+        if (expl is "object" or "any")
+        {
+            return true;             // top type
+        }
+
         if (exp.Contains("=>") || expl is "lambda" or "function" or "predicate" or "collection" or "provider")
+        {
             return true;                                        // callable / opaque
+        }
 
         // Collection expectations: a collection arg is fine; a scalar arg we skip (cop may wrap).
         if (expected.IsCollection)
+        {
             return true;
+        }
 
         // Scalar expected, collection actual: the runtime cannot anchor/coerce a collection into a
         // single value — this is a real error (e.g. a toError anchor that is a collection).
@@ -342,21 +452,33 @@ public sealed partial class TypeChecker
             return false;
         }
 
-        var act = actual.Name;
-        if (string.Equals(act, exp, StringComparison.OrdinalIgnoreCase)) return true;
+        string act = actual.Name;
+        if (string.Equals(act, exp, StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
 
         bool expIsPrimitive = IsPrimitive(expl);
         bool actIsPrimitive = IsPrimitive(act.ToLowerInvariant());
 
         // Enum members are strings at runtime; treat enum and string as mutually compatible.
         if ((_enums.Contains(exp) || expl == "string") && (_enums.Contains(act) || act.Equals("string", StringComparison.OrdinalIgnoreCase)))
+        {
             return true;
+        }
 
         if (expIsPrimitive)
         {
-            if (!actIsPrimitive) return true;                   // named/unknown actual vs primitive — be lenient
+            if (!actIsPrimitive)
+            {
+                return true;                   // named/unknown actual vs primitive — be lenient
+            }
             // both primitive and not equal: int↔float widening is allowed; everything else mismatches.
-            if (expl == "float" && (act.Equals("int", StringComparison.OrdinalIgnoreCase) || act.Equals("float", StringComparison.OrdinalIgnoreCase))) return true;
+            if (expl == "float" && (act.Equals("int", StringComparison.OrdinalIgnoreCase) || act.Equals("float", StringComparison.OrdinalIgnoreCase)))
+            {
+                return true;
+            }
+
             why = "";
             return false;
         }
@@ -370,26 +492,45 @@ public sealed partial class TypeChecker
         }
 
         // Both named: assignable if actual is the same type, a subtype, or conforms to the trait.
-        if (IsSubtypeOrConforms(act, exp)) return true;
+        if (IsSubtypeOrConforms(act, exp))
+        {
+            return true;
+        }
 
         // If we don't actually know the actual type (not in our model), stay lenient.
-        if (!_knownTypes.Contains(act)) return true;
+        if (!_knownTypes.Contains(act))
+        {
+            return true;
+        }
 
         return false;
     }
 
     private bool IsSubtypeOrConforms(string actual, string expected)
     {
-        var seen = new HashSet<string>(StringComparer.Ordinal);
-        var stack = new Stack<string>();
+        HashSet<string> seen = new HashSet<string>(StringComparer.Ordinal);
+        Stack<string> stack = new Stack<string>();
         stack.Push(actual);
         while (stack.Count > 0)
         {
-            var t = stack.Pop();
-            if (!seen.Add(t)) continue;
-            if (string.Equals(t, expected, StringComparison.OrdinalIgnoreCase)) return true;
-            if (_bases.TryGetValue(t, out var bases))
-                foreach (var b in bases) stack.Push(b);
+            string t = stack.Pop();
+            if (!seen.Add(t))
+            {
+                continue;
+            }
+
+            if (string.Equals(t, expected, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            if (_bases.TryGetValue(t, out HashSet<string>? bases))
+            {
+                foreach (string b in bases)
+                {
+                    stack.Push(b);
+                }
+            }
         }
         return false;
     }
@@ -402,7 +543,11 @@ public sealed partial class TypeChecker
     /// <summary>Infers the type of an expression, or null when it cannot be determined confidently.</summary>
     private IT? InferExpr(Expression? expr)
     {
-        if (_staticInference) return InferStaticExpression(expr);
+        if (_staticInference)
+        {
+            return InferStaticExpression(expr);
+        }
+
         switch (expr)
         {
             case LiteralExpr lit:
@@ -420,13 +565,25 @@ public sealed partial class TypeChecker
             case InterpolatedStringExpr: return new IT("string", false);
 
             case ListExpr list:
-                if (list.Elements.Count == 0) return new IT("object", true);
-                var first = InferExpr(list.Elements[0]);
+                if (list.Elements.Count == 0)
+                {
+                    return new IT("object", true);
+                }
+
+                IT? first = InferExpr(list.Elements[0]);
                 return first is null ? new IT("object", true) : new IT(first.Name, true);
 
             case IdentifierExpr id:
-                if (_locals.TryGetValue(id.Name, out var lt)) return lt;
-                if (_topLevelLets.TryGetValue(id.Name, out var tl)) return tl;
+                if (_locals.TryGetValue(id.Name, out IT? lt))
+                {
+                    return lt;
+                }
+
+                if (_topLevelLets.TryGetValue(id.Name, out IT? tl))
+                {
+                    return tl;
+                }
+
                 return null;
 
             case MemberExpr me:
@@ -439,7 +596,10 @@ public sealed partial class TypeChecker
                 return InferFilter(fe);
 
             case BinaryExpr be:
-                if (IsBooleanOp(be.Op)) return new IT("bool", false);
+                if (IsBooleanOp(be.Op))
+                {
+                    return new IT("bool", false);
+                }
                 // `+` concatenates lists or adds scalars. For violation checks the common shape is
                 // `let all = a + b + c` where each part is `[Violation]`; the result is that same
                 // collection type. Inferring it (instead of giving up) is what lets the editor show
@@ -453,8 +613,8 @@ public sealed partial class TypeChecker
                 return oe.TypeHint is not null ? new IT(oe.TypeHint, false) : new IT("object", false);
 
             case ConditionalExpr c:
-                var t = InferExpr(c.Then);
-                var e = InferExpr(c.Else);
+                IT? t = InferExpr(c.Then);
+                IT? e = InferExpr(c.Else);
                 return t is not null && e is not null && t == e ? t : null;
 
             default: return null;
@@ -468,87 +628,129 @@ public sealed partial class TypeChecker
     /// </summary>
     private IT? InferAddition(Expression left, Expression right)
     {
-        var l = InferExpr(left);
-        var r = InferExpr(right);
+        IT? l = InferExpr(left);
+        IT? r = InferExpr(right);
         if (l is not null && r is not null)
         {
-            if (l == r) return l;
-            if (l.IsCollection && r.IsCollection && string.Equals(l.Name, r.Name, StringComparison.Ordinal))
+            if (l == r)
+            {
                 return l;
+            }
+
+            if (l.IsCollection && r.IsCollection && string.Equals(l.Name, r.Name, StringComparison.Ordinal))
+            {
+                return l;
+            }
         }
-        if (l is { IsCollection: true }) return l;
-        if (r is { IsCollection: true }) return r;
+        if (l is { IsCollection: true })
+        {
+            return l;
+        }
+
+        if (r is { IsCollection: true })
+        {
+            return r;
+        }
+
         return null;
     }
 
     private IT? InferMember(MemberExpr me)
     {
-        var obj = InferExpr(me.Object);
-        if (obj is null) return null;
+        IT? obj = InferExpr(me.Object);
+        if (obj is null)
+        {
+            return null;
+        }
+
         if (obj.IsCollection)
         {
             // A few well-known collection members; everything else is unknown.
             return me.Member is "Count" ? new IT("int", false) : null;
         }
-        var pt = LookupProperty(obj.Name, me.Member);
+        TypeRef? pt = LookupProperty(obj.Name, me.Member);
         return pt is null ? null : ToIT(pt);
     }
 
     private TypeRef? LookupProperty(string typeName, string member)
     {
-        var seen = new HashSet<string>(StringComparer.Ordinal);
-        var stack = new Stack<string>();
+        HashSet<string> seen = new HashSet<string>(StringComparer.Ordinal);
+        Stack<string> stack = new Stack<string>();
         stack.Push(typeName);
         while (stack.Count > 0)
         {
-            var t = stack.Pop();
-            if (!seen.Add(t)) continue;
-            if (_props.TryGetValue(t, out var props) && props.TryGetValue(member, out var pt))
+            string t = stack.Pop();
+            if (!seen.Add(t))
+            {
+                continue;
+            }
+
+            if (_props.TryGetValue(t, out Dictionary<string, TypeRef>? props) && props.TryGetValue(member, out TypeRef? pt))
+            {
                 return pt;
-            if (_bases.TryGetValue(t, out var bases))
-                foreach (var b in bases) stack.Push(b);
+            }
+
+            if (_bases.TryGetValue(t, out HashSet<string>? bases))
+            {
+                foreach (string b in bases)
+                {
+                    stack.Push(b);
+                }
+            }
         }
         return null;
     }
 
     private IT? InferCall(CallExpr call)
     {
-        if (call.Callee is not IdentifierExpr id) return null;
-        var rt = GetReturnType(id.Name);
+        if (call.Callee is not IdentifierExpr id)
+        {
+            return null;
+        }
+
+        TypeRef? rt = GetReturnType(id.Name);
         return rt is null || GenericInference.IsTypeVariable(rt.Name) ? null : ToIT(rt);
     }
 
     /// <summary>Return type of a function when it has exactly one (unambiguous) overload.</summary>
     private TypeRef? GetReturnType(string name) =>
-        _funcs.TryGetValue(name, out var s) && s.Count == 1 ? s[0].Return : null;
+        _funcs.TryGetValue(name, out List<Sig>? s) && s.Count == 1 ? s[0].Return : null;
 
     private IT? InferFilter(FilterExpr filter)
     {
-        var coll = InferExpr(filter.Collection);
-        var elem = ElementType(coll);
+        IT? coll = InferExpr(filter.Collection);
+        IT? elem = ElementType(coll);
 
         switch (filter.Predicate)
         {
             case IdentifierExpr pid:
                 // Narrowing predicate narrows the element.
-                if (_narrowings.TryGetValue(pid.Name, out var narrowOverloads))
+                if (_narrowings.TryGetValue(pid.Name, out List<(TypeRef? Input, TypeRef Output)>? narrowOverloads))
                 {
-                    var output = ResolveNarrowing(narrowOverloads, elem);
-                    if (output is not null) return new IT(output.Name, true);
+                    TypeRef? output = ResolveNarrowing(narrowOverloads, elem);
+                    if (output is not null)
+                    {
+                        return new IT(output.Name, true);
+                    }
                 }
                 // A declared boolean predicate is a filter — it preserves the element type.
                 if (_funcs.ContainsKey(pid.Name))
+                {
                     return coll is { IsCollection: true } ? coll : (elem is null ? null : new IT(elem.Name, true));
+                }
                 // A property name is a projection: collection:Prop maps each element to its Prop.
                 if (elem is not null)
                 {
-                    var proj = LookupProperty(elem.Name, pid.Name);
-                    if (proj is not null) return new IT(proj.Name, true);
+                    TypeRef? proj = LookupProperty(elem.Name, pid.Name);
+                    if (proj is not null)
+                    {
+                        return new IT(proj.Name, true);
+                    }
                 }
                 return null; // unknown predicate/projection — element type is undetermined
             case CallExpr pcall when pcall.Callee is IdentifierExpr mid:
                 // collection:method(...) maps each element to method's return type.
-                var rt = GetReturnType(mid.Name);
+                TypeRef? rt = GetReturnType(mid.Name);
                 return rt is null ? null : new IT(rt.Name, true);
             default:
                 return coll;
@@ -559,13 +761,22 @@ public sealed partial class TypeChecker
     private TypeRef? ResolveNarrowing(List<(TypeRef? Input, TypeRef Output)> overloads, IT? elem)
     {
         if (elem is null)
-            return overloads.Count == 1 ? overloads[0].Output : null; // ambiguous when unknown
-        foreach (var (input, output) in overloads)
         {
-            if (input is null) return output;
+            return overloads.Count == 1 ? overloads[0].Output : null; // ambiguous when unknown
+        }
+
+        foreach ((TypeRef? input, TypeRef? output) in overloads)
+        {
+            if (input is null)
+            {
+                return output;
+            }
+
             if (string.Equals(input.Name, elem.Name, StringComparison.OrdinalIgnoreCase)
                 || IsSubtypeOrConforms(elem.Name, input.Name))
+            {
                 return output;
+            }
         }
         return null; // no matching overload — preserve the element type
     }
@@ -589,7 +800,7 @@ public sealed partial class TypeChecker
 
     private void Report(string message, int line)
     {
-        var sourceLine = _src is not null ? ParseException.GetSourceLine(_src, line) : null;
+        string? sourceLine = _src is not null ? ParseException.GetSourceLine(_src, line) : null;
         _diagnostics.Add(new CopDiagnostic(CopDiagnosticSeverity.Error, message, _file, line, SourceLine: sourceLine));
     }
 
@@ -600,8 +811,8 @@ public sealed partial class TypeChecker
     /// <summary>Builds a checker populated with the merged type model, for editor queries.</summary>
     internal static TypeChecker ForModel(IEnumerable<ModuleNode> modules)
     {
-        var checker = new TypeChecker();
-        var mods = modules.ToList();
+        TypeChecker checker = new TypeChecker();
+        List<ModuleNode> mods = modules.ToList();
         checker.BuildModel(mods, mods);
         return checker;
     }
@@ -612,26 +823,43 @@ public sealed partial class TypeChecker
     {
         _locals.Clear();
         if (locals is not null)
-            foreach (var kv in locals)
+        {
+            foreach (KeyValuePair<string, TypeInfo> kv in locals)
+            {
                 _locals[kv.Key] = new IT(kv.Value.Name, kv.Value.IsCollection);
-        var it = InferExpr(expr);
+            }
+        }
+
+        IT? it = InferExpr(expr);
         return it is null ? null : new TypeInfo(it.Name, it.IsCollection);
     }
 
     /// <summary>Finds a property by name, walking base types/traits; returns its declaring type.</summary>
     internal PropertyInfo? FindProperty(string typeName, string member)
     {
-        var seen = new HashSet<string>(StringComparer.Ordinal);
-        var stack = new Stack<string>();
+        HashSet<string> seen = new HashSet<string>(StringComparer.Ordinal);
+        Stack<string> stack = new Stack<string>();
         stack.Push(typeName);
         while (stack.Count > 0)
         {
-            var t = stack.Pop();
-            if (!seen.Add(t)) continue;
-            if (_props.TryGetValue(t, out var props) && props.TryGetValue(member, out var pt))
+            string t = stack.Pop();
+            if (!seen.Add(t))
+            {
+                continue;
+            }
+
+            if (_props.TryGetValue(t, out Dictionary<string, TypeRef>? props) && props.TryGetValue(member, out TypeRef? pt))
+            {
                 return new PropertyInfo(member, pt.IsCollection ? $"[{pt.Name}]" : pt.Name, t);
-            if (_bases.TryGetValue(t, out var bases))
-                foreach (var b in bases) stack.Push(b);
+            }
+
+            if (_bases.TryGetValue(t, out HashSet<string>? bases))
+            {
+                foreach (string b in bases)
+                {
+                    stack.Push(b);
+                }
+            }
         }
         return null;
     }
@@ -639,21 +867,37 @@ public sealed partial class TypeChecker
     /// <summary>Enumerates all properties of a type, including inherited ones (deduped by name).</summary>
     internal IReadOnlyList<PropertyInfo> AllProperties(string typeName)
     {
-        var result = new List<PropertyInfo>();
-        var seenProp = new HashSet<string>(StringComparer.Ordinal);
-        var seenType = new HashSet<string>(StringComparer.Ordinal);
-        var stack = new Stack<string>();
+        List<PropertyInfo> result = new List<PropertyInfo>();
+        HashSet<string> seenProp = new HashSet<string>(StringComparer.Ordinal);
+        HashSet<string> seenType = new HashSet<string>(StringComparer.Ordinal);
+        Stack<string> stack = new Stack<string>();
         stack.Push(typeName);
         while (stack.Count > 0)
         {
-            var t = stack.Pop();
-            if (!seenType.Add(t)) continue;
-            if (_props.TryGetValue(t, out var props))
-                foreach (var kv in props)
+            string t = stack.Pop();
+            if (!seenType.Add(t))
+            {
+                continue;
+            }
+
+            if (_props.TryGetValue(t, out Dictionary<string, TypeRef>? props))
+            {
+                foreach (KeyValuePair<string, TypeRef> kv in props)
+                {
                     if (seenProp.Add(kv.Key))
+                    {
                         result.Add(new PropertyInfo(kv.Key, kv.Value.IsCollection ? $"[{kv.Value.Name}]" : kv.Value.Name, t));
-            if (_bases.TryGetValue(t, out var bases))
-                foreach (var b in bases) stack.Push(b);
+                    }
+                }
+            }
+
+            if (_bases.TryGetValue(t, out HashSet<string>? bases))
+            {
+                foreach (string b in bases)
+                {
+                    stack.Push(b);
+                }
+            }
         }
         return result;
     }
@@ -661,27 +905,35 @@ public sealed partial class TypeChecker
     /// <summary>Signature info for a declared predicate or function (first overload).</summary>
     internal CallableInfo? Callable(string name)
     {
-        if (!_funcs.TryGetValue(name, out var sigs) || sigs.Count == 0) return null;
+        if (!_funcs.TryGetValue(name, out List<Sig>? sigs) || sigs.Count == 0)
+        {
+            return null;
+        }
+
         return ToCallableInfo(name, sigs[0]);
     }
 
     /// <summary>Signature info for EVERY overload of a declared predicate or function.</summary>
     internal IReadOnlyList<CallableInfo> AllCallables(string name)
     {
-        if (!_funcs.TryGetValue(name, out var sigs)) return [];
+        if (!_funcs.TryGetValue(name, out List<Sig>? sigs))
+        {
+            return [];
+        }
+
         return sigs.Select(sig => ToCallableInfo(name, sig)).ToList();
     }
 
     private CallableInfo ToCallableInfo(string name, Sig sig)
     {
-        var pars = sig.Params.Select(p => p is null ? null : (p.IsCollection ? $"[{p.Name}]" : p.Name)).ToList();
+        List<string?> pars = sig.Params.Select(p => p is null ? null : (p.IsCollection ? $"[{p.Name}]" : p.Name)).ToList();
         string? ret = sig.Return is null ? null : (sig.Return.IsCollection ? $"[{sig.Return.Name}]" : sig.Return.Name);
         return new CallableInfo(name, sig.IsPredicate, pars, ret, _narrowings.ContainsKey(name));
     }
 
     internal TypeInfo? TopLevelLet(string name, out bool found)
     {
-        if (_topLevelLets.TryGetValue(name, out var it))
+        if (_topLevelLets.TryGetValue(name, out IT? it))
         {
             found = true;
             return it is null ? null : new TypeInfo(it.Name, it.IsCollection);

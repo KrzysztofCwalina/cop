@@ -1,3 +1,5 @@
+// Represents type declarations, members, inheritance, and source identity.
+
 namespace Cop.Providers.SourceModel;
 
 public record TypeDeclaration(

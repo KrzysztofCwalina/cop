@@ -1,3 +1,5 @@
+// Checks release versions and persists throttled update reminders for interactive users.
+
 using System.Globalization;
 using System.Net.Http;
 using System.Reflection;
@@ -30,13 +32,24 @@ internal static class VersionNotifier
         try
         {
             // Interactive only: skip in pipes/redirects/CI so we never pollute captured output.
-            if (Console.IsErrorRedirected) return;
-            var current = Assembly.GetExecutingAssembly().GetName().Version;
-            if (current is null) return;
+            if (Console.IsErrorRedirected)
+            {
+                return;
+            }
 
-            var path = StatePath();
-            var (newState, messages) = Run(ReadState(path), current, DateTime.UtcNow, TryFetchLatestTag);
-            foreach (var m in messages) WriteColored(m.Color, m.Text);
+            Version? current = Assembly.GetExecutingAssembly().GetName().Version;
+            if (current is null)
+            {
+                return;
+            }
+
+            string path = StatePath();
+            (State? newState, List<Message>? messages) = Run(ReadState(path), current, DateTime.UtcNow, TryFetchLatestTag);
+            foreach (Message m in messages)
+            {
+                WriteColored(m.Color, m.Text);
+            }
+
             WriteState(path, newState);
         }
         catch
@@ -53,20 +66,25 @@ internal static class VersionNotifier
     internal static (State NewState, List<Message> Messages) Run(
         State state, Version current, DateTime now, Func<string?> fetchLatest)
     {
-        var messages = new List<Message>();
+        List<Message> messages = new List<Message>();
 
         // Throttled remote check + persistent "update available" reminder.
-        var lastCheck = state.LastCheck;
-        var latestTag = state.LatestTag;
+        DateTime? lastCheck = state.LastCheck;
+        string? latestTag = state.LatestTag;
         if (ShouldCheckRemote(lastCheck, now))
         {
-            var fetched = fetchLatest();
+            string? fetched = fetchLatest();
             lastCheck = now;                       // throttle even on failure
-            if (fetched is not null) latestTag = fetched;
+            if (fetched is not null)
+            {
+                latestTag = fetched;
+            }
         }
         if (IsUpdateAvailable(latestTag, current))
+        {
             messages.Add(new Message(ConsoleColor.Yellow,
                 $"a new version of cop is available ({latestTag}). run 'cop update' to upgrade."));
+        }
 
         return (new State(lastCheck, latestTag), messages);
     }
@@ -84,10 +102,18 @@ internal static class VersionNotifier
     /// <summary>Parses a version string or "v"-prefixed tag (e.g. "v2026.6.22.4"). Null if invalid.</summary>
     internal static Version? ParseVersion(string? s)
     {
-        if (string.IsNullOrWhiteSpace(s)) return null;
+        if (string.IsNullOrWhiteSpace(s))
+        {
+            return null;
+        }
+
         s = s.Trim();
-        if (s.Length > 0 && (s[0] == 'v' || s[0] == 'V')) s = s[1..];
-        return Version.TryParse(s, out var v) ? v : null;
+        if (s.Length > 0 && (s[0] == 'v' || s[0] == 'V'))
+        {
+            s = s[1..];
+        }
+
+        return Version.TryParse(s, out Version? v) ? v : null;
     }
 
     // ── Output ───────────────────────────────────────────────────────────────
@@ -99,7 +125,7 @@ internal static class VersionNotifier
             Console.Error.WriteLine(text);
             return;
         }
-        var prev = Console.ForegroundColor;
+        ConsoleColor prev = Console.ForegroundColor;
         try
         {
             Console.ForegroundColor = color.Value;
@@ -120,14 +146,21 @@ internal static class VersionNotifier
     {
         try
         {
-            if (!File.Exists(path)) return new State(null, null);
-            using var doc = JsonDocument.Parse(File.ReadAllText(path));
-            var root = doc.RootElement;
+            if (!File.Exists(path))
+            {
+                return new State(null, null);
+            }
+
+            using JsonDocument doc = JsonDocument.Parse(File.ReadAllText(path));
+            JsonElement root = doc.RootElement;
             DateTime? last = null;
-            if (root.TryGetProperty("lastCheck", out var lc) && lc.ValueKind == JsonValueKind.String &&
-                DateTime.TryParse(lc.GetString(), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var d))
+            if (root.TryGetProperty("lastCheck", out JsonElement lc) && lc.ValueKind == JsonValueKind.String &&
+                DateTime.TryParse(lc.GetString(), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out DateTime d))
+            {
                 last = d.ToUniversalTime();
-            var tag = root.TryGetProperty("latestTag", out var t) && t.ValueKind == JsonValueKind.String ? t.GetString() : null;
+            }
+
+            string? tag = root.TryGetProperty("latestTag", out JsonElement t) && t.ValueKind == JsonValueKind.String ? t.GetString() : null;
             return new State(last, tag);
         }
         catch
@@ -158,14 +191,18 @@ internal static class VersionNotifier
     {
         try
         {
-            using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(2) };
+            using HttpClient http = new HttpClient { Timeout = TimeSpan.FromSeconds(2) };
             http.DefaultRequestHeaders.UserAgent.ParseAdd("cop-version-notifier/1.0");
-            var url = $"https://api.github.com/repos/{RepoOwner}/{RepoName}/releases/latest";
-            using var resp = http.GetAsync(url).GetAwaiter().GetResult();
-            if (!resp.IsSuccessStatusCode) return null;
-            var json = resp.Content.ReadAsStringAsync().GetAwaiter().GetResult();
-            using var doc = JsonDocument.Parse(json);
-            return doc.RootElement.TryGetProperty("tag_name", out var t) ? t.GetString() : null;
+            string url = $"https://api.github.com/repos/{RepoOwner}/{RepoName}/releases/latest";
+            using HttpResponseMessage resp = http.GetAsync(url).GetAwaiter().GetResult();
+            if (!resp.IsSuccessStatusCode)
+            {
+                return null;
+            }
+
+            string json = resp.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+            using JsonDocument doc = JsonDocument.Parse(json);
+            return doc.RootElement.TryGetProperty("tag_name", out JsonElement t) ? t.GetString() : null;
         }
         catch
         {

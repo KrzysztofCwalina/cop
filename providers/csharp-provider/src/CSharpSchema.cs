@@ -1,3 +1,5 @@
+// Extends the common code schema with C# declaration and control-flow facts.
+
 using Cop.Core;
 
 namespace Cop.Providers;
@@ -16,9 +18,9 @@ public static class CSharpSchema
 
     private static ProviderSchema Build()
     {
-        var baseSchema = CodeSchema.Get();
+        ProviderSchema baseSchema = CodeSchema.Get();
 
-        var types = new List<ProviderTypeSchema>(baseSchema.Types)
+        List<ProviderTypeSchema> types = new List<ProviderTypeSchema>(baseSchema.Types)
         {
             new()
             {
@@ -65,6 +67,7 @@ public static class CSharpSchema
                     new ProviderPropertySchema { Name = "IsGoto", Type = "bool" },
                     new ProviderPropertySchema { Name = "IsAwaitForeach", Type = "bool" },
                     new ProviderPropertySchema { Name = "HasCatchFilter", Type = "bool" },
+                    new ProviderPropertySchema { Name = "IsUsingResource", Type = "bool" },
                 ],
             },
         };

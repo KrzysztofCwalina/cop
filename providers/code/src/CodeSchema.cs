@@ -1,3 +1,5 @@
+// Defines the language-independent code-model schema.
+
 using Cop.Core;
 using Cop.Providers.SourceModel;
 
@@ -48,7 +50,7 @@ public static class CodeSchema
                     Coll("Fields", "Field"), Coll("Properties", "Property"), Coll("Events", "Event")),
 
                 TypeDef("Method", null,
-                    Prop("Name"),
+                    Prop("Name"), Prop("Kind"),
                     Opt("ReceiverType"), Coll("TypeParameters"),
                     Opt("Column", "int"), Opt("EndLine", "int"), Opt("EndColumn", "int"),
                     Prop("Modifiers", "int"),
@@ -87,7 +89,7 @@ public static class CodeSchema
 
                 TypeDef("TypeReference", null,
                     Prop("Name"), Opt("Namespace"),
-                    Bool("Generic"), Coll("GenericArguments", "TypeReference"),
+                    Bool("Generic"), Bool("IsAnonymous"), Coll("GenericArguments", "TypeReference"),
                     Prop("Length", "int")),
 
                 TypeDef("Statement", null,
@@ -104,11 +106,11 @@ public static class CodeSchema
                     Opt("File", "File"), Prop("Source"),
                     Opt("Method", "Method"), Opt("Parent", "Statement"),
                     Coll("Children", "Statement"), Coll("Ancestors", "Statement"),
-                    Opt("Condition"), Opt("Expression"),
+                    Opt("Condition"), Opt("Expression"), Opt("ConditionExpression", "CodeExpression"),
                     Coll("ConstructedTypeInterfaces")),
 
                 TypeDef("CodeExpression", null,
-                    Prop("Kind"), Opt("Name"), Opt("StringValue"),
+                    Prop("Kind"), Opt("Name"), Opt("StringValue"), Opt("BooleanValue", "bool"),
                     Opt("Target", "CodeExpression"), Coll("Children", "CodeExpression")),
 
                 TypeDef("CallableReference", null,
@@ -119,7 +121,10 @@ public static class CodeSchema
 
                 TypeDef("Line", null,
                     Prop("Text"), Prop("Number", "int"), Prop("Kind"), Opt("File", "File"), Prop("Source"),
-                    Prop("PreviousText"), Prop("NextText")),
+                    Prop("PreviousText"), Prop("NextText"), Coll("Comments", "Comment")),
+
+                TypeDef("Comment", null,
+                    Prop("Kind"), Prop("Content"), Prop("Line", "int")),
 
                 TypeDef("File", null,
                     Prop("Path"), Opt("FullPath"), Opt("SourceRoot"), Opt("Language"), Opt("Namespace"),

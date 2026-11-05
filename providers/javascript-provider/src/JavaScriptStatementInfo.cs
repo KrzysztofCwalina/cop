@@ -1,3 +1,5 @@
+// Restores JavaScript-specific statement identities when reading cached source models.
+
 namespace Cop.Providers.SourceModel;
 
 /// <summary>
@@ -6,6 +8,9 @@ namespace Cop.Providers.SourceModel;
 /// </summary>
 public sealed class JavaScriptStatementInfo : StatementInfo
 {
+    /// <summary>
+    /// Creates a JavaScript statement from parsed syntax and source facts.
+    /// </summary>
     public JavaScriptStatementInfo(
         string kind, List<string> keywords, string? typeName, string? memberName,
         List<string> arguments, int line, bool isInMethod)
@@ -26,10 +31,15 @@ public sealed class JavaScriptStatementInfo : StatementInfo
     /// <summary>True for a JavaScript <c>try</c> statement.</summary>
     public bool IsTryCatch => Kind == "try";
 
+    /// <inheritdoc />
     public override string? LanguageTag => "javascript";
 
+    /// <inheritdoc />
     public override IReadOnlyList<KeyValuePair<string, bool>>? LanguageFlags => [];
 
+    /// <summary>
+    /// Registers restoration of JavaScript statements from cached source facts.
+    /// </summary>
     public static void RegisterCacheFactory() =>
         StatementTypeRegistry.Register("javascript", (baseDecl, _) => new JavaScriptStatementInfo(
             baseDecl.Kind,

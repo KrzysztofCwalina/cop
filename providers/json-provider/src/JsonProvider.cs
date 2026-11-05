@@ -1,3 +1,5 @@
+// Parses JSON documents into queryable provider objects with source provenance.
+
 using System.Text;
 using System.Text.Json;
 using Cop.Core;
@@ -13,10 +15,11 @@ namespace Cop.Providers;
 /// </summary>
 public sealed class JsonProvider : DataProvider
 {
+    /// <inheritdoc />
     public override ReadOnlyMemory<byte> GetSchema()
     {
-        using var ms = new MemoryStream();
-        using var w = new Utf8JsonWriter(ms);
+        using MemoryStream ms = new MemoryStream();
+        using Utf8JsonWriter w = new Utf8JsonWriter(ms);
         w.WriteStartObject();
         w.WriteStartArray("types");
         w.WriteEndArray();
@@ -31,22 +34,29 @@ public sealed class JsonProvider : DataProvider
         return ms.ToArray();
     }
 
+    /// <inheritdoc />
     public override object? Query(ProviderQuery query)
     {
         if (string.IsNullOrEmpty(query.RootPath))
+        {
             return null;
+        }
 
-        var filePath = query.RootPath;
+        string filePath = query.RootPath;
 
         // If RootPath is a directory (startup query), return empty — JSON loads on-demand
         if (Directory.Exists(filePath))
+        {
             return null;
+        }
 
         if (!File.Exists(filePath))
+        {
             throw new FileNotFoundException($"JSON file not found: '{filePath}'");
+        }
 
-        var json = File.ReadAllBytes(filePath);
-        var items = ParseJson(json);
+        byte[] json = File.ReadAllBytes(filePath);
+        List<object> items = ParseJson(json);
         ExecutionStatistics.RecordInputFile(filePath);
 
         // Apply filter pushdown if present
@@ -64,39 +74,48 @@ public sealed class JsonProvider : DataProvider
 
     private static object? GetFieldValue(object item, string propertyName)
     {
-        if (item is DataObject dataObj && dataObj.Fields.TryGetValue(propertyName, out var value))
+        if (item is DataObject dataObj && dataObj.Fields.TryGetValue(propertyName, out object? value))
+        {
             return value;
+        }
+
         return null;
     }
 
     private static List<object> ParseJson(byte[] utf8Json)
     {
-        using var doc = JsonDocument.Parse(utf8Json);
-        var root = doc.RootElement;
+        using JsonDocument doc = JsonDocument.Parse(utf8Json);
+        JsonElement root = doc.RootElement;
 
         if (root.ValueKind == JsonValueKind.Array)
         {
-            var items = new List<object>();
-            foreach (var elem in root.EnumerateArray())
+            List<object> items = new List<object>();
+            foreach (JsonElement elem in root.EnumerateArray())
             {
                 if (elem.ValueKind == JsonValueKind.Object)
+                {
                     items.Add(ElementToDataObject(elem));
+                }
                 else
+                {
                     items.Add(ElementToValue(elem));
+                }
             }
             return items;
         }
 
         if (root.ValueKind == JsonValueKind.Object)
+        {
             return [ElementToDataObject(root)];
+        }
 
         return [ElementToValue(root)];
     }
 
     private static DataObject ElementToDataObject(JsonElement elem)
     {
-        var fields = new Dictionary<string, object?>(StringComparer.Ordinal);
-        foreach (var prop in elem.EnumerateObject())
+        Dictionary<string, object?> fields = new Dictionary<string, object?>(StringComparer.Ordinal);
+        foreach (JsonProperty prop in elem.EnumerateObject())
         {
             fields[prop.Name] = ElementToValue(prop.Value);
         }
@@ -106,7 +125,7 @@ public sealed class JsonProvider : DataProvider
     private static object ElementToValue(JsonElement elem) => elem.ValueKind switch
     {
         JsonValueKind.String => elem.GetString() ?? "",
-        JsonValueKind.Number when elem.TryGetInt32(out var i) => i,
+        JsonValueKind.Number when elem.TryGetInt32(out int i) => i,
         JsonValueKind.Number => elem.GetDouble(),
         JsonValueKind.True => true,
         JsonValueKind.False => false,
@@ -118,13 +137,17 @@ public sealed class JsonProvider : DataProvider
 
     private static List<object> ParseNestedArray(JsonElement elem)
     {
-        var items = new List<object>();
-        foreach (var child in elem.EnumerateArray())
+        List<object> items = new List<object>();
+        foreach (JsonElement child in elem.EnumerateArray())
         {
             if (child.ValueKind == JsonValueKind.Object)
+            {
                 items.Add(ElementToDataObject(child));
+            }
             else
+            {
                 items.Add(ElementToValue(child));
+            }
         }
         return items;
     }

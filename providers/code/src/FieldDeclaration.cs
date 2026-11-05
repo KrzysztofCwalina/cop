@@ -1,3 +1,5 @@
+// Represents field declarations, types, and modifiers.
+
 namespace Cop.Providers.SourceModel;
 
 public record FieldDeclaration(string Name, TypeReference? Type, Modifier Modifiers, int Line)

@@ -1,3 +1,5 @@
+// Captures changed files and source ranges for revision-based analysis.
+
 using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
@@ -34,33 +36,54 @@ public sealed partial class ChangeSnapshot
     {
         options.Validate();
         if (options.Scope == "full")
+        {
             throw new InvalidOperationException("Full-scope reviews do not have a change snapshot.");
+        }
+
         this.options = options;
         this.command = command;
         logger = log ?? (_ => { });
         RootPath = Path.GetFullPath(rootPath);
         if (!Directory.Exists(RootPath))
+        {
             throw new InvalidOperationException($"The review target directory does not exist: {RootPath}");
+        }
+
         RejectReparsePoints(RootPath);
         RepositoryRoot = Path.GetFullPath(RequireGitAt(RootPath, "rev-parse", "--show-toplevel").TrimEnd('\r', '\n'));
         if (!IsWithin(RootPath, RepositoryRoot))
+        {
             throw new InvalidOperationException("The review target must be inside the Git worktree.");
+        }
+
         targetPrefix = Normalize(Path.GetRelativePath(RepositoryRoot, RootPath));
         if (targetPrefix == ".")
+        {
             targetPrefix = "";
+        }
+
         if (Git("rev-parse", "--is-shallow-repository").Trim() == "true")
+        {
             throw new InvalidOperationException("Change-scoped review requires complete history. Run git fetch --unshallow, then retry.");
+        }
+
         HeadCommit = ResolveCommit("HEAD");
         initialGitState = CaptureGitState();
         if (options.Pr is not null)
         {
             pullRequest = LoadPullRequest();
             if (!string.Equals(HeadCommit, pullRequest.Head, StringComparison.OrdinalIgnoreCase))
+            {
                 throw new InvalidOperationException(
                     $"PR review requires its exact head {pullRequest.Head}; the current HEAD is {HeadCommit}. Check out the PR explicitly, then retry.");
+            }
+
             if (Git("status", "--porcelain=v1", "-z", "--untracked-files=all", "--", TargetPathspec).Length != 0)
+            {
                 throw new InvalidOperationException("PR review requires a clean target, including nonignored untracked files. Commit or move local edits; no checkout or stash was performed.");
-            var remote = FindPullRequestRemote(pullRequest);
+            }
+
+            string remote = FindPullRequestRemote(pullRequest);
             EnsurePullRequestCommit(pullRequest.Base, remote, pullRequest.Base);
             EnsurePullRequestCommit(pullRequest.Head, remote, $"refs/pull/{pullRequest.Number}/head");
             BaseCommit = MergeBase(pullRequest.Base, pullRequest.Head);
@@ -70,24 +93,29 @@ public sealed partial class ChangeSnapshot
             BaseCommit = MergeBase(ResolveCommit(options.Base ?? DiscoverDefaultBase()), HeadCommit);
         }
 
-        foreach (var path in CandidatePaths())
+        foreach (string path in CandidatePaths())
         {
             if (!IsEligible(path))
+            {
                 continue;
-            var fullPath = ResolveRepositoryPath(path);
+            }
+
+            string fullPath = ResolveRepositoryPath(path);
             RejectReparsePoints(fullPath);
             fingerprints[path] = Fingerprint(fullPath);
         }
         Files = Array.AsReadOnly(BuildChanges().ToArray());
         AssertUnchanged();
-        var mode = pullRequest is null ? "branch" : "pr";
-        var localEditPolicy = pullRequest is null
+        string mode = pullRequest is null ? "branch" : "pr";
+        string localEditPolicy = pullRequest is null
             ? "included (staged, unstaged, nonignored untracked)"
             : "excluded (exact PR head; clean target required)";
         Log($"Change-scoped review: mode={mode}; scope={options.Scope}; base={BaseCommit}; head={HeadCommit}; "
             + $"local edits={localEditPolicy}; files={Files.Count}; hunks={Files.Sum(file => file.Ranges.Count)}.");
         if (Files.Count == 0)
+        {
             Log("Change-scoped review: no applicable changes (zero eligible changed files); no change-scoped review performed; no full-scope fallback.");
+        }
     }
 
     public string RepositoryRoot { get; }
@@ -103,29 +131,43 @@ public sealed partial class ChangeSnapshot
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
         RejectTraversal(path);
-        var fullPath = Path.GetFullPath(path, RootPath);
+        string fullPath = Path.GetFullPath(path, RootPath);
         if (!IsWithin(fullPath, RootPath))
+        {
             throw new InvalidOperationException("The finding path is outside the review target.");
+        }
+
         RejectReparsePoints(fullPath);
-        var relative = Normalize(Path.GetRelativePath(RepositoryRoot, fullPath));
+        string relative = Normalize(Path.GetRelativePath(RepositoryRoot, fullPath));
         if (!IsEligible(relative))
+        {
             throw new InvalidOperationException("The finding path is excluded from source access.");
+        }
+
         return relative;
     }
 
     public bool IsChanged(string path, int line)
     {
-        var relative = ToRepositoryPath(path);
-        foreach (var file in Files)
+        string relative = ToRepositoryPath(path);
+        foreach (ChangedFile file in Files)
         {
             if (!PathComparer.Equals(file.Path, relative) && !PathComparer.Equals(file.OldPath, relative))
+            {
                 continue;
+            }
+
             if (line <= 0 || file.IsDeleted)
+            {
                 return true;
+            }
+
             if (file.Ranges.Any(range => range.NewCount == 0
                 ? line == Math.Max(1, range.NewStart)
                 : line >= range.NewStart && (long)line < (long)range.NewStart + range.NewCount))
+            {
                 return true;
+            }
         }
         return false;
     }
@@ -134,19 +176,29 @@ public sealed partial class ChangeSnapshot
     {
         if (!string.Equals(ResolveCommit("HEAD"), HeadCommit, StringComparison.Ordinal)
             || CaptureGitState() != initialGitState)
-            throw Stale();
-        var paths = CandidatePaths().Where(IsEligible).ToHashSet(PathComparer);
-        if (!paths.SetEquals(fingerprints.Keys))
-            throw Stale();
-        foreach (var (path, fingerprint) in fingerprints)
         {
-            var fullPath = ResolveRepositoryPath(path);
+            throw Stale();
+        }
+
+        HashSet<string> paths = CandidatePaths().Where(IsEligible).ToHashSet(PathComparer);
+        if (!paths.SetEquals(fingerprints.Keys))
+        {
+            throw Stale();
+        }
+
+        foreach ((string? path, string? fingerprint) in fingerprints)
+        {
+            string fullPath = ResolveRepositoryPath(path);
             RejectReparsePoints(fullPath);
             if (Fingerprint(fullPath) != fingerprint)
+            {
                 throw Stale();
+            }
         }
         if (pullRequest is not null && LoadPullRequest() != pullRequest)
+        {
             throw new InvalidOperationException("The PR base/head metadata changed during review. Discard the review and retry.");
+        }
     }
 
     private string TargetPathspec => targetPrefix.Length == 0 ? "." : $":(literal){targetPrefix}";
@@ -157,24 +209,30 @@ public sealed partial class ChangeSnapshot
 
     private List<ChangedFile> BuildChanges()
     {
-        var result = new List<ChangedFile>();
-        var tokens = SplitNull(Git("diff", "--no-ext-diff", "--no-textconv", "--name-status", "-z",
+        List<ChangedFile> result = new List<ChangedFile>();
+        string[] tokens = SplitNull(Git("diff", "--no-ext-diff", "--no-textconv", "--name-status", "-z",
             "--find-renames", BaseCommit, "--", TargetPathspec));
         long patchBytes = 0;
-        var excluded = 0;
-        for (var index = 0; index < tokens.Length;)
+        int excluded = 0;
+        for (int index = 0; index < tokens.Length;)
         {
-            var rawStatus = tokens[index++];
+            string rawStatus = tokens[index++];
             if (index >= tokens.Length)
+            {
                 throw new InvalidOperationException("Git returned an incomplete changed-file record.");
-            var path = tokens[index++];
+            }
+
+            string path = tokens[index++];
             string? oldPath = null;
-            var status = rawStatus[..1];
+            string status = rawStatus[..1];
             if (status is "R" or "C")
             {
                 oldPath = path;
                 if (index >= tokens.Length)
+                {
                     throw new InvalidOperationException("Git returned an incomplete rename record.");
+                }
+
                 path = tokens[index++];
             }
             if (!IsEligible(path) || (oldPath is not null && !IsEligible(oldPath)))
@@ -184,25 +242,28 @@ public sealed partial class ChangeSnapshot
             }
             RejectReparsePoints(ResolveRepositoryPath(path));
             if (oldPath is not null)
+            {
                 RejectReparsePoints(ResolveRepositoryPath(oldPath));
-            var paths = oldPath is null ? new[] { path } : new[] { oldPath, path };
+            }
+
+            string[] paths = oldPath is null ? new[] { path } : new[] { oldPath, path };
             // Zero-context hunks define exact ranges; the separately retained patch includes context.
-            var patch = DiffWithContext(3, paths);
-            var ranges = ParseRanges(DiffWithContext(0, paths));
+            string patch = DiffWithContext(3, paths);
+            IReadOnlyList<ChangedRange> ranges = ParseRanges(DiffWithContext(0, paths));
             Add(new(path, oldPath, status, patch, ranges, IsBinaryPatch(patch)));
         }
-        foreach (var path in SplitNull(Git("ls-files", "-z", "--others", "--exclude-standard", "--", TargetPathspec)))
+        foreach (string path in SplitNull(Git("ls-files", "-z", "--others", "--exclude-standard", "--", TargetPathspec)))
         {
             if (!IsEligible(path))
             {
                 excluded++;
                 continue;
             }
-            var fullPath = ResolveRepositoryPath(path);
+            string fullPath = ResolveRepositoryPath(path);
             RejectReparsePoints(fullPath);
-            var bytes = ReadFileBounded(fullPath);
+            byte[] bytes = ReadFileBounded(fullPath);
             EnsureFingerprint(path, bytes);
-            var binary = !TryText(bytes, out var source);
+            bool binary = !TryText(bytes, out string? source);
             if (binary)
             {
                 Add(new(path, null, "A", $"Binary file added: {path}\n", Array.Empty<ChangedRange>(), true));
@@ -210,31 +271,42 @@ public sealed partial class ChangeSnapshot
             }
             // A patch retains original CRs/BOMs and missing-final-newline information.
             source = StrictUtf8.GetString(bytes);
-            var lines = source.Length == 0 ? Array.Empty<string>() : source.Split('\n');
+            string[] lines = source.Length == 0 ? Array.Empty<string>() : source.Split('\n');
             if (lines.Length != 0 && lines[^1].Length == 0)
+            {
                 lines = lines[..^1];
-            var patch = $"diff --git {QuotePatchPath("a/" + path)} {QuotePatchPath("b/" + path)}\nnew file mode 100644\n";
+            }
+
+            string patch = $"diff --git {QuotePatchPath("a/" + path)} {QuotePatchPath("b/" + path)}\nnew file mode 100644\n";
             if (lines.Length != 0)
             {
                 patch += $"--- /dev/null\n+++ {QuotePatchPath("b/" + path)}\n@@ -0,0 +1,{lines.Length} @@\n"
                     + string.Join('\n', lines.Select(line => "+" + line)) + "\n";
                 if (!source.EndsWith('\n'))
+                {
                     patch += "\\ No newline at end of file\n";
+                }
             }
             Add(new(path, null, "A", patch,
                 lines.Length == 0 ? Array.Empty<ChangedRange>()
                     : Array.AsReadOnly(new[] { new ChangedRange(0, 0, 1, lines.Length) }), false));
         }
         if (excluded != 0)
+        {
             Log($"Change-scoped review: excluded {excluded} changed paths outside the eligible source set (generated, sensitive, or outside target).");
+        }
+
         return result.OrderBy(file => file.Path, StringComparer.Ordinal).ToList();
 
         void Add(ChangedFile file)
         {
             patchBytes += Encoding.UTF8.GetByteCount(file.Patch);
             if (result.Count >= MaxChangedFiles || patchBytes > MaxPatchBytes)
+            {
                 throw new InvalidOperationException(
                     $"The change exceeds the review limits ({MaxChangedFiles} files / {MaxPatchBytes} patch bytes). Narrow the target or split the change; no patch was truncated.");
+            }
+
             result.Add(file);
         }
     }
@@ -245,16 +317,22 @@ public sealed partial class ChangeSnapshot
 
     internal static IReadOnlyList<ChangedRange> ParseRanges(string patch)
     {
-        var ranges = new List<ChangedRange>();
-        foreach (var line in patch.Split('\n'))
+        List<ChangedRange> ranges = new List<ChangedRange>();
+        foreach (string line in patch.Split('\n'))
         {
             if (!line.StartsWith("@@", StringComparison.Ordinal))
+            {
                 continue;
-            var parts = line.Split(' ', 4, StringSplitOptions.None);
+            }
+
+            string[] parts = line.Split(' ', 4, StringSplitOptions.None);
             if (parts.Length != 4 || parts[0] != "@@" || !parts[3].StartsWith("@@", StringComparison.Ordinal))
+            {
                 throw InvalidHunk();
-            var oldRange = ParseHunkRange(parts[1], '-');
-            var newRange = ParseHunkRange(parts[2], '+');
+            }
+
+            (int Start, int Count) oldRange = ParseHunkRange(parts[1], '-');
+            (int Start, int Count) newRange = ParseHunkRange(parts[2], '+');
             ranges.Add(new(oldRange.Start, oldRange.Count, newRange.Start, newRange.Count));
         }
         return ranges.AsReadOnly();
@@ -263,14 +341,23 @@ public sealed partial class ChangeSnapshot
     private static (int Start, int Count) ParseHunkRange(string value, char sign)
     {
         if (value.Length < 2 || value[0] != sign)
+        {
             throw InvalidHunk();
-        var comma = value.IndexOf(',');
-        var startText = comma < 0 ? value.AsSpan(1) : value.AsSpan(1, comma - 1);
-        if (!int.TryParse(startText, NumberStyles.None, CultureInfo.InvariantCulture, out var start))
+        }
+
+        int comma = value.IndexOf(',');
+        ReadOnlySpan<char> startText = comma < 0 ? value.AsSpan(1) : value.AsSpan(1, comma - 1);
+        if (!int.TryParse(startText, NumberStyles.None, CultureInfo.InvariantCulture, out int start))
+        {
             throw InvalidHunk();
-        var count = 1;
+        }
+
+        int count = 1;
         if (comma >= 0 && !int.TryParse(value.AsSpan(comma + 1), NumberStyles.None, CultureInfo.InvariantCulture, out count))
+        {
             throw InvalidHunk();
+        }
+
         return (start, count);
     }
 
@@ -297,31 +384,45 @@ public sealed partial class ChangeSnapshot
 
     private string MergeBase(string first, string second)
     {
-        var bases = RequireGit("merge-base", "--all", first, second).Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        string[] bases = RequireGit("merge-base", "--all", first, second).Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         if (bases.Length != 1)
+        {
             throw new InvalidOperationException("The comparison has no unique merge base. Fetch complete history or choose an unambiguous --base.");
+        }
+
         return bases[0];
     }
 
     private string DiscoverDefaultBase()
     {
-        var remotes = Git("remote").Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-        var branch = RunGit("symbolic-ref", "--quiet", "--short", "HEAD");
+        string[] remotes = Git("remote").Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        ChangeCommandResult branch = RunGit("symbolic-ref", "--quiet", "--short", "HEAD");
         string? remote = null;
         if (branch.ExitCode == 0)
         {
-            var configured = RunGit("config", "--get", $"branch.{branch.Output.Trim()}.remote");
+            ChangeCommandResult configured = RunGit("config", "--get", $"branch.{branch.Output.Trim()}.remote");
             if (configured.ExitCode == 0 && remotes.Contains(configured.Output.Trim(), StringComparer.Ordinal))
+            {
                 remote = configured.Output.Trim();
+            }
         }
         if (remote is null && remotes.Length == 1)
+        {
             remote = remotes[0];
+        }
+
         if (remote is null)
+        {
             throw new InvalidOperationException("Cannot determine the branch's default remote unambiguously. Configure its upstream or pass --base explicitly.");
-        var symbolicHead = RunGit("symbolic-ref", "--quiet", $"refs/remotes/{remote}/HEAD");
+        }
+
+        ChangeCommandResult symbolicHead = RunGit("symbolic-ref", "--quiet", $"refs/remotes/{remote}/HEAD");
         if (symbolicHead.ExitCode != 0)
+        {
             throw new InvalidOperationException(
                 $"Remote '{remote}' has no symbolic default HEAD. Run git remote set-head {remote} --auto after fetching, or pass --base.");
+        }
+
         return symbolicHead.Output.Trim();
     }
 
@@ -332,19 +433,25 @@ public sealed partial class ChangeSnapshot
 
     private string RequireGit(params string[] arguments)
     {
-        var result = RunGit(arguments);
+        ChangeCommandResult result = RunGit(arguments);
         if (result.ExitCode != 0)
+        {
             throw new InvalidOperationException(
                 $"Git comparison failed ({arguments[0]}): {result.Error.Trim()}. Fetch the required history/refs or pass an explicit --base; full scope is never selected implicitly.");
+        }
+
         return result.Output;
     }
 
     private string RequireGitAt(string directory, params string[] arguments)
     {
-        var result = command.Run(directory, "git", arguments);
+        ChangeCommandResult result = command.Run(directory, "git", arguments);
         if (result.ExitCode != 0)
+        {
             throw new InvalidOperationException(
                 $"Change-scoped review requires a Git worktree: {result.Error.Trim()}. Use --scope full explicitly for a full review.");
+        }
+
         return result.Output;
     }
 

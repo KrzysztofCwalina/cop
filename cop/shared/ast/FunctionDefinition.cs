@@ -1,6 +1,6 @@
-namespace Cop.Lang;
+// Describes function inputs, return types, and transformation bodies.
 
-public record FunctionParameter(string Name, string TypeName);
+namespace Cop.Lang;
 
 /// <summary>
 /// A function definition that transforms items from one type to another.

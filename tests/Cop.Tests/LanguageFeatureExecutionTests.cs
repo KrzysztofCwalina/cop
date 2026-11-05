@@ -30,7 +30,11 @@ public class LanguageFeatureExecutionTests
         try
         {
             File.WriteAllText(Path.Combine(scriptsDir, "program.cop"), source);
-            var result = Engine.Run(scriptsDir, targetDir, commandName: commandName, additionalFeedPaths: [PackagesDir]);
+            var result = Engine.Run(scriptsDir, targetDir, new EngineRunOptions
+            {
+                CommandName = commandName,
+                AdditionalFeedPaths = [PackagesDir],
+            });
 
             Assert.That(result.HasParseErrors, Is.False, string.Join(Environment.NewLine, result.ParseErrors));
             Assert.That(result.HasFatalErrors, Is.False, string.Join(Environment.NewLine, result.Errors));

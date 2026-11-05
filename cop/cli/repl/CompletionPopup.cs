@@ -1,3 +1,7 @@
+// Displays and navigates completion choices in the interactive terminal editor.
+
+using System.Text;
+
 namespace Cop.Repl;
 
 /// <summary>
@@ -63,28 +67,44 @@ public class CompletionPopup
 
     public void MoveUp()
     {
-        if (!_visible || _items.Count == 0) return;
+        if (!_visible || _items.Count == 0)
+        {
+            return;
+        }
+
         _selectedIndex = (_selectedIndex - 1 + _items.Count) % _items.Count;
         EnsureVisible();
     }
 
     public void MoveDown()
     {
-        if (!_visible || _items.Count == 0) return;
+        if (!_visible || _items.Count == 0)
+        {
+            return;
+        }
+
         _selectedIndex = (_selectedIndex + 1) % _items.Count;
         EnsureVisible();
     }
 
     public void PageUp()
     {
-        if (!_visible || _items.Count == 0) return;
+        if (!_visible || _items.Count == 0)
+        {
+            return;
+        }
+
         _selectedIndex = Math.Max(0, _selectedIndex - _maxVisible);
         EnsureVisible();
     }
 
     public void PageDown()
     {
-        if (!_visible || _items.Count == 0) return;
+        if (!_visible || _items.Count == 0)
+        {
+            return;
+        }
+
         _selectedIndex = Math.Min(_items.Count - 1, _selectedIndex + _maxVisible);
         EnsureVisible();
     }
@@ -92,9 +112,13 @@ public class CompletionPopup
     private void EnsureVisible()
     {
         if (_selectedIndex < _scrollOffset)
+        {
             _scrollOffset = _selectedIndex;
+        }
         else if (_selectedIndex >= _scrollOffset + _maxVisible)
+        {
             _scrollOffset = _selectedIndex - _maxVisible + 1;
+        }
     }
 
     /// <summary>
@@ -104,10 +128,12 @@ public class CompletionPopup
     public (string Content, int Lines) Render(int cursorCol)
     {
         if (!_visible || _items.Count == 0)
+        {
             return ("", 0);
+        }
 
         int visibleCount = Math.Min(_maxVisible, _items.Count);
-        var sb = new System.Text.StringBuilder();
+        StringBuilder sb = new System.Text.StringBuilder();
 
         // Save cursor, move to next line
         sb.Append("\x1b[s"); // save cursor
@@ -162,9 +188,12 @@ public class CompletionPopup
     /// </summary>
     public string Clear(int linesUsed)
     {
-        if (linesUsed == 0) return "";
+        if (linesUsed == 0)
+        {
+            return "";
+        }
 
-        var sb = new System.Text.StringBuilder();
+        StringBuilder sb = new System.Text.StringBuilder();
         sb.Append("\x1b[s"); // save cursor
 
         for (int i = 0; i < linesUsed + 1; i++)
