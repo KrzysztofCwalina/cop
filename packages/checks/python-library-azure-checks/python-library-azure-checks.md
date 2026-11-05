@@ -1,6 +1,6 @@
 ---
 name: python-library-azure-checks
-version: 1.0.0
+version: 1.0.1
 title: Python Azure Client Library Development
 description: Azure SDK patterns for Python client library development with credential support and pipeline conventions
 authors: cop-team

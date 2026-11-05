@@ -1,6 +1,6 @@
 ---
 name: csharp-checks
-version: 1.0.0
+version: 1.0.1
 title: C# Checks
 description: C# correctness, StyleCop style, and Framework Design Guidelines checks for coding agents
 authors: cop-team

@@ -272,6 +272,16 @@
         "C# analysis detects same-length source edits even when file timestamps are preserved.",
         "Successful version-matched package recovery no longer prints the unnecessary different-version provider message."
       ]
+    },
+    {
+      "version": "2026.11.4.1",
+      "approved": true,
+      "features": [
+        "Reuse named diagnostic message templates without losing per-item interpolation.",
+        "Build project-independent structural checks with new code and C# query APIs for declarations, imports, dependencies, calls, arguments, and language facts.",
+        "C#, Python, JavaScript, Java, Go, and Rust check packages reuse the shared queries while preserving their diagnostics and rule behavior.",
+        "Repository self-checks now use clearer predicates, explicit source scopes, architectural comments, and readable 90-character lines."
+      ]
     }
   ]
 }

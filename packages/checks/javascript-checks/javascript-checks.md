@@ -1,6 +1,6 @@
 ---
 name: javascript-checks
-version: 1.0.0
+version: 1.0.1
 title: JavaScript/TypeScript Checks
 description: JavaScript and TypeScript coding conventions, correctness checks, and async/await rules for coding agents
 authors: cop-team
