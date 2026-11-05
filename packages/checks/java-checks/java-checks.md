@@ -1,6 +1,6 @@
 ---
 name: java-checks
-version: 1.0.0
+version: 1.0.1
 title: Java Checks
 description: Java coding conventions and correctness checks for coding agents
 authors: cop-team

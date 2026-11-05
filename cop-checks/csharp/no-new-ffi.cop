@@ -1,10 +1,8 @@
-# New runtime FFIs must be explicitly approved — the FFI surface must not grow silently.
-# Capabilities belong in .cop packages, not as new ffi.Register intrinsics in the language core.
-# (This is the guard that should have caught CHECK being moved into the runtime.)
+# Keep the runtime FFI small; implement domain-specific capabilities in .cop packages.
+# Test-only registrations do not expand the shipped API.
 
 import code
 
-# Approved built-in FFI names, compared to the decoded first string argument.
 let approved-ffi-names = [
     'print', 'debug', 'save', 'assert', 'fail', 'error', 'read',
     'pathMatches', 'provider', 'distinct', 'take', 'skip', 'first',
@@ -13,33 +11,20 @@ let approved-ffi-names = [
     'matches', 'length', 'isSet', 'isClear', 'Get', 'containsKey'
 ]
 
-predicate hasFfiReceiver(Statement) => Statement.CallTarget.Kind == memberAccess
-    && Statement.CallTarget.Target.Kind == identifier
-    && Statement.CallTarget.Target.Name:equals('ffi')
-
 predicate isFfiRegistration(Statement) =>
-    Statement.Kind == call
-    && Statement.MemberName:equals('Register')
-    && hasFfiReceiver
+    Statement.Kind == call &&
+    Statement.MemberName:equals('Register') &&
+    hasIdentifierReceiverIgnoringCase(Statement, 'ffi')
 
-predicate registersApprovedName(Statement) => Statement.ArgumentExpressions.Count > 0
-    && Statement.ArgumentExpressions[0].Kind == stringLiteral
-    && Statement.ArgumentExpressions[0].StringValue:in(approved-ffi-names)
+predicate hasApprovedFfiName(Statement) =>
+    hasStringArgumentIn(Statement, 0, approved-ffi-names)
 
-# Only the FFI invocation test needs to register its own non-built-in callback.
-predicate isInFfiInvocationTest(Statement) =>
-    Statement.File.Path == 'tests/lang.tests/lang/EvaluatorTests.cs'
-    && Statement.Method.Name == 'EvalForeignFunction'
+predicate isUnapprovedRegistration(Statement) =>
+    isFfiRegistration &&
+    !hasApprovedFfiName
 
-predicate registersInvocationTestCallback(Statement) => Statement.ArgumentExpressions.Count > 0
-    && Statement.ArgumentExpressions[0].Kind == stringLiteral
-    && Statement.ArgumentExpressions[0].StringValue == 'double'
+let ffi-message =
+    'Unapproved runtime function; use a .cop package or get explicit approval'
 
-predicate isApprovedFfiTestRegistration(Statement) =>
-    isInFfiInvocationTest && registersInvocationTestCallback
-
-predicate isUnapprovedFfi(Statement) =>
-    isFfiRegistration && !registersApprovedName && !isApprovedFfiTestRegistration
-
-export let no-new-ffi = codebase.Calls:isUnapprovedFfi
-    :toError('New runtime FFI registered without approval. The FFI surface must not grow — implement the capability as a .cop package, or get sign-off and add its name to approved-ffi-names.')
+export let no-new-ffi = non-test-calls:isUnapprovedRegistration
+    :toError(ffi-message)

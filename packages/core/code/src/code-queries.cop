@@ -1,0 +1,167 @@
+# Queries over parsed facts; callers choose scope, policy, and diagnostics.
+
+## Matches exact entries in File.Usings, not resolved symbol dependencies.
+export predicate importsAny(File, names: [string]) =>
+    names:any((name) => File.Usings:contains(name))
+
+## Matches parsed project-reference names supplied by the caller.
+export predicate referencesAny(Project, names: [string]) =>
+    names:any((name) => Project.References:contains(name))
+
+## Tests whether a project declares the supplied package reference.
+export predicate hasPackage(Project, name: string) =>
+    Project.Packages:contains(name)
+
+## Tests whether a project declares the supplied framework reference.
+export predicate hasFramework(Project, name: string) =>
+    Project.Frameworks:contains(name)
+
+## Tests for a parsed property; missing or omitted properties do not match.
+export predicate hasProjectProperty(Project, name: string) =>
+    Project.Properties:any((property) => property.Name:equals(name))
+
+## Tests whether any parsed declaration has the supplied property name and value.
+export predicate hasProjectPropertyValue(Project, name: string, value: string) =>
+    Project.Properties:any((property) =>
+        property.Name:equals(name) &&
+        property.Value:equals(value))
+
+## Finds a declared value different from the expected value; missing is not different.
+export predicate hasOtherProjectPropertyValue(Project, name: string, value: string) =>
+    Project.Properties:any((property) =>
+        property.Name:equals(name) &&
+        property.Value:notEquals(value))
+
+## Matches listed base names, without inferring a transitive inheritance hierarchy.
+export predicate derivesFromAny(Type, names: [string]) =>
+    names:any((name) => Type.BaseTypes:contains(name))
+
+## Matches a parsed decorator name; no framework or naming policy is implied.
+export predicate hasDecorator(Type, name: string) =>
+    Type.Decorators:contains(name)
+
+## Tests the namespace exposed by the declaring file.
+export predicate hasNamespace(Type) =>
+    Type.File != nic &&
+    Type.File.Namespace != nic &&
+    Type.File.Namespace.Length > 0
+
+## Selects interfaces outside the caller's allowlist, in any supplied language.
+## Returns declarations, not violations; the caller chooses the diagnostic.
+export function interfacesExcept(types: [Type], allowedNames: [string]) : [Type] =>
+    types.Where((candidate) =>
+        candidate.Kind == Interface &&
+        !allowedNames:contains(candidate.Name))
+
+## Matches exact, case-sensitive member names without restricting statement kind.
+export predicate hasMemberName(Statement, names: [string]) =>
+    Statement.MemberName != nic &&
+    names:any((name) => Statement.MemberName == name)
+
+## Matches parsed type names without inferring aliases or resolving symbols.
+export predicate hasTypeName(Statement, names: [string]) =>
+    Statement.TypeName != nic &&
+    names:any((name) => Statement.TypeName == name)
+
+## Matches an identifier expression, not a string containing its name.
+export predicate isIdentifier(CodeExpression, name: string) =>
+    CodeExpression.Kind == identifier &&
+    CodeExpression.Name == name
+
+## Matches an identifier with case-insensitive name comparison.
+export predicate isIdentifierIgnoringCase(CodeExpression, name: string) =>
+    CodeExpression.Kind == identifier &&
+    CodeExpression.Name:equals(name)
+
+## Matches a member directly on an identifier, such as receiver.member.
+export predicate isMemberOf(CodeExpression, receiver: string, member: string) =>
+    CodeExpression.Kind == memberAccess &&
+    CodeExpression.Name == member &&
+    CodeExpression.Target != nic &&
+    isIdentifier(CodeExpression.Target, receiver)
+
+## Matches direct member access with case-insensitive comparison of both names.
+export predicate isMemberOfIgnoringCase(
+    CodeExpression, receiver: string, member: string) =>
+    CodeExpression.Kind == memberAccess &&
+    CodeExpression.Name:equals(member) &&
+    CodeExpression.Target != nic &&
+    isIdentifierIgnoringCase(CodeExpression.Target, receiver)
+
+## Recognizes a syntactic identifier receiver; this is not symbol resolution.
+export predicate hasIdentifierReceiver(Statement, receiver: string) =>
+    Statement.CallTarget != nic &&
+    Statement.CallTarget.Kind == memberAccess &&
+    Statement.CallTarget.Target != nic &&
+    isIdentifier(Statement.CallTarget.Target, receiver)
+
+## Recognizes a syntactic identifier receiver with case-insensitive comparison.
+export predicate hasIdentifierReceiverIgnoringCase(Statement, receiver: string) =>
+    Statement.CallTarget != nic &&
+    Statement.CallTarget.Kind == memberAccess &&
+    Statement.CallTarget.Target != nic &&
+    isIdentifierIgnoringCase(Statement.CallTarget.Target, receiver)
+
+## Recognizes receiver.member.method(), with an allowed list of middle members.
+export predicate hasMemberReceiver(Statement, receiver: string, members: [string]) =>
+    Statement.CallTarget != nic &&
+    Statement.CallTarget.Kind == memberAccess &&
+    Statement.CallTarget.Target != nic &&
+    Statement.CallTarget.Target.Kind == memberAccess &&
+    members:any((member) => Statement.CallTarget.Target.Name == member) &&
+    Statement.CallTarget.Target.Target != nic &&
+    isIdentifier(Statement.CallTarget.Target.Target, receiver)
+
+## Matches a decoded string argument at a zero-based position.
+## Negative, missing, nonliteral, and unsupported arguments do not match.
+export predicate hasStringArgument(Statement, index: int, value: string) =>
+    index >= 0 &&
+    Statement.ArgumentExpressions.Count > index &&
+    Statement.ArgumentExpressions[index].Kind == stringLiteral &&
+    Statement.ArgumentExpressions[index].StringValue == value
+
+## Matches a decoded argument against a list using Cop's case-insensitive membership.
+export predicate hasStringArgumentIn(Statement, index: int, values: [string]) =>
+    index >= 0 &&
+    Statement.ArgumentExpressions.Count > index &&
+    Statement.ArgumentExpressions[index].Kind == stringLiteral &&
+    Statement.ArgumentExpressions[index].StringValue:in(values)
+
+## Matches an identifier argument at a zero-based position.
+export predicate hasIdentifierArgument(Statement, index: int, name: string) =>
+    index >= 0 &&
+    Statement.ArgumentExpressions.Count > index &&
+    isIdentifier(Statement.ArgumentExpressions[index], name)
+
+## Tests decoded string-argument contents against caller-supplied markers.
+export predicate stringArgumentContainsAny(Statement, index: int, markers: [string]) =>
+    index >= 0 &&
+    Statement.ArgumentExpressions.Count > index &&
+    stringLiteralContainsAny(Statement.ArgumentExpressions[index], markers)
+
+predicate stringLiteralContainsAny(CodeExpression, markers: [string]) =>
+    CodeExpression.Kind == stringLiteral &&
+    CodeExpression.StringValue != nic &&
+    markers:any((marker) => CodeExpression.StringValue:contains(marker))
+
+## Tests whether the parser attached no Cop suppression to a statement.
+export predicate isUnsuppressed(Statement) =>
+    Statement.CopIgnore == ''
+
+## Tests whether the parser attached no Cop suppression to a source line.
+export predicate isUnsuppressed(Line) =>
+    Line.CopIgnore == ''
+
+## Describes a generic handler with no bare rethrow; it need not have an empty body.
+export predicate isUnrethrowingGenericHandler(Statement) =>
+    Statement.ErrorHandler &&
+    Statement.Generic &&
+    !Statement.Rethrows
+
+## Tests a parameter count against a caller-supplied exclusive upper bound.
+export predicate hasParameterCountAbove(Method, limit: int) =>
+    Method.Parameters.Count > limit
+
+## Tests the supplied parsed statement count, not physical source lines.
+export predicate hasStatementCountAbove(Method, limit: int) =>
+    Method.Statements.Count > limit

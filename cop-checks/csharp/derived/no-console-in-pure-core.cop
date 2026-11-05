@@ -1,14 +1,18 @@
-# Flag Console references in the interpreter, AST, parser, tokenizer, and runtime.
-# Output goes through the output abstraction (cop/shared/output/*). Diagnostics and sinks
-# (DiagnosticFormatter, DataSink) and the CLI are the sanctioned console boundaries.
+# Route core output through the output abstraction, not Console.
 
-predicate isInConsoleFreeCore(Statement) =>
-    Statement.File.Path:contains('cop/shared/interpreter/')
-    || Statement.File.Path:contains('cop/shared/ast/')
-    || Statement.File.Path:contains('cop/shared/parser/')
-    || Statement.File.Path:contains('cop/shared/tokenizer/')
-    || Statement.File.Path:contains('cop/runtime/')
-predicate referencesConsoleType(Statement) => Statement.TypeName:equals('Console')
+predicate inSyntax(File) =>
+    File.Path:contains('cop/shared/ast/') ||
+    File.Path:contains('cop/shared/parser/') ||
+    File.Path:contains('cop/shared/tokenizer/')
+predicate referencesConsole(Statement) =>
+    Statement.TypeName:equals('Console')
 
-export let derived-no-console-in-pure-core = codebase.Statements:isInConsoleFreeCore:referencesConsoleType
-    :toError('{item.TypeName}.{item.MemberName} writes to the console in the pure core — use the output abstraction ({item.File.Path}:{item.Line})')
+let console-message =
+    '{item.TypeName}.{item.MemberName}: use the core output abstraction, not Console'
+
+export let derived-no-console-in-pure-core = codebase.Statements:referencesConsole
+    .Where(
+        inInterpreter(item.File) ||
+        inSyntax(item.File) ||
+        inRuntime(item.File))
+    :toError(console-message)

@@ -1,6 +1,6 @@
 ---
 name: csharp
-version: 1.0.0
+version: 1.1.0
 title: C# Source Language Provider
 description: C# source code parser and analyzer
 authors: cop-team
@@ -84,6 +84,22 @@ warning. Do not remove valid project settings merely to silence it.
 Active `#nullable` directives appear in `Statements` with `Kind == directive` and parsed
 `Keywords`: `nullable`, `enable`/`disable`/`restore`, and optionally `warnings`/`annotations`.
 Comments, string literals, and inactive preprocessor branches do not produce directives.
+
+## Reusable C# fact predicates
+
+`csharp.isAsyncVoid(Method)` identifies async methods returning `void`.
+`csharp.disablesNullable(Statement)` identifies active C# nullable-disable directives.
+Neither predicate chooses whether that construct is allowed or creates diagnostics.
+
+`csharp.isEnvironmentVariableAccess(Statement)` recognizes syntactic reads and writes
+through `Environment`, `System.Environment`, and `global::System.Environment`.
+`csharp.isEnvironmentVariableRead(Statement)` narrows these to `GetEnvironmentVariable`,
+including overloads with a target argument. The caller decides which reads or writes,
+names, argument counts, and locations are acceptable.
+
+These environment predicates match parsed type/member names case-insensitively; they do
+not infer using aliases or prove symbol identity. Use the `code` package's receiver and
+argument queries for other APIs, with platform conventions kept in the calling check.
 
 ---
 name: csharp-lister

@@ -1,12 +1,10 @@
-# Reject nonblank ImplicitUsings settings other than enable.
-# Empty and missing settings are not detected; this inspects parsed project properties.
+# Enable implicit usings to keep common namespace imports consistent across projects.
 
 import code
 
-predicate isNonEnabledImplicitUsingsSetting(ProjectProperty) =>
-    ProjectProperty.Name:equals('ImplicitUsings')
-    && ProjectProperty.Value:notEquals('enable')
-predicate hasNonEnabledImplicitUsings(Project) => Project.Properties:any(isNonEnabledImplicitUsingsSetting)
+let implicit-usings-message =
+    'Project {item.Name} must set <ImplicitUsings>enable</ImplicitUsings>'
 
-export let derived-implicit-usings = codebase.Projects:hasNonEnabledImplicitUsings
-    :toError('Project {item.Name} must set <ImplicitUsings>enable</ImplicitUsings>')
+export let derived-implicit-usings = codebase.Projects
+    .Where(hasOtherProjectPropertyValue(item, 'ImplicitUsings', 'enable'))
+    :toError(implicit-usings-message)

@@ -1,6 +1,6 @@
 {
   "name": "javascript-library-azure-checks",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Azure-specific patterns for JavaScript/TypeScript client SDKs following the Azure SDK design guidelines",
   "title": "Azure JavaScript/TypeScript Client Library Development",
   "authors": "cop-team",

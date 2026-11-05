@@ -35,6 +35,36 @@ public class ModuleIsolationTests
     /// their own value when their exported functions access it.
     /// </summary>
     [Test]
+    public void NamedTemplatesKeepPackagePrivateBindings()
+    {
+        CreatePackage("template-a", """
+            let prefix = 'A'
+            let message = '{prefix} {item}'
+            export function renderA(value: string) : string => message
+            """);
+        CreatePackage("template-b", """
+            let prefix = 'B'
+            let message = '{prefix} {item}'
+            export function renderB(value: string) : string => message
+            """);
+        var bridge = new LanguageBridge();
+        var loader = new ModuleLoader([_feedDir]);
+        loader.LoadPackage("template-a", bridge.Evaluator);
+        loader.LoadPackage("template-b", bridge.Evaluator);
+        var errors = new List<string>();
+        loader.EvalDeferredLetBindings(bridge.Evaluator, errors);
+        Assert.That(errors, Is.Empty, string.Join("\n", errors));
+        bridge.LoadSource("""
+            command MAIN = ['Alpha', 'Beta'].Select(renderA(item) + '|' + renderB(item))
+            """, "<test>");
+
+        var result = bridge.RunCommand("MAIN");
+
+        Assert.That(bridge.Errors, Is.Empty, string.Join("\n", bridge.Errors));
+        Assert.That(result.Display(), Is.EqualTo("[A Alpha|B Alpha, A Beta|B Beta]"));
+    }
+
+    [Test]
     public void NonExportedLetBindingsDoNotCollide()
     {
         // Package A: exports getA() which returns module-local 'data'

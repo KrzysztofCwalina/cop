@@ -1,10 +1,9 @@
-# Reject references from the runtime project to the listed provider projects.
-# filesystem-provider is allowed and deliberately absent from the forbidden list.
+# Keep the listed provider dependencies out of runtime; filesystem-provider is allowed.
 
 import code
 
-let runtime-project-names = ['runtime']
-let runtime-forbidden-provider-names = [
+let runtime-projects = ['runtime']
+let forbidden-providers = [
     'code'
     'markdown-provider'
     'csharp-provider'
@@ -16,9 +15,11 @@ let runtime-forbidden-provider-names = [
     'cop-provider'
 ]
 
-predicate isRuntimeProject(Project) => Project.Name:in(runtime-project-names)
-predicate isRuntimeForbiddenProviderName(string) => string:in(runtime-forbidden-provider-names)
-predicate referencesRuntimeForbiddenProvider(Project) => Project.References:any(isRuntimeForbiddenProviderName)
+predicate isRuntime(Project) =>
+    Project.Name:in(runtime-projects)
+let runtime-dependency-message =
+    '{item.Name} must not reference providers other than filesystem-provider'
 
-export let layering-violations = codebase.Projects:isRuntimeProject:referencesRuntimeForbiddenProvider
-    :toError('{item.Name} must not reference providers other than filesystem-provider')
+export let layering-violations = codebase.Projects:isRuntime
+    .Where(referencesAny(item, forbidden-providers))
+    :toError(runtime-dependency-message)

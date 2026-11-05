@@ -1,8 +1,11 @@
-# Reject foreach statements in cop-checks/; report violation lists through CHECK.
-# Violations are always produced with :toError/:toWarning/:toInfo and printed via CHECK.
+# Report violations with CHECK, not foreach, so failures set the exit code.
 
-predicate isForeachStatement(Statement) => Statement.Kind == foreach
-predicate isInForeachRestrictedChecksFolder(Statement) => Statement.File.Path:contains('cop-checks/')
+predicate isForeach(Statement) =>
+    Statement.Kind == foreach
 
-export let derived-no-foreach-in-checks = codebase.Statements:isForeachStatement:isInForeachRestrictedChecksFolder
-    :toError('Do not use foreach in cop-checks — use CHECK ({item.File.Path}:{item.Line})')
+let check-foreach-message =
+    'Do not use foreach in cop-checks — use CHECK ({item.File.Path}:{item.Line})'
+
+export let derived-no-foreach-in-checks = codebase.Statements:isForeach
+    .Where(inChecks(item.File))
+    :toError(check-foreach-message)

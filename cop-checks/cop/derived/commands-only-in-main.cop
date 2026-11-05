@@ -1,10 +1,15 @@
-# Allow command declarations in cop-checks/ only in files ending with main.cop.
-# Each individual check file exports a violation list; only the aggregator runs commands.
+# Keep commands in *main.cop files; individual checks only export violations.
 
-predicate isCommandDeclaration(Statement) => Statement.Kind == command
-predicate isInCommandRestrictedChecksFolder(Statement) => Statement.File.Path:contains('cop-checks/')
-predicate isOutsideMainCheckFile(Statement) => !Statement.File.Path:endsWith('main.cop')
+predicate isCommand(Statement) =>
+    Statement.Kind == command
+predicate hasMainSuffix(File) =>
+    File.Path:endsWith('main.cop')
 
-export let derived-single-command-in-checks = codebase.Statements
-    :isCommandDeclaration:isInCommandRestrictedChecksFolder:isOutsideMainCheckFile
-    :toError('Only cop-checks/main.cop may declare a command ({item.File.Path}:{item.Line})')
+let check-command-message =
+    'Only cop-checks/main.cop may declare a command ({item.File.Path}:{item.Line})'
+
+export let derived-single-command-in-checks = codebase.Statements:isCommand
+    .Where(
+        inChecks(item.File) &&
+        !hasMainSuffix(item.File))
+    :toError(check-command-message)

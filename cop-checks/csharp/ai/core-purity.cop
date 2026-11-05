@@ -1,16 +1,5 @@
-# Opt-in AI review of cop/shared/ and cop/runtime/ for code-analysis domain leakage.
-#
-# The cop CORE — the general-purpose Cop language (cop/shared/) and the runtime
-# engine (cop/runtime/) — must stay DOMAIN-AGNOSTIC. Code-analysis behavior
-# (code-review Violations, issue severities, error/warning/info reporting, checks,
-# rules, analyzers) is the job of cop PACKAGES such as code-analysis, and must
-# never be baked into the C# core.
-#
-# This LLM-based rule reviews the core's parsed source and architecture against
-# its intended responsibilities.
-#
-# Opt-in (makes a network call; needs ~/.cop/ai.json — see packages/core/ai):
-#   cop cop-checks/main.cop -t . -c ai
+# Use AI to find code-analysis logic that belongs in packages, not the core.
+# Opt-in: -c AI requires network access and ~/.cop/ai.json.
 
 import code
 import ai

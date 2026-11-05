@@ -1,8 +1,15 @@
-# Flag System.CommandLine imports outside cop/cli/, including test code.
-# The parsing/argument layer must not leak into the language, runtime, or providers.
+# Keep argument parsing in the CLI; other layers must not import System.CommandLine.
 
-predicate isOutsideCliFolder(Type) => !Type.File.Path:contains('cop/cli/')
-predicate importsSystemCommandLine(Type) => Type.File.Usings:contains('System.CommandLine')
+predicate inCli(File) =>
+    File.Path:contains('cop/cli/')
+predicate importsCommandLine(File) =>
+    importsAny(File, ['System.CommandLine'])
 
-export let derived-commandline-confined-to-cli = codebase.Types:isOutsideCliFolder:importsSystemCommandLine
-    :toError('{item.Name} uses System.CommandLine outside cop/cli ({item.File.Path})')
+let commandline-message =
+    '{item.Name} uses System.CommandLine outside cop/cli ({item.File.Path})'
+
+export let derived-commandline-confined-to-cli = codebase.Types
+    .Where(
+        !inCli(item.File) &&
+        importsCommandLine(item.File))
+    :toError(commandline-message)

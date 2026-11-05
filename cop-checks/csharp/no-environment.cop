@@ -1,75 +1,57 @@
-# Reject unreviewed environment-variable reads/writes outside tests/ and samples/.
-# Use CLI flags or config to control Cop behavior.
-# Secrets (e.g. GITHUB_TOKEN) must not be passed on a command line.
-# Reading PATH for installed-tool discovery is allowed; only the installer may update PATH.
-# Frontends may inspect reviewed toolchain context, not introduce Cop feature flags.
-#
-# Inspect parsed calls, including nested expressions. Only the decoded first argument can
-# exempt a secret name (TOKEN/SECRET/PASSWORD); comments and other arguments cannot.
-# A computed variable name is not a known secret and requires explicit review.
+# The environment supplies execution context, not a second configuration API.
 
-predicate isCSharpEnvironmentCall(Statement) => Statement.File.Language == csharp
-predicate isOutsideEnvironmentFixtures(Statement) =>
-    !Statement.File.Path:startsWith('tests/')
-    && !Statement.File.Path:startsWith('samples/')
+let allowed-calls =
+    # Keep runtime credentials separate from shareable configuration.
+    secret-calls +
+    # External dependency locations belong to the host environment.
+    tool-search-path-reads +
+    # Host setup belongs to installation, not normal execution.
+    installer-path-calls +
+    # Unsupported host context must be reported, not silently ignored.
+    java-classpath-reads +
+    # Dependency storage locations belong to the host environment.
+    cargo-home-reads +
+    # Unsupported host context must not lead to misleading analysis.
+    rust-build-setting-reads
 
-predicate hasEnvironmentReceiverType(Statement) =>
-    Statement.TypeName:equals('Environment')
-    || Statement.TypeName:equals('System.Environment')
-    || Statement.TypeName:equals('global::System.Environment')
-predicate hasEnvironmentAccessMember(Statement) =>
-    Statement.MemberName:equals('GetEnvironmentVariable')
-    || Statement.MemberName:equals('SetEnvironmentVariable')
-predicate accessesEnvironmentVariable(Statement) =>
-    hasEnvironmentReceiverType && hasEnvironmentAccessMember
+let environment-message =
+    'Use CLI flags or config instead of environment variables for Cop settings'
 
-predicate isSecretEnvironmentName(CodeExpression) => CodeExpression.Kind == stringLiteral
-    && (CodeExpression.StringValue:contains('TOKEN')
-        || CodeExpression.StringValue:contains('SECRET')
-        || CodeExpression.StringValue:contains('PASSWORD'))
-predicate hasSecretEnvironmentArgument(Statement) => Statement.ArgumentExpressions.Count > 0
-    && isSecretEnvironmentName(Statement.ArgumentExpressions[0])
+export let no-environment = (env-calls - allowed-calls)
+    :toError(environment-message)
 
-predicate hasLiteralEnvironmentName(Statement) => Statement.ArgumentExpressions.Count > 0
-    && Statement.ArgumentExpressions[0].Kind == stringLiteral
-predicate hasPathEnvironmentName(Statement) => hasLiteralEnvironmentName
-    && Statement.ArgumentExpressions[0].StringValue == 'PATH'
-predicate isSingleArgumentEnvironmentRead(Statement) =>
-    Statement.MemberName == 'GetEnvironmentVariable'
-    && Statement.ArgumentExpressions.Count == 1
-predicate readsSearchPath(Statement) => isSingleArgumentEnvironmentRead && hasPathEnvironmentName
+# Calls to inspect.
+let env-calls = source-calls:isEnvironmentVariableAccess
+let env-reads = env-calls:isEnvRead
 
-predicate isInPathInstaller(Statement) =>
-    Statement.File.Path == 'cop/cli/commands/CopInstallation.cs'
-    && Statement.Method.Name == 'ConfigurePath'
-predicate isInstallerPathAccess(Statement) => isInPathInstaller && hasPathEnvironmentName
+# Allowed groups.
+let secret-markers = ['TOKEN', 'SECRET', 'PASSWORD']
+let secret-calls = env-calls.Where(stringArgumentContainsAny(item, 0, secret-markers))
+let path-calls = env-calls.Where(hasStringArgument(item, 0, 'PATH'))
+let tool-search-path-reads = path-calls:isEnvRead
 
-# Java diagnoses an ignored CLASSPATH; Rust resolves Cargo sources and rejects unsupported flags.
-predicate isInJavaContextDiscovery(Statement) =>
-    Statement.File.Path == 'providers/java-provider/src/JavaSemanticContext.cs'
-    && Statement.Method.Name == 'Discover'
-predicate hasClasspathEnvironmentName(Statement) => hasLiteralEnvironmentName
-    && Statement.ArgumentExpressions[0].StringValue == 'CLASSPATH'
-predicate isInRustFrontendBinding(Statement) =>
-    Statement.File.Path == 'providers/rust-provider/src/RustFrontend.cs'
-    && Statement.Method.Name == 'Bind'
-predicate isReviewedCargoArgument(CodeExpression) =>
-    (CodeExpression.Kind == stringLiteral && CodeExpression.StringValue == 'CARGO_HOME')
-    || (CodeExpression.Kind == identifier && CodeExpression.Name == 'name')
-predicate readsJavaClasspathContext(Statement) =>
-    isSingleArgumentEnvironmentRead && isInJavaContextDiscovery && hasClasspathEnvironmentName
-predicate readsRustCargoContext(Statement) =>
-    isSingleArgumentEnvironmentRead && isInRustFrontendBinding
-    && isReviewedCargoArgument(Statement.ArgumentExpressions[0])
-predicate readsReviewedFrontendContext(Statement) => readsJavaClasspathContext || readsRustCargoContext
+let installer-path-calls = path-calls
+    .Where(
+        item.File.Path == 'cop/cli/commands/CopInstallation.cs' &&
+        item.Method.Name == 'ConfigurePath')
 
-predicate isUnapprovedEnvironmentAccess(Statement) =>
-    !hasSecretEnvironmentArgument
-    && !readsSearchPath
-    && !readsReviewedFrontendContext
-    && !isInstallerPathAccess
+let java-classpath-reads = env-reads
+    .Where(
+        item.File.Path == 'providers/java-provider/src/JavaSemanticContext.cs' &&
+        item.Method.Name == 'Discover' &&
+        hasStringArgument(item, 0, 'CLASSPATH'))
 
-export let no-environment = codebase.Calls
-    :accessesEnvironmentVariable:isCSharpEnvironmentCall:isOutsideEnvironmentFixtures
-    :isUnapprovedEnvironmentAccess
-    :toError('Environment variable used to control behavior — use a CLI flag or config instead ({item.File.Path}:{item.Line})')
+let rust-toolchain-reads = env-reads
+    .Where(
+        item.File.Path == 'providers/rust-provider/src/RustFrontend.cs' &&
+        item.Method.Name == 'Bind')
+
+let cargo-home-reads = rust-toolchain-reads
+    .Where(hasStringArgument(item, 0, 'CARGO_HOME'))
+let rust-build-setting-reads = rust-toolchain-reads.Where(
+    hasIdentifierArgument(item, 0, 'name'))
+
+# Only one-argument reads have the reviewed allowances above.
+predicate isEnvRead(Statement) =>
+    isEnvironmentVariableRead(Statement) &&
+    Statement.ArgumentExpressions.Count == 1

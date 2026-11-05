@@ -1,6 +1,6 @@
 ---
 name: python-library-checks
-version: 1.0.0
+version: 1.0.1
 title: Python Library and Client Library Development
 description: Library API design and client SDK patterns for Python including type hints, naming, method signatures, and API design
 authors: cop-team

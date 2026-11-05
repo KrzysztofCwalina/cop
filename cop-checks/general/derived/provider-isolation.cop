@@ -1,9 +1,8 @@
-# Reject references between the listed provider projects.
-# References to projects outside the list are unrestricted by this rule.
+# Keep the listed provider projects independent of one another.
 
 import code
 
-let isolation-checked-provider-names = [
+let provider-names = [
     'AiProvider'
     'codeql-provider'
     'cop-provider'
@@ -19,10 +18,12 @@ let isolation-checked-provider-names = [
     'typespec-provider'
 ]
 
-predicate isIsolationCheckedProviderName(string) => string:in(isolation-checked-provider-names)
-predicate isProviderSubjectToIsolation(Project) => Project.Name:in(isolation-checked-provider-names)
-predicate referencesIsolationCheckedProvider(Project) => Project.References:any(isIsolationCheckedProviderName)
+predicate isListedProvider(Project) =>
+    Project.Name:in(provider-names)
 
-export let derived-provider-isolation = codebase.Projects
-    :isProviderSubjectToIsolation:referencesIsolationCheckedProvider
-    :toError('Provider project {item.Name} must not reference another provider project')
+let provider-dependency-message =
+    'Provider project {item.Name} must not reference another provider project'
+
+export let derived-provider-isolation = codebase.Projects:isListedProvider
+    .Where(referencesAny(item, provider-names))
+    :toError(provider-dependency-message)

@@ -1,6 +1,6 @@
 ---
 name: python-checks
-version: 1.0.0
+version: 1.0.1
 title: Python Checks
 description: Python correctness, style, idiom, quality, and documentation checks for coding agents
 authors: cop-team

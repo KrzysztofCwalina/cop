@@ -1,12 +1,10 @@
-# Reject nonblank TargetFramework values other than net10.0.
-# Empty/missing settings and TargetFrameworks are not detected by this rule.
+# Target net10.0 consistently across projects.
 
 import code
 
-predicate isUnexpectedTargetFrameworkSetting(ProjectProperty) =>
-    ProjectProperty.Name:equals('TargetFramework')
-    && ProjectProperty.Value:notEquals('net10.0')
-predicate hasUnexpectedTargetFramework(Project) => Project.Properties:any(isUnexpectedTargetFrameworkSetting)
+let target-framework-message =
+    'Project {item.Name} must target net10.0'
 
-export let derived-target-framework = codebase.Projects:hasUnexpectedTargetFramework
-    :toError('Project {item.Name} must target net10.0')
+export let derived-target-framework = codebase.Projects
+    .Where(hasOtherProjectPropertyValue(item, 'TargetFramework', 'net10.0'))
+    :toError(target-framework-message)

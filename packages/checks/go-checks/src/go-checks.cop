@@ -31,24 +31,25 @@ predicate isProdLine(Line) => !Line.File.Path:endsWith('_test.go')
 # comment set CopIgnore is exempted. (Type/Method carry no CopIgnore, so only the
 # statement/call/line checks below are line-suppressible — use composition or path
 # predicates to exclude the type/method checks.)
-predicate notIgnored(Statement) => Statement.CopIgnore == ''
-predicate lineNotIgnored(Line) => Line.CopIgnore == ''
 
 ## Correctness
 
 # panic() aborts the program — return an error instead in library code.
-predicate isPanicCall(Statement) => Statement.Kind == throw && Statement.MemberName == 'panic'
-export let panic-calls = cb.Statements:isPanicCall:isProdStatement:notIgnored
+predicate isPanicCall(Statement) =>
+    Statement.Kind == throw && Statement:hasMemberName(['panic'])
+export let panic-calls = cb.Statements:isPanicCall:isProdStatement:isUnsuppressed
     :toWarning('Avoid panic() in library code — return an error instead')
 
 # os.Exit() skips deferred cleanup and is hard to test — reserve it for main().
-predicate isOsExit(Statement) => Statement.TypeName == 'os' && Statement.MemberName == 'Exit'
-export let os-exit = cb.Calls:isOsExit:isProdStatement:notIgnored
+predicate isOsExit(Statement) =>
+    Statement:hasTypeName(['os']) && Statement:hasMemberName(['Exit'])
+export let os-exit = cb.Calls:isOsExit:isProdStatement:isUnsuppressed
     :toWarning('Avoid os.Exit() outside main — it skips deferred cleanup; return an error instead')
 
 # time.Sleep() in production code is usually a concurrency smell — prefer channels/contexts.
-predicate isTimeSleep(Statement) => Statement.TypeName == 'time' && Statement.MemberName == 'Sleep'
-export let time-sleep = cb.Calls:isTimeSleep:isProdStatement:notIgnored
+predicate isTimeSleep(Statement) =>
+    Statement:hasTypeName(['time']) && Statement:hasMemberName(['Sleep'])
+export let time-sleep = cb.Calls:isTimeSleep:isProdStatement:isUnsuppressed
     :toInfo('time.Sleep() is often a concurrency smell — prefer channels, contexts, or timers')
 
 ## Combined correctness checks
@@ -57,10 +58,9 @@ export let go-correctness-checks = panic-calls + os-exit + time-sleep
 ## Style
 
 # Avoid fmt console output in library code — use a logging framework (log/slog).
-predicate isConsolePrint(Statement) => Statement.TypeName == 'fmt'
-    && (Statement.MemberName == 'Print' || Statement.MemberName == 'Printf'
-        || Statement.MemberName == 'Println')
-export let console-output = cb.Calls:isConsolePrint:isProdStatement:notIgnored
+predicate isConsolePrint(Statement) =>
+    Statement:hasTypeName(['fmt']) && Statement:hasMemberName(['Print', 'Printf', 'Println'])
+export let console-output = cb.Calls:isConsolePrint:isProdStatement:isUnsuppressed
     :toWarning('Avoid fmt.{item.MemberName} in library code — use a logging framework (log/slog)')
 
 # Go identifiers should use MixedCaps, not snake_case.
@@ -79,7 +79,7 @@ export let initialism-casing = cb.Types:isProdType:hasBadInitialism
 
 # interface{} can be written as `any` since Go 1.18.
 predicate isEmptyInterface(Line) => Line.Text:contains('interface{}')
-export let use-any = cb.Lines:isProdLine:isEmptyInterface:lineNotIgnored
+export let use-any = cb.Lines:isProdLine:isEmptyInterface:isUnsuppressed
     :toInfo('Use any instead of interface{} (Go 1.18+)')
 
 ## Combined style checks
@@ -88,12 +88,14 @@ export let go-style-checks = console-output + underscore-naming + initialism-cas
 ## Complexity
 
 # Functions with more than 7 parameters are hard to call — group them into a struct.
-predicate hasTooManyArgs(Method) => Method.Parameters.Count > 7
+predicate hasTooManyArgs(Method) =>
+    Method:hasParameterCountAbove(7)
 export let too-many-arguments = cb.Methods:isProdMethod:hasTooManyArgs
     :toWarning('{item.Name} has more than 7 parameters — group them into a struct')
 
 # Very large function bodies are hard to read — consider splitting.
-predicate isLargeFunction(Method) => Method.Statements.Count > 50
+predicate isLargeFunction(Method) =>
+    Method:hasStatementCountAbove(50)
 export let large-function = cb.Methods:isProdMethod:isLargeFunction
     :toInfo('{item.Name} is large (> 50 statements) — consider splitting it')
 

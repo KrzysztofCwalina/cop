@@ -1,9 +1,13 @@
-# Keep runtime-backed API declarations in files named intrinsics.cop.
-# This check enforces declaration placement; implementations remain in C#.
+# Keep runtime-backed API declarations in *intrinsics.cop files.
 
 import cop
 
-predicate isOutsideIntrinsicsFile(CopFunction) => !CopFunction.File.Path:endsWith('intrinsics.cop')
+predicate hasIntrinsicsSuffix(File) =>
+    File.Path:endsWith('intrinsics.cop')
 
-export let intrinsics-in-wrong-file = codebase.Methods:asCop:isIntrinsic:isOutsideIntrinsicsFile
-    :toError('Intrinsic declaration must be in intrinsics.cop, not {item.File.Path}')
+let intrinsics-message =
+    'Intrinsic declaration must be in intrinsics.cop, not {item.File.Path}'
+
+export let intrinsics-in-wrong-file = codebase.Methods:asCop:isIntrinsic
+    .Where(!hasIntrinsicsSuffix(item.File))
+    :toError(intrinsics-message)

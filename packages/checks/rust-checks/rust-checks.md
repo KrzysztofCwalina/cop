@@ -1,6 +1,6 @@
 ---
 name: rust-checks
-version: 1.0.0
+version: 1.0.1
 title: Rust Checks
 description: Rust coding conventions and correctness checks for coding agents
 authors: cop-team

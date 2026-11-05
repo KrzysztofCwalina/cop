@@ -1346,6 +1346,27 @@ foreach Clients:!isSealed => '{error:@red} {item.Name} should be sealed'
 foreach Clients:hasAsyncWithoutCancellation => '{warning:@yellow} {item.File.Path}:{item.Line} {item.Name} missing cancellation token'
 ```
 
+### Named Templates
+
+Bind an interpolated string to a `let` to reuse it in item-based operations:
+
+```cop
+let greeting = 'Hello {item.Name}'
+let people = [{ Name = 'Alice' }, { Name = 'Bob' }]
+command MAIN = people.Select(greeting)
+# => Hello Alice
+# => Hello Bob
+```
+
+Each use supplies the current `item`; the first item's rendered text is not reused for
+later items. This also works for named templates passed to functions in filters, such
+as `types:toError(message)`, and for aliases of a template.
+
+Other names retain their lexical scope. An `item` already bound where the template is
+declared also keeps that binding. Templates that do not read the supplied item remain
+memoized, like ordinary top-level `let` values. Reading a template that needs `item`
+outside an item context is an error.
+
 ## Null (`nic`)
 
 The keyword `nic` represents the absence of a value:

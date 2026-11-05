@@ -1,10 +1,11 @@
-# Flag statements referencing Process in cop/shared/interpreter/.
-# This detects the parsed type name, not just process-launch calls.
-# Process execution belongs in providers (e.g. ProcessObjectProvider, tool-providers),
-# keeping the language evaluator pure and side-effect-free.
+# Keep process execution in providers; the interpreter must not reference Process.
 
-predicate isInProcessFreeInterpreter(Statement) => Statement.File.Path:contains('cop/shared/interpreter/')
-predicate referencesProcessType(Statement) => Statement.TypeName:equals('Process')
+predicate referencesProcess(Statement) =>
+    Statement.TypeName:equals('Process')
 
-export let derived-interpreter-no-process-launch = codebase.Statements:isInProcessFreeInterpreter:referencesProcessType
-    :toError('The evaluator must not launch processes — move it to a provider ({item.File.Path}:{item.Line})')
+let process-launch-message =
+    'The interpreter must not launch processes; use a provider'
+
+export let derived-interpreter-no-process-launch = codebase.Statements:referencesProcess
+    .Where(inInterpreter(item.File))
+    :toError(process-launch-message)

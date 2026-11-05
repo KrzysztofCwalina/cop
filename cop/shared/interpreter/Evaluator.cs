@@ -117,14 +117,7 @@ public sealed class Evaluator
                 }
                 else
                 {
-                    var capturedLd = ld;
-                    var capturedEnv = _globalEnv;
-                    var thunk = new CopThunk(() => EvalLetBinding(capturedLd, capturedEnv))
-                    {
-                        ConstantExpression = capturedLd.Value,
-                        ConstantEnvironment = capturedEnv
-                    };
-                    _globalEnv.Define(ld.Name, thunk);
+                    _globalEnv.Define(ld.Name, CreateLetBinding(ld, _globalEnv));
                 }
             }
         }
@@ -136,6 +129,17 @@ public sealed class Evaluator
         LetBindingEvaluated?.Invoke(declaration);
         return value;
     }
+
+    internal CopThunk CreateLetBinding(LetDecl declaration, Environment environment) =>
+        CreateBinding(declaration.Value, environment, scope => EvalLetBinding(declaration, scope));
+
+    private static CopThunk CreateBinding(Expression expression, Environment environment,
+        Func<Environment, CopValue> evaluate) => new(() => evaluate(environment))
+    {
+        ConstantExpression = expression,
+        ConstantEnvironment = environment,
+        EvaluateInEnvironment = evaluate
+    };
 
     /// <summary>
     /// Run a named command/function from the global environment.
@@ -189,7 +193,10 @@ public sealed class Evaluator
         switch (decl)
         {
             case LetDecl ld:
-                var value = EvalLetBinding(ld, _globalEnv);
+                var value = ld.Value is InterpolatedStringExpr
+                    && !_globalEnv.TryLookup(ImplicitItemVariable, out _)
+                    ? CreateLetBinding(ld, _globalEnv)
+                    : EvalLetBinding(ld, _globalEnv);
                 _globalEnv.Define(ld.Name, value);
                 break;
 
@@ -246,7 +253,10 @@ public sealed class Evaluator
         switch (stmt)
         {
             case LetStatement ls:
-                var val = Eval(ls.Value, env);
+                var val = ls.Value is InterpolatedStringExpr
+                    && !env.TryLookup(ImplicitItemVariable, out _)
+                    ? CreateBinding(ls.Value, env, scope => Eval(ls.Value, scope))
+                    : Eval(ls.Value, env);
                 env.Define(ls.Name, val);
                 break;
 
@@ -377,7 +387,26 @@ public sealed class Evaluator
     private CopValue EvalIdentifier(IdentifierExpr id, Environment env)
     {
         if (env.TryLookup(id.Name, out var value))
+        {
+            if (value is CopThunk thunk
+                && thunk.ConstantEnvironment is { } closure
+                && thunk.EvaluateInEnvironment is { } evaluate
+                && !closure.TryLookup(ImplicitItemVariable, out _)
+                && env.TryLookup(ImplicitItemVariable, out var item)
+                && IsTemplate(thunk))
+            {
+                return new CopThunk(() => thunk.ForceTemplate(() =>
+                {
+                    var scope = closure.Extend();
+                    // Track actual reads, so nested item scopes and constant templates stay memoized.
+                    var contextualItem = new CopThunk(() => item);
+                    scope.Define(ImplicitItemVariable, contextualItem);
+                    var rendered = ForceValue(evaluate(scope));
+                    return (rendered, !contextualItem.IsForced);
+                }));
+            }
             return value;
+        }
 
         // Check FFI registry as fallback (for lazily registered externals)
         var ext = _ffi.Resolve(id.Name);
@@ -385,6 +414,26 @@ public sealed class Evaluator
             return ext;
 
         throw new CopEvaluationException($"Undefined variable '{id.Name}'", id.Line, _filePath);
+    }
+
+    private static bool IsTemplate(CopThunk thunk)
+    {
+        HashSet<CopThunk>? aliases = null;
+        while (!thunk.IsForced)
+        {
+            if (thunk.ConstantExpression is InterpolatedStringExpr)
+                return true;
+            if (thunk.ConstantExpression is not IdentifierExpr alias
+                || thunk.ConstantEnvironment is not { } closure
+                || !closure.TryLookup(alias.Name, out var value)
+                || value is not CopThunk next)
+                return false;
+            aliases ??= [];
+            if (!aliases.Add(thunk))
+                return false;
+            thunk = next;
+        }
+        return false;
     }
 
     private CopValue EvalBinary(BinaryExpr bin, Environment env)
@@ -1220,7 +1269,7 @@ public sealed class Evaluator
 
     private CopValue EvalMatch(MatchExpr match, Environment env)
     {
-        var discriminant = Eval(match.Discriminant, env);
+        var discriminant = ForceValue(Eval(match.Discriminant, env));
 
         foreach (var arm in match.Arms)
         {

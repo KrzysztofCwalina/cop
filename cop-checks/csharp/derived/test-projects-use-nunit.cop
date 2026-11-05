@@ -1,11 +1,12 @@
-# Projects under tests/ must reference the NUnit package — the repo's single test framework.
+# Use NUnit consistently across projects under tests/.
 
 import code
 
-predicate isInTestProjectsFolder(Project) => Project.Path:startsWith('tests/')
-predicate isNUnitPackageName(string) => string:equals('NUnit')
-predicate referencesNUnitPackage(Project) => Project.Packages:any(isNUnitPackageName)
-predicate lacksNUnitPackage(Project) => !referencesNUnitPackage
+predicate inTests(Project) =>
+    Project.Path:startsWith('tests/')
+let test-framework-message =
+    'Test project {item.Name} must reference NUnit'
 
-export let derived-test-projects-use-nunit = codebase.Projects:isInTestProjectsFolder:lacksNUnitPackage
-    :toError('Test project {item.Name} must reference NUnit')
+export let derived-test-projects-use-nunit = codebase.Projects:inTests
+    .Where(!hasPackage(item, 'NUnit'))
+    :toError(test-framework-message)

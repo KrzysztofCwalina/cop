@@ -1,4 +1,6 @@
 using Cop.Cli.Commands;
+using Cop.Lang.Ast;
+using Cop.Lang.Parser;
 using Cop.Providers;
 using NUnit.Framework;
 
@@ -36,6 +38,65 @@ public class SelfCheckStructureTests
     }
 
     [Test]
+    public void SelfCheckSourceLinesStayWithin90Characters()
+    {
+        var checks = Path.Combine(_repo, "cop-checks");
+        var overlongLines = new List<string>();
+        foreach (var file in Directory.GetFiles(checks, "*.cop", SearchOption.AllDirectories))
+        {
+            int number = 0;
+            foreach (var line in File.ReadLines(file))
+            {
+                number++;
+                if (line.Length > 90)
+                    overlongLines.Add($"{Path.GetRelativePath(checks, file)}:{number}: {line.Length} characters");
+            }
+        }
+
+        Assert.That(overlongLines, Is.Empty, string.Join("\n", overlongLines));
+    }
+
+    [Test]
+    public void SelfChecksUsePrivateNamedDiagnosticTemplates()
+    {
+        var templates = new List<string>();
+        foreach (var file in Directory.GetFiles(Path.Combine(_repo, "cop-checks"), "*.cop", SearchOption.AllDirectories))
+        {
+            var module = CopParser.Parse(File.ReadAllText(file), file);
+            var calls = new DiagnosticCallCollector();
+            calls.Visit(module);
+            var bindings = module.Declarations.OfType<LetDecl>().ToDictionary(d => d.Name);
+            foreach (var call in calls.Calls)
+            {
+                Assert.That(call.Args, Has.Count.EqualTo(1), file);
+                Assert.That(call.Args[0], Is.InstanceOf<IdentifierExpr>(), file);
+                var name = ((IdentifierExpr)call.Args[0]).Name;
+                Assert.That(bindings.ContainsKey(name), Is.True, $"{file}: {name}");
+                var binding = bindings[name];
+                Assert.That(binding.IsExported, Is.False, $"{file}: {name}");
+                Assert.That(binding.Value is InterpolatedStringExpr or LiteralExpr { Value: string },
+                    Is.True, $"{file}: {name} must hold a plain template, not a lambda");
+                templates.Add(name);
+            }
+        }
+
+        Assert.That(templates, Has.Count.EqualTo(38));
+        Assert.That(templates.Distinct().Count(), Is.EqualTo(38), "Sibling rules share a namespace.");
+    }
+
+    private sealed class DiagnosticCallCollector : AstWalker
+    {
+        public List<CallExpr> Calls { get; } = [];
+
+        public override object? VisitCallExpr(CallExpr node)
+        {
+            if (node.Callee is IdentifierExpr { Name: "toError" or "toWarning" or "toInfo" })
+                Calls.Add(node);
+            return base.VisitCallExpr(node);
+        }
+    }
+
+    [Test]
     public void SelfChecksAreGroupedBySourceLanguage()
     {
         var checks = Path.Combine(_repo, "cop-checks");
@@ -69,7 +130,7 @@ public class SelfCheckStructureTests
         Assert.That(result.Outputs.Select(o => o.Message), Is.EqualTo(new[]
         {
             "Wrong.cop(1): error: Intrinsic declaration must be in intrinsics.cop, not Wrong.cop",
-            "Sample.cs(1): error: Do not add new interfaces — use abstract classes instead: IUnexpected in Sample.cs"
+            "Sample.cs(1): error: Use an abstract class instead of interface IUnexpected (Sample.cs)"
         }));
     }
 
@@ -128,7 +189,12 @@ public class SelfCheckStructureTests
     public void RepositoryHasNoUnapprovedRegexImports()
     {
         File.Copy(Path.Combine(_repo, "cop-checks", "csharp", "no-regex.cop"), Path.Combine(_root, "rule.cop"));
-        File.WriteAllText(Path.Combine(_root, "main.cop"), "command MAIN = CHECK(no-regex)");
+        File.WriteAllText(Path.Combine(_root, "main.cop"), """
+            import code
+            import csharp
+            let codebase = codebase(csharp.parse())
+            command MAIN = CHECK(no-regex)
+            """);
         var result = Engine.Run(_root, _repo, additionalFeedPaths: [Path.Combine(_repo, "packages")]);
 
         Assert.That(result.HasParseErrors, Is.False, string.Join("\n", result.ParseErrors));
@@ -176,7 +242,22 @@ public class SelfCheckStructureTests
                 string? Wrap(string? value) => value;
             }
             """, "csharp", [4, 5, 7, 8],
-            "Environment variable used to control behavior — use a CLI flag or config instead (Input.cs:{0})");
+            "Use CLI flags or config instead of environment variables for Cop settings");
+    }
+
+    [Test]
+    public void EnvironmentCheckKeepsUnapprovedCallsOnTheSameLine()
+    {
+        AssertCheck(Path.Combine("csharp", "no-environment.cop"), "no-environment", "Input.cs", """
+            using System;
+            namespace Fixture;
+            class Example {
+                string? Read() => Environment.GetEnvironmentVariable("GITHUB_TOKEN") ?? Environment.GetEnvironmentVariable("MODE");
+                void Write() { Environment.SetEnvironmentVariable("GITHUB_TOKEN", "value"); Environment.SetEnvironmentVariable("MODE", "GITHUB_TOKEN"); }
+                string? Lookup(string name) => Environment.GetEnvironmentVariable("PATH") ?? Environment.GetEnvironmentVariable(name);
+            }
+            """, "csharp", [4, 5, 6],
+            "Use CLI flags or config instead of environment variables for Cop settings");
     }
 
     [Test]
@@ -193,7 +274,7 @@ public class SelfCheckStructureTests
                 string? Unknown(string name) => Environment.GetEnvironmentVariable(name);
             }
             """, "csharp", [6, 7, 8],
-            "Environment variable used to control behavior — use a CLI flag or config instead (Input.cs:{0})");
+            "Use CLI flags or config instead of environment variables for Cop settings");
     }
 
     [TestCase("cop/cli/commands/CopInstallation.cs", true)]
@@ -213,7 +294,7 @@ public class SelfCheckStructureTests
                 void Other() => Environment.SetEnvironmentVariable("PATH", "bin");
             }
             """, "csharp", isInstaller ? [7, 8, 10] : [5, 6, 7, 8, 10],
-            $"Environment variable used to control behavior — use a CLI flag or config instead ({file}:{{0}})");
+            "Use CLI flags or config instead of environment variables for Cop settings");
     }
 
     [TestCase("providers/java-provider/src/JavaSemanticContext.cs", "Discover", "CLASSPATH", false, true)]
@@ -239,7 +320,7 @@ public class SelfCheckStructureTests
                 string? Other() => Environment.GetEnvironmentVariable("{{variable}}");
             }
             """, "csharp", violations,
-            $"Environment variable used to control behavior — use a CLI flag or config instead ({file}:{{0}})");
+            "Use CLI flags or config instead of environment variables for Cop settings");
     }
 
     [Test]
@@ -259,13 +340,16 @@ public class SelfCheckStructureTests
                 }
             }
             """, "csharp", [6, 7],
-            "New runtime FFI registered without approval. The FFI surface must not grow — implement the capability as a .cop package, or get sign-off and add its name to approved-ffi-names.");
+            "Unapproved runtime function; use a .cop package or get explicit approval");
     }
 
-    [TestCase("tests/lang.tests/lang/EvaluatorTests.cs", true)]
+    [TestCase("tests/lang.tests/lang/EvaluatorTests.cs", false)]
     [TestCase("tests/lang.tests/lang/OtherTests.cs", false)]
-    [TestCase("cop/shared/interpreter/StandardLibrary.cs", false)]
-    public void FfiExceptionOnlyAllowsTheInvocationTest(string file, bool allowsInvocationTest)
+    [TestCase("cop/shared/interpreter/StandardLibrary.cs", true)]
+    [TestCase("src/Input.cs", true)]
+    [TestCase("samples/Input.cs", true)]
+    [TestCase("examples/Input.cs", true)]
+    public void FfiCheckExemptsTestsButStillChecksOtherSources(string file, bool hasViolations)
     {
         AssertCheck(Path.Combine("csharp", "no-new-ffi.cop"), "no-new-ffi", file, """
             class Example {
@@ -277,8 +361,17 @@ public class SelfCheckStructureTests
                     ffi.Register("double", () => 0);
                 }
             }
-            """, "csharp", allowsInvocationTest ? [4, 7] : [3, 4, 7],
-            "New runtime FFI registered without approval. The FFI surface must not grow — implement the capability as a .cop package, or get sign-off and add its name to approved-ffi-names.");
+            """, "csharp", hasViolations ? [3, 4, 7] : [],
+            "Unapproved runtime function; use a .cop package or get explicit approval");
+    }
+
+    [TestCase("src/Input.cop", true)]
+    [TestCase("tests/Input.cop", false)]
+    public void FfiCheckPreservesCopCallCoverage(string file, bool hasViolation)
+    {
+        AssertCheck(Path.Combine("csharp", "no-new-ffi.cop"), "no-new-ffi", file,
+            "let registration = ffi.Register('unexpected')", "cop", hasViolation ? [1] : [],
+            "Unapproved runtime function; use a .cop package or get explicit approval");
     }
 
     [Test]
@@ -320,7 +413,7 @@ public class SelfCheckStructureTests
             let different = codebase(Other.Providers)
             let other = helper(Program.Providers)
             """, "cop", [3, 4],
-            "Language-specific package must hardcode its provider via codebase(<lang>.parse()), not codebase(Program.Providers), so it works without -p");
+            "Use codebase(<lang>.parse()), not codebase(Program.Providers)");
     }
 
     [TestCase("src/Input.cs", true)]
@@ -329,9 +422,155 @@ public class SelfCheckStructureTests
     [TestCase("examples/Input.cs", true)]
     public void NamespaceCheckPreservesItsFixtureExemptions(string file, bool hasViolation)
     {
-        AssertCheck(Path.Combine("csharp", "namespaces.cop"), "types-without-namespace", file,
+        AssertCheck(Path.Combine("csharp", "types-require-namespaces.cop"), "types-without-namespace", file,
             "class Example { }", "csharp", hasViolation ? [1] : [],
             $"Example in {file} must be in a namespace");
+    }
+
+    [TestCase("src/Input.cs", true)]
+    [TestCase("tests/Input.cs", false)]
+    [TestCase("samples/Input.cs", false)]
+    [TestCase("examples/Input.cs", false)]
+    public void InterfaceCheckExemptsTestsSamplesAndExamples(string file, bool hasViolation)
+    {
+        AssertCheck(Path.Combine("csharp", "no-interfaces.cop"), "no-new-interfaces", file,
+            "namespace Example; interface IUnexpected { }", "csharp", hasViolation ? [1] : [],
+            $"Use an abstract class instead of interface IUnexpected ({file})");
+    }
+
+    [TestCase("[]", new[] { 2, 3, 6 })]
+    [TestCase("['IAllowed']", new[] { 3, 6 })]
+    [TestCase("['iallowed', 'IFirst', 'ISecond']", new int[] { })]
+    public void InterfaceQueryUsesCallerScopeAllowlistAndDiagnostic(string allowed, int[] lines)
+    {
+        var target = Path.Combine(_root, "target");
+        Directory.CreateDirectory(target);
+        File.WriteAllText(Path.Combine(target, "Input.cs"), """
+            namespace Fixture;
+            interface IAllowed { }
+            interface IFirst { }
+            class Ordinary { }
+            class Container { }
+            interface ISecond { }
+            interface IExcluded { }
+            """);
+        File.WriteAllText(Path.Combine(_root, "main.cop"), $$"""
+            import code
+            import csharp
+            let cb = codebase(csharp.parse())
+            let selected = cb.Types.Where(item.Name != 'IExcluded')
+            let rejected = code.interfacesExcept(selected, {{allowed}})
+                + code.interfacesExcept([], [])
+            command MAIN = CHECK(rejected:toError('Caller policy rejects {item.Name}', ''))
+            """);
+        var names = new Dictionary<int, string> { [2] = "IAllowed", [3] = "IFirst", [6] = "ISecond" };
+        var expected = lines.Select(line =>
+            $"Input.cs({line}): error: Caller policy rejects {names[line]}");
+        for (int run = 0; run < 2; run++)
+        {
+            var result = Engine.Run(_root, target,
+                additionalFeedPaths: [Path.Combine(_repo, "packages")]);
+
+            Assert.That(result.HasParseErrors, Is.False, string.Join("\n", result.ParseErrors));
+            Assert.That(result.HasFatalErrors, Is.False, string.Join("\n", result.Errors));
+            Assert.That(result.Outputs.Select(o => o.Message), Is.EqualTo(expected));
+            Assert.That(result.ExitCode, Is.EqualTo(lines.Length));
+        }
+    }
+
+    [TestCase("src/Input.cs", true)]
+    [TestCase("tests/Input.cs", false)]
+    [TestCase("samples/Input.cs", false)]
+    [TestCase("examples/Input.cs", true)]
+    public void ExceptionChecksOnlyExemptTestsAndSamples(string file, bool hasViolation)
+    {
+        AssertCheck(Path.Combine("csharp", "derived", "exception-naming.cop"),
+            "derived-exception-naming", file, "namespace Fixture; class Failure : Exception { }",
+            "csharp", hasViolation ? [1] : [],
+            $"Failure derives from Exception but is not named *Exception ({file})");
+        AssertCheck(Path.Combine("csharp", "derived", "exception-suffix-implies-base.cop"),
+            "derived-exception-suffix-implies-base", file, "namespace Fixture; class FailureException { }",
+            "csharp", hasViolation ? [1] : [],
+            "FailureException is named *Exception but does not derive from Exception");
+    }
+
+    [Test]
+    public void SharedFileScopesPreserveDistinctExemptions()
+    {
+        var scripts = Path.Combine(_root, "cop-checks");
+        var target = Path.Combine(_root, "target");
+        Directory.CreateDirectory(scripts);
+        foreach (var folder in new[] { "src", "tests", "samples", "examples" })
+        {
+            Directory.CreateDirectory(Path.Combine(target, folder));
+            File.WriteAllText(Path.Combine(target, folder, "Input.cs"),
+                """namespace Fixture; class Example { void Run() { System.Console.WriteLine("example"); } }""");
+        }
+        File.WriteAllText(Path.Combine(target, "src", "Input.cop"), "let example = print('example')");
+        var program = Path.Combine(scripts, "main.cop");
+        File.WriteAllText(program, """
+            command FILE_SCOPES =
+                print('{source-files.Path.OrderBy(item)}') &
+                print('{source-files-without-examples.Path.OrderBy(item)}') &
+                print('{non-test-files.Path.OrderBy(item)}') &
+                print('{files-without-samples-or-examples.Path.OrderBy(item)}') &
+                print('{source-calls.File.Path.OrderBy(item)}') &
+                print('{non-test-calls.File.Path.OrderBy(item)}')
+            """);
+        var checks = Path.Combine(_repo, "cop-checks");
+        var files = Directory.GetFiles(checks, "*.cop", SearchOption.AllDirectories)
+            .Order(StringComparer.Ordinal).Append(program).ToArray();
+        var result = Engine.Run(checks, target, commandName: "FILE_SCOPES", scriptFiles: files,
+            additionalFeedPaths: [Path.Combine(_repo, "packages")]);
+
+        Assert.That(result.HasParseErrors, Is.False, string.Join("\n", result.ParseErrors));
+        Assert.That(result.HasFatalErrors, Is.False, string.Join("\n", result.Errors));
+        Assert.That(result.ExitCode, Is.Null);
+        Assert.That(result.Outputs.Select(o => o.Message), Is.EqualTo(new[]
+        {
+            "[examples/Input.cs, src/Input.cop, src/Input.cs]",
+            "[src/Input.cop, src/Input.cs]",
+            "[examples/Input.cs, samples/Input.cs, src/Input.cop, src/Input.cs]",
+            "[src/Input.cop, src/Input.cs, tests/Input.cs]",
+            "[examples/Input.cs, src/Input.cs]",
+            "[examples/Input.cs, samples/Input.cs, src/Input.cop, src/Input.cs]"
+        }));
+    }
+
+    [TestCase("src/Input.cs", true)]
+    [TestCase("tests/Input.cs", false)]
+    [TestCase("samples/Input.cs", true)]
+    [TestCase("examples/Input.cs", true)]
+    public void FixtureLocationCheckOnlyExemptsTests(string file, bool hasViolation)
+    {
+        AssertCheck(Path.Combine("csharp", "derived", "test-fixtures-under-tests.cop"),
+            "derived-tests-location", file, "using NUnit.Framework; namespace Fixture; [TestFixture] class Example { }",
+            "csharp", hasViolation ? [1] : [],
+            $"Test fixture Example must live under tests/ ({file})");
+    }
+
+    [TestCase("src/Input.cs", true)]
+    [TestCase("tests/Input.cs", false)]
+    [TestCase("samples/Input.cs", false)]
+    [TestCase("examples/Input.cs", true)]
+    public void EnvironmentCheckOnlyExemptsTestsAndSamples(string file, bool hasViolation)
+    {
+        AssertCheck(Path.Combine("csharp", "no-environment.cop"), "no-environment", file,
+            "class Example { string? Read() => Environment.GetEnvironmentVariable(\"MODE\"); }",
+            "csharp", hasViolation ? [1] : [],
+            "Use CLI flags or config instead of environment variables for Cop settings");
+    }
+
+    [TestCase("src/Input.cs", true)]
+    [TestCase("tests/Input.cs", true)]
+    [TestCase("samples/Input.cs", false)]
+    [TestCase("examples/Input.cs", false)]
+    public void ProviderNamespaceCheckOnlyExemptsSamplesAndExamples(string file, bool hasViolation)
+    {
+        AssertCheck(Path.Combine("csharp", "derived", "provider-namespace.cop"),
+            "derived-provider-namespace", file, "namespace Other; class ExampleProvider : DataProvider { }",
+            "csharp", hasViolation ? [1] : [],
+            "ExampleProvider: namespace must start with Cop.Providers, not Other");
     }
 
     [TestCase("cop/cli/cop.csproj", true)]
@@ -344,7 +583,8 @@ public class SelfCheckStructureTests
               <ItemGroup><FrameworkReference Include="Microsoft.AspNetCore.App" /></ItemGroup>
             </Project>
             """, "csharp", hasViolation ? [0] : [],
-            $"Project {Path.GetFileNameWithoutExtension(file)} has FrameworkReference to Microsoft.AspNetCore.App which breaks single-file publish");
+            $"Project {Path.GetFileNameWithoutExtension(file)}: " +
+            "remove Microsoft.AspNetCore.App for single-file publishing");
     }
 
     [Test]
@@ -360,7 +600,70 @@ public class SelfCheckStructureTests
             class StandardLibrary { }
             class CustomRegexCacheWrapper { }
             """, "csharp", [3],
-            "Unexpected is in a file that imports System.Text.RegularExpressions — use recursive descent parsers: Input.cs");
+            "Unexpected: use parsers instead of System.Text.RegularExpressions");
+    }
+
+    [Test]
+    public void Issue103_NamedDiagnosticTemplateRendersEveryType()
+    {
+        var target = Path.Combine(_root, "target");
+        Directory.CreateDirectory(target);
+        File.WriteAllText(Path.Combine(target, "Input.cs"), """
+            namespace Fixture;
+            class Alpha { }
+            class Beta { }
+            """);
+        File.WriteAllText(Path.Combine(_root, "main.cop"), """
+            import code
+            import csharp
+            let codebase = codebase(csharp.parse())
+            let message = 'Type {item.Name} in {item.File.Path}'
+            command MAIN = CHECK(codebase.Types:toError(message))
+            """);
+
+        var result = Engine.Run(_root, target, additionalFeedPaths: [Path.Combine(_repo, "packages")]);
+
+        Assert.That(result.HasFatalErrors, Is.False, string.Join("\n", result.Errors));
+        Assert.That(result.Outputs.Select(o => o.Message), Is.EqualTo(new[]
+        {
+            "Input.cs(2): error: Type Alpha in Input.cs",
+            "Input.cs(3): error: Type Beta in Input.cs"
+        }));
+        Assert.That(result.ExitCode, Is.EqualTo(2));
+    }
+
+    [Test]
+    public void RegexCheckUsesSharedCodebaseSelection()
+    {
+        var target = Path.Combine(_root, "target");
+        var selected = Path.Combine(target, "selected");
+        Directory.CreateDirectory(selected);
+        File.WriteAllText(Path.Combine(selected, "Included.cs"), """
+            using System.Text.RegularExpressions;
+            namespace Fixture;
+            class Included { }
+            """);
+        File.WriteAllText(Path.Combine(target, "Excluded.cs"), """
+            using System.Text.RegularExpressions;
+            namespace Fixture;
+            class Excluded { }
+            """);
+        File.Copy(Path.Combine(_repo, "cop-checks", "csharp", "no-regex.cop"), Path.Combine(_root, "rule.cop"));
+        File.WriteAllText(Path.Combine(_root, "main.cop"), """
+            import code
+            import csharp
+            let codebase = codebase(csharp.parse('selected'))
+            command MAIN = CHECK(no-regex)
+            """);
+
+        var result = Engine.Run(_root, target, additionalFeedPaths: [Path.Combine(_repo, "packages")]);
+
+        Assert.That(result.HasFatalErrors, Is.False, string.Join("\n", result.Errors));
+        Assert.That(result.Outputs.Select(o => o.Message), Is.EqualTo(new[]
+        {
+            "Included.cs(3): error: Included: use parsers instead of System.Text.RegularExpressions"
+        }));
+        Assert.That(result.ExitCode, Is.EqualTo(1));
     }
 
     [TestCase("providers/java-provider/src/JavaSemanticContext.cs", "Discover", false)]
@@ -380,7 +683,7 @@ public class SelfCheckStructureTests
                 }
             }
             """, "csharp", allowsComputedName ? [5, 6, 7] : [5, 6, 7, 8],
-            $"Environment variable used to control behavior — use a CLI flag or config instead ({file}:{{0}})");
+            "Use CLI flags or config instead of environment variables for Cop settings");
     }
 
     [TestCase("Cop.Providers", false)]
@@ -393,7 +696,7 @@ public class SelfCheckStructureTests
             "derived-provider-namespace", "Input.cs",
             $"namespace {ns}; class SampleProvider : DataProvider {{ }}",
             "csharp", hasViolation ? [1] : [],
-            $"Provider SampleProvider must live in the Cop.Providers namespace, not {ns} (Input.cs)");
+            $"SampleProvider: namespace must start with Cop.Providers, not {ns}");
     }
 
     [TestCase(null, false)]
@@ -406,7 +709,7 @@ public class SelfCheckStructureTests
             "derived-single-target-framework", "Input.csproj",
             $"<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup>{setting}</PropertyGroup></Project>",
             "csharp", hasViolation ? [0] : [],
-            "Project Input uses TargetFrameworks (multi-targeting) — use a single TargetFramework");
+            "Project Input: use TargetFramework, not TargetFrameworks");
     }
 
     [Test]
@@ -418,7 +721,7 @@ public class SelfCheckStructureTests
             "derived-single-target-framework", "Input.csproj",
             "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFrameworks /></PropertyGroup></Project>",
             "csharp", [0],
-            "Project Input uses TargetFrameworks (multi-targeting) — use a single TargetFramework");
+            "Project Input: use TargetFramework, not TargetFrameworks");
     }
 
     [TestCase("implicit-usings.cop", "derived-implicit-usings", "ImplicitUsings", "enable", "disable",
@@ -465,19 +768,24 @@ public class SelfCheckStructureTests
         Directory.CreateDirectory(scripts);
         Directory.CreateDirectory(Path.GetDirectoryName(Path.Combine(target, file))!);
         File.WriteAllText(Path.Combine(target, file), source);
-        File.Copy(Path.Combine(_repo, "cop-checks", check), Path.Combine(scripts, "rule.cop"));
         File.WriteAllText(Path.Combine(scripts, "main.cop"), $"""
             import code
             import {language}
-            let codebase = codebase({language}.parse())
-            command MAIN = CHECK({binding})
+            command SELF_CHECK = CHECK({binding})
             """);
+        var checks = Path.Combine(_repo, "cop-checks");
+        var main = Path.Combine(checks, "main.cop");
+        var rule = Path.Combine(checks, check);
+        var files = Directory.GetFiles(checks, "*.cop", SearchOption.AllDirectories)
+            .Where(f => f != main && f != rule).Order(StringComparer.Ordinal)
+            .Append(rule).Append(main).Append(Path.Combine(scripts, "main.cop")).ToArray();
         var path = file.Replace('\\', '/');
         var expected = lines.Select(line =>
             $"{path}({line}): error: {string.Format(message, line)}").ToArray();
         for (int run = 0; run < 2; run++)
         {
-            var result = Engine.Run(scripts, target, additionalFeedPaths: [Path.Combine(_repo, "packages")]);
+            var result = Engine.Run(checks, target, commandName: "SELF_CHECK", scriptFiles: files,
+                additionalFeedPaths: [Path.Combine(_repo, "packages")]);
             Assert.That(result.HasParseErrors, Is.False, string.Join("\n", result.ParseErrors));
             Assert.That(result.HasFatalErrors, Is.False, string.Join("\n", result.Errors));
             Assert.That(result.Outputs.Select(o => o.Message), Is.EqualTo(expected), $"Run {run + 1}");

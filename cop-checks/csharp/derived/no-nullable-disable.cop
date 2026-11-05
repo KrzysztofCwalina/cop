@@ -1,11 +1,8 @@
-# Reject active C# #nullable disable directives, including warnings/annotations variants.
-# Uses active Roslyn directives and their parsed keywords, not comments or string literals.
+# Preserve nullable safety checks by rejecting #nullable disable directives.
 
-predicate isCSharpSourceStatement(Statement) => Statement.File.Language == csharp
-predicate isNullableDisableDirective(Statement) =>
-    Statement.Kind == directive
-    && Statement.Keywords:contains('nullable')
-    && Statement.Keywords:contains('disable')
+let nullable-directive-message =
+    'Do not disable nullable reference types ({item.File.Path}:{item.Line})'
 
-export let derived-no-nullable-disable = codebase.Statements:isCSharpSourceStatement:isNullableDisableDirective
-    :toError('Do not disable nullable reference types ({item.File.Path}:{item.Line})')
+export let derived-no-nullable-disable = codebase.Statements:disablesNullable
+    .Where(item.File.Language == csharp)
+    :toError(nullable-directive-message)

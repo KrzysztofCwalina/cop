@@ -1,6 +1,6 @@
 ---
 name: go-checks
-version: 1.0.0
+version: 1.0.1
 title: Go Checks
 description: Go coding conventions and correctness checks for coding agents
 authors: cop-team

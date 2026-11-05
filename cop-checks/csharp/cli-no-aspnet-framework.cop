@@ -1,8 +1,10 @@
 # Keep the CLI free of ASP.NET framework references so cop.exe can ship as a single file.
 
-predicate isCliPublishProject(Project) => Project.Path:contains('cop/cli')
-predicate referencesAspNetFramework(Project) => Project.Frameworks:contains('Microsoft.AspNetCore.App')
+predicate isCopCliProject(Project) =>
+    Project.Path:contains('cop/cli')
+let aspnet-message =
+    'Project {item.Name}: remove Microsoft.AspNetCore.App for single-file publishing'
 
-## ASP.NET FrameworkReference breaks single-file publish (adds aspnetcorev2_inprocess.dll)
-export let no-aspnet-in-cli = codebase.Projects:isCliPublishProject:referencesAspNetFramework
-    :toError('Project {item.Name} has FrameworkReference to Microsoft.AspNetCore.App which breaks single-file publish')
+export let no-aspnet-in-cli = codebase.Projects:isCopCliProject
+    .Where(hasFramework(item, 'Microsoft.AspNetCore.App'))
+    :toError(aspnet-message)
