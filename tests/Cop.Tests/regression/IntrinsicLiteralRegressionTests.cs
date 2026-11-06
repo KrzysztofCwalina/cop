@@ -7,7 +7,7 @@ namespace Cop.Tests;
 public class IntrinsicLiteralRegressionTests
 {
     [Test]
-    public void Issue065_FunctionCanReturnIntrinsicStringLiteral()
+    public async Task Issue065_FunctionCanReturnIntrinsicStringLiteral()
     {
         var directory = Path.Combine(Path.GetTempPath(), "cop-issue065-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(directory);
@@ -17,7 +17,7 @@ public class IntrinsicLiteralRegressionTests
                 function value() : string => 'intrinsic'
                 command MAIN = print(value())
                 """);
-            var result = Engine.Run(directory, directory);
+            var result = (await Engine.RunAsync(directory, directory));
             Assert.That(result.HasFatalErrors, Is.False, string.Join("; ", result.Errors));
             Assert.That(result.Outputs.Select(o => o.Message), Is.EqualTo(new[] { "intrinsic" }));
         }

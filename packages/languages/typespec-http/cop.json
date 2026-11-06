@@ -11,5 +11,5 @@
     "analysis"
   ],
   "provider": "clr",
-  "providerEntry": "TypeSpecProvider.TypeSpecHttpProvider"
+  "providerEntry": "Cop.Providers.TypeSpec.TypeSpecHttpProvider"
 }

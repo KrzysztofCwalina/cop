@@ -12,7 +12,7 @@ public class SmokeTests
     /// Assert.Pass() placeholder that verified nothing).
     /// </summary>
     [Test]
-    public void Engine_RunsTrivialProgram_ProducesExpectedOutput()
+    public async Task Engine_RunsTrivialProgram_ProducesExpectedOutput()
     {
         var root = Path.Combine(Path.GetTempPath(), "cop-smoke-" + Guid.NewGuid().ToString("N")[..8]);
         var scripts = Path.Combine(root, "scripts");
@@ -23,7 +23,7 @@ public class SmokeTests
         {
             File.WriteAllText(Path.Combine(scripts, "program.cop"), "command main = print('ok')");
 
-            var result = Engine.Run(scripts, target);
+            var result = (await Engine.RunAsync(scripts, target));
 
             Assert.That(result.HasParseErrors, Is.False, string.Join("; ", result.ParseErrors));
             Assert.That(result.HasFatalErrors, Is.False, string.Join("; ", result.Errors));

@@ -1,7 +1,9 @@
+// Exposes raw TypeSpec declarations and decorators to provider queries.
+
 using Cop.Core;
 using Cop.Lang;
 
-namespace TypeSpecProvider;
+namespace Cop.Providers.TypeSpec;
 
 /// <summary>
 /// DataProvider for raw TypeSpec type graph.
@@ -12,9 +14,10 @@ namespace TypeSpecProvider;
 public class TypeSpecRawProvider : DataProvider
 {
 
-    public override ReadOnlyMemory<byte> GetSchema() => _schema.ToJson();
+    /// <inheritdoc />
+    public override ReadOnlyMemory<byte> GetSchema() => s_schema.ToJson();
 
-    private static readonly ProviderSchema _schema = BuildSchema();
+    private static readonly ProviderSchema s_schema = BuildSchema();
 
     private static ProviderSchema BuildSchema()
     {
@@ -25,59 +28,59 @@ public class TypeSpecRawProvider : DataProvider
                 new() { Name = "TspDecorator", Properties =
                 [
                     new() { Name = "Name" },
-                    new() { Name = "Arguments", Collection = true },
+                    new() { Name = "Arguments", IsCollection = true },
                 ]},
                 new() { Name = "TspProperty", Properties =
                 [
                     new() { Name = "Name" },
                     new() { Name = "Type" },
                     new() { Name = "Optional", Type = "bool" },
-                    new() { Name = "Default", Optional = true },
-                    new() { Name = "Decorators", Type = "TspDecorator", Collection = true },
+                    new() { Name = "Default", IsOptional = true },
+                    new() { Name = "Decorators", Type = "TspDecorator", IsCollection = true },
                 ]},
                 new() { Name = "TspModel", Properties =
                 [
                     new() { Name = "Name" },
-                    new() { Name = "Namespace", Optional = true },
-                    new() { Name = "Properties", Type = "TspProperty", Collection = true },
-                    new() { Name = "BaseModel", Optional = true },
-                    new() { Name = "Decorators", Type = "TspDecorator", Collection = true },
+                    new() { Name = "Namespace", IsOptional = true },
+                    new() { Name = "Properties", Type = "TspProperty", IsCollection = true },
+                    new() { Name = "BaseModel", IsOptional = true },
+                    new() { Name = "Decorators", Type = "TspDecorator", IsCollection = true },
                 ]},
                 new() { Name = "TspOperation", Properties =
                 [
                     new() { Name = "Name" },
-                    new() { Name = "Namespace", Optional = true },
-                    new() { Name = "Interface", Optional = true },
-                    new() { Name = "Parameters", Type = "TspProperty", Collection = true },
+                    new() { Name = "Namespace", IsOptional = true },
+                    new() { Name = "Interface", IsOptional = true },
+                    new() { Name = "Parameters", Type = "TspProperty", IsCollection = true },
                     new() { Name = "ReturnType" },
-                    new() { Name = "Decorators", Type = "TspDecorator", Collection = true },
+                    new() { Name = "Decorators", Type = "TspDecorator", IsCollection = true },
                 ]},
                 new() { Name = "TspInterface", Properties =
                 [
                     new() { Name = "Name" },
-                    new() { Name = "Namespace", Optional = true },
-                    new() { Name = "Operations", Type = "TspOperation", Collection = true },
-                    new() { Name = "Decorators", Type = "TspDecorator", Collection = true },
+                    new() { Name = "Namespace", IsOptional = true },
+                    new() { Name = "Operations", Type = "TspOperation", IsCollection = true },
+                    new() { Name = "Decorators", Type = "TspDecorator", IsCollection = true },
                 ]},
                 new() { Name = "TspEnum", Properties =
                 [
                     new() { Name = "Name" },
-                    new() { Name = "Namespace", Optional = true },
-                    new() { Name = "Members", Type = "TspEnumMember", Collection = true },
-                    new() { Name = "Decorators", Type = "TspDecorator", Collection = true },
+                    new() { Name = "Namespace", IsOptional = true },
+                    new() { Name = "Members", Type = "TspEnumMember", IsCollection = true },
+                    new() { Name = "Decorators", Type = "TspDecorator", IsCollection = true },
                 ]},
                 new() { Name = "TspEnumMember", Properties =
                 [
                     new() { Name = "Name" },
-                    new() { Name = "Value", Optional = true },
-                    new() { Name = "Decorators", Type = "TspDecorator", Collection = true },
+                    new() { Name = "Value", IsOptional = true },
+                    new() { Name = "Decorators", Type = "TspDecorator", IsCollection = true },
                 ]},
                 new() { Name = "TspUnion", Properties =
                 [
                     new() { Name = "Name" },
-                    new() { Name = "Namespace", Optional = true },
-                    new() { Name = "Variants", Type = "TspUnionVariant", Collection = true },
-                    new() { Name = "Decorators", Type = "TspDecorator", Collection = true },
+                    new() { Name = "Namespace", IsOptional = true },
+                    new() { Name = "Variants", Type = "TspUnionVariant", IsCollection = true },
+                    new() { Name = "Decorators", Type = "TspDecorator", IsCollection = true },
                 ]},
                 new() { Name = "TspUnionVariant", Properties =
                 [
@@ -87,15 +90,15 @@ public class TypeSpecRawProvider : DataProvider
                 new() { Name = "TspScalar", Properties =
                 [
                     new() { Name = "Name" },
-                    new() { Name = "Namespace", Optional = true },
-                    new() { Name = "BaseScalar", Optional = true },
-                    new() { Name = "Decorators", Type = "TspDecorator", Collection = true },
+                    new() { Name = "Namespace", IsOptional = true },
+                    new() { Name = "BaseScalar", IsOptional = true },
+                    new() { Name = "Decorators", Type = "TspDecorator", IsCollection = true },
                 ]},
                 new() { Name = "TspNamespace", Properties =
                 [
                     new() { Name = "Name" },
                     new() { Name = "FullName" },
-                    new() { Name = "Decorators", Type = "TspDecorator", Collection = true },
+                    new() { Name = "Decorators", Type = "TspDecorator", IsCollection = true },
                 ]},
             ],
             Collections =
@@ -111,48 +114,56 @@ public class TypeSpecRawProvider : DataProvider
         };
     }
 
-    public override object? Query(ProviderQuery query)
+    /// <inheritdoc />
+    public override async ValueTask<object?> QueryAsync(
+        ProviderQuery query, CancellationToken cancellationToken = default)
     {
-        var spec = new TspSpec();
+        TspSpec spec = new TspSpec();
         if (query.RootPath is not null && Directory.Exists(query.RootPath))
-            spec = TspParser.ParseFiles(query.RootPath);
+        {
+            spec = await TspParser.ParseFilesAsync(
+                query.RootPath, cancellationToken: cancellationToken).ConfigureAwait(false);
+        }
 
-        var requested = query.Collection;
+        string? requested = query.Collection;
         bool Want(string name) => requested is null || requested == name;
 
-        var db = new DataStoreBuilder();
+        DataStoreBuilder db = new DataStoreBuilder();
 
         // Child tables for string collections and object collections
         // TspDecorator: stride 2 (Name, Arguments-range)
-        var decorators = db.AddTable("Decorators", "TspDecorator", 2);
+        DataTableBuilder decorators = db.AddTable("Decorators", "TspDecorator", 2);
         // TspDecorator.Arguments: stride 1 (string per row)
-        var decArgs = db.AddTable("TspDecorator.Arguments", "string", 1);
+        DataTableBuilder decArgs = db.AddTable("TspDecorator.Arguments", "string", 1);
         // TspProperty: stride 5 (Name, Type, Optional, Default, Decorators-range)
-        var properties = db.AddTable("Properties", "TspProperty", 5);
+        DataTableBuilder properties = db.AddTable("Properties", "TspProperty", 5);
         // TspEnumMember: stride 3 (Name, Value, Decorators-range)
-        var enumMembers = db.AddTable("EnumMembers", "TspEnumMember", 3);
+        DataTableBuilder enumMembers = db.AddTable("EnumMembers", "TspEnumMember", 3);
         // TspUnionVariant: stride 2 (Name, Type)
-        var unionVariants = db.AddTable("UnionVariants", "TspUnionVariant", 2);
+        DataTableBuilder unionVariants = db.AddTable("UnionVariants", "TspUnionVariant", 2);
         // TspOperation (child table for Interface.Operations)
-        var operations = db.AddTable("Operations", "TspOperation", 6);
+        DataTableBuilder operations = db.AddTable("Operations", "TspOperation", 6);
 
         // Top-level collection tables
-        var models = Want("Models") ? db.AddTable("Models", "TspModel", 5) : null;
-        var interfaces = Want("Interfaces") ? db.AddTable("Interfaces", "TspInterface", 4) : null;
-        var enums = Want("Enums") ? db.AddTable("Enums", "TspEnum", 4) : null;
-        var unions = Want("Unions") ? db.AddTable("Unions", "TspUnion", 4) : null;
-        var scalars = Want("Scalars") ? db.AddTable("Scalars", "TspScalar", 4) : null;
-        var namespaces = Want("Namespaces") ? db.AddTable("Namespaces", "TspNamespace", 3) : null;
+        DataTableBuilder? models = Want("Models") ? db.AddTable("Models", "TspModel", 5) : null;
+        DataTableBuilder? interfaces = Want("Interfaces") ? db.AddTable("Interfaces", "TspInterface", 4) : null;
+        DataTableBuilder? enums = Want("Enums") ? db.AddTable("Enums", "TspEnum", 4) : null;
+        DataTableBuilder? unions = Want("Unions") ? db.AddTable("Unions", "TspUnion", 4) : null;
+        DataTableBuilder? scalars = Want("Scalars") ? db.AddTable("Scalars", "TspScalar", 4) : null;
+        DataTableBuilder? namespaces = Want("Namespaces") ? db.AddTable("Namespaces", "TspNamespace", 3) : null;
 
         // --- Populate ---
 
         // Models: Name(0), Namespace(1), Properties(2→Properties), BaseModel(3), Decorators(4→Decorators)
         if (models is not null)
         {
-            foreach (var m in spec.Models)
+            foreach (TspModel m in spec.Models)
             {
                 if (!MatchesFilter(query.Filter, "Name", m.Name, "Namespace", m.Namespace))
+                {
                     continue;
+                }
+
                 int row = models.AddRow();
                 models.SetString(row, 0, m.Name);
                 models.SetString(row, 1, m.Namespace);
@@ -164,10 +175,13 @@ public class TypeSpecRawProvider : DataProvider
 
         // Operations (top-level): Name(0), Namespace(1), Interface(2), Parameters(3→Properties), ReturnType(4), Decorators(5→Decorators)
         // Always populate since both top-level "Operations" and Interface.Operations share this table
-        foreach (var o in spec.Operations)
+        foreach (TspOperation o in spec.Operations)
         {
             if (Want("Operations") && !MatchesFilter(query.Filter, "Name", o.Name, "Namespace", o.Namespace))
+            {
                 continue;
+            }
+
             int row = operations.AddRow();
             operations.SetString(row, 0, o.Name);
             operations.SetString(row, 1, o.Namespace);
@@ -180,16 +194,19 @@ public class TypeSpecRawProvider : DataProvider
         // Interfaces: Name(0), Namespace(1), Operations(2→Operations), Decorators(3→Decorators)
         if (interfaces is not null)
         {
-            foreach (var iface in spec.Interfaces)
+            foreach (TspInterface iface in spec.Interfaces)
             {
                 if (!MatchesFilter(query.Filter, "Name", iface.Name, "Namespace", iface.Namespace))
+                {
                     continue;
+                }
+
                 int row = interfaces.AddRow();
                 interfaces.SetString(row, 0, iface.Name);
                 interfaces.SetString(row, 1, iface.Namespace);
                 // Add interface-local operations to the shared Operations table
                 int opStart = operations.Count;
-                foreach (var o in iface.Operations)
+                foreach (TspOperation o in iface.Operations)
                 {
                     int oRow = operations.AddRow();
                     operations.SetString(oRow, 0, o.Name);
@@ -207,15 +224,18 @@ public class TypeSpecRawProvider : DataProvider
         // Enums: Name(0), Namespace(1), Members(2→EnumMembers), Decorators(3→Decorators)
         if (enums is not null)
         {
-            foreach (var e in spec.Enums)
+            foreach (TspEnum e in spec.Enums)
             {
                 if (!MatchesFilter(query.Filter, "Name", e.Name, "Namespace", e.Namespace))
+                {
                     continue;
+                }
+
                 int row = enums.AddRow();
                 enums.SetString(row, 0, e.Name);
                 enums.SetString(row, 1, e.Namespace);
                 int memberStart = enumMembers.Count;
-                foreach (var m in e.Members)
+                foreach (TspEnumMember m in e.Members)
                 {
                     int mRow = enumMembers.AddRow();
                     enumMembers.SetString(mRow, 0, m.Name);
@@ -230,15 +250,18 @@ public class TypeSpecRawProvider : DataProvider
         // Unions: Name(0), Namespace(1), Variants(2→UnionVariants), Decorators(3→Decorators)
         if (unions is not null)
         {
-            foreach (var u in spec.Unions)
+            foreach (TspUnion u in spec.Unions)
             {
                 if (!MatchesFilter(query.Filter, "Name", u.Name, "Namespace", u.Namespace))
+                {
                     continue;
+                }
+
                 int row = unions.AddRow();
                 unions.SetString(row, 0, u.Name);
                 unions.SetString(row, 1, u.Namespace);
                 int varStart = unionVariants.Count;
-                foreach (var v in u.Variants)
+                foreach (TspUnionVariant v in u.Variants)
                 {
                     int vRow = unionVariants.AddRow();
                     unionVariants.SetString(vRow, 0, v.Name);
@@ -252,10 +275,13 @@ public class TypeSpecRawProvider : DataProvider
         // Scalars: Name(0), Namespace(1), BaseScalar(2), Decorators(3→Decorators)
         if (scalars is not null)
         {
-            foreach (var s in spec.Scalars)
+            foreach (TspScalar s in spec.Scalars)
             {
                 if (!MatchesFilter(query.Filter, "Name", s.Name, "Namespace", s.Namespace))
+                {
                     continue;
+                }
+
                 int row = scalars.AddRow();
                 scalars.SetString(row, 0, s.Name);
                 scalars.SetString(row, 1, s.Namespace);
@@ -267,10 +293,13 @@ public class TypeSpecRawProvider : DataProvider
         // Namespaces: Name(0), FullName(1), Decorators(2→Decorators)
         if (namespaces is not null)
         {
-            foreach (var n in spec.Namespaces)
+            foreach (TspNamespace n in spec.Namespaces)
             {
                 if (!MatchesFilter(query.Filter, "Name", n.Name))
+                {
                     continue;
+                }
+
                 int row = namespaces.AddRow();
                 namespaces.SetString(row, 0, n.Name);
                 namespaces.SetString(row, 1, n.FullName);
@@ -286,13 +315,13 @@ public class TypeSpecRawProvider : DataProvider
         DataTableBuilder decorators, DataTableBuilder decArgs, List<TspDecorator> items)
     {
         int start = decorators.Count;
-        foreach (var d in items)
+        foreach (TspDecorator d in items)
         {
             int row = decorators.AddRow();
             decorators.SetString(row, 0, d.Name);
             // Arguments string collection
             int argStart = decArgs.Count;
-            foreach (var a in d.Arguments)
+            foreach (string a in d.Arguments)
             {
                 int aRow = decArgs.AddRow();
                 decArgs.SetString(aRow, 0, a);
@@ -308,12 +337,12 @@ public class TypeSpecRawProvider : DataProvider
         List<TspProperty> items)
     {
         int start = properties.Count;
-        foreach (var p in items)
+        foreach (TspProperty p in items)
         {
             int row = properties.AddRow();
             properties.SetString(row, 0, p.Name);
             properties.SetString(row, 1, p.Type);
-            properties.SetBool(row, 2, p.Optional);
+            properties.SetBool(row, 2, p.IsOptional);
             properties.SetString(row, 3, p.Default);
             properties.SetRange(row, 4, AddDecorators(decorators, decArgs, p.Decorators));
         }
@@ -327,9 +356,17 @@ public class TypeSpecRawProvider : DataProvider
     private static bool MatchesFilter(FilterExpression? filter, string prop1, string? val1,
         string? prop2 = null, string? val2 = null)
     {
-        if (filter is null) return true;
-        var accessors = new Dictionary<string, Func<object, object?>> { [prop1] = _ => val1 };
-        if (prop2 is not null) accessors[prop2] = _ => val2;
+        if (filter is null)
+        {
+            return true;
+        }
+
+        Dictionary<string, Func<object, object?>> accessors = new Dictionary<string, Func<object, object?>> { [prop1] = _ => val1 };
+        if (prop2 is not null)
+        {
+            accessors[prop2] = _ => val2;
+        }
+
         return FilterCompiler.Compile(filter, accessors)(filter);
     }
 }

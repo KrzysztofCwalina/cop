@@ -125,7 +125,13 @@ export type CSharpStatement = Statement & {
     IsYield : bool,
     IsGoto : bool,
     IsAwaitForeach : bool,
-    HasCatchFilter : bool
+    HasCatchFilter : bool,
+    IsCancellationHandler : bool,
+    IsCallerCancellationPreserved : bool,
+    IsUsingResource : bool,
+    HasTypeRestrictedCatchFilter : bool,
+    IsOwnershipTransferred : bool,
+    IsOriginalExceptionAlwaysRethrown : bool
 }
 
 ## Narrows a Statement to a CSharpStatement (C# statements only), exposing C#-specific fields.
@@ -158,3 +164,35 @@ export predicate isAwaitForeach(CSharpStatement) => CSharpStatement.IsAwaitForea
 
 ## True for a `catch` clause with an exception filter (`when (...)`).
 export predicate hasCatchFilter(CSharpStatement) => CSharpStatement.HasCatchFilter
+
+## True for a bound OperationCanceledException or derived typed catch, including aliases.
+export predicate isCancellationHandler(CSharpStatement) =>
+    CSharpStatement.IsCancellationHandler
+
+## Proves supported explicit caller-cancellation paths, not implicit exception effects.
+## Recognizes original rethrows, operation-linked caller-token guards and exclusions,
+## consumed fresh canceled completion sources, and exclusively internal-token awaits.
+## Nested cleanup must preserve cancellation on every explicit handler path.
+## Known caller lineage survives linking to independent lifetime/deadline tokens.
+## Unknown token provenance, unsupported flow, and unconsumed completions are false.
+export predicate isCallerCancellationPreserved(CSharpStatement) =>
+    CSharpStatement.IsCallerCancellationPreserved
+
+## True for a call directly initializing a `using` or `await using` resource.
+## Calls nested in its arguments or body are not themselves using resources.
+export predicate isUsingResource(CSharpStatement) => CSharpStatement.IsUsingResource
+
+## True when a catch filter restricts the caught exception to specific exception types.
+## Arbitrary conditions, broad base types, and negative type tests do not qualify.
+export predicate hasTypeRestrictedCatchFilter(CSharpStatement) =>
+    CSharpStatement.HasTypeRestrictedCatchFilter
+
+## True when every path through a catch body rethrows the original exception.
+## A conditional rethrow, replacement exception, or nested function does not qualify.
+export predicate alwaysRethrowsOriginalException(CSharpStatement) =>
+    CSharpStatement.IsOriginalExceptionAlwaysRethrown
+
+## True when a created resource is returned or stored in an owning member.
+## Local assignments and ordinary method arguments are not ownership transfers.
+export predicate transfersResourceOwnership(CSharpStatement) =>
+    CSharpStatement.IsOwnershipTransferred

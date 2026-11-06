@@ -1,3 +1,5 @@
+// Describes host functions callable from Cop expressions.
+
 namespace Cop.Lang.Interpreter;
 
 /// <summary>
@@ -5,12 +7,14 @@ namespace Cop.Lang.Interpreter;
 /// Foreign functions receive evaluated arguments and the current environment.
 /// They must ALWAYS return a CopValue (use CopNull.Instance for void).
 /// </summary>
-public delegate CopValue ForeignFunction(IReadOnlyList<CopValue> args, Environment env);
+public delegate ValueTask<CopValue> ForeignFunction(IReadOnlyList<CopValue> args,
+    Environment env, CancellationToken cancellationToken);
 
 /// <summary>
 /// Extended delegate for foreign functions that need evaluator access (e.g., higher-order functions).
 /// </summary>
-public delegate CopValue ForeignFunctionEx(IReadOnlyList<CopValue> args, Evaluator evaluator, Environment env);
+public delegate ValueTask<CopValue> ForeignFunctionEx(IReadOnlyList<CopValue> args,
+    Evaluator evaluator, Environment env, CancellationToken cancellationToken);
 
 /// <summary>
 /// Registry for foreign functions provided by the runtime.
@@ -23,7 +27,14 @@ public sealed class ForeignFunctionRegistry
     /// <summary>
     /// Register a foreign function by name.
     /// </summary>
-    public void Register(string name, ForeignFunction impl, int arity = -1)
+    public void Register(string name,
+        Func<IReadOnlyList<CopValue>, Environment, CopValue> impl, int arity = -1)
+    {
+        _functions[name] = new CopExternalFunction(name, impl, arity);
+    }
+
+    /// <summary>Registers a foreign function whose execution may suspend.</summary>
+    public void RegisterAsync(string name, ForeignFunction impl, int arity = -1)
     {
         _functions[name] = new CopExternalFunction(name, impl, arity);
     }
@@ -31,9 +42,21 @@ public sealed class ForeignFunctionRegistry
     /// <summary>
     /// Register a foreign function that needs evaluator access (for higher-order functions).
     /// </summary>
-    public void RegisterEx(string name, ForeignFunctionEx impl, int arity = -1)
+    public void RegisterEx(string name,
+        Func<IReadOnlyList<CopValue>, Evaluator, Environment, CopValue> impl, int arity = -1)
     {
         _functions[name] = new CopExternalFunction(name, (args, env) => CopNull.Instance, arity)
+        {
+            ExtendedImpl = (args, evaluator, env, _) =>
+                ValueTask.FromResult(impl(args, evaluator, env))
+        };
+    }
+
+    /// <summary>Registers an asynchronous higher-order function with evaluator access.</summary>
+    public void RegisterExAsync(string name, ForeignFunctionEx impl, int arity = -1)
+    {
+        _functions[name] = new CopExternalFunction(name,
+            (_, _, _) => ValueTask.FromResult<CopValue>(CopNull.Instance), arity)
         {
             ExtendedImpl = impl
         };
@@ -45,8 +68,10 @@ public sealed class ForeignFunctionRegistry
     /// </summary>
     public void Alias(string alias, string canonical)
     {
-        if (!_functions.ContainsKey(alias) && _functions.TryGetValue(canonical, out var fn))
+        if (!_functions.ContainsKey(alias) && _functions.TryGetValue(canonical, out CopExternalFunction? fn))
+        {
             _functions[alias] = fn;
+        }
     }
 
     /// <summary>
@@ -55,7 +80,7 @@ public sealed class ForeignFunctionRegistry
     /// </summary>
     public CopExternalFunction? Resolve(string name)
     {
-        _functions.TryGetValue(name, out var fn);
+        _functions.TryGetValue(name, out CopExternalFunction? fn);
         return fn;
     }
 
@@ -69,7 +94,9 @@ public sealed class ForeignFunctionRegistry
     /// </summary>
     public void PopulateEnvironment(Environment env)
     {
-        foreach (var (name, fn) in _functions)
+        foreach ((string? name, CopExternalFunction? fn) in _functions)
+        {
             env.Define(name, fn);
+        }
     }
 }

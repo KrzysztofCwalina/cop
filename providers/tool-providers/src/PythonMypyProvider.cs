@@ -1,3 +1,5 @@
+// Runs mypy and converts Python type diagnostics into provider violations.
+
 using System.Text.Json;
 using Cop.Core;
 
@@ -10,30 +12,42 @@ public class PythonMypyProvider : ToolProvider
 {
     protected override string ToolName => "mypy";
 
-    protected override List<object> RunTool(string rootPath, IReadOnlySet<string> excluded)
+    protected override async ValueTask<List<object>> RunToolAsync(
+        string rootPath, IReadOnlySet<string> excluded, CancellationToken cancellationToken)
     {
-        var (stdout, _, _) = RunProcess("mypy", ". --output json --ignore-missing-imports", rootPath, shell: true);
-        if (string.IsNullOrWhiteSpace(stdout)) return [];
+        (string? stdout, string _, int _) = await RunProcessAsync(
+            new("mypy", ". --output json --ignore-missing-imports", rootPath)
+            { Mode = ToolInvocationMode.Shell }, cancellationToken).ConfigureAwait(false);
+        if (string.IsNullOrWhiteSpace(stdout))
+        {
+            return [];
+        }
 
-        var violations = new List<object>();
+        List<object> violations = new List<object>();
 
         // mypy JSON output: one JSON object per line
-        foreach (var line in stdout.Split('\n', StringSplitOptions.RemoveEmptyEntries))
+        foreach (string line in stdout.Split('\n', StringSplitOptions.RemoveEmptyEntries))
         {
-            if (!line.TrimStart().StartsWith('{')) continue;
+            if (!line.TrimStart().StartsWith('{'))
+            {
+                continue;
+            }
 
             try
             {
-                using var doc = JsonDocument.Parse(line);
-                var item = doc.RootElement;
+                using JsonDocument doc = JsonDocument.Parse(line);
+                JsonElement item = doc.RootElement;
 
-                var filePath = NormalizePath(item.GetProperty("file").GetString() ?? "", rootPath);
-                if (string.IsNullOrEmpty(filePath) || IsExcluded(filePath, excluded)) continue;
+                string filePath = NormalizePath(item.GetProperty("file").GetString() ?? string.Empty, rootPath);
+                if (string.IsNullOrEmpty(filePath) || IsExcluded(filePath, excluded))
+                {
+                    continue;
+                }
 
-                var lineNum = item.TryGetProperty("line", out var ln) ? ln.GetInt32() : 0;
-                var severity = item.TryGetProperty("severity", out var s) ? s.GetString() ?? "error" : "error";
-                var message = item.TryGetProperty("message", out var m) ? m.GetString() ?? "" : "";
-                var code = item.TryGetProperty("code", out var c) ? c.GetString() : null;
+                int lineNum = item.TryGetProperty("line", out JsonElement ln) ? ln.GetInt32() : 0;
+                string severity = item.TryGetProperty("severity", out JsonElement s) ? s.GetString() ?? "error" : "error";
+                string message = item.TryGetProperty("message", out JsonElement m) ? m.GetString() ?? string.Empty : string.Empty;
+                string? code = item.TryGetProperty("code", out JsonElement c) ? c.GetString() : null;
 
                 violations.Add(new ToolViolation
                 {

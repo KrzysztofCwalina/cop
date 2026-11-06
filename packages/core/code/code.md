@@ -114,6 +114,17 @@ establish; an unavailable optional fact is `nic`, not an invented value.
   value when supplied by the parser. `CallTarget` and `ArgumentExpressions` describe calls.
   Literal expression kinds distinguish strings, numbers, booleans, null, arrays, and objects;
   unsupported forms remain `other`. Textual `Expression` is still not a substitute for these facts.
+- `Statement.ConditionExpression` describes a parsed control-flow condition when available.
+  Binary expressions expose their operator in `Name` and ordered operands in `Children`.
+  `CodeExpression.BooleanValue` is a decoded boolean literal; unknown values remain `nic`.
+- `File.Comments` and `Line.Comments` contain parsed comment trivia. A `Comment` exposes
+  its `Kind`, decoded `Content`, and one-based `Line`. For C# single-line comments,
+  `Content` excludes the `//` delimiter but retains the following whitespace.
+- `TypeReference.IsAnonymous` identifies a compiler-known anonymous type. Inspect generic
+  arguments recursively when deciding whether the full type can be written explicitly.
+- `Method.Kind` distinguishes ordinary `method` declarations from `constructor`,
+  `localFunction`, `accessor`, `operator`, and `destructor` declarations when supported.
+  Do not treat every callable exposed by a type as an ordinary class member method.
 - `Project.SourceFiles` is optional exact source-file membership. `nic` means membership is
   unspecified and directory-based membership is used; an empty list means no source files.
 

@@ -11,7 +11,7 @@ public class CSharpFrameworkMetadataTests
 {
     [TestCase(false)]
     [TestCase(true)]
-    public void AssemblyApi_ResolvesReferenceAndImplementationCoreIdentities_FromBundledContracts(bool implementationCore)
+    public async Task AssemblyApi_ResolvesReferenceAndImplementationCoreIdentities_FromBundledContracts(bool implementationCore)
     {
         var root = Path.Combine(Path.GetTempPath(), "cop-framework-api-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
@@ -51,8 +51,8 @@ public class CSharpFrameworkMetadataTests
             Assert.That(file.Types[1].Fields.Single().Type?.ToString(), Is.EqualTo("System.Int32"));
             var surface = file.Types[2];
             Assert.That(surface.BaseTypes, Is.EqualTo(new[] { "System.IDisposable" }));
-            Assert.That(surface.Methods.Select(method => method.Name), Is.EqualTo(new[] { "Dispose", "Map" }));
-            var map = surface.Methods[1];
+            Assert.That((await AsyncSourceFacts.MembersAsync(surface, CancellationToken.None)).Methods.Select(method => method.Name), Is.EqualTo(new[] { "Dispose", "Map" }));
+            var map = (await AsyncSourceFacts.MembersAsync(surface, CancellationToken.None)).Methods[1];
             Assert.That(map.ReturnType?.ToString(),
                 Is.EqualTo("System.Collections.Generic.Dictionary<System.String, System.Int32[]>"));
             Assert.That(map.Parameters.Select(parameter => parameter.Type?.ToString()),

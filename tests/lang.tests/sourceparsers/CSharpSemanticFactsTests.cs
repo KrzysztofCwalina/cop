@@ -44,14 +44,14 @@ public class CSharpSemanticFactsTests
         "<ItemGroup><Compile Remove=\"Excluded.cs\" /></ItemGroup>",
         "multiple target frameworks (<TargetFrameworks>), imported build files (<Import>), " +
         "conditional build settings (Condition attributes)")]
-    public void BuildSettingsWarningExplainsTheDetectedSettingsImpactAndAction(string settings, string reason)
+    public async Task BuildSettingsWarningExplainsTheDetectedSettingsImpactAndAction(string settings, string reason)
     {
         var project = Path.Combine(_root, "App.csproj");
         File.WriteAllText(project, $"<Project>{settings}</Project>");
         File.WriteAllText(Path.Combine(_root, "App.cs"), "class App { int Value() => 1; int Run() => Value(); }");
 
-        var call = Calls().Single();
-        Assert.That(Text(Object(call, "ValueType"), "Name"), Is.EqualTo("Int32"));
+        var call = (await (await CallsAsync(cancellationToken: CancellationToken.None)).SingleAsync());
+        Assert.That((await TextAsync((await ObjectAsync(call, "ValueType", cancellationToken: CancellationToken.None)), "Name", cancellationToken: CancellationToken.None)), Is.EqualTo("Int32"));
         Assert.That(ProviderErrors.Drain(), Is.Empty);
         Assert.That(ProviderWarnings.Drain(), Is.EqualTo(new[]
         {
@@ -64,7 +64,7 @@ public class CSharpSemanticFactsTests
     }
 
     [Test]
-    public void InputStatisticsIncludeSourcesDemandedOnlyForSemanticContext()
+    public async Task InputStatisticsIncludeSourcesDemandedOnlyForSemanticContext()
     {
         File.WriteAllText(Path.Combine(_root, "a.cs"), "class Caller { string Run() => Target.Value(); }");
         File.WriteAllText(Path.Combine(_root, "z.cs"), "static class Target { public static string Value() => \"ok\"; }");
@@ -72,29 +72,30 @@ public class CSharpSemanticFactsTests
         {
             using var statistics = new ExecutionStatistics();
             var provider = new CSharpProvider();
-            var result = (DeferredProviderResult)provider.QueryDeferred(new() { RootPath = _root, Collection = "Calls" });
-            var call = result.Collections["Calls"].Cast<Cop.Providers.SourceModel.StatementInfo>().First();
+            var result = (DeferredProviderResult?)(await provider.QueryDeferredAsync(new() { RootPath = _root, Collection = "Calls" }, cancellationToken: CancellationToken.None))
+                ?? throw new AssertionException("Expected a deferred provider result.");
+            var call = (await result.Collections["Calls"].Cast<Cop.Providers.SourceModel.StatementInfo>().FirstAsync());
             Assert.That(statistics.Snapshot().InputFiles, Is.EqualTo(1));
-            Assert.That(call.ValueType?.OriginalText, Is.EqualTo("string"));
+            Assert.That((await AsyncSourceFacts.SemanticAsync(call, CancellationToken.None)).ValueType?.OriginalText, Is.EqualTo("string"));
             Assert.That(statistics.Snapshot().InputFiles, Is.EqualTo(2));
             Assert.That(ProviderErrors.Drain(), Is.Empty);
         }
     }
 
     [Test]
-    public void SimpleProjectDoesNotReportUnsupportedBuildSettings()
+    public async Task SimpleProjectDoesNotReportUnsupportedBuildSettings()
     {
         File.WriteAllText(Path.Combine(_root, "App.csproj"),
             "<Project><PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup></Project>");
         File.WriteAllText(Path.Combine(_root, "App.cs"), "class App { int Value() => 1; int Run() => Value(); }");
 
-        Assert.That(Text(Object(Calls().Single(), "ValueType"), "Name"), Is.EqualTo("Int32"));
+        Assert.That((await TextAsync((await ObjectAsync((await (await CallsAsync(cancellationToken: CancellationToken.None)).SingleAsync()), "ValueType", cancellationToken: CancellationToken.None)), "Name", cancellationToken: CancellationToken.None)), Is.EqualTo("Int32"));
         Assert.That(ProviderErrors.Drain(), Is.Empty);
         Assert.That(ProviderWarnings.Drain(), Is.Empty);
     }
 
     [Test]
-    public void BuildOnlyConditionsDoNotProduceAnalysisWarnings()
+    public async Task BuildOnlyConditionsDoNotProduceAnalysisWarnings()
     {
         File.WriteAllText(Path.Combine(_root, "App.csproj"), """
             <Project Sdk="Microsoft.NET.Sdk">
@@ -108,13 +109,13 @@ public class CSharpSemanticFactsTests
             """);
         File.WriteAllText(Path.Combine(_root, "App.cs"), "class App { int Value() => 1; int Run() => Value(); }");
 
-        Assert.That(Text(Object(Calls().Single(), "ValueType"), "Name"), Is.EqualTo("Int32"));
+        Assert.That((await TextAsync((await ObjectAsync((await (await CallsAsync(cancellationToken: CancellationToken.None)).SingleAsync()), "ValueType", cancellationToken: CancellationToken.None)), "Name", cancellationToken: CancellationToken.None)), Is.EqualTo("Int32"));
         Assert.That(ProviderErrors.Drain(), Is.Empty);
         Assert.That(ProviderWarnings.Drain(), Is.Empty);
     }
 
     [Test]
-    public void ExplicitCompileInputsBindLinkedSourcesWithoutExcludedDuplicatesOnColdAndWarmRuns()
+    public async Task ExplicitCompileInputsBindLinkedSourcesWithoutExcludedDuplicatesOnColdAndWarmRuns()
     {
         var app = Path.Combine(_root, "App");
         var shared = Path.Combine(_root, "Shared");
@@ -138,32 +139,34 @@ public class CSharpSemanticFactsTests
         for (int run = 0; run < 2; run++)
         {
             var service = Service();
-            var call = Calls(service).Single();
-            Assert.That(Text(Object(call, "ValueType"), "Name"), Is.EqualTo("String"));
-            Assert.That(Path.GetFullPath(Text(Object(call, "ReferencedCallable"), "SourceFile")), Is.EqualTo(linked));
-            var files = Items(service.QueryProvider("csharp", new() { RootPath = _root, Collection = "Files" }))
-                .Cast<CopDynamicObject>().ToDictionary(file => Text(file, "Path"));
-            Assert.That(Items(files["App/Caller.cs"].GetField("Projects")).Select(value => value.Display()), Is.EqualTo(new[] { "App" }));
-            Assert.That(Items(files["Shared/Linked.cs"].GetField("Projects")).Select(value => value.Display()), Is.EqualTo(new[] { "App" }));
+            var call = (await (await CallsAsync(service, cancellationToken: CancellationToken.None)).SingleAsync());
+            Assert.That((await TextAsync((await ObjectAsync(call, "ValueType", cancellationToken: CancellationToken.None)), "Name", cancellationToken: CancellationToken.None)), Is.EqualTo("String"));
+            Assert.That(Path.GetFullPath((await TextAsync((await ObjectAsync(call, "ReferencedCallable", cancellationToken: CancellationToken.None)), "SourceFile", cancellationToken: CancellationToken.None))), Is.EqualTo(linked));
+            var files = new Dictionary<string, CopDynamicObject>();
+            await foreach (var file in Items(await service.QueryProviderAsync("csharp",
+                new() { RootPath = _root, Collection = "Files" })).Cast<CopDynamicObject>())
+                files.Add(await TextAsync(file, "Path"), file);
+            Assert.That((await Items((await files["App/Caller.cs"].GetFieldAsync("Projects", cancellationToken: CancellationToken.None))).Select(async (CopValue value, CancellationToken asyncCancellationToken7925) => await value.DisplayAsync(cancellationToken: asyncCancellationToken7925)).ToArrayAsync()), Is.EqualTo(new[] { "App" }));
+            Assert.That((await Items((await files["Shared/Linked.cs"].GetFieldAsync("Projects", cancellationToken: CancellationToken.None))).Select(async (CopValue value, CancellationToken asyncCancellationToken8068) => await value.DisplayAsync(cancellationToken: asyncCancellationToken8068)).ToArrayAsync()), Is.EqualTo(new[] { "App" }));
             foreach (var path in new[] { "App/Extra.cs", "Shared/Skipped.cs", "Shared/Removed.cs" })
-                Assert.That(Items(files[path].GetField("Projects")), Is.Empty);
+                Assert.That((await Items((await files[path].GetFieldAsync("Projects", cancellationToken: CancellationToken.None))).ToArrayAsync()), Is.Empty);
             Assert.That(ProviderErrors.Drain(), Is.Empty);
             Assert.That(ProviderWarnings.Drain(), Is.Empty);
         }
 
-        var eager = (Dictionary<string, List<object>>)new CSharpProvider().Query(new()
-            { RootPath = _root, Collection = "Files" })!;
+        var eager = (Dictionary<string, List<object>>)(await new CSharpProvider().QueryAsync(new()
+        { RootPath = _root, Collection = "Files" }, cancellationToken: CancellationToken.None))!;
         var eagerFiles = eager["Files"].Cast<Cop.Providers.SourceModel.SourceFile>().ToDictionary(file => file.Path);
-        Assert.That(eagerFiles["App/Caller.cs"].Projects, Is.EqualTo(new[] { "App" }));
-        Assert.That(eagerFiles["Shared/Linked.cs"].Projects, Is.EqualTo(new[] { "App" }));
+        Assert.That((await AsyncSourceFacts.ProjectsAsync(eagerFiles["App/Caller.cs"], CancellationToken.None)).Projects, Is.EqualTo(new[] { "App" }));
+        Assert.That((await AsyncSourceFacts.ProjectsAsync(eagerFiles["Shared/Linked.cs"], CancellationToken.None)).Projects, Is.EqualTo(new[] { "App" }));
         foreach (var path in new[] { "App/Extra.cs", "Shared/Skipped.cs", "Shared/Removed.cs" })
-            Assert.That(eagerFiles[path].Projects, Is.Empty);
+            Assert.That((await AsyncSourceFacts.ProjectsAsync(eagerFiles[path], CancellationToken.None)).Projects, Is.Empty);
         Assert.That(ProviderErrors.Drain(), Is.Empty);
         Assert.That(ProviderWarnings.Drain(), Is.Empty);
     }
 
     [Test]
-    public void ProjectReferencesCompileALibraryWhoseOnlySourceIsLinked()
+    public async Task ProjectReferencesCompileALibraryWhoseOnlySourceIsLinked()
     {
         foreach (var directory in new[] { "App", "Library", "Shared" })
             Directory.CreateDirectory(Path.Combine(_root, directory));
@@ -175,7 +178,7 @@ public class CSharpSemanticFactsTests
         var linked = Path.Combine(_root, "Shared", "Library.cs");
         File.WriteAllText(linked, "public static class Library { public static string Value() => \"ok\"; }");
 
-        Assert.That(Text(Object(Calls().Single(), "ValueType"), "Name"), Is.EqualTo("String"));
+        Assert.That((await TextAsync((await ObjectAsync((await (await CallsAsync(cancellationToken: CancellationToken.None)).SingleAsync()), "ValueType", cancellationToken: CancellationToken.None)), "Name", cancellationToken: CancellationToken.None)), Is.EqualTo("String"));
         Assert.That(ProviderErrors.Drain(), Is.Empty);
         Assert.That(ProviderWarnings.Drain(), Is.Empty);
     }
@@ -199,56 +202,56 @@ public class CSharpSemanticFactsTests
         """;
 
     [Test]
-    public void PublicQueries_ResolveFactoryReceiver_SelectedOverloadAndUnrelatedTarget_ColdAndWarm()
+    public async Task PublicQueries_ResolveFactoryReceiver_SelectedOverloadAndUnrelatedTarget_ColdAndWarm()
     {
         File.WriteAllText(Path.Combine(_root, "a.cs"), Caller);
         File.WriteAllText(Path.Combine(_root, "b.cs"), Dependency);
         for (int run = 0; run < 2; run++)
         {
-            var calls = Calls().Where(c => Text(c, "MemberName") == "Execute").ToArray();
+            var calls = (await (await CallsAsync(cancellationToken: CancellationToken.None)).Where(async (CopDynamicObject c, CancellationToken asyncCancellationToken11329) => (await TextAsync(c, "MemberName", cancellationToken: asyncCancellationToken11329)) == "Execute").ToArrayAsync());
             Assert.That(calls, Has.Length.EqualTo(3));
-            Assert.That(calls.Select(c => Text(Object(c, "ReferencedCallable"), "Signature")),
+            Assert.That((await calls.ToAsyncEnumerable().Select(async (CopDynamicObject c, CancellationToken asyncCancellationToken11475) => await TextAsync((await ObjectAsync(c, "ReferencedCallable", cancellationToken: asyncCancellationToken11475)), "Signature", cancellationToken: asyncCancellationToken11475)).ToArrayAsync()),
                 Is.EqualTo(new[] { "Library.Base.Execute(int)", "Library.Other.Execute(int)", "Library.Base.Execute(string)" }));
-            Assert.That(Text(Object(calls[0], "ReceiverType"), "Name"), Is.EqualTo("Derived"));
-            Assert.That(Text(Object(Object(calls[0], "ReferencedCallable"), "ReturnType"), "Name"), Is.EqualTo("Int32"));
-            Assert.That(Text(Object(calls[0], "ValueType"), "Name"), Is.EqualTo("Int32"));
-            Assert.That(Text(Object(calls[1], "ValueType"), "Name"), Is.EqualTo("Boolean"));
-            Assert.That(Text(Object(calls[2], "ValueType"), "Name"), Is.EqualTo("String"));
-            Assert.That(calls[1].GetField("ReceiverType"), Is.TypeOf<CopNull>(),
+            Assert.That((await TextAsync((await ObjectAsync(calls[0], "ReceiverType", cancellationToken: CancellationToken.None)), "Name", cancellationToken: CancellationToken.None)), Is.EqualTo("Derived"));
+            Assert.That((await TextAsync((await ObjectAsync((await ObjectAsync(calls[0], "ReferencedCallable", cancellationToken: CancellationToken.None)), "ReturnType", cancellationToken: CancellationToken.None)), "Name", cancellationToken: CancellationToken.None)), Is.EqualTo("Int32"));
+            Assert.That((await TextAsync((await ObjectAsync(calls[0], "ValueType", cancellationToken: CancellationToken.None)), "Name", cancellationToken: CancellationToken.None)), Is.EqualTo("Int32"));
+            Assert.That((await TextAsync((await ObjectAsync(calls[1], "ValueType", cancellationToken: CancellationToken.None)), "Name", cancellationToken: CancellationToken.None)), Is.EqualTo("Boolean"));
+            Assert.That((await TextAsync((await ObjectAsync(calls[2], "ValueType", cancellationToken: CancellationToken.None)), "Name", cancellationToken: CancellationToken.None)), Is.EqualTo("String"));
+            Assert.That((await calls[1].GetFieldAsync("ReceiverType", cancellationToken: CancellationToken.None)), Is.TypeOf<CopNull>(),
                 "A static type qualification is not an expression receiver.");
-            var selected = Object(calls[0], "ReferencedCallable");
-            Assert.That(Text(selected, "Name"), Is.EqualTo("Execute"));
-            Assert.That(Text(selected, "DeclaringType"), Is.EqualTo("Base"));
-            Assert.That(Text(selected, "Namespace"), Is.EqualTo("Library"));
-            Assert.That(Path.GetFullPath(Text(selected, "SourceFile")), Is.EqualTo(Path.Combine(_root, "b.cs")));
-            Assert.That(Text(selected, "Line"), Is.EqualTo("3"));
-            Assert.That(Text(selected, "Column"), Is.EqualTo("24"));
-            Assert.That(Text(selected, "EndColumn"), Is.EqualTo("31"));
-            Assert.That(Items(selected.GetField("Parameters")).Select(p => Text((CopDynamicObject)p, "Name")),
+            var selected = (await ObjectAsync(calls[0], "ReferencedCallable", cancellationToken: CancellationToken.None));
+            Assert.That((await TextAsync(selected, "Name", cancellationToken: CancellationToken.None)), Is.EqualTo("Execute"));
+            Assert.That((await TextAsync(selected, "DeclaringType", cancellationToken: CancellationToken.None)), Is.EqualTo("Base"));
+            Assert.That((await TextAsync(selected, "Namespace", cancellationToken: CancellationToken.None)), Is.EqualTo("Library"));
+            Assert.That(Path.GetFullPath((await TextAsync(selected, "SourceFile", cancellationToken: CancellationToken.None))), Is.EqualTo(Path.Combine(_root, "b.cs")));
+            Assert.That((await TextAsync(selected, "Line", cancellationToken: CancellationToken.None)), Is.EqualTo("3"));
+            Assert.That((await TextAsync(selected, "Column", cancellationToken: CancellationToken.None)), Is.EqualTo("24"));
+            Assert.That((await TextAsync(selected, "EndColumn", cancellationToken: CancellationToken.None)), Is.EqualTo("31"));
+            Assert.That((await Items((await selected.GetFieldAsync("Parameters", cancellationToken: CancellationToken.None))).Select(async (CopValue p, CancellationToken asyncCancellationToken13019) => await TextAsync((CopDynamicObject)p, "Name", cancellationToken: asyncCancellationToken13019)).ToArrayAsync()),
                 Is.EqualTo(new[] { "Int32" }));
             Assert.That(ProviderErrors.Drain(), Is.Empty);
         }
     }
 
     [Test]
-    public void DependencyEdit_RebindsUnchangedCallerAfterWarmSyntaxSnapshot()
+    public async Task DependencyEdit_RebindsUnchangedCallerAfterWarmSyntaxSnapshot()
     {
         File.WriteAllText(Path.Combine(_root, "a.cs"), Caller);
         var dependency = Path.Combine(_root, "b.cs");
         File.WriteAllText(dependency, Dependency);
-        string[] Values() => Calls().Where(c => Text(c, "MemberName") == "Execute")
-            .Select(c => Text(Object(c, "ValueType"), "Name")).ToArray();
-        Assert.That(Values(), Is.EqualTo(new[] { "Int32", "Boolean", "String" }));
-        Assert.That(Values(), Is.EqualTo(new[] { "Int32", "Boolean", "String" }));
+        async Task<string[]> ValuesAsync(CancellationToken cancellationToken = default) => (await (await CallsAsync(cancellationToken: cancellationToken)).Where(async (Cop.Lang.Interpreter.CopDynamicObject c, CancellationToken asyncCancellationToken13504) => (await TextAsync(c, "MemberName", cancellationToken: asyncCancellationToken13504)) == "Execute")
+            .Select(async (CopDynamicObject c, CancellationToken asyncCancellationToken13566) => await TextAsync((await ObjectAsync(c, "ValueType", cancellationToken: asyncCancellationToken13566)), "Name", cancellationToken: asyncCancellationToken13566)).ToArrayAsync());
+        Assert.That((await ValuesAsync(cancellationToken: CancellationToken.None)), Is.EqualTo(new[] { "Int32", "Boolean", "String" }));
+        Assert.That((await ValuesAsync(cancellationToken: CancellationToken.None)), Is.EqualTo(new[] { "Int32", "Boolean", "String" }));
         var unchanged = File.GetLastWriteTimeUtc(Path.Combine(_root, "a.cs"));
         File.WriteAllText(dependency, Dependency.Replace("virtual int Execute", "virtual long Execute"));
-        Assert.That(Values(), Is.EqualTo(new[] { "Int64", "Boolean", "String" }));
+        Assert.That((await ValuesAsync(cancellationToken: CancellationToken.None)), Is.EqualTo(new[] { "Int64", "Boolean", "String" }));
         Assert.That(File.GetLastWriteTimeUtc(Path.Combine(_root, "a.cs")), Is.EqualTo(unchanged));
         Assert.That(ProviderErrors.Drain(), Is.Empty);
     }
 
     [Test]
-    public void CopConsumer_ExecutesTheCommonSemanticSurface()
+    public async Task CopConsumer_ExecutesTheCommonSemanticSurface()
     {
         File.WriteAllText(Path.Combine(_root, "a.cs"), Caller);
         File.WriteAllText(Path.Combine(_root, "b.cs"), Dependency);
@@ -264,7 +267,10 @@ public class CSharpSemanticFactsTests
         var repository = TestContext.CurrentContext.TestDirectory;
         while (!File.Exists(Path.Combine(repository, "cop.sln")))
             repository = Path.GetDirectoryName(repository) ?? throw new AssertionException("Cannot locate package source.");
-        var result = Engine.Run(program, _root, additionalFeedPaths: [Path.Combine(repository, "packages")]);
+        var result = (await Engine.RunAsync(program, _root, new EngineRunOptions
+        {
+            AdditionalFeedPaths = [Path.Combine(repository, "packages")],
+        }));
         Assert.That(result.HasFatalErrors, Is.False, string.Join("; ", result.Errors));
         Assert.That(result.Outputs.Select(output => output.Message), Is.EqualTo(new[]
         {
@@ -275,33 +281,33 @@ public class CSharpSemanticFactsTests
     }
 
     [Test]
-    public void StructuralFirstAndTake_DoNotReadLaterFilesOrBindMissingContext()
+    public async Task StructuralFirstAndTake_DoNotReadLaterFilesOrBindMissingContext()
     {
         File.WriteAllText(Path.Combine(_root, "a.cs"), "class First { void Run() { ping(); ping(); } }");
         var later = Path.Combine(_root, "b.cs");
         File.WriteAllText(later, "class Later {}");
         using var locked = new FileStream(later, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
         var service = Service();
-        var types = service.QueryProvider("csharp", new() { RootPath = _root, Collection = "Types" });
-        Assert.That(Text((CopDynamicObject)Items(types).First(), "Name"), Is.EqualTo("First"));
-        var calls = Calls(service).Take(1).ToArray();
-        Assert.That(calls.Select(c => Text(c, "MemberName")), Is.EqualTo(new[] { "ping" }));
+        var types = (await service.QueryProviderAsync("csharp", new() { RootPath = _root, Collection = "Types" }, cancellationToken: CancellationToken.None));
+        Assert.That((await TextAsync((CopDynamicObject)(await Items(types).FirstAsync()), "Name", cancellationToken: CancellationToken.None)), Is.EqualTo("First"));
+        var calls = (await (await CallsAsync(service, cancellationToken: CancellationToken.None)).Take(1).ToArrayAsync());
+        Assert.That((await calls.ToAsyncEnumerable().Select(async (Cop.Lang.Interpreter.CopDynamicObject c, CancellationToken asyncCancellationToken16489) => await TextAsync(c, "MemberName", cancellationToken: asyncCancellationToken16489)).ToArrayAsync()), Is.EqualTo(new[] { "ping" }));
         Assert.That(ProviderErrors.Drain(), Is.Empty);
     }
 
     [Test]
-    public void MissingContext_IsReportedOnlyOnSemanticDemand_AndNeverFabricatesSelectedTarget()
+    public async Task MissingContext_IsReportedOnlyOnSemanticDemand_AndNeverFabricatesSelectedTarget()
     {
         File.WriteAllText(Path.Combine(_root, "a.cs"), "class Caller { void Run() { Missing.Factory().Execute(1); } }");
-        var call = Calls().Single(c => Text(c, "MemberName") == "Execute");
+        var call = (await (await CallsAsync(cancellationToken: CancellationToken.None)).SingleAsync(async (Cop.Lang.Interpreter.CopDynamicObject c, CancellationToken cancellationToken) => (await TextAsync(c, "MemberName", cancellationToken: CancellationToken.None)) == "Execute"));
         Assert.That(ProviderErrors.Drain(), Is.Empty);
-        Assert.That(call.GetField("ReferencedCallable"), Is.TypeOf<CopNull>());
-        Assert.That(call.GetField("ValueType"), Is.TypeOf<CopNull>());
-        Assert.That(call.GetField("ReceiverType"), Is.TypeOf<CopNull>());
+        Assert.That((await call.GetFieldAsync("ReferencedCallable", cancellationToken: CancellationToken.None)), Is.TypeOf<CopNull>());
+        Assert.That((await call.GetFieldAsync("ValueType", cancellationToken: CancellationToken.None)), Is.TypeOf<CopNull>());
+        Assert.That((await call.GetFieldAsync("ReceiverType", cancellationToken: CancellationToken.None)), Is.TypeOf<CopNull>());
         var errors = ProviderErrors.Drain();
         Assert.That(errors.Any(e => e.Contains("a.cs") && e.Contains("Missing") && e.Contains("CS0103")), Is.True,
             string.Join(System.Environment.NewLine, errors));
-        Assert.That(call.GetField("ReferencedCallable"), Is.TypeOf<CopNull>());
+        Assert.That((await call.GetFieldAsync("ReferencedCallable", cancellationToken: CancellationToken.None)), Is.TypeOf<CopNull>());
         Assert.That(ProviderErrors.Drain(), Is.Empty, "One file binding demand must not repeat diagnostics.");
     }
 
@@ -313,23 +319,23 @@ public class CSharpSemanticFactsTests
         return service;
     }
 
-    private IEnumerable<CopDynamicObject> Calls(ProviderQueryService? service = null) =>
-        Items((service ?? Service()).QueryProvider("csharp", new() { RootPath = _root, Collection = "Calls" }))
+    private async Task<IAsyncEnumerable<CopDynamicObject>> CallsAsync(ProviderQueryService? service = null, CancellationToken cancellationToken = default) =>
+        Items((await (service ?? Service()).QueryProviderAsync("csharp", new() { RootPath = _root, Collection = "Calls" }, cancellationToken: cancellationToken)))
             .Cast<CopDynamicObject>();
 
-    private static string Text(CopDynamicObject item, string field) => item.GetField(field).Display();
-    private static CopDynamicObject Object(CopDynamicObject item, string field)
+    private static async Task<string> TextAsync(CopDynamicObject item, string field, CancellationToken cancellationToken = default) => (await (await item.GetFieldAsync(field, cancellationToken: cancellationToken)).DisplayAsync(cancellationToken: cancellationToken));
+    private static async Task<CopDynamicObject> ObjectAsync(CopDynamicObject item, string field, CancellationToken cancellationToken = default)
     {
-        var value = item.GetField(field);
+        var value = (await item.GetFieldAsync(field, cancellationToken: cancellationToken));
         Assert.That(value, Is.TypeOf<CopDynamicObject>(), $"{field} must have an exact bound value.");
         return (CopDynamicObject)value;
     }
 
-    private static IEnumerable<CopValue> Items(CopValue value) => value switch
+    private static IAsyncEnumerable<CopValue> Items(CopValue value) => value switch
     {
-        CopList list => list.Items,
-        CopLazyCollection lazy => lazy.Enumerate(),
-        CopQueryable query => query.Enumerate(),
+        CopList list => list.Items.ToAsyncEnumerable(),
+        CopLazyCollection lazy => lazy.EnumerateAsync(cancellationToken: CancellationToken.None),
+        CopQueryable query => query.EnumerateAsync(cancellationToken: CancellationToken.None),
         _ => throw new AssertionException($"Expected collection, got {value.GetType().Name}")
     };
 }

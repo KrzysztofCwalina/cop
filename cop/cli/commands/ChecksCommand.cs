@@ -1,3 +1,5 @@
+// Generates checks from repository guidelines and verifies the generated suite.
+
 using System.ComponentModel;
 using System.Diagnostics;
 
@@ -17,19 +19,23 @@ public static class ChecksCommand
     private const string SectionStart = "<!-- BEGIN COP INSTRUCTIONS -->";
     private const string SectionEnd = "<!-- END COP INSTRUCTIONS -->";
 
-    public static int Execute(bool claude = false)
-        => Execute(claude, Directory.GetCurrentDirectory(), RunAgent);
+    /// <summary>
+    /// Generates repository checks with the selected coding agent and verifies them.
+    /// </summary>
+    public static Task<int> ExecuteAsync(InstructionAgent agent = InstructionAgent.Copilot)
+        => ExecuteAsync(agent == InstructionAgent.Claude,
+            Directory.GetCurrentDirectory(), RunAgent);
 
     // Testable core: process execution is injected so the orchestration (guideline discovery,
     // prompt building, launch, final verify gate) can be unit-tested offline.
-    internal static int Execute(
+    internal static async Task<int> ExecuteAsync(
         bool claude,
         string cwd,
         Func<ProcessStartInfo, int> runAgent)
     {
         // 1. Require a source of project guidelines to convert.
-        var copilotInstructions = Path.Combine(cwd, ".github", "copilot-instructions.md");
-        var agentsMd = Path.Combine(cwd, "AGENTS.md");
+        string copilotInstructions = Path.Combine(cwd, ".github", "copilot-instructions.md");
+        string agentsMd = Path.Combine(cwd, "AGENTS.md");
         if (!File.Exists(copilotInstructions) && !File.Exists(agentsMd))
         {
             Console.Error.WriteLine("cop init --checks: no project guidelines found.");
@@ -41,9 +47,9 @@ public static class ChecksCommand
         // 2. Build the task prompt and launch the agent in the repo. The agent executable is
         //    resolved against PATH by the OS (UseShellExecute=false); a missing agent surfaces as
         //    a Win32Exception, which we turn into an install hint.
-        var agent = claude ? "claude" : "copilot";
-        var prompt = BuildPrompt();
-        var psi = BuildStartInfo(agent, prompt, cwd);
+        string agent = claude ? "claude" : "copilot";
+        string prompt = BuildPrompt();
+        ProcessStartInfo psi = BuildStartInfo(agent, prompt, cwd);
 
         Console.WriteLine($"Launching {agent} to generate cop checks from your guidelines...");
         Console.WriteLine($"  working directory: {cwd}");
@@ -58,12 +64,18 @@ public static class ChecksCommand
         {
             Console.Error.WriteLine($"cop init --checks: '{agent}' CLI not found on PATH.");
             if (claude)
+            {
                 Console.Error.WriteLine("Install Claude Code: https://docs.anthropic.com/en/docs/claude-code");
+            }
             else
+            {
                 Console.Error.WriteLine("Install GitHub Copilot CLI: https://docs.github.com/copilot/how-tos/set-up/install-copilot-cli");
+            }
+
             return 1;
         }
-        catch (Exception ex) when (ex is not OutOfMemoryException)
+        catch (Exception ex) when (ex is IOException or InvalidOperationException or
+            UnauthorizedAccessException)
         {
             Console.Error.WriteLine($"cop init --checks: failed to launch '{agent}': {ex.Message}");
             return 1;
@@ -71,18 +83,22 @@ public static class ChecksCommand
 
         // 4. Final verify gate — confirm the agent actually produced verifiable checks.
         Console.WriteLine();
-        var checksDir = Path.Combine(cwd, "cop-checks");
+        string checksDir = Path.Combine(cwd, "cop-checks");
         if (!Directory.Exists(checksDir) ||
             Directory.GetFiles(checksDir, "*.cop", SearchOption.AllDirectories).Length == 0)
         {
             Console.Error.WriteLine("cop init --checks: the agent did not produce any cop-checks/*.cop files.");
             if (agentExit != 0)
+            {
                 Console.Error.WriteLine($"(the {agent} CLI exited with code {agentExit})");
+            }
+
             return 1;
         }
 
         Console.WriteLine("Verifying generated checks: cop verify cop-checks/ --strict-structure");
-        int verifyExit = VerifyCommand.Execute(checksDir, strictStructure: true);
+        int verifyExit = VerifyCommand.Execute(checksDir,
+            new VerificationOptions { IsStrictStructureEnabled = true });
         if (verifyExit != 0)
         {
             Console.Error.WriteLine();
@@ -96,12 +112,13 @@ public static class ChecksCommand
         // toError anchored on a collection). Actually RUN the checks so a crash is caught here
         // instead of being reported as success. Exit codes: 0 = clean, 1 = violations found
         // (the checks ran fine), 2 = fatal runtime error (the checks are broken).
-        var mainCop = Path.Combine(checksDir, "main.cop");
+        string mainCop = Path.Combine(checksDir, "main.cop");
         if (File.Exists(mainCop))
         {
             Console.WriteLine();
             Console.WriteLine("Running generated checks: cop cop-checks/main.cop -t .");
-            int runExit = RunCommand.Execute(mainCop, target: cwd);
+            int runExit = await RunCommand.ExecuteAsync(
+                mainCop, new RunOptions { Target = cwd });
             if (runExit == 2)
             {
                 Console.Error.WriteLine();
@@ -123,7 +140,7 @@ public static class ChecksCommand
     /// </summary>
     internal static ProcessStartInfo BuildStartInfo(string agent, string prompt, string workingDir)
     {
-        var psi = new ProcessStartInfo
+        ProcessStartInfo psi = new ProcessStartInfo
         {
             FileName = agent,
             WorkingDirectory = workingDir,
@@ -164,7 +181,7 @@ public static class ChecksCommand
     internal static string BuildPrompt()
     {
         // The same authoring guide `cop init` writes — canonical templates + DO-NOT rules.
-        var authoringGuide = InitCommand.GetInstructionContent();
+        string authoringGuide = InitCommand.GetInstructionContent();
 
         return $$"""
             You are setting up cop static-analysis checks for this repository.
@@ -282,7 +299,7 @@ public static class ChecksCommand
 
     private static int RunAgent(ProcessStartInfo psi)
     {
-        using var proc = Process.Start(psi)
+        using Process proc = Process.Start(psi)
             ?? throw new InvalidOperationException("process did not start");
         proc.WaitForExit();
         return proc.ExitCode;

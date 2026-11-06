@@ -20,7 +20,7 @@ public class ReleasePackageCompatibilityTests
         var root = Path.GetFullPath(Path.Combine(TestContext.CurrentContext.TestDirectory, "..", "..", "..", "..", ".."));
         var packages = Directory.EnumerateFiles(Path.Combine(root, "packages"), "cop.json", SearchOption.AllDirectories)
             .Select(path => Path.GetDirectoryName(path)!)
-            .Select(path => (Path: path, Metadata: PackageMetadata.TryLoadFromDirectory(path)!))
+            .Select(path => (Path: path, Metadata: PackageMetadata.LoadFromDirectoryOrDefault(path)!))
             .Where(package => package.Metadata.IsClrProvider)
             .ToArray();
 
@@ -76,7 +76,7 @@ public class ReleasePackageCompatibilityTests
     }
 
     [Test]
-    public void Issue093_IncompatibleLocalProviderIsSkippedWithoutDeletingIt()
+    public async Task Issue093_IncompatibleLocalProviderIsSkippedWithoutDeletingIt()
     {
         var root = Path.Combine(Path.GetTempPath(), "cop-release-packages-" + Guid.NewGuid().ToString("N"));
         try
@@ -89,7 +89,9 @@ public class ReleasePackageCompatibilityTests
             Assert.That(File.Exists(Path.Combine(stale, "lib", "fixture.dll")), Is.True);
 
             var errors = new List<string>();
-            Assert.That(ProviderLoader.Load(stale, PackageMetadata.TryLoadFromDirectory(stale)!, errors), Is.Null);
+            var loaded = await ProviderLoader.LoadAsync(
+                stale, PackageMetadata.LoadFromDirectoryOrDefault(stale)!, errors);
+            Assert.That(loaded.Data, Is.Null);
             Assert.That(errors, Has.Count.EqualTo(1));
             Assert.That(errors[0], Does.Contain("2000.1.1.1").And.Contain("fixture.dll").And.Contain("incompatible"));
         }
@@ -97,7 +99,7 @@ public class ReleasePackageCompatibilityTests
     }
 
     [Test]
-    public void Issue093_EngineUsesMatchingFallbackInsteadOfIncompatibleLocalProvider()
+    public async Task Issue093_EngineUsesMatchingFallbackInsteadOfIncompatibleLocalProvider()
     {
         var root = Path.Combine(Path.GetTempPath(), "cop-provider-fallback-" + Guid.NewGuid().ToString("N"));
         try
@@ -113,8 +115,11 @@ public class ReleasePackageCompatibilityTests
             var main = Path.Combine(root, "main.cop");
             File.WriteAllText(main, "import fixture\ncommand MAIN = print(selected)");
 
-            var result = Engine.Run(root, root, additionalFeedPaths: [Path.Combine(root, "fallback")],
-                scriptFiles: [main]);
+            var result = (await Engine.RunAsync(root, root, new EngineRunOptions
+            {
+                AdditionalFeedPaths = [Path.Combine(root, "fallback")],
+                ScriptFiles = [main],
+            }));
             Assert.That(result.HasParseErrors, Is.False, string.Join("\n", result.ParseErrors));
             Assert.That(result.Errors, Is.Empty, string.Join("\n", result.Errors));
             Assert.That(result.Outputs.Select(o => o.Message), Is.EqualTo(new[] { "MATCHING" }));
@@ -124,7 +129,7 @@ public class ReleasePackageCompatibilityTests
     }
 
     [Test]
-    public void Issue093_InitializationFailureDoesNotRunCommandOrReportUndefinedBindings()
+    public async Task Issue093_InitializationFailureDoesNotRunCommandOrReportUndefinedBindings()
     {
         var root = Path.Combine(Path.GetTempPath(), "cop-initialization-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
@@ -136,7 +141,7 @@ public class ReleasePackageCompatibilityTests
                 let all-violations = []
                 command MAIN = print(all-violations)
                 """);
-            var result = Engine.Run(root, root);
+            var result = (await Engine.RunAsync(root, root));
             Assert.That(result.HasParseErrors, Is.False, string.Join("\n", result.ParseErrors));
             Assert.That(result.HasFatalErrors, Is.True, string.Join("\n", result.Errors));
             Assert.That(result.Errors, Has.Count.EqualTo(1));

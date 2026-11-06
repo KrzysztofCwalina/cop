@@ -282,8 +282,11 @@ public class AiJudgeTests
         Directory.CreateDirectory(scripts);
         File.WriteAllText(Path.Combine(scripts, "main.cop"), program);
 
-        var result = Engine.Run(scripts, target, additionalFeedPaths: [Path.Combine(RepoRoot, "packages")],
-            reviewOptions: new ReviewOptions { Scope = "full", AiConfigPath = _config });
+        var result = (await Engine.RunAsync(scripts, target, new EngineRunOptions
+        {
+            AdditionalFeedPaths = [Path.Combine(RepoRoot, "packages")],
+            ReviewOptions = new ReviewOptions { Scope = "full", AiConfigPath = _config },
+        }));
 
         Assert.That(result.ParseErrors, Is.Empty);
         Assert.That(result.Errors, Is.Empty);
@@ -359,7 +362,7 @@ public class AiJudgeTests
     {
         using var model = ConfigureModel("[]");
         var result = await RunCli(Path.Combine(RepoRoot, "cop-checks", "main.cop"),
-            "-t", RepoRoot, "-c", "ai", "--no-color");
+            "-t", RepoRoot, "-c", "ai", "--no-color", "-dd");
         Assert.That(result.ExitCode, Is.EqualTo(0), result.Stderr + result.Stdout);
         Assert.That(result.Stdout.Trim(), Is.EqualTo(""));
         using var request = JsonDocument.Parse(await model.Request);
@@ -367,7 +370,7 @@ public class AiJudgeTests
         var files = context.RootElement.GetProperty("files").EnumerateArray().ToArray();
         var engine = files.Single(file => file.GetProperty("path").GetString() == "Engine.cs");
         Assert.That(engine.GetProperty("lines")[0].GetProperty("text").GetString(),
-            Is.EqualTo("using System.Diagnostics;"));
+            Is.EqualTo(File.ReadLines(Path.Combine(RepoRoot, "cop", "runtime", "Engine.cs")).First()));
         Assert.That(files.Any(file => file.GetProperty("path").GetString() == "cli/Program.cs"), Is.False);
     }
 
@@ -387,6 +390,7 @@ public class AiJudgeTests
             start.ArgumentList.Add(arg);
         start.ArgumentList.Add("--scope");
         start.ArgumentList.Add("full");
+        start.ArgumentList.Add("--no-user-checks");
         start.ArgumentList.Add("--ai-config");
         start.ArgumentList.Add(_config);
         using var process = Process.Start(start)!;
@@ -397,10 +401,14 @@ public class AiJudgeTests
         {
             await process.WaitForExitAsync(timeout.Token);
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException exception)
         {
-            process.Kill(entireProcessTree: true);
-            throw;
+            if (!process.HasExited)
+                process.Kill(entireProcessTree: true);
+            await process.WaitForExitAsync();
+            throw new TimeoutException(
+                $"CLI exceeded its deadline.\nstdout:\n{await stdout}\nstderr:\n{await stderr}",
+                exception);
         }
         return (process.ExitCode, await stdout, await stderr);
     }
@@ -428,7 +436,7 @@ public class AiJudgeTests
     private async Task<List<DataObject>> Judge(string requirement, object? codebase)
     {
         var context = new AnalysisContext(_root, new ReviewOptions { Scope = "full", AiConfigPath = _config });
-        var result = await new AiProvider().GetFunctions(context)!["judge"]([requirement, codebase]);
+        var result = await new AiProvider().GetFunctions(context)!["judge"]([requirement, codebase],CancellationToken.None);
         Assert.That(result, Is.InstanceOf<IEnumerable<object?>>());
         return ((IEnumerable<object?>)result!).Cast<DataObject>().ToList();
     }

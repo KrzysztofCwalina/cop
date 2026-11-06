@@ -1,3 +1,5 @@
+// Searches package feeds and displays matching packages.
+
 using System;
 using System.Collections.Generic;
 using System.CommandLine;
@@ -9,35 +11,41 @@ using Cop.Core;
 
 namespace Cop.Cli.Commands;
 
+/// <summary>Finds packages across the configured package feeds.</summary>
 public static class SearchCommand
 {
+    /// <summary>
+    /// Creates the package-search command with its required search query.
+    /// </summary>
     public static Command Create()
     {
-        var queryArg = new Argument<string>("query");
-        var command = new Command("search", "Search for packages across configured feeds")
+        Argument<string> queryArg = new Argument<string>("query");
+        Command command = new Command("search", "Search for packages across configured feeds")
         {
             queryArg
         };
 
-        command.SetAction(parseResult => Execute(parseResult.GetValue(queryArg)));
+        command.SetAction(parseResult => ExecuteAsync(parseResult.GetValue(queryArg)
+            ?? throw new InvalidOperationException("The required search query is missing.")));
 
         return command;
     }
 
-    private static int Execute(string query)
+    private static async Task<int> ExecuteAsync(string query)
     {
         try
         {
-            return ExecuteAsync(query).GetAwaiter().GetResult();
+            return await SearchFeedsAsync(query);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or
+            HttpRequestException or System.Text.Json.JsonException)
         {
             Console.Error.WriteLine($"Error: {ex.Message}");
             return 1;
         }
     }
 
-    private static async Task<int> ExecuteAsync(string query)
+    private static async Task<int> SearchFeedsAsync(string query)
     {
         if (string.IsNullOrWhiteSpace(query))
         {
@@ -46,8 +54,8 @@ public static class SearchCommand
         }
 
         // Load feeds
-        var feedManager = new FeedManager();
-        var feeds = feedManager.GetFeeds();
+        FeedManager feedManager = new FeedManager();
+        List<string> feeds = feedManager.GetFeeds();
 
         if (feeds.Count == 0)
         {
@@ -56,42 +64,42 @@ public static class SearchCommand
         }
 
         // Create HTTP client with GitHub token if available
-        var githubToken = Environment.GetEnvironmentVariable("GITHUB_TOKEN");
-        using var httpClient = new HttpClient();
-        var packageSource = new GitHubPackageSource(httpClient, githubToken);
+        string? githubToken = Environment.GetEnvironmentVariable("GITHUB_TOKEN");
+        using HttpClient httpClient = new HttpClient();
+        GitHubPackageSource packageSource = new GitHubPackageSource(httpClient, githubToken);
 
         // Search across feeds
-        var results = new List<FeedSearchResult>();
-        var queryLower = query.ToLowerInvariant();
+        List<FeedSearchResult> results = new List<FeedSearchResult>();
+        string queryLower = query.ToLowerInvariant();
 
-        foreach (var feed in feeds)
+        foreach (string feed in feeds)
         {
             // Parse feed URL: github.com/owner/repo
-            var feedParts = feed.Split('/', StringSplitOptions.RemoveEmptyEntries);
+            string[] feedParts = feed.Split('/', StringSplitOptions.RemoveEmptyEntries);
             if (feedParts.Length != 3 || feedParts[0] != "github.com")
             {
                 Console.Error.WriteLine($"Warning: Invalid feed format: '{feed}'. Skipping.");
                 continue;
             }
 
-            var owner = feedParts[1];
-            var repo = feedParts[2];
+            string owner = feedParts[1];
+            string repo = feedParts[2];
 
             // List packages in this feed
-            var packages = await packageSource.ListPackagesAsync(owner, repo);
-            
+            List<string> packages = await packageSource.ListPackagesAsync(owner, repo);
+
             // Filter packages by query
-            var matchingPackages = new List<PackageInfo>();
-            foreach (var packageName in packages)
+            List<PackageInfo> matchingPackages = new List<PackageInfo>();
+            foreach (string packageName in packages)
             {
                 if (packageName.Contains(queryLower, StringComparison.OrdinalIgnoreCase))
                 {
                     // Try to fetch metadata for display
-                    var packageInfo = new PackageInfo { Name = packageName };
-                    
+                    PackageInfo packageInfo = new PackageInfo { Name = packageName };
+
                     try
                     {
-                        var packageRef = new PackageReference
+                        PackageReference packageRef = new PackageReference
                         {
                             FullPath = $"{feed}/{packageName}",
                             Host = "github.com",
@@ -101,14 +109,15 @@ public static class SearchCommand
                             Version = null
                         };
 
-                        var metadata = await packageSource.GetPackageMetadataAsync(packageRef);
+                        PackageMetadata metadata = await packageSource.GetPackageMetadataAsync(packageRef);
                         packageInfo.Title = metadata.Title;
                         packageInfo.Version = metadata.Version;
                     }
-                    catch
+                    catch (Exception ex) when (ex is HttpRequestException or
+                        IOException or System.Text.Json.JsonException)
                     {
-                        // If metadata fetch fails, just use the package name
-                        // Keep packageInfo as is with defaults
+                        Console.Error.WriteLine(
+                            $"Warning: Could not read metadata for {packageName}: {ex.Message}");
                     }
 
                     matchingPackages.Add(packageInfo);
@@ -132,15 +141,15 @@ public static class SearchCommand
             return 0;
         }
 
-        foreach (var feedResult in results)
+        foreach (FeedSearchResult feedResult in results)
         {
             Console.WriteLine("Feed: {0}", feedResult.Feed);
-            foreach (var package in feedResult.Packages)
+            foreach (PackageInfo package in feedResult.Packages)
             {
                 // Display in table format: name, title, version
-                var name = package.Name.PadRight(20);
-                var title = (package.Title ?? "").PadRight(30);
-                var version = package.Version ?? "unknown";
+                string name = package.Name.PadRight(20);
+                string title = (package.Title ?? "").PadRight(30);
+                string version = package.Version ?? "unknown";
                 Console.WriteLine("  {0} {1} {2}", name, title, version);
             }
             Console.WriteLine();

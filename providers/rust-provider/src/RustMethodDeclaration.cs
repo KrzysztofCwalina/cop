@@ -1,3 +1,5 @@
+// Preserves Rust unsafe, const, and extern function facts through source caching.
+
 namespace Cop.Providers.SourceModel;
 
 /// <summary>
@@ -9,6 +11,7 @@ namespace Cop.Providers.SourceModel;
 /// </summary>
 public sealed record RustMethodDeclaration : MethodDeclaration
 {
+    /// <summary>Copies a shared method and adds Rust function qualifier facts.</summary>
     public RustMethodDeclaration(
         MethodDeclaration source,
         bool isUnsafe = false,
@@ -30,8 +33,10 @@ public sealed record RustMethodDeclaration : MethodDeclaration
     /// <summary>True for <c>extern</c> functions (FFI, e.g. <c>extern "C" fn</c>).</summary>
     public bool IsExtern { get; init; }
 
+    /// <inheritdoc />
     public override string? LanguageTag => "rust";
 
+    /// <inheritdoc />
     public override IReadOnlyList<KeyValuePair<string, bool>>? LanguageFlags =>
     [
         new("IsUnsafe", IsUnsafe),
@@ -44,18 +49,7 @@ public sealed record RustMethodDeclaration : MethodDeclaration
     public static void RegisterCacheFactory() =>
         MethodTypeRegistry.Register("rust", (baseDecl, flags) => new RustMethodDeclaration(
             baseDecl,
-            isUnsafe: flags.TryGetValue("IsUnsafe", out var u) && u,
-            isConst: flags.TryGetValue("IsConst", out var c) && c,
-            isExtern: flags.TryGetValue("IsExtern", out var e) && e));
-}
-
-public static class RustMethodDeclarationExtensions
-{
-    /// <summary>Wraps a common <see cref="MethodDeclaration"/> as a Rust-specific one.</summary>
-    public static RustMethodDeclaration AsRust(
-        this MethodDeclaration source,
-        bool isUnsafe = false,
-        bool isConst = false,
-        bool isExtern = false)
-        => new(source, isUnsafe, isConst, isExtern);
+            isUnsafe: flags.TryGetValue("IsUnsafe", out bool u) && u,
+            isConst: flags.TryGetValue("IsConst", out bool c) && c,
+            isExtern: flags.TryGetValue("IsExtern", out bool e) && e));
 }

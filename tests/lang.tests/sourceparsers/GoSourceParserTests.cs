@@ -16,29 +16,29 @@ public class GoSourceParserTests
     // ── Package / namespace ──────────────────────────────────────────────────
 
     [Test]
-    public void Parse_ExtractsPackageName()
+    public async Task Parse_ExtractsPackageName()
     {
         var src = "package main\n";
-        var result = _parser.Parse("main.go", src)!;
+        var result = (await _parser.ParseAsync("main.go", src, cancellationToken: CancellationToken.None))!;
         Assert.That(result.Namespace, Is.EqualTo("main"));
     }
 
     // ── Import extraction ────────────────────────────────────────────────────
 
     [Test]
-    public void Parse_SingleImport_ExtractsPath()
+    public async Task Parse_SingleImport_ExtractsPath()
     {
         var src = """
             package main
 
             import "fmt"
             """;
-        var result = _parser.Parse("main.go", src)!;
+        var result = (await _parser.ParseAsync("main.go", src, cancellationToken: CancellationToken.None))!;
         Assert.That(result.Usings, Is.EqualTo(new[] { "fmt" }));
     }
 
     [Test]
-    public void Parse_ImportBlock_ExtractsAllPaths()
+    public async Task Parse_ImportBlock_ExtractsAllPaths()
     {
         var src = """
             package server
@@ -49,7 +49,7 @@ public class GoSourceParserTests
                 "os"
             )
             """;
-        var result = _parser.Parse("server.go", src)!;
+        var result = (await _parser.ParseAsync("server.go", src, cancellationToken: CancellationToken.None))!;
         Assert.That(result.Usings, Does.Contain("fmt"));
         Assert.That(result.Usings, Does.Contain("net/http"));
         Assert.That(result.Usings, Does.Contain("os"));
@@ -57,7 +57,7 @@ public class GoSourceParserTests
     }
 
     [Test]
-    public void Parse_ImportBlockWithAlias_ExtractsPath()
+    public async Task Parse_ImportBlockWithAlias_ExtractsPath()
     {
         // The alias is ignored; the import path is stored.
         var src = """
@@ -67,14 +67,14 @@ public class GoSourceParserTests
                 log "github.com/sirupsen/logrus"
             )
             """;
-        var result = _parser.Parse("main.go", src)!;
+        var result = (await _parser.ParseAsync("main.go", src, cancellationToken: CancellationToken.None))!;
         Assert.That(result.Usings, Does.Contain("github.com/sirupsen/logrus"));
     }
 
     // ── Struct types ─────────────────────────────────────────────────────────
 
     [Test]
-    public void Parse_StructDecl_ExtractsNameAndKind()
+    public async Task Parse_StructDecl_ExtractsNameAndKind()
     {
         var src = """
             package shapes
@@ -84,7 +84,7 @@ public class GoSourceParserTests
                 Height float64
             }
             """;
-        var result = _parser.Parse("shapes.go", src)!;
+        var result = (await _parser.ParseAsync("shapes.go", src, cancellationToken: CancellationToken.None))!;
         var ty = result.Types.FirstOrDefault(t => t.Name == "Rectangle");
         Assert.That(ty, Is.Not.Null);
         Assert.That(ty!.Kind, Is.EqualTo(TypeKind.Struct));
@@ -96,7 +96,7 @@ public class GoSourceParserTests
     }
 
     [Test]
-    public void Parse_StructWithStructTags_SetsHasStructTags()
+    public async Task Parse_StructWithStructTags_SetsHasStructTags()
     {
         var src = """
             package model
@@ -106,21 +106,21 @@ public class GoSourceParserTests
                 Email string `json:"email"`
             }
             """;
-        var result = _parser.Parse("model.go", src)!;
+        var result = (await _parser.ParseAsync("model.go", src, cancellationToken: CancellationToken.None))!;
         var ty = result.Types.FirstOrDefault(t => t.Name == "User") as GoTypeDeclaration;
         Assert.That(ty, Is.Not.Null);
         Assert.That(ty!.HasStructTags, Is.True);
     }
 
     [Test]
-    public void Parse_UnexportedStruct_IsPrivate()
+    public async Task Parse_UnexportedStruct_IsPrivate()
     {
         var src = """
             package internal
 
             type worker struct{}
             """;
-        var result = _parser.Parse("internal.go", src)!;
+        var result = (await _parser.ParseAsync("internal.go", src, cancellationToken: CancellationToken.None))!;
         var ty = result.Types.FirstOrDefault(t => t.Name == "worker");
         Assert.That(ty, Is.Not.Null);
         Assert.That(ty!.IsPublic, Is.False);
@@ -129,7 +129,7 @@ public class GoSourceParserTests
     // ── Interface types ──────────────────────────────────────────────────────
 
     [Test]
-    public void Parse_InterfaceDecl_ExtractsNameAndKind()
+    public async Task Parse_InterfaceDecl_ExtractsNameAndKind()
     {
         var src = """
             package io
@@ -138,7 +138,7 @@ public class GoSourceParserTests
                 Read(p []byte) (n int, err error)
             }
             """;
-        var result = _parser.Parse("reader.go", src)!;
+        var result = (await _parser.ParseAsync("reader.go", src, cancellationToken: CancellationToken.None))!;
         var ty = result.Types.FirstOrDefault(t => t.Name == "Reader");
         Assert.That(ty, Is.Not.Null);
         Assert.That(ty!.Kind, Is.EqualTo(TypeKind.Interface));
@@ -148,7 +148,7 @@ public class GoSourceParserTests
     }
 
     [Test]
-    public void Parse_InterfaceWithMethods_ExtractsMethods()
+    public async Task Parse_InterfaceWithMethods_ExtractsMethods()
     {
         var src = """
             package svc
@@ -159,17 +159,18 @@ public class GoSourceParserTests
                 Name() string
             }
             """;
-        var result = _parser.Parse("svc.go", src)!;
-        var iface = result.Types.FirstOrDefault(t => t.Name == "Service");
+        var result = (await _parser.ParseAsync("svc.go", src, cancellationToken: CancellationToken.None))!;
+        var iface = result.Types.FirstOrDefault(t => t.Name == "Service")
+            ?? throw new AssertionException("Expected the Service interface.");
         Assert.That(iface, Is.Not.Null);
-        Assert.That(iface!.Methods, Has.Count.EqualTo(3));
-        Assert.That(iface.Methods.Any(m => m.Name == "Start"), Is.True);
-        Assert.That(iface.Methods.Any(m => m.Name == "Stop"), Is.True);
-        Assert.That(iface.Methods.Any(m => m.Name == "Name"), Is.True);
+        Assert.That((await AsyncSourceFacts.MembersAsync(iface!, CancellationToken.None)).Methods, Has.Count.EqualTo(3));
+        Assert.That((await AsyncSourceFacts.MembersAsync(iface, CancellationToken.None)).Methods.Any(m => m.Name == "Start"), Is.True);
+        Assert.That((await AsyncSourceFacts.MembersAsync(iface, CancellationToken.None)).Methods.Any(m => m.Name == "Stop"), Is.True);
+        Assert.That((await AsyncSourceFacts.MembersAsync(iface, CancellationToken.None)).Methods.Any(m => m.Name == "Name"), Is.True);
     }
 
     [Test]
-    public void Parse_GenericInterface_IsValidAndHasNoParseErrors()
+    public async Task Parse_GenericInterface_IsValidAndHasNoParseErrors()
     {
         var src = """
             package coll
@@ -179,7 +180,7 @@ public class GoSourceParserTests
                 Contains(v T) bool
             }
             """;
-        var result = _parser.Parse("coll.go", src)!;
+        var result = (await _parser.ParseAsync("coll.go", src, cancellationToken: CancellationToken.None))!;
         Assert.That(result.ParseErrors, Is.Empty, string.Join("\n", result.ParseErrors));
         var ty = result.Types.FirstOrDefault(t => t.Name == "Set");
         Assert.That(ty, Is.Not.Null);
@@ -189,7 +190,7 @@ public class GoSourceParserTests
     // ── Function / method extraction ─────────────────────────────────────────
 
     [Test]
-    public void Parse_FreeFunction_AppearsInSyntheticFunctionsType()
+    public async Task Parse_FreeFunction_AppearsInSyntheticFunctionsType()
     {
         var src = """
             package util
@@ -198,21 +199,21 @@ public class GoSourceParserTests
                 return a + b
             }
             """;
-        var result = _parser.Parse("util.go", src)!;
+        var result = (await _parser.ParseAsync("util.go", src, cancellationToken: CancellationToken.None))!;
         var funcType = result.Types.FirstOrDefault(t => t.Name.Contains("functions"));
         Assert.That(funcType, Is.Not.Null);
-        Assert.That(funcType!.Methods.Any(m => m.Name == "Add"), Is.True);
+        Assert.That((await AsyncSourceFacts.MembersAsync(funcType!, CancellationToken.None)).Methods.Any(m => m.Name == "Add"), Is.True);
     }
 
     [Test]
-    public void Parse_ExportedFunction_IsPublic()
+    public async Task Parse_ExportedFunction_IsPublic()
     {
         var src = """
             package api
 
             func HandleRequest(w http.ResponseWriter, r *http.Request) {}
             """;
-        var result = _parser.Parse("api.go", src)!;
+        var result = (await _parser.ParseAsync("api.go", src, cancellationToken: CancellationToken.None))!;
         var funcType = result.Types.FirstOrDefault(t => t.Name.Contains("functions"));
         var method = funcType?.Methods.FirstOrDefault(m => m.Name == "HandleRequest");
         Assert.That(method, Is.Not.Null);
@@ -220,7 +221,7 @@ public class GoSourceParserTests
     }
 
     [Test]
-    public void Parse_MethodWithValueReceiver_AttachesToType()
+    public async Task Parse_MethodWithValueReceiver_AttachesToType()
     {
         var src = """
             package geo
@@ -231,14 +232,14 @@ public class GoSourceParserTests
                 return 0
             }
             """;
-        var result = _parser.Parse("geo.go", src)!;
+        var result = (await _parser.ParseAsync("geo.go", src, cancellationToken: CancellationToken.None))!;
         var pointType = result.Types.FirstOrDefault(t => t.Name == "Point");
         Assert.That(pointType, Is.Not.Null);
-        Assert.That(pointType!.Methods.Any(m => m.Name == "Distance"), Is.True);
+        Assert.That((await AsyncSourceFacts.MembersAsync(pointType!, CancellationToken.None)).Methods.Any(m => m.Name == "Distance"), Is.True);
     }
 
     [Test]
-    public void Parse_MethodWithPointerReceiver_IsPointerReceiver()
+    public async Task Parse_MethodWithPointerReceiver_IsPointerReceiver()
     {
         var src = """
             package stack
@@ -249,16 +250,16 @@ public class GoSourceParserTests
                 s.items = append(s.items, v)
             }
             """;
-        var result = _parser.Parse("stack.go", src)!;
+        var result = (await _parser.ParseAsync("stack.go", src, cancellationToken: CancellationToken.None))!;
         var stackType = result.Types.FirstOrDefault(t => t.Name == "Stack");
         Assert.That(stackType, Is.Not.Null);
-        var push = stackType!.Methods.FirstOrDefault(m => m.Name == "Push") as GoMethodDeclaration;
+        var push = (await AsyncSourceFacts.MembersAsync(stackType!, CancellationToken.None)).Methods.FirstOrDefault(m => m.Name == "Push") as GoMethodDeclaration;
         Assert.That(push, Is.Not.Null);
         Assert.That(push!.IsPointerReceiver, Is.True);
     }
 
     [Test]
-    public void Parse_GenericFunction_IsGeneric()
+    public async Task Parse_GenericFunction_IsGeneric()
     {
         var src = """
             package maps
@@ -267,7 +268,7 @@ public class GoSourceParserTests
                 return nil
             }
             """;
-        var result = _parser.Parse("maps.go", src)!;
+        var result = (await _parser.ParseAsync("maps.go", src, cancellationToken: CancellationToken.None))!;
         Assert.That(result.ParseErrors, Is.Empty, string.Join("\n", result.ParseErrors));
         var funcType = result.Types.FirstOrDefault(t => t.Name.Contains("functions"));
         var method = funcType?.Methods.FirstOrDefault(m => m.Name == "Map") as GoMethodDeclaration;
@@ -276,14 +277,14 @@ public class GoSourceParserTests
     }
 
     [Test]
-    public void Parse_VariadicFunction_IsVariadic()
+    public async Task Parse_VariadicFunction_IsVariadic()
     {
         var src = """
             package log
 
             func Printf(format string, args ...interface{}) {}
             """;
-        var result = _parser.Parse("log.go", src)!;
+        var result = (await _parser.ParseAsync("log.go", src, cancellationToken: CancellationToken.None))!;
         var funcType = result.Types.FirstOrDefault(t => t.Name.Contains("functions"));
         var method = funcType?.Methods.FirstOrDefault(m => m.Name == "Printf") as GoMethodDeclaration;
         Assert.That(method, Is.Not.Null);
@@ -293,7 +294,7 @@ public class GoSourceParserTests
     // ── Statement detection (calls, control flow, error handling) ────────────
 
     [Test]
-    public void Parse_FuncCallStatement_ExtractedAsCallKind()
+    public async Task Parse_FuncCallStatement_ExtractedAsCallKind()
     {
         var src = """
             package main
@@ -304,15 +305,16 @@ public class GoSourceParserTests
                 fmt.Println("hello")
             }
             """;
-        var result = _parser.Parse("main.go", src)!;
-        var call = result.Statements.FirstOrDefault(s => s.Kind == "call" && s.MemberName == "Println");
+        var result = (await _parser.ParseAsync("main.go", src, cancellationToken: CancellationToken.None))!;
+        var call = result.Statements.FirstOrDefault(s => s.Kind == "call" && s.MemberName == "Println")
+            ?? throw new AssertionException("Expected the Println call.");
         Assert.That(call, Is.Not.Null);
-        Assert.That(call!.TypeName, Is.EqualTo("fmt"));
+        Assert.That((await AsyncSourceFacts.TypeNameAsync(call!, CancellationToken.None)).TypeName, Is.EqualTo("fmt"));
         Assert.That(call.IsInMethod, Is.True);
     }
 
     [Test]
-    public void Parse_BareCallStatement_NoTypeName()
+    public async Task Parse_BareCallStatement_NoTypeName()
     {
         var src = """
             package main
@@ -323,14 +325,14 @@ public class GoSourceParserTests
 
             func doWork() {}
             """;
-        var result = _parser.Parse("main.go", src)!;
+        var result = (await _parser.ParseAsync("main.go", src, cancellationToken: CancellationToken.None))!;
         var call = result.Statements.FirstOrDefault(s => s.Kind == "call" && s.MemberName == "doWork");
         Assert.That(call, Is.Not.Null);
-        Assert.That(call!.TypeName, Is.Null);
+        Assert.That((await AsyncSourceFacts.TypeNameAsync(call!, CancellationToken.None)).TypeName, Is.Null);
     }
 
     [Test]
-    public void Parse_DeferStatement_KindIsDefer()
+    public async Task Parse_DeferStatement_KindIsDefer()
     {
         var src = """
             package main
@@ -339,7 +341,7 @@ public class GoSourceParserTests
                 defer close()
             }
             """;
-        var result = _parser.Parse("main.go", src)!;
+        var result = (await _parser.ParseAsync("main.go", src, cancellationToken: CancellationToken.None))!;
         var defer_ = result.Statements.FirstOrDefault(s => s.Kind == "defer");
         Assert.That(defer_, Is.Not.Null);
         Assert.That(defer_!.IsInMethod, Is.True);
@@ -348,7 +350,7 @@ public class GoSourceParserTests
     }
 
     [Test]
-    public void Parse_GoStatement_KindIsGo()
+    public async Task Parse_GoStatement_KindIsGo()
     {
         var src = """
             package main
@@ -357,7 +359,7 @@ public class GoSourceParserTests
                 go worker()
             }
             """;
-        var result = _parser.Parse("main.go", src)!;
+        var result = (await _parser.ParseAsync("main.go", src, cancellationToken: CancellationToken.None))!;
         var goroutine = result.Statements.FirstOrDefault(s => s.Kind == "go");
         Assert.That(goroutine, Is.Not.Null);
         var goStmt = goroutine as GoStatementInfo;
@@ -365,7 +367,7 @@ public class GoSourceParserTests
     }
 
     [Test]
-    public void Parse_SelectStatement_KindIsSelect()
+    public async Task Parse_SelectStatement_KindIsSelect()
     {
         var src = """
             package main
@@ -379,7 +381,7 @@ public class GoSourceParserTests
                 }
             }
             """;
-        var result = _parser.Parse("main.go", src)!;
+        var result = (await _parser.ParseAsync("main.go", src, cancellationToken: CancellationToken.None))!;
         var sel = result.Statements.FirstOrDefault(s => s.Kind == "select");
         Assert.That(sel, Is.Not.Null);
         var goStmt = sel as GoStatementInfo;
@@ -387,7 +389,7 @@ public class GoSourceParserTests
     }
 
     [Test]
-    public void Parse_ForRangeLoop_KindIsRange()
+    public async Task Parse_ForRangeLoop_KindIsRange()
     {
         var src = """
             package main
@@ -399,7 +401,7 @@ public class GoSourceParserTests
                 }
             }
             """;
-        var result = _parser.Parse("main.go", src)!;
+        var result = (await _parser.ParseAsync("main.go", src, cancellationToken: CancellationToken.None))!;
         var rangeStmt = result.Statements.FirstOrDefault(s => s.Kind == "range");
         Assert.That(rangeStmt, Is.Not.Null);
         var goStmt = rangeStmt as GoStatementInfo;
@@ -407,7 +409,7 @@ public class GoSourceParserTests
     }
 
     [Test]
-    public void Parse_PlainForLoop_KindIsFor()
+    public async Task Parse_PlainForLoop_KindIsFor()
     {
         var src = """
             package main
@@ -417,13 +419,13 @@ public class GoSourceParserTests
                 }
             }
             """;
-        var result = _parser.Parse("main.go", src)!;
+        var result = (await _parser.ParseAsync("main.go", src, cancellationToken: CancellationToken.None))!;
         var forStmt = result.Statements.FirstOrDefault(s => s.Kind == "for");
         Assert.That(forStmt, Is.Not.Null);
     }
 
     [Test]
-    public void Parse_TypeSwitch_KindIsTypeSwitch()
+    public async Task Parse_TypeSwitch_KindIsTypeSwitch()
     {
         var src = """
             package main
@@ -435,7 +437,7 @@ public class GoSourceParserTests
                 }
             }
             """;
-        var result = _parser.Parse("main.go", src)!;
+        var result = (await _parser.ParseAsync("main.go", src, cancellationToken: CancellationToken.None))!;
         var ts = result.Statements.FirstOrDefault(s => s.Kind == "type-switch");
         Assert.That(ts, Is.Not.Null);
         var goStmt = ts as GoStatementInfo;
@@ -443,7 +445,7 @@ public class GoSourceParserTests
     }
 
     [Test]
-    public void Parse_PlainSwitch_KindIsSwitch()
+    public async Task Parse_PlainSwitch_KindIsSwitch()
     {
         var src = """
             package main
@@ -457,13 +459,13 @@ public class GoSourceParserTests
                 }
             }
             """;
-        var result = _parser.Parse("main.go", src)!;
+        var result = (await _parser.ParseAsync("main.go", src, cancellationToken: CancellationToken.None))!;
         var sw = result.Statements.FirstOrDefault(s => s.Kind == "switch");
         Assert.That(sw, Is.Not.Null);
     }
 
     [Test]
-    public void Parse_PanicCall_KindIsThrow()
+    public async Task Parse_PanicCall_KindIsThrow()
     {
         var src = """
             package main
@@ -474,14 +476,14 @@ public class GoSourceParserTests
                 }
             }
             """;
-        var result = _parser.Parse("main.go", src)!;
+        var result = (await _parser.ParseAsync("main.go", src, cancellationToken: CancellationToken.None))!;
         var throwStmt = result.Statements.FirstOrDefault(s => s.Kind == "throw");
         Assert.That(throwStmt, Is.Not.Null);
         Assert.That(throwStmt!.MemberName, Is.EqualTo("panic"));
     }
 
     [Test]
-    public void Parse_RecoverCall_KindIsCatch_IsGenericErrorHandler()
+    public async Task Parse_RecoverCall_KindIsCatch_IsGenericErrorHandler()
     {
         var src = """
             package main
@@ -493,7 +495,7 @@ public class GoSourceParserTests
                 }()
             }
             """;
-        var result = _parser.Parse("main.go", src)!;
+        var result = (await _parser.ParseAsync("main.go", src, cancellationToken: CancellationToken.None))!;
         var catchStmt = result.Statements.FirstOrDefault(s => s.Kind == "catch");
         Assert.That(catchStmt, Is.Not.Null);
         Assert.That(catchStmt!.MemberName, Is.EqualTo("recover"));
@@ -502,7 +504,7 @@ public class GoSourceParserTests
     }
 
     [Test]
-    public void Parse_IfErrNilPattern_IsErrorHandler()
+    public async Task Parse_IfErrNilPattern_IsErrorHandler()
     {
         var src = """
             package main
@@ -517,14 +519,14 @@ public class GoSourceParserTests
                 _ = f
             }
             """;
-        var result = _parser.Parse("main.go", src)!;
+        var result = (await _parser.ParseAsync("main.go", src, cancellationToken: CancellationToken.None))!;
         var ifStmt = result.Statements.FirstOrDefault(s => s.Kind == "if" && s.IsErrorHandler);
         Assert.That(ifStmt, Is.Not.Null, "Expected an 'if' statement with IsErrorHandler=true for 'if err != nil'");
         Assert.That(ifStmt!.IsGenericErrorHandler, Is.False);
     }
 
     [Test]
-    public void Parse_IfWithoutErrNil_IsNotErrorHandler()
+    public async Task Parse_IfWithoutErrNil_IsNotErrorHandler()
     {
         var src = """
             package main
@@ -534,7 +536,7 @@ public class GoSourceParserTests
                 }
             }
             """;
-        var result = _parser.Parse("main.go", src)!;
+        var result = (await _parser.ParseAsync("main.go", src, cancellationToken: CancellationToken.None))!;
         var ifStmt = result.Statements.FirstOrDefault(s => s.Kind == "if");
         Assert.That(ifStmt, Is.Not.Null);
         Assert.That(ifStmt!.IsErrorHandler, Is.False);
@@ -543,25 +545,25 @@ public class GoSourceParserTests
     // ── Comment-line tracking ────────────────────────────────────────────────
 
     [Test]
-    public void Parse_LineComments_TrackedByLineNumber()
+    public async Task Parse_LineComments_TrackedByLineNumber()
     {
         var src = "// This is a comment\npackage main\n// Another comment\n";
-        var result = _parser.Parse("main.go", src)!;
+        var result = (await _parser.ParseAsync("main.go", src, cancellationToken: CancellationToken.None))!;
         Assert.That(result.CommentLines, Does.Contain(1));
         Assert.That(result.CommentLines, Does.Not.Contain(2));
         Assert.That(result.CommentLines, Does.Contain(3));
     }
 
     [Test]
-    public void Parse_BlockComment_TrackedAsCommentLine()
+    public async Task Parse_BlockComment_TrackedAsCommentLine()
     {
         var src = "package main\n/* block */\n";
-        var result = _parser.Parse("main.go", src)!;
+        var result = (await _parser.ParseAsync("main.go", src, cancellationToken: CancellationToken.None))!;
         Assert.That(result.CommentLines, Does.Contain(2));
     }
 
     [Test]
-    public void Parse_CodeInsideCommentNotParsed()
+    public async Task Parse_CodeInsideCommentNotParsed()
     {
         var src = """
             package main
@@ -570,7 +572,7 @@ public class GoSourceParserTests
                 // fmt.Println("commented out")
             }
             """;
-        var result = _parser.Parse("main.go", src)!;
+        var result = (await _parser.ParseAsync("main.go", src, cancellationToken: CancellationToken.None))!;
         var calls = result.Statements.Where(s => s.Kind == "call" && s.MemberName == "Println").ToList();
         Assert.That(calls, Is.Empty);
     }
@@ -578,7 +580,7 @@ public class GoSourceParserTests
     // ── Multiline raw strings (backtick) ─────────────────────────────────────
 
     [Test]
-    public void Parse_MultilineRawString_ValidAndNoErrors()
+    public async Task Parse_MultilineRawString_ValidAndNoErrors()
     {
         var src = """
             package tmpl
@@ -588,14 +590,14 @@ public class GoSourceParserTests
             func notAFunction() {}
             `
             """;
-        var result = _parser.Parse("tmpl.go", src)!;
+        var result = (await _parser.ParseAsync("tmpl.go", src, cancellationToken: CancellationToken.None))!;
         Assert.That(result.ParseErrors, Is.Empty, string.Join("\n", result.ParseErrors));
     }
 
     // ── ParseErrors (positive control — valid Go must yield empty errors) ────
 
     [Test]
-    public void Parse_ValidGoFile_HasNoParseErrors()
+    public async Task Parse_ValidGoFile_HasNoParseErrors()
     {
         var src = """
             package server
@@ -627,12 +629,12 @@ public class GoSourceParserTests
 
             func (f *file) Close() {}
             """;
-        var result = _parser.Parse("server.go", src)!;
+        var result = (await _parser.ParseAsync("server.go", src, cancellationToken: CancellationToken.None))!;
         Assert.That(result.ParseErrors, Is.Empty, string.Join("\n", result.ParseErrors));
     }
 
     [Test]
-    public void Parse_GoroutineAndChannel_ValidNoErrors()
+    public async Task Parse_GoroutineAndChannel_ValidNoErrors()
     {
         var src = """
             package main
@@ -650,67 +652,67 @@ public class GoSourceParserTests
                 }
             }
             """;
-        var result = _parser.Parse("pipeline.go", src)!;
+        var result = (await _parser.ParseAsync("pipeline.go", src, cancellationToken: CancellationToken.None))!;
         Assert.That(result.ParseErrors, Is.Empty, string.Join("\n", result.ParseErrors));
     }
 
     // ── ParseErrors (negative tests — malformed Go → specific errors) ────────
 
     [Test]
-    public void Parse_MissingPackageClause_ReportsError()
+    public async Task Parse_MissingPackageClause_ReportsError()
     {
         var src = "func main() {}\n"; // no package declaration
-        var result = _parser.Parse("main.go", src)!;
+        var result = (await _parser.ParseAsync("main.go", src, cancellationToken: CancellationToken.None))!;
         Assert.That(result.ParseErrors, Is.Not.Empty);
         Assert.That(result.ParseErrors.Any(e => e.Contains("missing package clause")), Is.True,
             $"Expected 'missing package clause' error, got: {string.Join(", ", result.ParseErrors)}");
     }
 
     [Test]
-    public void Parse_UnterminatedInterpretedString_ReportsError()
+    public async Task Parse_UnterminatedInterpretedString_ReportsError()
     {
         var src = "package main\n\nfunc f() { s := \"unterminated\n}\n";
-        var result = _parser.Parse("main.go", src)!;
+        var result = (await _parser.ParseAsync("main.go", src, cancellationToken: CancellationToken.None))!;
         Assert.That(result.ParseErrors, Is.Not.Empty);
         Assert.That(result.ParseErrors.Any(e => e.Contains("unterminated string")), Is.True,
             $"Expected 'unterminated string' error, got: {string.Join(", ", result.ParseErrors)}");
     }
 
     [Test]
-    public void Parse_UnterminatedBlockComment_ReportsError()
+    public async Task Parse_UnterminatedBlockComment_ReportsError()
     {
         var src = "package main\n\n/* this comment never closes\n";
-        var result = _parser.Parse("main.go", src)!;
+        var result = (await _parser.ParseAsync("main.go", src, cancellationToken: CancellationToken.None))!;
         Assert.That(result.ParseErrors, Is.Not.Empty);
         Assert.That(result.ParseErrors.Any(e => e.Contains("unterminated block comment")), Is.True,
             $"Expected 'unterminated block comment' error, got: {string.Join(", ", result.ParseErrors)}");
     }
 
     [Test]
-    public void Parse_UnterminatedRawString_ReportsError()
+    public async Task Parse_UnterminatedRawString_ReportsError()
     {
         var src = "package main\n\nvar s = `never closed\n";
-        var result = _parser.Parse("main.go", src)!;
+        var result = (await _parser.ParseAsync("main.go", src, cancellationToken: CancellationToken.None))!;
         Assert.That(result.ParseErrors, Is.Not.Empty);
         Assert.That(result.ParseErrors.Any(e => e.Contains("unterminated raw string")), Is.True,
             $"Expected 'unterminated raw string literal' error, got: {string.Join(", ", result.ParseErrors)}");
     }
 
     [Test]
-    public void Parse_UnbalancedOpenBrace_ReportsError()
+    public async Task Parse_UnbalancedOpenBrace_ReportsError()
     {
         var src = "package main\n\nfunc f() {\n"; // missing closing }
-        var result = _parser.Parse("main.go", src)!;
+        var result = (await _parser.ParseAsync("main.go", src, cancellationToken: CancellationToken.None))!;
         Assert.That(result.ParseErrors, Is.Not.Empty);
         Assert.That(result.ParseErrors.Any(e => e.Contains("expected closing '}'") || e.Contains("}")), Is.True,
             $"Expected unclosed brace error, got: {string.Join(", ", result.ParseErrors)}");
     }
 
     [Test]
-    public void Parse_ErrorFormat_ContainsFilePathAndLineCol()
+    public async Task Parse_ErrorFormat_ContainsFilePathAndLineCol()
     {
         var src = "func main() {}\n"; // missing package
-        var result = _parser.Parse("myfile.go", src)!;
+        var result = (await _parser.ParseAsync("myfile.go", src, cancellationToken: CancellationToken.None))!;
         Assert.That(result.ParseErrors, Is.Not.Empty);
         // Format: myfile.go(line,col): error: ...
         Assert.That(result.ParseErrors[0], Does.StartWith("myfile.go("));
@@ -718,11 +720,11 @@ public class GoSourceParserTests
     }
 
     [Test]
-    public void Parse_MultipleErrors_ReturnsAllErrors()
+    public async Task Parse_MultipleErrors_ReturnsAllErrors()
     {
         // Missing package + unterminated string — two distinct errors
         var src = "func f() { s := \"oops\n}\n";
-        var result = _parser.Parse("bad.go", src)!;
+        var result = (await _parser.ParseAsync("bad.go", src, cancellationToken: CancellationToken.None))!;
         Assert.That(result.ParseErrors, Has.Count.GreaterThanOrEqualTo(2),
             $"Expected ≥2 errors, got: {string.Join(", ", result.ParseErrors)}");
     }

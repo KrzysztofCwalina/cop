@@ -1,3 +1,5 @@
+// Reconstructs language-specific methods and statements from source caches.
+
 namespace Cop.Providers.SourceModel;
 
 /// <summary>
@@ -9,28 +11,19 @@ namespace Cop.Providers.SourceModel;
 /// </summary>
 public static class MethodTypeRegistry
 {
+    /// <summary>
+    /// Registers reconstruction of language-specific methods from shared cached
+    /// declarations.
+    /// </summary>
     public static void Register(string tag, Func<MethodDeclaration, IReadOnlyDictionary<string, bool>, MethodDeclaration> factory)
         => LanguageCacheFactories<MethodDeclaration>.Register(tag, factory);
 
+    /// <summary>
+    /// Restores a language-specific method from its shared declaration and cached flags.
+    /// </summary>
     public static MethodDeclaration Reconstruct(string tag, MethodDeclaration baseDecl, IReadOnlyDictionary<string, bool> flags)
         => Reconstruct(tag, baseDecl, flags, System.Runtime.Loader.AssemblyLoadContext.Default);
 
     internal static MethodDeclaration Reconstruct(string tag, MethodDeclaration baseDecl, IReadOnlyDictionary<string, bool> flags,
         System.Runtime.Loader.AssemblyLoadContext context) => LanguageCacheFactories<MethodDeclaration>.Reconstruct(tag, baseDecl, flags, context);
-}
-
-/// <summary>
-/// Reconstructs language-specific <see cref="StatementInfo"/> subtypes when loading the source
-/// cache. Mirrors <see cref="MethodTypeRegistry"/>. Providers that don't cache don't need this.
-/// </summary>
-public static class StatementTypeRegistry
-{
-    public static void Register(string tag, Func<StatementInfo, IReadOnlyDictionary<string, bool>, StatementInfo> factory)
-        => LanguageCacheFactories<StatementInfo>.Register(tag, factory);
-
-    public static StatementInfo Reconstruct(string tag, StatementInfo baseDecl, IReadOnlyDictionary<string, bool> flags)
-        => Reconstruct(tag, baseDecl, flags, System.Runtime.Loader.AssemblyLoadContext.Default);
-
-    internal static StatementInfo Reconstruct(string tag, StatementInfo baseDecl, IReadOnlyDictionary<string, bool> flags,
-        System.Runtime.Loader.AssemblyLoadContext context) => LanguageCacheFactories<StatementInfo>.Reconstruct(tag, baseDecl, flags, context);
 }

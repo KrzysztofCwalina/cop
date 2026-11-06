@@ -1,3 +1,5 @@
+// Exposes Java-specific declarations and statements through runtime field accessors.
+
 using Cop.Core;
 using Cop.Providers.SourceModel;
 
@@ -10,17 +12,20 @@ namespace Cop.Providers;
 /// </summary>
 public static class JavaBindings
 {
+    /// <summary>
+    /// Extends shared bindings with Java-specific source-model accessors.
+    /// </summary>
     public static RuntimeBindings Build()
     {
-        var bindings = CodeBindings.Build();
+        RuntimeBindings bindings = CodeBindings.Build();
 
         bindings.ClrTypeMappings[typeof(JavaTypeDeclaration)] = "JavaType";
 
-        var javaAccessors = new Dictionary<string, Func<object, object?>>(bindings.Accessors["Type"])
+        Dictionary<string, Func<object, object?>> javaAccessors = new Dictionary<string, Func<object, object?>>(bindings.Accessors["Type"])
         {
             ["IsRecord"] = o => (object)((JavaTypeDeclaration)o).IsRecord,
             ["IsEnum"] = o => (object)((JavaTypeDeclaration)o).IsEnum,
-            ["IsSealed"] = o => (object)((JavaTypeDeclaration)o).IsSealed,
+            ["IsSealed"] = o => (object)((JavaTypeDeclaration)o).HasSealedModifier,
             ["IsNonSealed"] = o => (object)((JavaTypeDeclaration)o).IsNonSealed,
             ["IsFinal"] = o => (object)((JavaTypeDeclaration)o).IsFinal,
             ["IsGeneric"] = o => (object)((JavaTypeDeclaration)o).IsGeneric,
@@ -29,7 +34,7 @@ public static class JavaBindings
 
         bindings.ClrTypeMappings[typeof(JavaMethodDeclaration)] = "JavaMethod";
 
-        var javaMethodAccessors = new Dictionary<string, Func<object, object?>>(bindings.Accessors["Method"])
+        Dictionary<string, Func<object, object?>> javaMethodAccessors = new Dictionary<string, Func<object, object?>>(bindings.Accessors["Method"])
         {
             ["IsSynchronized"] = o => (object)((JavaMethodDeclaration)o).IsSynchronized,
             ["IsNative"] = o => (object)((JavaMethodDeclaration)o).IsNative,
@@ -41,7 +46,7 @@ public static class JavaBindings
 
         bindings.ClrTypeMappings[typeof(JavaStatementInfo)] = "JavaStatement";
 
-        var javaStatementAccessors = new Dictionary<string, Func<object, object?>>(bindings.Accessors["Statement"])
+        Dictionary<string, Func<object, object?>> javaStatementAccessors = new Dictionary<string, Func<object, object?>>(bindings.Accessors["Statement"])
         {
             ["IsSynchronized"] = o => (object)((JavaStatementInfo)o).IsSynchronized,
             ["IsTryWithResources"] = o => (object)((JavaStatementInfo)o).IsTryWithResources,
@@ -51,6 +56,7 @@ public static class JavaBindings
         };
         bindings.Accessors["JavaStatement"] = javaStatementAccessors;
 
+        CodeBindings.AddDerivedAsyncAccessors(bindings);
         return bindings;
     }
 }

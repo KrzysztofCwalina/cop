@@ -1,3 +1,8 @@
+// Process-wide diagnostic settings, set once from CLI flags in Program.cs and read by the
+// engine and by providers.
+
+using System.Collections.Concurrent;
+
 namespace Cop.Core;
 
 /// <summary>
@@ -13,84 +18,17 @@ public static class CopDiagnostics
     /// Verbosity level: 0 = off, 1 = -d (summaries), 2 = -dd (+ phase/parse timing),
     /// 3 = -ddd (+ per-item evaluator trace firehose).
     /// </summary>
-    public static int Level;
+    public static int Level { get; set; }
 
     /// <summary>Optional path for the AI judge transcript log (--ai-log). Null = disabled.</summary>
-    public static string? AiLogPath;
+    public static string? AiLogPath { get; set; }
 
     /// <summary>-d and up: emit [diag] summaries.</summary>
-    public static bool Summaries => Level >= 1;
+    public static bool IsSummaryEnabled => Level >= 1;
 
     /// <summary>-dd and up: emit provider phase timing and per-file parse timing.</summary>
-    public static bool Timing => Level >= 2;
+    public static bool IsTimingEnabled => Level >= 2;
 
     /// <summary>-ddd and up: emit the per-item evaluator [trace] firehose.</summary>
-    public static bool Trace => Level >= 3;
-}
-
-/// <summary>
-/// A process-wide sink for errors detected INSIDE a provider (e.g. a source file that fails to parse).
-/// Providers run in a shared assembly context with the host, so this static is the same instance in
-/// both — it lets a provider surface an error to the engine, which drains it after querying and
-/// reports it. Without this, provider-side failures were swallowed (printed to stderr at best) and a
-/// run "succeeded" (exit 0) despite an incomplete or wrong model.
-/// </summary>
-public static class ProviderErrors
-{
-    // Per async-context (per Engine.Run) rather than a single process-wide queue. The engine does
-    // Clear() at the start of a run and Drain() at the end; with a shared static queue, two
-    // concurrent runs (parallel tests, or the LSP analyzing in the background while the CLI runs)
-    // corrupted each other's error lists — one run's Clear() discarded the other's reports. An
-    // AsyncLocal isolates each run's queue. Engine.Run calls Clear() first, which establishes the
-    // queue in the run's context so the providers it then invokes report into that same queue.
-    private static readonly System.Threading.AsyncLocal<System.Collections.Concurrent.ConcurrentQueue<string>?> _errors = new();
-
-    private static System.Collections.Concurrent.ConcurrentQueue<string> Queue => _errors.Value ??= new();
-
-    /// <summary>Reports a provider-side error so the engine can surface it.</summary>
-    public static void Report(string message) => Queue.Enqueue(message);
-
-    /// <summary>Removes and returns all reported provider errors (deduplicated, order-preserving).</summary>
-    public static IReadOnlyList<string> Drain()
-    {
-        var queue = Queue;
-        var result = new List<string>();
-        var seen = new HashSet<string>(StringComparer.Ordinal);
-        while (queue.TryDequeue(out var e))
-            if (seen.Add(e))
-                result.Add(e);
-        return result;
-    }
-
-    /// <summary>Resets the current run's provider errors (called at the start of each run).</summary>
-    public static void Clear() => _errors.Value = new System.Collections.Concurrent.ConcurrentQueue<string>();
-}
-
-/// <summary>Nonfatal provider notices, isolated and deduplicated within each engine run.</summary>
-public static class ProviderWarnings
-{
-    private sealed class State
-    {
-        public readonly System.Collections.Concurrent.ConcurrentDictionary<(string Provider, string Scope, string Message), byte> Seen = new();
-        public readonly System.Collections.Concurrent.ConcurrentQueue<string> Messages = new();
-    }
-
-    private static readonly System.Threading.AsyncLocal<State?> _state = new();
-    private static State Current => _state.Value ??= new();
-
-    public static void ReportOnce(string provider, string scope, string message)
-    {
-        var state = Current;
-        if (state.Seen.TryAdd((provider, scope, message), 0))
-            state.Messages.Enqueue($"Warning: {provider}: {message}");
-    }
-
-    public static IReadOnlyList<string> Drain()
-    {
-        var result = new List<string>();
-        while (Current.Messages.TryDequeue(out var message)) result.Add(message);
-        return result;
-    }
-
-    public static void Clear() => _state.Value = new();
+    public static bool IsTraceEnabled => Level >= 3;
 }

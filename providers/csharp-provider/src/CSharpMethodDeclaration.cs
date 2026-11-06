@@ -1,3 +1,5 @@
+// Adds C#-specific method facts to the shared source model.
+
 namespace Cop.Providers.SourceModel;
 
 /// <summary>
@@ -12,22 +14,12 @@ namespace Cop.Providers.SourceModel;
 public sealed record CSharpMethodDeclaration : MethodDeclaration
 {
     internal int SyntaxStart { get; set; } = -1;
-    public CSharpMethodDeclaration(
-        MethodDeclaration source,
-        bool isExtension = false,
-        bool isPartial = false,
-        bool isUnsafe = false,
-        bool isExtern = false,
-        bool isExpressionBodied = false,
-        bool isGeneric = false)
+    /// <summary>
+    /// Copies a shared method before C#-specific facts are initialized.
+    /// </summary>
+    public CSharpMethodDeclaration(MethodDeclaration source)
         : base(source)
     {
-        IsExtension = isExtension;
-        IsPartial = isPartial;
-        IsUnsafe = isUnsafe;
-        IsExtern = isExtern;
-        IsExpressionBodied = isExpressionBodied;
-        IsGeneric = isGeneric;
     }
 
     /// <summary>True for C# extension members or methods whose first parameter has the <c>this</c> modifier.</summary>
@@ -47,18 +39,4 @@ public sealed record CSharpMethodDeclaration : MethodDeclaration
 
     /// <summary>True when the method declares generic type parameters.</summary>
     public bool IsGeneric { get; init; }
-}
-
-public static class CSharpMethodDeclarationExtensions
-{
-    /// <summary>Wraps a common <see cref="MethodDeclaration"/> as a C#-specific one.</summary>
-    public static CSharpMethodDeclaration AsCSharp(
-        this MethodDeclaration source,
-        bool isExtension = false,
-        bool isPartial = false,
-        bool isUnsafe = false,
-        bool isExtern = false,
-        bool isExpressionBodied = false,
-        bool isGeneric = false)
-        => new(source, isExtension, isPartial, isUnsafe, isExtern, isExpressionBodied, isGeneric);
 }

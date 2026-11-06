@@ -1,3 +1,5 @@
+// Preserves Java statement-specific facts when storing and restoring source models.
+
 namespace Cop.Providers.SourceModel;
 
 /// <summary>
@@ -6,10 +8,10 @@ namespace Cop.Providers.SourceModel;
 /// </summary>
 public sealed class JavaStatementInfo : StatementInfo
 {
-    public JavaStatementInfo(
-        string kind, List<string> keywords, string? typeName, string? memberName,
-        List<string> arguments, int line, bool isInMethod)
-        : base(kind, keywords, typeName, memberName, arguments, line, isInMethod) { }
+    /// <summary>
+    /// Creates a Java statement from parsed syntax and source-location facts.
+    /// </summary>
+    public JavaStatementInfo(StatementInfo source) : base(source) { }
 
     /// <summary>True for a Java <c>synchronized</c> block.</summary>
     public bool IsSynchronized => Kind == "synchronized";
@@ -26,38 +28,23 @@ public sealed class JavaStatementInfo : StatementInfo
     /// <summary>True for a Java <c>assert</c> statement.</summary>
     public bool IsAssert => Kind == "assert";
 
+    /// <inheritdoc />
     public override string? LanguageTag => "java";
 
+    /// <inheritdoc />
     public override IReadOnlyList<KeyValuePair<string, bool>>? LanguageFlags =>
     [
         new("IsTryWithResources", IsTryWithResources),
         new("IsEnhancedFor", IsEnhancedFor),
     ];
 
+    /// <summary>
+    /// Registers restoration of Java statements from cached source facts.
+    /// </summary>
     public static void RegisterCacheFactory() =>
-        StatementTypeRegistry.Register("java", (baseDecl, flags) => new JavaStatementInfo(
-            baseDecl.Kind,
-            baseDecl.Keywords,
-            baseDecl.TypeName,
-            baseDecl.MemberName,
-            baseDecl.Arguments,
-            baseDecl.Line,
-            baseDecl.IsInMethod)
+        StatementTypeRegistry.Register("java", (baseDecl, flags) => new JavaStatementInfo(baseDecl)
         {
-            HasRethrow = baseDecl.HasRethrow,
-            IsErrorHandler = baseDecl.IsErrorHandler,
-            IsGenericErrorHandler = baseDecl.IsGenericErrorHandler,
-            IsBraced = baseDecl.IsBraced,
-            Condition = baseDecl.Condition,
-            Expression = baseDecl.Expression,
-            CopIgnore = baseDecl.CopIgnore,
-            _children = baseDecl._children,
-            CallTarget = baseDecl.CallTarget,
-            ArgumentExpressions = baseDecl.ArgumentExpressions,
-            Column = baseDecl.Column,
-            EndLine = baseDecl.EndLine,
-            EndColumn = baseDecl.EndColumn,
-            IsTryWithResources = flags.TryGetValue("IsTryWithResources", out var tryWithResources) && tryWithResources,
-            IsEnhancedFor = flags.TryGetValue("IsEnhancedFor", out var enhancedFor) && enhancedFor,
+            IsTryWithResources = flags.TryGetValue("IsTryWithResources", out bool tryWithResources) && tryWithResources,
+            IsEnhancedFor = flags.TryGetValue("IsEnhancedFor", out bool enhancedFor) && enhancedFor,
         });
 }

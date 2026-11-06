@@ -56,10 +56,9 @@ public class SampleVerificationTests
             };
 
             using var process = Process.Start(psi)!;
-            var stderr = process.StandardError.ReadToEnd();
-            process.WaitForExit(30_000);
+            var (_, stderr, exitCode) = TestProcessOutput.Read(process, 30_000);
 
-            if (process.ExitCode != 0)
+            if (exitCode != 0)
             {
                 var relativePath = Path.GetRelativePath(RepoRoot, sampleFile).Replace('\\', '/');
                 failures.Add($"{relativePath}: {stderr.Trim()}");

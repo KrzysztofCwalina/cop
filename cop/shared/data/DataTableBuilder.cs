@@ -1,3 +1,5 @@
+// Builds typed table rows for the provider data store.
+
 namespace Cop.Core;
 
 /// <summary>
@@ -102,7 +104,7 @@ public class DataTableBuilder
     internal DataTable Build(byte[] stringHeap)
     {
         // Trim to exact size
-        var data = new long[_count * _stride];
+        long[] data = new long[_count * _stride];
         Array.Copy(_data, data, data.Length);
         return new DataTable(data, _stride, _count, _typeName, stringHeap);
     }

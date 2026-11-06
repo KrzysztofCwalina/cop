@@ -3,6 +3,7 @@
 
 import code
 import csharp
+import csharp-checks
 import cop
 
 let codebase = codebase(csharp.parse(), cop.parse())
@@ -14,6 +15,21 @@ let files-without-samples-or-examples = codebase.Files.Where(!inSamplesOrExample
 
 let source-types-without-examples = codebase.Types
     .Where(item.File.Path:in(source-files-without-examples.Path))
+
+let csharp-source-files = source-files-without-examples
+    .Where(item.Language == csharp)
+let csharp-source-codebase : Codebase = {
+    SourceScopes: codebase.SourceScopes,
+    Files: csharp-source-files,
+    Types: codebase.Types.Where(item.File.Path:in(csharp-source-files.Path)),
+    Methods: codebase.Methods.Where(item.File.Path:in(csharp-source-files.Path)),
+    Statements: codebase.Statements.Where(item.File.Path:in(csharp-source-files.Path)),
+    Calls: codebase.Calls.Where(item.File.Path:in(csharp-source-files.Path)),
+    Lines: codebase.Lines.Where(item.File.Path:in(csharp-source-files.Path)),
+    Regions: codebase.Regions.Where(item.File.Path:in(csharp-source-files.Path)),
+    Projects: codebase.Projects
+}
+let csharp-source-violations = csharpChecks(csharp-source-codebase)
 
 let source-calls = codebase.Calls:isCSharp
     .Where(item.File.Path:in(source-files.Path))
@@ -57,6 +73,7 @@ predicate hasExceptionSuffix(Type) =>
     Type.Name:endsWith('Exception')
 
 export let default-violations =
+    csharp-source-violations +
     intrinsics-in-wrong-file +
     types-without-namespace +
     no-new-interfaces +

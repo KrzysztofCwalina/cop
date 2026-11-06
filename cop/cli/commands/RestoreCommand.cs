@@ -1,3 +1,5 @@
+// Restores packages referenced by a project or explicitly requested at the CLI.
+
 using System;
 using System.CommandLine;
 using System.CommandLine.Parsing;
@@ -6,6 +8,7 @@ using System.Linq;
 using System.Net.Http;
 using Cop.Core;
 using Cop.Lang;
+using Cop.Lang.Ast;
 
 namespace Cop.Cli.Commands;
 
@@ -22,17 +25,17 @@ public static class RestoreCommand
     /// <returns>A System.CommandLine.Command configured for the restore subcommand.</returns>
     public static Command Create()
     {
-        var fileArg = new Argument<string>("file")
+        Argument<string> fileArg = new Argument<string>("file")
         {
             Arity = ArgumentArity.ZeroOrOne,
             Description = "A .cop file (or omit to restore all .cop files in the current directory)"
         };
-        var command = new Command("restore", "Restore packages from a .cop file")
+        Command command = new Command("restore", "Restore packages from a .cop file")
         {
             fileArg
         };
 
-        command.SetAction(parseResult => ExecuteAsync(parseResult.GetValue(fileArg)).GetAwaiter().GetResult());
+        command.SetAction(parseResult => ExecuteAsync(parseResult.GetValue(fileArg)));
 
         return command;
     }
@@ -46,7 +49,7 @@ public static class RestoreCommand
 
         if (fileArg != null)
         {
-            var fullPath = Path.GetFullPath(fileArg);
+            string fullPath = Path.GetFullPath(fileArg);
             if (!File.Exists(fullPath))
             {
                 Console.Error.WriteLine($"Error: File '{fullPath}' does not exist");
@@ -56,7 +59,7 @@ public static class RestoreCommand
         }
         else
         {
-            var dir = Directory.GetCurrentDirectory();
+            string dir = Directory.GetCurrentDirectory();
             filePaths = Directory.GetFiles(dir, "*.cop");
             if (filePaths.Length == 0)
             {
@@ -66,10 +69,13 @@ public static class RestoreCommand
         }
 
         int exitCode = 0;
-        foreach (var filePath in filePaths)
+        foreach (string filePath in filePaths)
         {
-            var result = await RestoreFileAsync(filePath);
-            if (result != 0) exitCode = result;
+            int result = await RestoreFileAsync(filePath);
+            if (result != 0)
+            {
+                exitCode = result;
+            }
         }
         return exitCode;
     }
@@ -85,10 +91,10 @@ public static class RestoreCommand
         try
         {
             // Parse the .cop file to extract feed and import declarations
-            var source = File.ReadAllText(filePath);
-            var module = Cop.Lang.Parser.CopParser.Parse(source, filePath);
+            string source = File.ReadAllText(filePath);
+            ModuleNode module = Cop.Lang.Parser.CopParser.Parse(source, filePath);
 
-            var imports = module.Declarations.OfType<Cop.Lang.Ast.ImportDecl>().Select(d => d.ModuleName).ToList();
+            List<string> imports = module.Declarations.OfType<Cop.Lang.Ast.ImportDecl>().Select(d => d.ModuleName).ToList();
 
             if (imports.Count == 0)
             {
@@ -98,8 +104,8 @@ public static class RestoreCommand
 
             // Build PackageReference list from feed URLs + import names
             // Only GitHub feeds (github.com/owner/repo) support remote restore
-            var feedPaths = Cop.Lang.Interpreter.ModuleLoader.ExtractFeedPaths(source, Path.GetDirectoryName(filePath) ?? ".").ToList();
-            var githubFeeds = feedPaths
+            List<string> feedPaths = Cop.Lang.Interpreter.ModuleLoader.ExtractFeedPaths(source, Path.GetDirectoryName(filePath) ?? ".").ToList();
+            List<string> githubFeeds = feedPaths
                 .Where(f => f.StartsWith("github.com/", StringComparison.OrdinalIgnoreCase))
                 .ToList();
 
@@ -110,7 +116,7 @@ public static class RestoreCommand
             }
 
             // For each import, use the first GitHub feed to form the full package reference
-            var packages = imports
+            List<PackageReference> packages = imports
                 .Select(importName => PackageReference.Parse($"{githubFeeds[0]}/{importName}"))
                 .ToList();
 
@@ -121,21 +127,24 @@ public static class RestoreCommand
             string? githubToken = Environment.GetEnvironmentVariable("GITHUB_TOKEN");
 
             // Create HttpClient and GitHubPackageSource
-            using var httpClient = new HttpClient();
-            var packageSource = new GitHubPackageSource(httpClient, githubToken);
+            using HttpClient httpClient = new HttpClient();
+            GitHubPackageSource packageSource = new GitHubPackageSource(httpClient, githubToken);
 
             // Create RestoreEngine
-            var engine = new RestoreEngine(packageSource);
+            RestoreEngine engine = new RestoreEngine(packageSource);
 
             // Perform the restore operation
             Console.WriteLine($"Restoring packages from {Path.GetFileName(filePath)}...");
-            var result = await engine.RestoreAsync(packages, filePath, repoRoot, CancellationToken.None);
+            RestoreResult result = await engine.RestoreAsync(packages, filePath, repoRoot, CancellationToken.None);
 
             // Check if restore succeeded
-            if (!result.Success)
+            if (!result.IsSuccessful)
             {
-                foreach (var warning in result.Warnings)
+                foreach (string warning in result.Warnings)
+                {
                     Console.Error.WriteLine($"Warning: {warning}");
+                }
+
                 Console.Error.WriteLine("Error: Restore operation failed");
                 return 1;
             }
@@ -146,17 +155,19 @@ public static class RestoreCommand
             {
                 Console.WriteLine();
                 Console.WriteLine("Warnings:");
-                foreach (var warning in result.Warnings)
+                foreach (string warning in result.Warnings)
+                {
                     Console.WriteLine($"  - {warning}");
+                }
             }
 
             if (result.PlacedFiles.Count > 0)
             {
                 Console.WriteLine();
                 Console.WriteLine("Placed files:");
-                foreach (var file in result.PlacedFiles)
+                foreach (string file in result.PlacedFiles)
                 {
-                    var relativePath = Path.GetRelativePath(repoRoot, file);
+                    string relativePath = Path.GetRelativePath(repoRoot, file);
                     Console.WriteLine($"  - {relativePath}");
                 }
             }
@@ -168,7 +179,9 @@ public static class RestoreCommand
             Console.Error.WriteLine($"Error parsing .cop file: {ex.Message}");
             return 1;
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or
+            System.Net.Http.HttpRequestException or System.Text.Json.JsonException or
+            InvalidOperationException or ArgumentException)
         {
             Console.Error.WriteLine($"Error: {ex.Message}");
             return 1;

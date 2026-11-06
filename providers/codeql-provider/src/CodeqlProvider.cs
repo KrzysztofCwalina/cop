@@ -1,3 +1,5 @@
+// Runs CodeQL analysis and projects its results into provider violations.
+
 using System.Text.Json;
 using Cop.Core;
 using Cop.Lang;
@@ -12,9 +14,10 @@ namespace Cop.Providers;
 public class CodeqlProvider : DataProvider
 {
 
+    /// <inheritdoc />
     public override ReadOnlyMemory<byte> GetSchema()
     {
-        var schema = new ProviderSchema
+        ProviderSchema schema = new ProviderSchema
         {
             Collections =
             [
@@ -53,18 +56,21 @@ public class CodeqlProvider : DataProvider
         return schema.ToJson();
     }
 
-    public override object? Query(ProviderQuery query)
+    /// <inheritdoc />
+    public override async ValueTask<object?> QueryAsync(
+        ProviderQuery query, CancellationToken cancellationToken = default)
     {
         // Auto-discover SARIF files in the root path
-        var violations = new List<object>();
-        var rules = new List<object>();
+        List<object> violations = new List<object>();
+        List<object> rules = new List<object>();
 
         if (!string.IsNullOrEmpty(query.RootPath) && Directory.Exists(query.RootPath))
         {
-            var sarifFiles = Directory.GetFiles(query.RootPath, "*.sarif", SearchOption.TopDirectoryOnly);
-            foreach (var file in sarifFiles)
+            string[] sarifFiles = Directory.GetFiles(query.RootPath, "*.sarif", SearchOption.TopDirectoryOnly);
+            foreach (string file in sarifFiles)
             {
-                LoadSarifFile(file, violations, rules);
+                await LoadSarifFileAsync(file, violations, rules, cancellationToken)
+                    .ConfigureAwait(false);
             }
         }
 
@@ -75,6 +81,7 @@ public class CodeqlProvider : DataProvider
         };
     }
 
+    /// <inheritdoc />
     public override RuntimeBindings? GetRuntimeBindings() => new()
     {
         ClrTypeMappings = new Dictionary<Type, string>
@@ -104,51 +111,68 @@ public class CodeqlProvider : DataProvider
         }
     };
 
-    private static void LoadSarifFile(string filePath, List<object> violations, List<object> rules)
+    private static async ValueTask LoadSarifFileAsync(
+        string filePath, List<object> violations, List<object> rules,
+        CancellationToken cancellationToken)
     {
         try
         {
-            var json = File.ReadAllBytes(filePath);
-            using var doc = JsonDocument.Parse(json);
-            var root = doc.RootElement;
+            byte[] json = await File.ReadAllBytesAsync(filePath, cancellationToken)
+                .ConfigureAwait(false);
+            using JsonDocument doc = JsonDocument.Parse(json);
+            JsonElement root = doc.RootElement;
 
-            if (!root.TryGetProperty("runs", out var runs))
+            if (!root.TryGetProperty("runs", out JsonElement runs))
+            {
                 return;
+            }
 
-            foreach (var run in runs.EnumerateArray())
+            foreach (JsonElement run in runs.EnumerateArray())
             {
                 // Extract rules from the tool driver
-                var ruleMap = new Dictionary<string, (string Severity, string Name, string Description, string Tags, string Precision)>();
-                if (run.TryGetProperty("tool", out var tool) &&
-                    tool.TryGetProperty("driver", out var driver) &&
-                    driver.TryGetProperty("rules", out var rulesArray))
+                Dictionary<string, (string Severity, string Name, string Description, string Tags, string Precision)> ruleMap = new Dictionary<string, (string Severity, string Name, string Description, string Tags, string Precision)>();
+                if (run.TryGetProperty("tool", out JsonElement tool) &&
+                    tool.TryGetProperty("driver", out JsonElement driver) &&
+                    driver.TryGetProperty("rules", out JsonElement rulesArray))
                 {
-                    foreach (var rule in rulesArray.EnumerateArray())
+                    foreach (JsonElement rule in rulesArray.EnumerateArray())
                     {
-                        var id = rule.GetProperty("id").GetString() ?? "";
-                        var name = rule.TryGetProperty("name", out var n) ? n.GetString() ?? "" : "";
-                        var desc = "";
-                        if (rule.TryGetProperty("shortDescription", out var sd) && sd.TryGetProperty("text", out var sdt))
-                            desc = sdt.GetString() ?? "";
-                        else if (rule.TryGetProperty("fullDescription", out var fd) && fd.TryGetProperty("text", out var fdt))
-                            desc = fdt.GetString() ?? "";
-
-                        var severity = "warning";
-                        var precision = "";
-                        if (rule.TryGetProperty("properties", out var props))
+                        string id = rule.GetProperty("id").GetString() ?? string.Empty;
+                        string name = rule.TryGetProperty("name", out JsonElement n) ? n.GetString() ?? string.Empty : string.Empty;
+                        string desc = string.Empty;
+                        if (rule.TryGetProperty("shortDescription", out JsonElement sd) && sd.TryGetProperty("text", out JsonElement sdt))
                         {
-                            if (props.TryGetProperty("problem.severity", out var sev))
-                                severity = sev.GetString() ?? "warning";
-                            if (props.TryGetProperty("precision", out var prec))
-                                precision = prec.GetString() ?? "";
+                            desc = sdt.GetString() ?? string.Empty;
+                        }
+                        else if (rule.TryGetProperty("fullDescription", out JsonElement fd) && fd.TryGetProperty("text", out JsonElement fdt))
+                        {
+                            desc = fdt.GetString() ?? string.Empty;
                         }
 
-                        var tags = "";
-                        if (rule.TryGetProperty("properties", out var p2) && p2.TryGetProperty("tags", out var tagsArr))
+                        string severity = "warning";
+                        string precision = string.Empty;
+                        if (rule.TryGetProperty("properties", out JsonElement props))
                         {
-                            var tagList = new List<string>();
-                            foreach (var t in tagsArr.EnumerateArray())
-                                tagList.Add(t.GetString() ?? "");
+                            if (props.TryGetProperty("problem.severity", out JsonElement sev))
+                            {
+                                severity = sev.GetString() ?? "warning";
+                            }
+
+                            if (props.TryGetProperty("precision", out JsonElement prec))
+                            {
+                                precision = prec.GetString() ?? string.Empty;
+                            }
+                        }
+
+                        string tags = string.Empty;
+                        if (rule.TryGetProperty("properties", out JsonElement p2) && p2.TryGetProperty("tags", out JsonElement tagsArr))
+                        {
+                            List<string> tagList = new List<string>();
+                            foreach (JsonElement t in tagsArr.EnumerateArray())
+                            {
+                                tagList.Add(t.GetString() ?? string.Empty);
+                            }
+
                             tags = string.Join(", ", tagList);
                         }
 
@@ -158,20 +182,27 @@ public class CodeqlProvider : DataProvider
                 }
 
                 // Extract results
-                if (!run.TryGetProperty("results", out var resultsArray))
-                    continue;
-
-                foreach (var result in resultsArray.EnumerateArray())
+                if (!run.TryGetProperty("results", out JsonElement resultsArray))
                 {
-                    var ruleId = result.TryGetProperty("ruleId", out var rid) ? rid.GetString() ?? "" : "";
-                    var message = "";
-                    if (result.TryGetProperty("message", out var msg) && msg.TryGetProperty("text", out var msgText))
-                        message = msgText.GetString() ?? "";
+                    continue;
+                }
 
-                    var severity = "warning";
-                    if (ruleMap.TryGetValue(ruleId, out var ruleInfo))
+                foreach (JsonElement result in resultsArray.EnumerateArray())
+                {
+                    string ruleId = result.TryGetProperty("ruleId", out JsonElement rid) ? rid.GetString() ?? string.Empty : string.Empty;
+                    string message = string.Empty;
+                    if (result.TryGetProperty("message", out JsonElement msg) && msg.TryGetProperty("text", out JsonElement msgText))
+                    {
+                        message = msgText.GetString() ?? string.Empty;
+                    }
+
+                    string severity = "warning";
+                    if (ruleMap.TryGetValue(ruleId, out (string Severity, string Name, string Description, string Tags, string Precision) ruleInfo))
+                    {
                         severity = ruleInfo.Severity;
-                    if (result.TryGetProperty("level", out var lvl))
+                    }
+
+                    if (result.TryGetProperty("level", out JsonElement lvl))
                     {
                         severity = lvl.GetString() switch
                         {
@@ -185,24 +216,28 @@ public class CodeqlProvider : DataProvider
 
                     // Map note/recommendation to info for Violation compatibility
                     if (severity is "note" or "recommendation")
+                    {
                         severity = "info";
+                    }
 
-                    var file = "";
+                    string file = string.Empty;
                     int startLine = 0;
 
-                    if (result.TryGetProperty("locations", out var locs))
+                    if (result.TryGetProperty("locations", out JsonElement locs))
                     {
-                        foreach (var loc in locs.EnumerateArray())
+                        foreach (JsonElement loc in locs.EnumerateArray())
                         {
-                            if (loc.TryGetProperty("physicalLocation", out var physLoc))
+                            if (loc.TryGetProperty("physicalLocation", out JsonElement physLoc))
                             {
-                                if (physLoc.TryGetProperty("artifactLocation", out var artLoc) &&
-                                    artLoc.TryGetProperty("uri", out var uri))
-                                    file = uri.GetString() ?? "";
-
-                                if (physLoc.TryGetProperty("region", out var region))
+                                if (physLoc.TryGetProperty("artifactLocation", out JsonElement artLoc) &&
+                                    artLoc.TryGetProperty("uri", out JsonElement uri))
                                 {
-                                    startLine = region.TryGetProperty("startLine", out var sl) ? sl.GetInt32() : 0;
+                                    file = uri.GetString() ?? string.Empty;
+                                }
+
+                                if (physLoc.TryGetProperty("region", out JsonElement region))
+                                {
+                                    startLine = region.TryGetProperty("startLine", out JsonElement sl) ? sl.GetInt32() : 0;
                                 }
                             }
                             break; // only use first location
@@ -210,7 +245,7 @@ public class CodeqlProvider : DataProvider
                     }
 
                     // Combine RuleId into Message
-                    var fullMessage = string.IsNullOrEmpty(ruleId) ? message : $"{ruleId}: {message}";
+                    string fullMessage = string.IsNullOrEmpty(ruleId) ? message : $"{ruleId}: {message}";
                     violations.Add(new CodeqlViolation(file, startLine, severity, fullMessage, "codeql"));
                 }
             }
@@ -221,22 +256,6 @@ public class CodeqlProvider : DataProvider
         }
     }
 
+    /// <inheritdoc />
     public override string ToString() => "CodeqlProvider";
 }
-
-/// <summary>CodeQL analysis violation (mapped from SARIF finding)</summary>
-public record CodeqlViolation(
-    string File,
-    int Line,
-    string Severity,
-    string Message,
-    string Source);
-
-/// <summary>CodeQL rule definition from SARIF</summary>
-public record CodeqlRule(
-    string Id,
-    string Name,
-    string Description,
-    string Severity,
-    string Tags,
-    string Precision);

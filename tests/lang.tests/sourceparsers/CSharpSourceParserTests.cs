@@ -24,7 +24,7 @@ public class CSharpSourceParserTests
     }
 
     [Test]
-    public void Parse_CSharp14ExtensionBlocks_KeepTheirMembersOnTheDeclaringType()
+    public async Task Parse_CSharp14ExtensionBlocks_KeepTheirMembersOnTheDeclaringType()
     {
         var file = _parser.Parse("Extensions.cs", """
             public static class Extensions {
@@ -39,9 +39,9 @@ public class CSharpSourceParserTests
         var type = file.Types.Single();
         Assert.That(type.NestedTypes, Is.Empty);
         Assert.That(type.Properties.Select(p => p.Name), Is.EqualTo(new[] { "Size", "Text" }));
-        Assert.That(type.Methods.Select(m => m.Name), Is.EqualTo(new[] { "Clean", "get_Size", "get_Text" }));
-        Assert.That(type.Methods.Select(m => m.ReceiverType), Is.EqualTo(new[] { "string", "string", "string" }));
-        Assert.That(type.Methods.Cast<Cop.Providers.SourceModel.CSharpMethodDeclaration>().Select(m => m.IsExtension),
+        Assert.That((await AsyncSourceFacts.MembersAsync(type, CancellationToken.None)).Methods.Select(m => m.Name), Is.EqualTo(new[] { "Clean", "get_Size", "get_Text" }));
+        Assert.That((await AsyncSourceFacts.MembersAsync(type, CancellationToken.None)).Methods.Select(m => m.ReceiverType), Is.EqualTo(new[] { "string", "string", "string" }));
+        Assert.That((await AsyncSourceFacts.MembersAsync(type, CancellationToken.None)).Methods.Cast<Cop.Providers.SourceModel.CSharpMethodDeclaration>().Select(m => m.IsExtension),
             Is.EqualTo(new[] { true, true, true }));
         Assert.That(file.Statements.Where(s => s.Kind == "call").Select(s => s.MemberName),
             Is.EqualTo(new[] { "Trim", "Trim" }));
@@ -91,7 +91,7 @@ public class CSharpSourceParserTests
     }
 
     [Test]
-    public void DeferredTypeNames_SeparateInvocationAndInferenceDemand_AndReuseEachPhase()
+    public async Task DeferredTypeNames_SeparateInvocationAndInferenceDemand_AndReuseEachPhase()
     {
         const string source = """
             class Client {
@@ -120,21 +120,21 @@ public class CSharpSourceParserTests
         Assert.That((invocations, inferences), Is.EqualTo((0, 0)));
         var next = file.Statements.Where(s => s.MemberName == "Next").ToArray();
         Assert.That(next.Select(s => s.Line), Is.EqualTo(new[] { 9, 10 }));
-        Assert.That(next[0].TypeName, Is.EqualTo("Client"));
-        Assert.That(next[0].TypeName, Is.EqualTo("Client"));
+        Assert.That((await AsyncSourceFacts.TypeNameAsync(next[0], CancellationToken.None)).TypeName, Is.EqualTo("Client"));
+        Assert.That((await AsyncSourceFacts.TypeNameAsync(next[0], CancellationToken.None)).TypeName, Is.EqualTo("Client"));
         Assert.That((invocations, inferences), Is.EqualTo((1, 0)));
-        Assert.That(file.Statements.Single(s => s.MemberName == "second").TypeName, Is.EqualTo("Client"));
+        Assert.That((await AsyncSourceFacts.TypeNameAsync(file.Statements.Single(s => s.MemberName == "second"), CancellationToken.None)).TypeName, Is.EqualTo("Client"));
         Assert.That((invocations, inferences), Is.EqualTo((1, 1)));
         var awaited = file.Statements.Where(s => s.MemberName == "Ping").ToArray();
         Assert.That(awaited.Select(s => s.Kind), Is.EquivalentTo(new[] { "await", "call" }));
-        Assert.That(awaited.Select(s => s.TypeName), Is.EqualTo(new[] { "Client", "Client" }));
+        Assert.That((await awaited.ToAsyncEnumerable().Select(async (Cop.Providers.SourceModel.StatementInfo s, CancellationToken cancellationToken) => (await AsyncSourceFacts.TypeNameAsync(s, CancellationToken.None)).TypeName).ToArrayAsync()), Is.EqualTo(new[] { "Client", "Client" }));
         Assert.That((invocations, inferences), Is.EqualTo((1, 1)));
-        Assert.That(next[1].TypeName, Is.EqualTo("Client"));
+        Assert.That((await AsyncSourceFacts.TypeNameAsync(next[1], CancellationToken.None)).TypeName, Is.EqualTo("Client"));
         Assert.That((invocations, inferences), Is.EqualTo((1, 1)));
     }
 
     [Test]
-    public void Parse_PrunedDeclarationWalk_PreservesNestedTypesAndPhysicalLineNumbers()
+    public async Task Parse_PrunedDeclarationWalk_PreservesNestedTypesAndPhysicalLineNumbers()
     {
         var file = _parser.Parse("Input.cs", """
             namespace Outer {
@@ -154,7 +154,7 @@ public class CSharpSourceParserTests
         Assert.That(file.Types.Select(t => (t.Name, t.Line)), Is.EqualTo(new[] { ("Alpha", 3), ("Beta", 10) }));
         Assert.That(file.Types[0].NestedTypes.Select(t => (t.Name, t.Line)),
             Is.EqualTo(new[] { ("Nested", 4), ("State", 5) }));
-        Assert.That(file.Types[0].NestedTypes[0].Methods.Single().Line, Is.EqualTo(4));
+        Assert.That((await AsyncSourceFacts.MembersAsync(file.Types[0].NestedTypes[0], CancellationToken.None)).Methods.Single().Line, Is.EqualTo(4));
         Assert.That(file.Statements.Single(s => s.Kind == "call").Line, Is.EqualTo(4));
     }
 
@@ -282,12 +282,12 @@ public class CSharpSourceParserTests
     }
 
     [Test]
-    public void Parse_GoodClient_ExtractsAsyncMethods()
+    public async Task Parse_GoodClient_ExtractsAsyncMethods()
     {
         var source = File.ReadAllText(SamplePath("GoodClient.cs"));
         var result = _parser.Parse("GoodClient.cs", source)!;
         var goodClient = result.Types.First(t => t.Name == "GoodClient");
-        var asyncMethods = goodClient.Methods.Where(m => m.IsAsync).ToList();
+        var asyncMethods = (await AsyncSourceFacts.MembersAsync(goodClient, CancellationToken.None)).Methods.Where(m => m.IsAsync).ToList();
         Assert.That(asyncMethods, Has.Count.GreaterThanOrEqualTo(1));
         var getItem = asyncMethods.First(m => m.Name == "GetItemAsync");
         Assert.That(getItem.Parameters.Any(p => p.Type?.Name == "CancellationToken"), Is.True);
@@ -325,7 +325,7 @@ public class CSharpSourceParserTests
     }
 
     [Test]
-    public void Parse_BadClient_ExtractsInvocations()
+    public async Task Parse_BadClient_ExtractsInvocations()
     {
         var source = File.ReadAllText(SamplePath("BadClient.cs"));
         var result = _parser.Parse("BadClient.cs", source)!;
@@ -334,25 +334,25 @@ public class CSharpSourceParserTests
             .ToList();
         // Exactly one Thread.Sleep(100) invocation in BadClient.cs.
         Assert.That(sleepCalls, Has.Count.EqualTo(1));
-        Assert.That(sleepCalls[0].TypeName, Is.EqualTo("Thread"));
+        Assert.That((await AsyncSourceFacts.TypeNameAsync(sleepCalls[0], CancellationToken.None)).TypeName, Is.EqualTo("Thread"));
     }
 
     [Test]
-    public void Parse_BadClient_ExtractsCatchClauses()
+    public async Task Parse_BadClient_ExtractsCatchClauses()
     {
         var source = File.ReadAllText(SamplePath("BadClient.cs"));
         var result = _parser.Parse("BadClient.cs", source)!;
         var catches = result.Statements.Where(s => s.Kind == "catch").ToList();
         Assert.That(catches, Has.Count.GreaterThanOrEqualTo(1));
-        Assert.That(catches[0].TypeName, Is.EqualTo("Exception"));
+        Assert.That((await AsyncSourceFacts.TypeNameAsync(catches[0], CancellationToken.None)).TypeName, Is.EqualTo("Exception"));
     }
 
     [Test]
-    public void Parse_CatchWithRethrow_HasRethrowIsTrue()
+    public async Task Parse_CatchWithRethrow_HasRethrowIsTrue()
     {
         var source = File.ReadAllText(SamplePath("BadClient.cs"));
         var result = _parser.Parse("BadClient.cs", source)!;
-        var catchStmt = result.Statements.First(s => s.Kind == "catch" && s.TypeName == "Exception");
+        var catchStmt = (await result.Statements.ToAsyncEnumerable().FirstAsync(async (Cop.Providers.SourceModel.StatementInfo s, CancellationToken cancellationToken) => s.Kind == "catch" && (await AsyncSourceFacts.TypeNameAsync(s, CancellationToken.None)).TypeName == "Exception"));
         Assert.That(catchStmt.HasRethrow, Is.True);
     }
 
@@ -375,7 +375,7 @@ public class CSharpSourceParserTests
     }
 
     [Test]
-    public void Parse_MultipleCatches_RethrowDetectedCorrectly()
+    public async Task Parse_MultipleCatches_RethrowDetectedCorrectly()
     {
         var source = """
             class Foo {
@@ -394,18 +394,18 @@ public class CSharpSourceParserTests
         var result = _parser.Parse("test.cs", source)!;
         var catches = result.Statements.Where(s => s.Kind == "catch").ToList();
         Assert.That(catches, Has.Count.EqualTo(2));
-        Assert.That(catches[0].TypeName, Is.EqualTo("RequestFailedException"));
+        Assert.That((await AsyncSourceFacts.TypeNameAsync(catches[0], CancellationToken.None)).TypeName, Is.EqualTo("RequestFailedException"));
         Assert.That(catches[0].HasRethrow, Is.False);
         Assert.That(catches[0].IsErrorHandler, Is.True);
         Assert.That(catches[0].IsGenericErrorHandler, Is.False);
-        Assert.That(catches[1].TypeName, Is.EqualTo("Exception"));
+        Assert.That((await AsyncSourceFacts.TypeNameAsync(catches[1], CancellationToken.None)).TypeName, Is.EqualTo("Exception"));
         Assert.That(catches[1].HasRethrow, Is.True);
         Assert.That(catches[1].IsErrorHandler, Is.True);
         Assert.That(catches[1].IsGenericErrorHandler, Is.True);
     }
 
     [Test]
-    public void Parse_BareCatch_IsGenericErrorHandler()
+    public async Task Parse_BareCatch_IsGenericErrorHandler()
     {
         var source = """
             class Foo {
@@ -419,7 +419,7 @@ public class CSharpSourceParserTests
             """;
         var result = _parser.Parse("test.cs", source)!;
         var catchStmt = result.Statements.First(s => s.Kind == "catch");
-        Assert.That(catchStmt.TypeName, Is.Null);
+        Assert.That((await AsyncSourceFacts.TypeNameAsync(catchStmt, CancellationToken.None)).TypeName, Is.Null);
         Assert.That(catchStmt.IsErrorHandler, Is.True);
         Assert.That(catchStmt.IsGenericErrorHandler, Is.True);
     }
@@ -478,7 +478,7 @@ public class CSharpSourceParserTests
     }
 
     [Test]
-    public void Parse_NestedControlFlow_DoesNotDuplicateStatements()
+    public async Task Parse_NestedControlFlow_DoesNotDuplicateStatements()
     {
         // Regression (#31): each statement/call must appear exactly once in the flat Statements
         // list. Statements inside switch sections, try/catch blocks and else clauses were being
@@ -521,11 +521,11 @@ public class CSharpSourceParserTests
         Assert.That(writeLines.Select(s => s.Line).Distinct().Count(), Is.EqualTo(4));
 
         // No statement (identified by kind+line) should be duplicated anywhere in the flat list.
-        var dupes = result.Statements
-            .GroupBy(s => (s.Kind, s.Line, s.MemberName, s.TypeName))
+        var dupes = (await result.Statements.ToAsyncEnumerable()
+            .GroupBy(async (s, cancellationToken) => (s.Kind, s.Line, s.MemberName, (await AsyncSourceFacts.TypeNameAsync(s, CancellationToken.None)).TypeName))
             .Where(g => g.Count() > 1)
             .Select(g => $"{g.Key.Kind}@{g.Key.Line}")
-            .ToList();
+            .ToListAsync());
         Assert.That(dupes, Is.Empty, $"duplicated statements: {string.Join(", ", dupes)}");
     }
 

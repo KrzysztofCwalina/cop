@@ -1,3 +1,5 @@
+// Computes edit distances and suggests nearby names for language diagnostics.
+
 namespace Cop.Lang;
 
 /// <summary>
@@ -11,8 +13,15 @@ public static class StringDistance
     /// </summary>
     public static int Levenshtein(string a, string b)
     {
-        if (string.IsNullOrEmpty(a)) return b?.Length ?? 0;
-        if (string.IsNullOrEmpty(b)) return a.Length;
+        if (string.IsNullOrEmpty(a))
+        {
+            return b?.Length ?? 0;
+        }
+
+        if (string.IsNullOrEmpty(b))
+        {
+            return a.Length;
+        }
 
         a = a.ToLowerInvariant();
         b = b.ToLowerInvariant();
@@ -21,7 +30,9 @@ public static class StringDistance
         int[] curr = new int[b.Length + 1];
 
         for (int j = 0; j <= b.Length; j++)
+        {
             prev[j] = j;
+        }
 
         for (int i = 1; i <= a.Length; i++)
         {
@@ -51,11 +62,13 @@ public static class StringDistance
         string? best = null;
         int bestDist = int.MaxValue;
 
-        foreach (var candidate in candidates)
+        foreach (string candidate in candidates)
         {
             // Quick reject: if lengths differ by more than maxDistance, skip
             if (Math.Abs(input.Length - candidate.Length) > maxDistance)
+            {
                 continue;
+            }
 
             int dist = Levenshtein(input, candidate);
             if (dist < bestDist && dist <= maxDistance)
@@ -74,16 +87,20 @@ public static class StringDistance
     /// </summary>
     public static List<string> FindClosestN(string input, IEnumerable<string> candidates, int maxResults = 3, int maxDistance = 3)
     {
-        var results = new List<(string Name, int Dist)>();
+        List<(string Name, int Dist)> results = new List<(string Name, int Dist)>();
 
-        foreach (var candidate in candidates)
+        foreach (string candidate in candidates)
         {
             if (Math.Abs(input.Length - candidate.Length) > maxDistance)
+            {
                 continue;
+            }
 
             int dist = Levenshtein(input, candidate);
             if (dist <= maxDistance)
+            {
                 results.Add((candidate, dist));
+            }
         }
 
         results.Sort((a, b) => a.Dist.CompareTo(b.Dist));

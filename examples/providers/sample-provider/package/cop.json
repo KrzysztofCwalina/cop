@@ -1,0 +1,11 @@
+{
+  "name": "sample",
+  "version": "1.0.0",
+  "title": "Sample Provider",
+  "description": "A minimal sample provider demonstrating the Cop plugin pattern",
+  "authors": "cop-team",
+  "tags": ["sample", "template"],
+  "provider": "clr",
+  "providerEntry": "SampleProvider.SampleProvider",
+  "providerAssembly": "sample-provider.dll"
+}

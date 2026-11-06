@@ -1,64 +1,8 @@
-namespace TypeSpecProvider;
+// Tokenizes TypeSpec names, literals, punctuation, and comments.
 
-public enum TspTokenKind
-{
-    // Literals
-    Identifier,
-    StringLiteral,
-    NumericLiteral,
-    TripleQuoteString,
+using System.Text;
 
-    // Keywords
-    Model,
-    Op,
-    Interface,
-    Enum,
-    Union,
-    Scalar,
-    Namespace,
-    Import,
-    Using,
-    Extends,
-    Is,
-    If,
-    Else,
-    Alias,
-    Extern,
-    Dec,
-    Fn,
-    Const,
-    True,
-    False,
-    Void,
-    Never,
-    Unknown,
-
-    // Punctuation
-    OpenBrace,
-    CloseBrace,
-    OpenParen,
-    CloseParen,
-    OpenBracket,
-    CloseBracket,
-    Semicolon,
-    Comma,
-    Colon,
-    Dot,
-    DotDotDot,
-    At,
-    Hash,
-    QuestionMark,
-    Equals,
-    Pipe,
-    Ampersand,
-    Arrow,        // =>
-
-    // Special
-    EndOfFile,
-    Unknown_Token,
-}
-
-public record TspToken(TspTokenKind Kind, string Value, int Line, int Column);
+namespace Cop.Providers.TypeSpec;
 
 /// <summary>
 /// Tokenizer for TypeSpec source files.
@@ -70,24 +14,31 @@ public class TspLexer
     private int _line = 1;
     private int _col = 1;
 
+    /// <summary>Creates a lexer for the supplied TypeSpec source text.</summary>
     public TspLexer(string source)
     {
         _source = source;
     }
 
+    /// <summary>Reads TypeSpec tokens with their line and column locations.</summary>
     public List<TspToken> Tokenize()
     {
-        var tokens = new List<TspToken>();
+        List<TspToken> tokens = new List<TspToken>();
         while (_pos < _source.Length)
         {
             SkipWhitespaceAndComments();
-            if (_pos >= _source.Length) break;
+            if (_pos >= _source.Length)
+            {
+                break;
+            }
 
-            var token = ReadToken();
+            TspToken? token = ReadToken();
             if (token is not null)
+            {
                 tokens.Add(token);
+            }
         }
-        tokens.Add(new TspToken(TspTokenKind.EndOfFile, "", _line, _col));
+        tokens.Add(new TspToken(TspTokenKind.EndOfFile, string.Empty, _line, _col));
         return tokens;
     }
 
@@ -107,7 +58,10 @@ public class TspLexer
             if (c == '/' && _pos + 1 < _source.Length && _source[_pos + 1] == '/')
             {
                 while (_pos < _source.Length && _source[_pos] != '\n')
+                {
                     Advance();
+                }
+
                 continue;
             }
 
@@ -116,7 +70,10 @@ public class TspLexer
             {
                 Advance(); Advance(); // skip /*
                 while (_pos + 1 < _source.Length && !(_source[_pos] == '*' && _source[_pos + 1] == '/'))
+                {
                     Advance();
+                }
+
                 if (_pos + 1 < _source.Length)
                 {
                     Advance(); Advance(); // skip */
@@ -178,7 +135,7 @@ public class TspLexer
     private TspToken ReadString(int startLine, int startCol)
     {
         Advance(); // skip opening "
-        var sb = new System.Text.StringBuilder();
+        StringBuilder sb = new System.Text.StringBuilder();
         while (_pos < _source.Length && _source[_pos] != '"')
         {
             if (_source[_pos] == '\\' && _pos + 1 < _source.Length)
@@ -192,14 +149,18 @@ public class TspLexer
             }
             Advance();
         }
-        if (_pos < _source.Length) Advance(); // skip closing "
+        if (_pos < _source.Length)
+        {
+            Advance(); // skip closing "
+        }
+
         return new TspToken(TspTokenKind.StringLiteral, sb.ToString(), startLine, startCol);
     }
 
     private TspToken ReadTripleQuotedString(int startLine, int startCol)
     {
         Advance(); Advance(); Advance(); // skip """
-        var sb = new System.Text.StringBuilder();
+        StringBuilder sb = new System.Text.StringBuilder();
         while (_pos + 2 < _source.Length && !(_source[_pos] == '"' && _source[_pos + 1] == '"' && _source[_pos + 2] == '"'))
         {
             sb.Append(_source[_pos]);
@@ -211,7 +172,7 @@ public class TspLexer
 
     private TspToken ReadNumber(int startLine, int startCol)
     {
-        var sb = new System.Text.StringBuilder();
+        StringBuilder sb = new System.Text.StringBuilder();
         if (_source[_pos] == '-') { sb.Append('-'); Advance(); }
         while (_pos < _source.Length && (char.IsDigit(_source[_pos]) || _source[_pos] == '.'))
         {
@@ -223,15 +184,15 @@ public class TspLexer
 
     private TspToken ReadIdentifierOrKeyword(int startLine, int startCol)
     {
-        var sb = new System.Text.StringBuilder();
+        StringBuilder sb = new System.Text.StringBuilder();
         while (_pos < _source.Length && (char.IsLetterOrDigit(_source[_pos]) || _source[_pos] == '_' || _source[_pos] == '$'))
         {
             sb.Append(_source[_pos]);
             Advance();
         }
 
-        var value = sb.ToString();
-        var kind = value switch
+        string value = sb.ToString();
+        TspTokenKind kind = value switch
         {
             "model" => TspTokenKind.Model,
             "op" => TspTokenKind.Op,

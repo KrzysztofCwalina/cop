@@ -1,3 +1,5 @@
+// Models an OpenAPI operation and its source provenance.
+
 namespace Cop.Providers.OpenApi;
 
 /// <summary>
@@ -11,7 +13,8 @@ public record OpenApiOperationInfo(
     bool HasResponses,
     int Line)
 {
+    /// <summary>Gets the specification source file declaring this operation.</summary>
     public SourceModel.SourceFile? File { get; init; }
+    /// <summary>Gets the file path and line used to locate diagnostics.</summary>
     public string Source => $"{File?.Path}:{Line}";
 }
-

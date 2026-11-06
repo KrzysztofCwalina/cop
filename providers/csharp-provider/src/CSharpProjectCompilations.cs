@@ -1,4 +1,8 @@
+// Creates Roslyn compilations with each project's source and dependency boundaries.
+
+using System.Xml.Linq;
 using Cop.Core;
+using Cop.Providers.SourceModel;
 using Cop.Providers.SourceParsers;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
@@ -7,65 +11,107 @@ namespace Cop.Providers;
 
 internal static class CSharpProjectCompilations
 {
-    internal static Dictionary<SyntaxTree, CSharpCompilation> Create(string root,
+    internal static async ValueTask<Dictionary<SyntaxTree, CSharpCompilation>> CreateAsync(string root,
         IEnumerable<SyntaxTree> syntaxTrees, IReadOnlySet<string>? excluded,
-        Func<string, List<MetadataReference>> references)
+        Func<string, List<MetadataReference>> references, CancellationToken cancellationToken)
     {
         root = Path.GetFullPath(root);
-        var allTrees = syntaxTrees.ToArray();
-        var comparison = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
-        var comparer = OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
-        var discovered = CSharpProjectDiscovery.Discover(root, excluded, allTrees.Select(tree => tree.FilePath).ToArray());
-        var projectFiles = discovered.ToDictionary(
+        SyntaxTree[] allTrees = syntaxTrees.ToArray();
+        StringComparison comparison = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+        StringComparer comparer = OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
+        List<ProjectInfo> discovered = CSharpProjectDiscovery.Discover(root, excluded, allTrees.Select(tree => tree.FilePath).ToArray());
+        Dictionary<string, HashSet<string>?> projectFiles = discovered.ToDictionary(
             project => Path.GetFullPath(project.Path.Replace('/', Path.DirectorySeparatorChar), root),
             project => project.SourceFiles is null ? null : new HashSet<string>(project.SourceFiles, comparer), comparer);
-        var projects = projectFiles.Keys.OrderByDescending(p => Path.GetDirectoryName(p)!.Length)
+        string[] projects = projectFiles.Keys.OrderByDescending(p => Path.GetDirectoryName(p)!.Length)
             .ThenBy(p => p, comparer).ToArray();
-        var groups = new Dictionary<string, List<SyntaxTree>>(comparer);
-        var owners = new Dictionary<SyntaxTree, string>();
-        foreach (var tree in allTrees)
+        Dictionary<string, List<SyntaxTree>> groups = new Dictionary<string, List<SyntaxTree>>(comparer);
+        Dictionary<SyntaxTree, string> owners = new Dictionary<SyntaxTree, string>();
+        foreach (SyntaxTree? tree in allTrees)
         {
-            var path = Path.GetFullPath(tree.FilePath);
-            var memberships = projects.Where(project => projectFiles[project] is { } sources
+            string path = Path.GetFullPath(tree.FilePath);
+            string[] memberships = projects.Where(project => projectFiles[project] is { } sources
                 ? sources.Contains(path)
                 : path.StartsWith(Path.GetDirectoryName(project)! + Path.DirectorySeparatorChar, comparison)).ToArray();
-            owners[tree] = memberships.FirstOrDefault() ?? "";
-            foreach (var project in memberships.Length == 0 ? new[] { "" } : memberships)
+            owners[tree] = memberships.FirstOrDefault() ?? string.Empty;
+            foreach (string? project in memberships.Length == 0 ? new[] { string.Empty } : memberships)
             {
-                if (!groups.TryGetValue(project, out var group)) groups[project] = group = [];
+                if (!groups.TryGetValue(project, out List<SyntaxTree>? group))
+                {
+                    groups[project] = group = [];
+                }
+
                 group.Add(tree);
             }
         }
 
-        var compiled = new Dictionary<string, CSharpCompilation>(comparer);
-        var visiting = new HashSet<string>(comparer);
-        CSharpCompilation Compile(string project)
+        Dictionary<string, CSharpCompilation> compiled = new Dictionary<string, CSharpCompilation>(comparer);
+        HashSet<string> visiting = new HashSet<string>(comparer);
+        async ValueTask<CSharpCompilation> CompileAsync(string project)
         {
-            if (compiled.TryGetValue(project, out var cached)) return cached;
+            cancellationToken.ThrowIfCancellationRequested();
+            if (compiled.TryGetValue(project, out CSharpCompilation? cached))
+            {
+                return cached;
+            }
+
             visiting.Add(project);
-            var directory = project.Length == 0 ? root : Path.GetDirectoryName(project)!;
-            var metadata = references(directory);
-            var trees = groups.GetValueOrDefault(project) ?? [];
-            var imports = new List<string>();
+            string directory = project.Length == 0 ? root : Path.GetDirectoryName(project)!;
+            List<MetadataReference> metadata = references(directory);
+            List<SyntaxTree> trees = groups.GetValueOrDefault(project) ?? [];
+            List<string> imports = new List<string>();
             if (project.Length > 0)
             {
                 try
                 {
-                    var document = CSharpProjectDiscovery.LoadProjectDocument(project);
-                    var elements = document?.Descendants().ToList() ?? [];
-                    var unsupportedSettings = CSharpProjectInputs.UnsupportedSettings(document);
+                    XDocument? document = CSharpProjectDiscovery.LoadProjectDocument(project);
+                    List<XElement> elements = document?.Descendants().ToList() ?? [];
+                    string targetFramework = elements
+                        .FirstOrDefault(element => element.Name.LocalName is
+                            "TargetFramework" or "TargetFrameworks")
+                        ?.Value.Split(';', StringSplitOptions.TrimEntries)[0] ?? string.Empty;
+                    HashSet<string?> referenceNames = metadata
+                        .Select(reference => Path.GetFileName(reference.Display))
+                        .ToHashSet(StringComparer.OrdinalIgnoreCase);
+                    foreach (XElement framework in elements
+                        .Where(element => element.Name.LocalName == "FrameworkReference"))
+                    {
+                        if (framework.Attribute("Include")?.Value is not { } name)
+                        {
+                            continue;
+                        }
+                        IEnumerable<MetadataReference> frameworkReferences =
+                            await CSharpFrameworkReferences.ResolveAsync(
+                                name, targetFramework, project, cancellationToken)
+                                .ConfigureAwait(false);
+                        foreach (MetadataReference reference in frameworkReferences)
+                        {
+                            if (referenceNames.Add(Path.GetFileName(reference.Display)))
+                            {
+                                metadata.Add(reference);
+                            }
+                        }
+                    }
+                    List<string> unsupportedSettings = CSharpProjectInputs.UnsupportedSettings(document);
                     if (unsupportedSettings.Count > 0)
+                    {
                         ProviderWarnings.ReportOnce("csharp", project,
                             $"Limited C# analysis for '{project}': found {string.Join(", ", unsupportedSettings)}. " +
                             "Cop cannot fully evaluate these settings. Source-file membership may fall back to project folders, " +
                             "and only the first restored target framework is used. File inclusion or resolved symbols may differ from your actual build. " +
                             "If a check depends on these settings, compare its results with the files and target framework selected by your normal build. " +
                             "This is a Cop limitation, not a project error; installing the .NET SDK or running restore will not remove it.");
-                    foreach (var reference in elements.Where(e => e.Name.LocalName == "ProjectReference"))
+                    }
+
+                    foreach (XElement? reference in elements.Where(e => e.Name.LocalName == "ProjectReference"))
                     {
-                        var include = reference.Attribute("Include")?.Value;
-                        if (include is null) continue;
-                        var dependency = Path.GetFullPath(Path.Combine(directory,
+                        string? include = reference.Attribute("Include")?.Value;
+                        if (include is null)
+                        {
+                            continue;
+                        }
+
+                        string dependency = Path.GetFullPath(Path.Combine(directory,
                             include.Replace('\\', Path.DirectorySeparatorChar).Replace('/', Path.DirectorySeparatorChar)));
                         if (!projects.Contains(dependency, comparer))
                         {
@@ -78,17 +124,26 @@ internal static class CSharpProjectCompilations
                             ProviderWarnings.ReportOnce("csharp", project, $"Cyclic project reference in '{project}'; semantic resolution is incomplete.");
                             continue;
                         }
-                        metadata.Add(Compile(dependency).ToMetadataReference());
+                        CSharpCompilation dependencyCompilation = await CompileAsync(dependency)
+                            .ConfigureAwait(false);
+                        metadata.Add(dependencyCompilation.ToMetadataReference());
                     }
                     if (elements.Any(e => e.Name.LocalName == "ImplicitUsings" && e.Value.Trim() is "enable" or "true"))
+                    {
                         imports.AddRange(["System", "System.Collections.Generic", "System.IO", "System.Linq",
                             "System.Net.Http", "System.Threading", "System.Threading.Tasks"]);
-                    foreach (var import in elements.Where(e => e.Name.LocalName == "Using"))
+                    }
+
+                    foreach (XElement? import in elements.Where(e => e.Name.LocalName == "Using"))
                     {
-                        var include = import.Attribute("Include")?.Value;
-                        if (include is null) continue;
-                        var alias = import.Attribute("Alias")?.Value;
-                        var isStatic = import.Attribute("Static")?.Value == "true";
+                        string? include = import.Attribute("Include")?.Value;
+                        if (include is null)
+                        {
+                            continue;
+                        }
+
+                        string? alias = import.Attribute("Alias")?.Value;
+                        bool isStatic = import.Attribute("Static")?.Value == "true";
                         imports.Add(alias is not null ? $"{alias} = {include}" : isStatic ? $"static {include}" : include);
                     }
                 }
@@ -97,21 +152,27 @@ internal static class CSharpProjectCompilations
                     ProviderErrors.Report($"Failed to load project '{project}' for C# analysis: {ex.Message}");
                 }
             }
-            var compilationTrees = trees.AsEnumerable();
+            IEnumerable<SyntaxTree> compilationTrees = trees.AsEnumerable();
             if (imports.Count > 0)
+            {
                 compilationTrees = compilationTrees.Append(CSharpSyntaxTree.ParseText(
                     string.Join("\n", imports.Distinct().Select(i => $"global using {i};")),
                     CSharpSourceParser.ParseOptions));
-            var compilation = CSharpCompilation.Create("CopAnalysis_" + compiled.Count, compilationTrees, metadata,
+            }
+
+            CSharpCompilation compilation = CSharpCompilation.Create("CopAnalysis_" + compiled.Count, compilationTrees, metadata,
                 new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary).WithNullableContextOptions(NullableContextOptions.Enable));
             compiled[project] = compilation;
             visiting.Remove(project);
             return compilation;
         }
 
-        var result = new Dictionary<SyntaxTree, CSharpCompilation>();
-        foreach (var tree in allTrees)
-            result[tree] = Compile(owners[tree]);
+        Dictionary<SyntaxTree, CSharpCompilation> result = new Dictionary<SyntaxTree, CSharpCompilation>();
+        foreach (SyntaxTree? tree in allTrees)
+        {
+            result[tree] = await CompileAsync(owners[tree]).ConfigureAwait(false);
+        }
+
         return result;
     }
 }

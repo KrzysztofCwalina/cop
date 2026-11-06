@@ -1,3 +1,5 @@
+// Stores signed file checksums and verifies project tamper-protection locks.
+
 using System.Security.Cryptography;
 using System.Text;
 using YamlDotNet.Serialization;
@@ -6,27 +8,18 @@ using YamlDotNet.Serialization.NamingConventions;
 namespace Cop.Core;
 
 /// <summary>
-/// Represents a single locked file entry in .cop-lock.
-/// </summary>
-public class LockEntry
-{
-    [YamlMember(Alias = "checksum")]
-    public string Checksum { get; set; } = "";
-
-    [YamlMember(Alias = "signature")]
-    public string Signature { get; set; } = "";
-}
-
-/// <summary>
 /// Represents the .cop-lock file: a signed manifest of locked file checksums.
 /// </summary>
 public class LockFile
 {
+    /// <summary>The project file containing signed content locks.</summary>
     public const string FileName = ".cop-lock";
 
+    /// <summary>The serialized lock-manifest format version.</summary>
     [YamlMember(Alias = "version")]
     public int Version { get; set; } = 1;
 
+    /// <summary>Locked file entries indexed by their project-relative paths.</summary>
     [YamlMember(Alias = "files")]
     public Dictionary<string, LockEntry> Files { get; set; } = new();
 
@@ -35,10 +28,13 @@ public class LockFile
     /// </summary>
     public static LockFile? Load(string directory)
     {
-        var path = Path.Combine(directory, FileName);
-        if (!File.Exists(path)) return null;
+        string path = Path.Combine(directory, FileName);
+        if (!File.Exists(path))
+        {
+            return null;
+        }
 
-        var yaml = File.ReadAllText(path);
+        string yaml = File.ReadAllText(path);
         return Deserialize(yaml);
     }
 
@@ -47,7 +43,7 @@ public class LockFile
     /// </summary>
     public static LockFile Deserialize(string yaml)
     {
-        var deserializer = new DeserializerBuilder()
+        IDeserializer deserializer = new DeserializerBuilder()
             .WithNamingConvention(HyphenatedNamingConvention.Instance)
             .IgnoreUnmatchedProperties()
             .Build();
@@ -59,9 +55,9 @@ public class LockFile
     /// </summary>
     public void Save(string directory)
     {
-        var path = Path.Combine(directory, FileName);
-        var yaml = Serialize();
-        var tempPath = path + ".tmp";
+        string path = Path.Combine(directory, FileName);
+        string yaml = Serialize();
+        string tempPath = path + ".tmp";
         File.WriteAllText(tempPath, yaml);
         File.Move(tempPath, path, overwrite: true);
     }
@@ -71,7 +67,7 @@ public class LockFile
     /// </summary>
     public string Serialize()
     {
-        var serializer = new SerializerBuilder()
+        ISerializer serializer = new SerializerBuilder()
             .WithNamingConvention(HyphenatedNamingConvention.Instance)
             .Build();
         return serializer.Serialize(this);
@@ -84,14 +80,18 @@ public class LockFile
     public void Lock(string relativePath, string rootDirectory, string key)
     {
         if (relativePath == FileName)
+        {
             throw new InvalidOperationException("Cannot lock the lockfile itself.");
+        }
 
-        var fullPath = Path.Combine(rootDirectory, relativePath.Replace('/', Path.DirectorySeparatorChar));
+        string fullPath = Path.Combine(rootDirectory, relativePath.Replace('/', Path.DirectorySeparatorChar));
         if (!File.Exists(fullPath))
+        {
             throw new FileNotFoundException($"File not found: {relativePath}");
+        }
 
-        var checksum = ComputeFileChecksum(fullPath);
-        var signature = Sign(checksum, key);
+        string checksum = ComputeFileChecksum(fullPath);
+        string signature = Sign(checksum, key);
 
         Files[relativePath] = new LockEntry { Checksum = checksum, Signature = signature };
     }
@@ -111,11 +111,11 @@ public class LockFile
     /// </summary>
     public List<LockVerification> VerifyChecksums(string rootDirectory)
     {
-        var results = new List<LockVerification>();
+        List<LockVerification> results = new List<LockVerification>();
 
-        foreach (var (relativePath, entry) in Files)
+        foreach ((string? relativePath, LockEntry? entry) in Files)
         {
-            var fullPath = Path.Combine(rootDirectory, relativePath.Replace('/', Path.DirectorySeparatorChar));
+            string fullPath = Path.Combine(rootDirectory, relativePath.Replace('/', Path.DirectorySeparatorChar));
 
             if (!File.Exists(fullPath))
             {
@@ -123,8 +123,8 @@ public class LockFile
                 continue;
             }
 
-            var currentChecksum = ComputeFileChecksum(fullPath);
-            var status = currentChecksum == entry.Checksum ? "clean" : "modified";
+            string currentChecksum = ComputeFileChecksum(fullPath);
+            string status = currentChecksum == entry.Checksum ? "clean" : "modified";
             results.Add(new LockVerification(relativePath, status, entry.Checksum, currentChecksum));
         }
 
@@ -137,9 +137,9 @@ public class LockFile
     /// </summary>
     public List<LockVerification> VerifySignatures(string key)
     {
-        var results = new List<LockVerification>();
+        List<LockVerification> results = new List<LockVerification>();
 
-        foreach (var (relativePath, entry) in Files)
+        foreach ((string? relativePath, LockEntry? entry) in Files)
         {
             if (!Verify(entry.Checksum, entry.Signature, key))
             {
@@ -156,13 +156,15 @@ public class LockFile
     /// </summary>
     public void Resign(string key, string? rootDirectory = null)
     {
-        foreach (var (relativePath, entry) in Files)
+        foreach ((string? relativePath, LockEntry? entry) in Files)
         {
             if (rootDirectory != null)
             {
-                var fullPath = Path.Combine(rootDirectory, relativePath.Replace('/', Path.DirectorySeparatorChar));
+                string fullPath = Path.Combine(rootDirectory, relativePath.Replace('/', Path.DirectorySeparatorChar));
                 if (File.Exists(fullPath))
+                {
                     entry.Checksum = ComputeFileChecksum(fullPath);
+                }
             }
             entry.Signature = Sign(entry.Checksum, key);
         }
@@ -173,9 +175,9 @@ public class LockFile
     /// </summary>
     public static string ComputeFileChecksum(string filePath)
     {
-        using var sha256 = SHA256.Create();
-        using var stream = File.OpenRead(filePath);
-        var hash = sha256.ComputeHash(stream);
+        using SHA256 sha256 = SHA256.Create();
+        using FileStream stream = File.OpenRead(filePath);
+        byte[] hash = sha256.ComputeHash(stream);
         return "sha256:" + Convert.ToHexStringLower(hash);
     }
 
@@ -184,10 +186,10 @@ public class LockFile
     /// </summary>
     public static string Sign(string data, string key)
     {
-        var keyBytes = Encoding.UTF8.GetBytes(key);
-        var dataBytes = Encoding.UTF8.GetBytes(data);
-        using var hmac = new HMACSHA256(keyBytes);
-        var hash = hmac.ComputeHash(dataBytes);
+        byte[] keyBytes = Encoding.UTF8.GetBytes(key);
+        byte[] dataBytes = Encoding.UTF8.GetBytes(data);
+        using HMACSHA256 hmac = new HMACSHA256(keyBytes);
+        byte[] hash = hmac.ComputeHash(dataBytes);
         return "hmac-sha256:" + Convert.ToHexStringLower(hash);
     }
 
@@ -196,7 +198,7 @@ public class LockFile
     /// </summary>
     public static bool Verify(string data, string signature, string key)
     {
-        var expected = Sign(data, key);
+        string expected = Sign(data, key);
         return CryptographicOperations.FixedTimeEquals(
             Encoding.UTF8.GetBytes(expected),
             Encoding.UTF8.GetBytes(signature));
@@ -207,19 +209,18 @@ public class LockFile
     /// </summary>
     public static string NormalizePath(string rootDirectory, string filePath)
     {
-        var fullPath = Path.GetFullPath(filePath);
-        var rootFull = Path.GetFullPath(rootDirectory);
+        string fullPath = Path.GetFullPath(filePath);
+        string rootFull = Path.GetFullPath(rootDirectory);
         if (!rootFull.EndsWith(Path.DirectorySeparatorChar))
+        {
             rootFull += Path.DirectorySeparatorChar;
+        }
 
         if (!fullPath.StartsWith(rootFull, StringComparison.OrdinalIgnoreCase))
+        {
             throw new InvalidOperationException($"File '{filePath}' is outside the project root '{rootDirectory}'.");
+        }
 
         return Path.GetRelativePath(rootFull, fullPath).Replace('\\', '/');
     }
 }
-
-/// <summary>
-/// Result of verifying a single locked file.
-/// </summary>
-public record LockVerification(string RelativePath, string Status, string? ExpectedChecksum, string? ActualChecksum);

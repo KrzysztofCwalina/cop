@@ -1,8 +1,10 @@
+// Keeps the editor grammar's keyword lists synchronized with compiler metadata.
+
 using System.Text;
 using System.Text.Json;
 using Cop.Lang;
 
-namespace CopMeta;
+namespace Cop.Tools.Metadata;
 
 /// <summary>
 /// Regenerates the data-driven parts of the TextMate grammar — the keyword/constant lists in
@@ -15,16 +17,19 @@ namespace CopMeta;
 /// </summary>
 public static class MetadataGenerator
 {
+    /// <summary>The repository-relative path of the editor's TextMate grammar.</summary>
     public const string GrammarRelPath = "install/vscode-cop/syntaxes/cop.tmLanguage.json";
 
     /// <summary>Injects the metadata-derived keyword/constant lists into an existing grammar file.</summary>
+    /// <param name="existingGrammar">The current TextMate grammar JSON.</param>
+    /// <returns>The grammar with keyword lists refreshed from compiler metadata.</returns>
     public static string BuildGrammar(string existingGrammar)
     {
-        var declaration = LanguageMetadata.Keywords.Where(k => k.Category == "declaration").Select(k => k.Name);
-        var control = LanguageMetadata.Keywords.Where(k => k.Category == "control").Select(k => k.Name);
-        var constants = LanguageMetadata.Keywords.Where(k => k.Category == "constant").Select(k => k.Name);
+        IEnumerable<string> declaration = LanguageMetadata.Keywords.Where(k => k.Category == "declaration").Select(k => k.Name);
+        IEnumerable<string> control = LanguageMetadata.Keywords.Where(k => k.Category == "control").Select(k => k.Name);
+        IEnumerable<string> constants = LanguageMetadata.Keywords.Where(k => k.Category == "constant").Select(k => k.Name);
 
-        var text = existingGrammar;
+        string text = existingGrammar;
         text = ReplaceSectionMatch(text, "declaration-keywords", Alternation(declaration));
         text = ReplaceSectionMatch(text, "control-keywords", Alternation(control));
         text = ReplaceSectionMatch(text, "constants", Alternation(constants));
@@ -32,13 +37,19 @@ public static class MetadataGenerator
     }
 
     /// <summary>
-    /// Regenerates the grammar keyword lists. When <paramref name="check"/> is true, only verifies the
-    /// committed grammar is up to date and returns non-zero (without writing) if not.
+    /// Verifies the committed grammar is current without modifying it.
     /// </summary>
-    public static int Run(string repoRoot, bool check)
+    /// <param name="repoRoot">The repository containing the editor grammar.</param>
+    /// <returns>Zero when current, or one when the committed keyword lists are stale.</returns>
+    public static int Check(string repoRoot) => Run(repoRoot, check: true);
+
+    /// <summary>Writes grammar keyword lists generated from compiler metadata.</summary>
+    public static int Write(string repoRoot) => Run(repoRoot, check: false);
+
+    private static int Run(string repoRoot, bool check)
     {
-        var grammarPath = Path.Combine(repoRoot, GrammarRelPath.Replace('/', Path.DirectorySeparatorChar));
-        var newGrammar = BuildGrammar(File.ReadAllText(grammarPath));
+        string grammarPath = Path.Combine(repoRoot, GrammarRelPath.Replace('/', Path.DirectorySeparatorChar));
+        string newGrammar = BuildGrammar(File.ReadAllText(grammarPath));
 
         if (check)
         {
@@ -64,26 +75,44 @@ public static class MetadataGenerator
     /// <summary>Replaces the <c>"match"</c> value of the named grammar repository section.</summary>
     private static string ReplaceSectionMatch(string grammar, string sectionKey, string newMatch)
     {
-        var bytes = Encoding.UTF8.GetBytes(grammar);
-        var reader = new Utf8JsonReader(bytes);
+        byte[] bytes = Encoding.UTF8.GetBytes(grammar);
+        Utf8JsonReader reader = new Utf8JsonReader(bytes);
         bool inRepository = false, inSection = false;
         while (reader.Read())
         {
             if (reader.TokenType == JsonTokenType.EndObject)
             {
-                if (reader.CurrentDepth == 2) inSection = false;
-                if (reader.CurrentDepth == 1) inRepository = false;
+                if (reader.CurrentDepth == 2)
+                {
+                    inSection = false;
+                }
+
+                if (reader.CurrentDepth == 1)
+                {
+                    inRepository = false;
+                }
             }
-            if (reader.TokenType != JsonTokenType.PropertyName) continue;
+            if (reader.TokenType != JsonTokenType.PropertyName)
+            {
+                continue;
+            }
+
             if (reader.CurrentDepth == 1)
+            {
                 inRepository = reader.ValueTextEquals("repository");
+            }
             else if (inRepository && reader.CurrentDepth == 2)
+            {
                 inSection = reader.ValueTextEquals(sectionKey);
+            }
             else if (inSection && reader.CurrentDepth == 3 && reader.ValueTextEquals("match"))
             {
                 reader.Read();
                 if (reader.TokenType != JsonTokenType.String)
+                {
                     throw new InvalidOperationException($"Grammar section '{sectionKey}' must have a string 'match' field.");
+                }
+
                 int start = checked((int)reader.TokenStartIndex);
                 int end = checked((int)reader.BytesConsumed);
                 return Encoding.UTF8.GetString(bytes.AsSpan(0, start))

@@ -1,3 +1,5 @@
+// Lists and updates the package feeds configured for CLI package resolution.
+
 using System;
 using System.CommandLine;
 using System.CommandLine.Parsing;
@@ -18,28 +20,30 @@ public static class FeedCommand
     /// </summary>
     public static Command Create()
     {
-        var feedCommand = new Command("feed", "Manage package feeds");
+        Command feedCommand = new Command("feed", "Manage package feeds");
 
         // feed add <url>
-        var addUrlArg = new Argument<string>("url");
-        var addCommand = new Command("add", "Add a package feed")
+        Argument<string> addUrlArg = new Argument<string>("url");
+        Command addCommand = new Command("add", "Add a package feed")
         {
             addUrlArg
         };
-        addCommand.SetAction(parseResult => ExecuteAdd(parseResult.GetValue(addUrlArg)));
+        addCommand.SetAction(parseResult => ExecuteAdd(parseResult.GetValue(addUrlArg)
+            ?? throw new InvalidOperationException("The required feed URL is missing.")));
         feedCommand.Add(addCommand);
 
         // feed remove <url>
-        var removeUrlArg = new Argument<string>("url");
-        var removeCommand = new Command("remove", "Remove a package feed")
+        Argument<string> removeUrlArg = new Argument<string>("url");
+        Command removeCommand = new Command("remove", "Remove a package feed")
         {
             removeUrlArg
         };
-        removeCommand.SetAction(parseResult => ExecuteRemove(parseResult.GetValue(removeUrlArg)));
+        removeCommand.SetAction(parseResult => ExecuteRemove(parseResult.GetValue(removeUrlArg)
+            ?? throw new InvalidOperationException("The required feed URL is missing.")));
         feedCommand.Add(removeCommand);
 
         // feed list
-        var listCommand = new Command("list", "List configured feeds");
+        Command listCommand = new Command("list", "List configured feeds");
         listCommand.SetAction(_ => ExecuteList());
         feedCommand.Add(listCommand);
 
@@ -53,7 +57,7 @@ public static class FeedCommand
     {
         try
         {
-            var feedManager = new FeedManager();
+            FeedManager feedManager = new FeedManager();
             feedManager.AddFeed(url);
             Console.WriteLine($"Successfully added feed: {url}");
             return 0;
@@ -68,7 +72,8 @@ public static class FeedCommand
             Console.Error.WriteLine($"Error: {ex.Message}");
             return 1;
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or
+            System.Text.Json.JsonException or System.Security.SecurityException)
         {
             Console.Error.WriteLine($"Error adding feed: {ex.Message}");
             return 1;
@@ -82,7 +87,7 @@ public static class FeedCommand
     {
         try
         {
-            var feedManager = new FeedManager();
+            FeedManager feedManager = new FeedManager();
             feedManager.RemoveFeed(url);
             Console.WriteLine($"Successfully removed feed: {url}");
             return 0;
@@ -97,7 +102,8 @@ public static class FeedCommand
             Console.Error.WriteLine($"Error: {ex.Message}");
             return 1;
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or
+            System.Text.Json.JsonException or System.Security.SecurityException)
         {
             Console.Error.WriteLine($"Error removing feed: {ex.Message}");
             return 1;
@@ -112,8 +118,8 @@ public static class FeedCommand
     {
         try
         {
-            var feedManager = new FeedManager();
-            var feeds = feedManager.GetFeeds();
+            FeedManager feedManager = new FeedManager();
+            List<string> feeds = feedManager.GetFeeds();
 
             if (feeds.Count == 0)
             {
@@ -122,7 +128,7 @@ public static class FeedCommand
             }
 
             Console.WriteLine("Configured feeds:");
-            foreach (var feed in feeds)
+            foreach (string feed in feeds)
             {
                 // First feed is always the default
                 string marker = feeds.IndexOf(feed) == 0 ? "*" : " ";
@@ -131,7 +137,8 @@ public static class FeedCommand
 
             return 0;
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or
+            System.Text.Json.JsonException or System.Security.SecurityException)
         {
             Console.Error.WriteLine($"Error listing feeds: {ex.Message}");
             return 1;

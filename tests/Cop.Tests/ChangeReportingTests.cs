@@ -61,10 +61,14 @@ public class ChangeReportingTests
 
     [TestCase("MAIN")]
     [TestCase("RAW")]
-    public void ChangedReporting_FiltersBeforeFormattingAndCounting(string command)
+    public async Task ChangedReporting_FiltersBeforeFormattingAndCounting(string command)
     {
-        var result = Engine.Run(_scripts, _root, commandName: command,
-            additionalFeedPaths: [Packages], reviewOptions: Scoped());
+        var result = (await Engine.RunAsync(_scripts, _root, new EngineRunOptions
+        {
+            CommandName = command,
+            AdditionalFeedPaths = [Packages],
+            ReviewOptions = Scoped(),
+        }));
         Assert.That(result.Errors, Is.Empty, string.Join("\n", result.Errors));
         Assert.That(result.ParseErrors, Is.Empty);
         Assert.That(result.ExitCode, Is.EqualTo(2));
@@ -73,9 +77,12 @@ public class ChangeReportingTests
     }
 
     [Test]
-    public void DefaultReporting_DoesNotResolveGitAndRetainsAllFindings()
+    public async Task DefaultReporting_DoesNotResolveGitAndRetainsAllFindings()
     {
-        var result = Engine.Run(_scripts, _root, additionalFeedPaths: [Packages]);
+        var result = (await Engine.RunAsync(_scripts, _root, new EngineRunOptions
+        {
+            AdditionalFeedPaths = [Packages],
+        }));
         Assert.That(result.Errors, Is.Empty);
         Assert.That(result.ExitCode, Is.EqualTo(3));
         Assert.That(result.Outputs.Select(output => output.Message).ToArray(),
@@ -83,17 +90,20 @@ public class ChangeReportingTests
     }
 
     [Test]
-    public void DefaultReporting_PreservesAbsentExternalResultsBehavior()
+    public async Task DefaultReporting_PreservesAbsentExternalResultsBehavior()
     {
         File.WriteAllText(Path.Combine(_scripts, "main.cop"), "import code\ncommand MAIN = CHECK(nic)");
-        var result = Engine.Run(_scripts, _root, additionalFeedPaths: [Packages]);
+        var result = (await Engine.RunAsync(_scripts, _root, new EngineRunOptions
+        {
+            AdditionalFeedPaths = [Packages],
+        }));
         Assert.That(result.Errors, Is.Empty, string.Join("\n", result.Errors));
         Assert.That(result.Outputs, Is.Empty);
         Assert.That(result.ExitCode, Is.Null);
     }
 
     [Test]
-    public void ScopedReporting_PreservesFullSemanticInput()
+    public async Task ScopedReporting_PreservesFullSemanticInput()
     {
         File.WriteAllText(Path.Combine(_scripts, "main.cop"), $$"""
             feed '{{Packages.Replace('\\', '/')}}'
@@ -104,7 +114,11 @@ public class ChangeReportingTests
             let findings = cb.Types:fullModel:toError('full-model')
             command MAIN = CHECK(findings)
             """);
-        var result = Engine.Run(_scripts, _root, additionalFeedPaths: [Packages], reviewOptions: Scoped());
+        var result = (await Engine.RunAsync(_scripts, _root, new EngineRunOptions
+        {
+            AdditionalFeedPaths = [Packages],
+            ReviewOptions = Scoped(),
+        }));
         Assert.That(result.Errors, Is.Empty, string.Join("\n", result.Errors));
         Assert.That(result.ExitCode, Is.EqualTo(1));
         Assert.That(result.Outputs.Select(output => output.Message).ToArray(),
@@ -112,16 +126,19 @@ public class ChangeReportingTests
     }
 
     [Test]
-    public void InvalidComparison_IsFatalEvenWhenThereAreNoFindings()
+    public async Task InvalidComparison_IsFatalEvenWhenThereAreNoFindings()
     {
-        var result = Engine.Run(_scripts, _root, additionalFeedPaths: [Packages],
-            reviewOptions: new ReviewOptions { Scope = "branch", Base = "missing-ref", ReportScope = "changes" });
+        var result = (await Engine.RunAsync(_scripts, _root, new EngineRunOptions
+        {
+            AdditionalFeedPaths = [Packages],
+            ReviewOptions = new ReviewOptions { Scope = "branch", Base = "missing-ref", ReportScope = "changes" },
+        }));
         Assert.That(result.HasFatalErrors, Is.True);
         Assert.That(result.Outputs, Is.Empty);
     }
 
     [Test]
-    public void ScopedReporting_UsesAbsoluteProvenanceForParsedSubroots()
+    public async Task ScopedReporting_UsesAbsoluteProvenanceForParsedSubroots()
     {
         var nested = Path.Combine(_root, "nested");
         Directory.CreateDirectory(nested);
@@ -136,7 +153,11 @@ public class ChangeReportingTests
         Git("add", ".");
         Git("commit", "-qm", "nested baseline");
         File.WriteAllText(Path.Combine(nested, "Changed.cs"), "public class Nested { public int Value; }\n");
-        var result = Engine.Run(_scripts, _root, additionalFeedPaths: [Packages], reviewOptions: Scoped());
+        var result = (await Engine.RunAsync(_scripts, _root, new EngineRunOptions
+        {
+            AdditionalFeedPaths = [Packages],
+            ReviewOptions = Scoped(),
+        }));
         Assert.That(result.Errors, Is.Empty, string.Join("\n", result.Errors));
         Assert.That(result.ExitCode, Is.EqualTo(1));
         Assert.That(result.Outputs.Select(output => output.Message),
@@ -145,10 +166,14 @@ public class ChangeReportingTests
 
     [TestCase("MAIN")]
     [TestCase("RAW")]
-    public void LaterCleanCommand_DoesNotEraseScopedFailure(string command)
+    public async Task LaterCleanCommand_DoesNotEraseScopedFailure(string command)
     {
-        var result = Engine.Run(_scripts, _root, commandFilter: [command, "CLEAN"],
-            additionalFeedPaths: [Packages], reviewOptions: Scoped());
+        var result = (await Engine.RunAsync(_scripts, _root, new EngineRunOptions
+        {
+            CommandFilter = [command, "CLEAN"],
+            AdditionalFeedPaths = [Packages],
+            ReviewOptions = Scoped(),
+        }));
         Assert.That(result.Errors, Is.Empty, string.Join("\n", result.Errors));
         Assert.That(result.ExitCode, Is.EqualTo(2));
         Assert.That(result.Outputs.Select(output => output.Message).ToArray(),
@@ -238,7 +263,9 @@ public class ChangeReportingTests
         var start = new ProcessStartInfo("dotnet")
         {
             WorkingDirectory = workingDirectory ?? Path.GetDirectoryName(target)!,
-            RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false
         };
         start.ArgumentList.Add(typeof(RunCommand).Assembly.Location);
         start.ArgumentList.Add(target);

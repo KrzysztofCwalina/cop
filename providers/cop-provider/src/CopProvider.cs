@@ -1,3 +1,5 @@
+// Supplies Cop source parsing and language-specific runtime bindings.
+
 using Cop.Core;
 using Cop.Providers.SourceParsers;
 
@@ -12,55 +14,93 @@ public class CopProvider : DataProvider
 {
     private readonly Dictionary<string, CopSemanticSnapshot> _semantics = new(StringComparer.Ordinal);
 
+    /// <inheritdoc />
     public override ReadOnlyMemory<byte> GetSchema() => CopSchema.GetJson();
 
+    /// <inheritdoc />
     public override RuntimeBindings GetRuntimeBindings() => CopBindings.Build();
 
+    /// <inheritdoc />
     public override IReadOnlyDictionary<string, object?> GetQueryMetadata(ProviderQuery query) =>
         CodeBindings.SourceMetadata(query, ".cop");
+    /// <inheritdoc />
     public override string QueryResultType => "Codebase";
 
-    public override object QueryDeferred(ProviderQuery query)
+    /// <inheritdoc />
+    public override ValueTask<object?> QueryDeferredAsync(
+        ProviderQuery query, CancellationToken cancellationToken = default)
     {
-        var parsers = new SourceParserRegistry();
+        SourceParserRegistry parsers = new SourceParserRegistry();
         parsers.Register(new CopSourceParser());
         parsers.Register(new TextFileParser());
-        var result = CodeCollectionBuilder.CollectDeferred(parsers, new ProviderQuery
+        DeferredProviderResult result = CodeCollectionBuilder.CollectDeferred(parsers, new ProviderQuery
         {
             RootPath = query.RootPath, Collection = query.Collection,
             ExcludedDirectories = query.ExcludedDirectories, Options = query.Options
         }, this);
-        if (query.RootPath is null) return result;
-        var key = Path.GetFullPath(query.RootPath);
-        if (!_semantics.TryGetValue(key, out var semantics))
-            _semantics.Add(key, semantics = new(key));
-        IEnumerable<object> Attach(IEnumerable<object> items)
+        if (query.RootPath is null)
         {
-            foreach (var item in items)
+            return ValueTask.FromResult<object?>(result);
+        }
+
+        string key = Path.GetFullPath(query.RootPath);
+        if (!_semantics.TryGetValue(key, out CopSemanticSnapshot? semantics))
+        {
+            _semantics.Add(key, semantics = new(key));
+        }
+
+        async IAsyncEnumerable<object> Attach(
+            IAsyncEnumerable<object> items,
+            [System.Runtime.CompilerServices.EnumeratorCancellation]
+            CancellationToken token = default)
+        {
+            await foreach (object item in items.WithCancellation(token).ConfigureAwait(false))
             {
                 semantics.Attach(item);
                 yield return item;
             }
         }
-        var itemTypes = ProviderSchema.FromJson(GetSchema()).Collections.ToDictionary(collection => collection.Name,
+        Dictionary<string, string> itemTypes = ProviderSchema.FromJson(GetSchema()).Collections.ToDictionary(collection => collection.Name,
             collection => collection.ItemType, StringComparer.Ordinal);
-        var accessors = GetRuntimeBindings().Accessors;
-        var collections = new Dictionary<string, IEnumerable<object>>(StringComparer.Ordinal);
-        foreach (var (name, items) in result.Collections)
+        Dictionary<string, Dictionary<string, Func<object, object?>>> accessors = GetRuntimeBindings().Accessors;
+        Dictionary<string, IAsyncEnumerable<object>> collections = new(StringComparer.Ordinal);
+        AsyncProviderFilter evaluator = new(GetRuntimeBindings());
+        async IAsyncEnumerable<object> Filter(
+            IAsyncEnumerable<object> values, FilterExpression? filter,
+            [System.Runtime.CompilerServices.EnumeratorCancellation]
+            CancellationToken token = default)
         {
-            IEnumerable<object> values = Attach(items);
-            var filter = query.CollectionFilters?.GetValueOrDefault(name) ?? query.Filter;
-            if (filter is not null && itemTypes.TryGetValue(name, out var itemType)
-                && accessors.TryGetValue(itemType, out var fields))
-                values = values.Where(Cop.Lang.FilterCompiler.Compile(filter, fields));
+            await foreach (object value in values.WithCancellation(token).ConfigureAwait(false))
+            {
+                if (await evaluator.MatchesAsync(value, filter, token).ConfigureAwait(false))
+                {
+                    yield return value;
+                }
+            }
+        }
+        foreach ((string name, IAsyncEnumerable<object> items) in result.Collections)
+        {
+            IAsyncEnumerable<object> values = Attach(items);
+            FilterExpression? filter = query.CollectionFilters?.GetValueOrDefault(name) ?? query.Filter;
+            if (filter is not null && itemTypes.TryGetValue(name, out string? itemType)
+                && accessors.TryGetValue(itemType, out Dictionary<string, Func<object, object?>>? fields))
+            {
+                values = Filter(values, filter);
+            }
+
             collections.Add(name, values);
         }
-        return new DeferredProviderResult(collections);
+        cancellationToken.ThrowIfCancellationRequested();
+        return ValueTask.FromResult<object?>(new DeferredProviderResult(collections));
     }
 
-    public override object? Query(ProviderQuery query)
+    /// <inheritdoc />
+    public override async ValueTask<object?> QueryAsync(
+        ProviderQuery query, CancellationToken cancellationToken = default)
     {
-        var result = (DeferredProviderResult)QueryDeferred(query);
-        return result.Collections.ToDictionary(pair => pair.Key, pair => pair.Value.ToList(), StringComparer.Ordinal);
+        DeferredProviderResult result = (DeferredProviderResult)
+            (await QueryDeferredAsync(query, cancellationToken).ConfigureAwait(false))!;
+        return await ProviderCollections.MaterializeAsync(result, cancellationToken)
+            .ConfigureAwait(false);
     }
 }

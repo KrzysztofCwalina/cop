@@ -1,3 +1,5 @@
+// Exposes Dockerfile instructions and build stages as queryable provider data.
+
 using Cop.Core;
 using Cop.Providers.SourceModel;
 
@@ -9,9 +11,10 @@ namespace Cop.Providers.Dockerfile;
 /// </summary>
 public sealed class DockerfileProvider : DataProvider
 {
-    public override ReadOnlyMemory<byte> GetSchema() => _schema.ToJson();
+    /// <inheritdoc />
+    public override ReadOnlyMemory<byte> GetSchema() => s_schema.ToJson();
 
-    private static readonly ProviderSchema _schema = BuildSchema();
+    private static readonly ProviderSchema s_schema = BuildSchema();
 
     private static ProviderSchema BuildSchema()
     {
@@ -22,7 +25,7 @@ public sealed class DockerfileProvider : DataProvider
                 TypeDef("DockerInstruction", null,
                     Prop("Instruction"), Prop("Argument"),
                     Prop("Line", "int"), Prop("Stage", "int"),
-                    Prop("IsJsonForm", "bool"), new() { Name = "Arguments", Type = "string", Collection = true },
+                    Prop("IsJsonForm", "bool"), new() { Name = "Arguments", Type = "string", IsCollection = true },
                     Opt("From"), Prop("ReferencedStage", "int"),
                     Opt("File", "File"), Prop("Source")),
 
@@ -44,8 +47,9 @@ public sealed class DockerfileProvider : DataProvider
     private static ProviderPropertySchema Prop(string name, string type = "string")
         => new() { Name = name, Type = type };
     private static ProviderPropertySchema Opt(string name, string type = "string")
-        => new() { Name = name, Type = type, Optional = true };
+        => new() { Name = name, Type = type, IsOptional = true };
 
+    /// <inheritdoc />
     public override RuntimeBindings GetRuntimeBindings()
     {
         return new RuntimeBindings
@@ -64,31 +68,42 @@ public sealed class DockerfileProvider : DataProvider
         };
     }
 
-    public override object? Query(ProviderQuery query)
+    /// <inheritdoc />
+    public override async ValueTask<object?> QueryAsync(
+        ProviderQuery query, CancellationToken cancellationToken = default)
     {
-        var result = (DeferredProviderResult)QueryDeferred(query);
-        return result.Collections.ToDictionary(c => c.Key, c => c.Value.ToList(), StringComparer.Ordinal);
+        DeferredProviderResult result = (DeferredProviderResult)
+            (await QueryDeferredAsync(query, cancellationToken).ConfigureAwait(false))!;
+        return await ProviderCollections.MaterializeAsync(result, cancellationToken)
+            .ConfigureAwait(false);
     }
 
     private readonly Dictionary<string, DeferredFormatSnapshot> _snapshots = new(StringComparer.Ordinal);
 
-    public override object QueryDeferred(ProviderQuery query)
+    /// <inheritdoc />
+    public override ValueTask<object?> QueryDeferredAsync(
+        ProviderQuery query, CancellationToken cancellationToken = default)
     {
-        if (query.RootPath is null) return new DeferredProviderResult(new Dictionary<string, IEnumerable<object>>());
-        var key = DeferredFormatSnapshot.Key(query);
-        var root = Path.GetFullPath(query.RootPath);
-        if (!_snapshots.TryGetValue(key, out var snapshot))
+        if (query.RootPath is null)
+        {
+            return ValueTask.FromResult<object?>(new DeferredProviderResult(
+                new Dictionary<string, IAsyncEnumerable<object>>()));
+        }
+
+        string key = DeferredFormatSnapshot.Key(query);
+        string root = Path.GetFullPath(query.RootPath);
+        if (!_snapshots.TryGetValue(key, out DeferredFormatSnapshot? snapshot))
         {
             snapshot = new(() =>
             {
-                var paths = new List<string>();
+                List<string> paths = new List<string>();
                 CollectDockerfiles(root, query.ExcludedDirectories, paths);
                 return paths;
-            }, path =>
+            }, async (path, token) =>
             {
-                var text = File.ReadAllText(path);
-                var file = new SourceFile(Path.GetRelativePath(root, path).Replace('\\', '/'), "dockerfile", [], [], text);
-                var doc = DockerfileParser.Parse(text);
+                string text = await File.ReadAllTextAsync(path, token).ConfigureAwait(false);
+                SourceFile file = new SourceFile(Path.GetRelativePath(root, path).Replace('\\', '/'), "dockerfile", [], [], text);
+                DockerfileParser.DockerfileParseResult doc = DockerfileParser.Parse(text);
                 return new()
                 {
                     ["Instructions"] = doc.Instructions.Select(i => (object)(i with { File = file })).ToList(),
@@ -97,23 +112,34 @@ public sealed class DockerfileProvider : DataProvider
             });
             _snapshots.Add(key, snapshot);
         }
-        return snapshot.Query(query, _schema, GetRuntimeBindings());
+        cancellationToken.ThrowIfCancellationRequested();
+        return ValueTask.FromResult<object?>(snapshot.Query(query, s_schema, GetRuntimeBindings()));
     }
 
     private static void CollectDockerfiles(string dir, IReadOnlySet<string>? excluded, List<string> result)
     {
         try
         {
-            foreach (var file in Directory.GetFiles(dir))
+            foreach (string file in Directory.GetFiles(dir))
             {
                 if (IsDockerfile(file))
+                {
                     result.Add(file);
+                }
             }
-            foreach (var subDir in Directory.GetDirectories(dir))
+            foreach (string subDir in Directory.GetDirectories(dir))
             {
-                if ((File.GetAttributes(subDir) & FileAttributes.ReparsePoint) != 0) continue;
-                var dirName = Path.GetFileName(subDir);
-                if (excluded is not null && excluded.Contains(dirName)) continue;
+                if ((File.GetAttributes(subDir) & FileAttributes.ReparsePoint) != 0)
+                {
+                    continue;
+                }
+
+                string dirName = Path.GetFileName(subDir);
+                if (excluded is not null && excluded.Contains(dirName))
+                {
+                    continue;
+                }
+
                 CollectDockerfiles(subDir, excluded, result);
             }
         }
@@ -125,7 +151,7 @@ public sealed class DockerfileProvider : DataProvider
 
     private static bool IsDockerfile(string file)
     {
-        var name = Path.GetFileName(file);
+        string name = Path.GetFileName(file);
         return name.Equals("Dockerfile", StringComparison.OrdinalIgnoreCase)
             || name.StartsWith("Dockerfile.", StringComparison.OrdinalIgnoreCase)
             || name.EndsWith(".dockerfile", StringComparison.OrdinalIgnoreCase);

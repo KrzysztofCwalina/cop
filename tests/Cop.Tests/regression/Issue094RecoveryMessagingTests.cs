@@ -78,12 +78,15 @@ public partial class ToolchainCliIntegrationTests
     }
 
     [Test]
-    public void Issue094_UnresolvedCompatibilityRemainsAnActionableError()
+    public async Task Issue094_UnresolvedCompatibilityRemainsAnActionableError()
     {
         ReleasePackageCompatibilityTests.WriteProvider(_root, "packages", new Version(2000, 1, 1, 1));
         File.WriteAllText(_script, "import fixture\ncommand MAIN = print('must not run')");
-        var result = Cop.Providers.Engine.Run(Path.GetDirectoryName(_script)!, _root,
-            additionalFeedPaths: [Path.Combine(_root, "packages")]);
+        var result = await Cop.Providers.Engine.RunAsync(
+            Path.GetDirectoryName(_script)!, _root, new global::Cop.Providers.EngineRunOptions
+        {
+            AdditionalFeedPaths = [Path.Combine(_root, "packages")],
+        });
 
         Assert.That(result.HasParseErrors || result.HasFatalErrors, Is.True);
         Assert.That(result.ParseErrors.Concat(result.Errors), Has.Some.Contains("2000.1.1.1"));

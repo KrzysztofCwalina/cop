@@ -1,3 +1,5 @@
+// Registers JavaScript parsing, project discovery, schemas, and runtime bindings.
+
 using Cop.Core;
 using Cop.Providers.SourceModel;
 using Cop.Providers.SourceParsers;
@@ -10,42 +12,40 @@ namespace Cop.Providers;
 public class JavaScriptProvider : DataProvider
 {
 
+    /// <inheritdoc />
     public override ReadOnlyMemory<byte> GetSchema() => JavaScriptSchema.GetJson();
 
+    /// <inheritdoc />
     public override RuntimeBindings GetRuntimeBindings() => JavaScriptBindings.Build();
 
+    /// <inheritdoc />
     public override IReadOnlyDictionary<string, object?> GetQueryMetadata(ProviderQuery query) =>
         CodeBindings.SourceMetadata(query, ".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs", ".mts", ".cts");
+    /// <inheritdoc />
     public override string QueryResultType => "Codebase";
 
-    public override object QueryDeferred(ProviderQuery query)
+    /// <inheritdoc />
+    public override ValueTask<object?> QueryDeferredAsync(
+        ProviderQuery query, CancellationToken cancellationToken = default)
     {
         JavaScriptTypeDeclaration.RegisterCacheFactory();
         JavaScriptMethodDeclaration.RegisterCacheFactory();
         JavaScriptStatementInfo.RegisterCacheFactory();
-        var parsers = new SourceParserRegistry();
+        SourceParserRegistry parsers = new SourceParserRegistry();
         parsers.Register(new JavaScriptSourceParser());
-        return CodeCollectionBuilder.CollectDeferred(parsers, query, this,
-            () => JavaScriptProjectDiscovery.Discover(query.RootPath!, query.ExcludedDirectories));
+        cancellationToken.ThrowIfCancellationRequested();
+        return ValueTask.FromResult<object?>(CodeCollectionBuilder.CollectDeferred(
+            parsers, query, this, token => JavaScriptProjectDiscovery.DiscoverAsync(
+                query.RootPath!, query.ExcludedDirectories, cancellationToken: token)));
     }
 
-    public override object? Query(ProviderQuery query)
+    /// <inheritdoc />
+    public override async ValueTask<object?> QueryAsync(
+        ProviderQuery query, CancellationToken cancellationToken = default)
     {
-        JavaScriptTypeDeclaration.RegisterCacheFactory();
-        JavaScriptMethodDeclaration.RegisterCacheFactory();
-        JavaScriptStatementInfo.RegisterCacheFactory();
-        var parsers = new SourceParserRegistry();
-        parsers.Register(new JavaScriptSourceParser());
-        var collections = CodeCollectionBuilder.CollectAndParse(parsers, query, this);
-
-        // Discover projects from package.json
-        if (query.RootPath is not null)
-        {
-            var projects = JavaScriptProjectDiscovery.Discover(query.RootPath, query.ExcludedDirectories);
-            if (query.Collection == null || query.Collection == "Projects")
-                collections["Projects"] = projects.Cast<object>().ToList();
-        }
-
-        return ApplyQueryFilters(query, collections);
+        DeferredProviderResult result = (DeferredProviderResult)
+            (await QueryDeferredAsync(query, cancellationToken).ConfigureAwait(false))!;
+        return await ProviderCollections.MaterializeAsync(result, cancellationToken)
+            .ConfigureAwait(false);
     }
 }

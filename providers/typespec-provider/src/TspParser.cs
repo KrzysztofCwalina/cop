@@ -1,4 +1,8 @@
-namespace TypeSpecProvider;
+// Parses TypeSpec declarations and decorators into the provider's raw model.
+
+using System.Text;
+
+namespace Cop.Providers.TypeSpec;
 
 /// <summary>
 /// Recursive descent parser for TypeSpec source files.
@@ -10,29 +14,38 @@ public class TspParser
     private int _pos;
     private readonly List<string> _currentNamespace = [];
 
+    /// <summary>Creates a parser over an already-tokenized TypeSpec source.</summary>
     public TspParser(List<TspToken> tokens)
     {
         _tokens = tokens;
     }
 
+    /// <summary>Parses TypeSpec source text into declarations and decorators.</summary>
     public static TspSpec Parse(string source)
     {
-        var lexer = new TspLexer(source);
-        var tokens = lexer.Tokenize();
-        var parser = new TspParser(tokens);
+        TspLexer lexer = new TspLexer(source);
+        List<TspToken> tokens = lexer.Tokenize();
+        TspParser parser = new TspParser(tokens);
         return parser.ParseSpec();
     }
 
-    public static TspSpec ParseFiles(string directory, string pattern = "*.tsp")
+    /// <summary>
+    /// Combines declarations from matching TypeSpec files in a directory tree.
+    /// </summary>
+    public static async ValueTask<TspSpec> ParseFilesAsync(
+        string directory, string pattern = "*.tsp", CancellationToken cancellationToken = default)
     {
-        var spec = new TspSpec();
-        if (!Directory.Exists(directory)) return spec;
-
-        var files = Directory.GetFiles(directory, pattern, SearchOption.AllDirectories);
-        foreach (var file in files)
+        TspSpec spec = new TspSpec();
+        if (!Directory.Exists(directory))
         {
-            var source = File.ReadAllText(file);
-            var fileSpec = Parse(source);
+            return spec;
+        }
+
+        string[] files = Directory.GetFiles(directory, pattern, SearchOption.AllDirectories);
+        foreach (string file in files)
+        {
+            string source = await File.ReadAllTextAsync(file, cancellationToken).ConfigureAwait(false);
+            TspSpec fileSpec = Parse(source);
             Cop.Core.ExecutionStatistics.RecordInputFile(file);
             spec.Namespaces.AddRange(fileSpec.Namespaces);
             spec.Models.AddRange(fileSpec.Models);
@@ -47,7 +60,7 @@ public class TspParser
 
     private TspSpec ParseSpec()
     {
-        var spec = new TspSpec();
+        TspSpec spec = new TspSpec();
         while (Current.Kind != TspTokenKind.EndOfFile)
         {
             ParseTopLevel(spec);
@@ -58,7 +71,7 @@ public class TspParser
     private void ParseTopLevel(TspSpec spec)
     {
         // Collect decorators
-        var decorators = ParseDecorators();
+        List<TspDecorator> decorators = ParseDecorators();
 
         switch (Current.Kind)
         {
@@ -107,9 +120,9 @@ public class TspParser
     private void ParseNamespace(TspSpec spec, List<TspDecorator> decorators)
     {
         Expect(TspTokenKind.Namespace);
-        var name = ParseDottedName();
+        string name = ParseDottedName();
 
-        var ns = new TspNamespace
+        TspNamespace ns = new TspNamespace
         {
             Name = name,
             FullName = _currentNamespace.Count > 0
@@ -142,9 +155,9 @@ public class TspParser
     private TspModel ParseModel(List<TspDecorator> decorators)
     {
         Expect(TspTokenKind.Model);
-        var name = ExpectIdentifier();
+        string name = ExpectIdentifier();
 
-        var model = new TspModel
+        TspModel model = new TspModel
         {
             Name = name,
             Namespace = CurrentNamespace,
@@ -179,13 +192,13 @@ public class TspParser
             Expect(TspTokenKind.OpenBrace);
             while (Current.Kind != TspTokenKind.CloseBrace && Current.Kind != TspTokenKind.EndOfFile)
             {
-                var propDecorators = ParseDecorators();
+                List<TspDecorator> propDecorators = ParseDecorators();
 
                 // Spread: ...ModelName
                 if (Current.Kind == TspTokenKind.DotDotDot)
                 {
                     Advance();
-                    var spreadType = ParseTypeReference();
+                    string spreadType = ParseTypeReference();
                     // Record as a property with spread marker
                     model.Properties.Add(new TspProperty
                     {
@@ -197,7 +210,7 @@ public class TspParser
                     continue;
                 }
 
-                var prop = ParseProperty(propDecorators);
+                TspProperty? prop = ParseProperty(propDecorators);
                 if (prop is not null)
                 {
                     model.Properties.Add(prop);
@@ -216,12 +229,14 @@ public class TspParser
     private TspProperty? ParseProperty(List<TspDecorator> decorators)
     {
         if (Current.Kind == TspTokenKind.CloseBrace || Current.Kind == TspTokenKind.EndOfFile)
+        {
             return null;
+        }
 
-        var name = ExpectIdentifier();
+        string name = ExpectIdentifier();
         bool optional = ConsumeOptional(TspTokenKind.QuestionMark);
         Expect(TspTokenKind.Colon);
-        var type = ParseTypeReference();
+        string type = ParseTypeReference();
 
         string? defaultValue = null;
         if (ConsumeOptional(TspTokenKind.Equals))
@@ -236,7 +251,7 @@ public class TspParser
         {
             Name = name,
             Type = type,
-            Optional = optional,
+            IsOptional = optional,
             Default = defaultValue,
             Decorators = decorators,
         };
@@ -245,9 +260,9 @@ public class TspParser
     private TspOperation ParseOperation(List<TspDecorator> decorators, string? interfaceName)
     {
         Expect(TspTokenKind.Op);
-        var name = ExpectIdentifier();
+        string name = ExpectIdentifier();
 
-        var op = new TspOperation
+        TspOperation op = new TspOperation
         {
             Name = name,
             Namespace = CurrentNamespace,
@@ -258,13 +273,13 @@ public class TspParser
         Expect(TspTokenKind.OpenParen);
         while (Current.Kind != TspTokenKind.CloseParen && Current.Kind != TspTokenKind.EndOfFile)
         {
-            var paramDecorators = ParseDecorators();
+            List<TspDecorator> paramDecorators = ParseDecorators();
 
             // Spread: ...ModelName
             if (Current.Kind == TspTokenKind.DotDotDot)
             {
                 Advance();
-                var spreadType = ParseTypeReference();
+                string spreadType = ParseTypeReference();
                 op.Parameters.Add(new TspProperty
                 {
                     Name = $"...{spreadType}",
@@ -275,16 +290,16 @@ public class TspParser
                 continue;
             }
 
-            var paramName = ExpectIdentifier();
+            string paramName = ExpectIdentifier();
             bool paramOptional = ConsumeOptional(TspTokenKind.QuestionMark);
             Expect(TspTokenKind.Colon);
-            var paramType = ParseTypeReference();
+            string paramType = ParseTypeReference();
 
             op.Parameters.Add(new TspProperty
             {
                 Name = paramName,
                 Type = paramType,
-                Optional = paramOptional,
+                IsOptional = paramOptional,
                 Decorators = paramDecorators,
             });
             ConsumeOptional(TspTokenKind.Comma);
@@ -304,9 +319,9 @@ public class TspParser
     private TspInterface ParseInterface(List<TspDecorator> decorators)
     {
         Expect(TspTokenKind.Interface);
-        var name = ExpectIdentifier();
+        string name = ExpectIdentifier();
 
-        var iface = new TspInterface
+        TspInterface iface = new TspInterface
         {
             Name = name,
             Namespace = CurrentNamespace,
@@ -333,7 +348,7 @@ public class TspParser
         Expect(TspTokenKind.OpenBrace);
         while (Current.Kind != TspTokenKind.CloseBrace && Current.Kind != TspTokenKind.EndOfFile)
         {
-            var opDecorators = ParseDecorators();
+            List<TspDecorator> opDecorators = ParseDecorators();
             if (Current.Kind == TspTokenKind.Op)
             {
                 iface.Operations.Add(ParseOperation(opDecorators, name));
@@ -341,7 +356,11 @@ public class TspParser
             else if (Current.Kind == TspTokenKind.Identifier || Current.Kind == TspTokenKind.CloseBrace)
             {
                 // Shorthand operation (no 'op' keyword inside interface)
-                if (Current.Kind == TspTokenKind.CloseBrace) break;
+                if (Current.Kind == TspTokenKind.CloseBrace)
+                {
+                    break;
+                }
+
                 iface.Operations.Add(ParseShorthandOperation(opDecorators, name));
             }
             else
@@ -356,9 +375,9 @@ public class TspParser
 
     private TspOperation ParseShorthandOperation(List<TspDecorator> decorators, string interfaceName)
     {
-        var name = ExpectIdentifier();
+        string name = ExpectIdentifier();
 
-        var op = new TspOperation
+        TspOperation op = new TspOperation
         {
             Name = name,
             Namespace = CurrentNamespace,
@@ -369,12 +388,12 @@ public class TspParser
         Expect(TspTokenKind.OpenParen);
         while (Current.Kind != TspTokenKind.CloseParen && Current.Kind != TspTokenKind.EndOfFile)
         {
-            var paramDecorators = ParseDecorators();
+            List<TspDecorator> paramDecorators = ParseDecorators();
 
             if (Current.Kind == TspTokenKind.DotDotDot)
             {
                 Advance();
-                var spreadType = ParseTypeReference();
+                string spreadType = ParseTypeReference();
                 op.Parameters.Add(new TspProperty
                 {
                     Name = $"...{spreadType}",
@@ -385,16 +404,16 @@ public class TspParser
                 continue;
             }
 
-            var paramName = ExpectIdentifier();
+            string paramName = ExpectIdentifier();
             bool paramOptional = ConsumeOptional(TspTokenKind.QuestionMark);
             Expect(TspTokenKind.Colon);
-            var paramType = ParseTypeReference();
+            string paramType = ParseTypeReference();
 
             op.Parameters.Add(new TspProperty
             {
                 Name = paramName,
                 Type = paramType,
-                Optional = paramOptional,
+                IsOptional = paramOptional,
                 Decorators = paramDecorators,
             });
             ConsumeOptional(TspTokenKind.Comma);
@@ -413,9 +432,9 @@ public class TspParser
     private TspEnum ParseEnum(List<TspDecorator> decorators)
     {
         Expect(TspTokenKind.Enum);
-        var name = ExpectIdentifier();
+        string name = ExpectIdentifier();
 
-        var tspEnum = new TspEnum
+        TspEnum tspEnum = new TspEnum
         {
             Name = name,
             Namespace = CurrentNamespace,
@@ -425,10 +444,13 @@ public class TspParser
         Expect(TspTokenKind.OpenBrace);
         while (Current.Kind != TspTokenKind.CloseBrace && Current.Kind != TspTokenKind.EndOfFile)
         {
-            var memberDecorators = ParseDecorators();
-            if (Current.Kind == TspTokenKind.CloseBrace) break;
+            List<TspDecorator> memberDecorators = ParseDecorators();
+            if (Current.Kind == TspTokenKind.CloseBrace)
+            {
+                break;
+            }
 
-            var memberName = Current.Kind == TspTokenKind.StringLiteral
+            string memberName = Current.Kind == TspTokenKind.StringLiteral
                 ? ExpectString()
                 : ExpectIdentifier();
 
@@ -455,9 +477,9 @@ public class TspParser
     private TspUnion ParseUnion(List<TspDecorator> decorators)
     {
         Expect(TspTokenKind.Union);
-        var name = ExpectIdentifier();
+        string name = ExpectIdentifier();
 
-        var union = new TspUnion
+        TspUnion union = new TspUnion
         {
             Name = name,
             Namespace = CurrentNamespace,
@@ -467,8 +489,11 @@ public class TspParser
         Expect(TspTokenKind.OpenBrace);
         while (Current.Kind != TspTokenKind.CloseBrace && Current.Kind != TspTokenKind.EndOfFile)
         {
-            var variantDecorators = ParseDecorators();
-            if (Current.Kind == TspTokenKind.CloseBrace) break;
+            List<TspDecorator> variantDecorators = ParseDecorators();
+            if (Current.Kind == TspTokenKind.CloseBrace)
+            {
+                break;
+            }
 
             // Check if this is "name: type" or just "type"
             string variantName;
@@ -502,9 +527,9 @@ public class TspParser
     private TspScalar ParseScalar(List<TspDecorator> decorators)
     {
         Expect(TspTokenKind.Scalar);
-        var name = ExpectIdentifier();
+        string name = ExpectIdentifier();
 
-        var scalar = new TspScalar
+        TspScalar scalar = new TspScalar
         {
             Name = name,
             Namespace = CurrentNamespace,
@@ -525,7 +550,7 @@ public class TspParser
 
     private List<TspDecorator> ParseDecorators()
     {
-        var decorators = new List<TspDecorator>();
+        List<TspDecorator> decorators = new List<TspDecorator>();
         while (Current.Kind == TspTokenKind.At)
         {
             decorators.Add(ParseDecorator());
@@ -536,18 +561,21 @@ public class TspParser
     private TspDecorator ParseDecorator()
     {
         Expect(TspTokenKind.At);
-        var name = ParseDottedName();
+        string name = ParseDottedName();
 
-        var decorator = new TspDecorator { Name = name };
+        TspDecorator decorator = new TspDecorator { Name = name };
 
         if (Current.Kind == TspTokenKind.OpenParen)
         {
             Advance();
             while (Current.Kind != TspTokenKind.CloseParen && Current.Kind != TspTokenKind.EndOfFile)
             {
-                var arg = ParseDecoratorArgument();
+                string? arg = ParseDecoratorArgument();
                 if (arg is not null)
+                {
                     decorator.Arguments.Add(arg);
+                }
+
                 ConsumeOptional(TspTokenKind.Comma);
             }
             Expect(TspTokenKind.CloseParen);
@@ -560,19 +588,19 @@ public class TspParser
     {
         if (Current.Kind == TspTokenKind.StringLiteral || Current.Kind == TspTokenKind.TripleQuoteString)
         {
-            var val = Current.Value;
+            string val = Current.Value;
             Advance();
             return val;
         }
         if (Current.Kind == TspTokenKind.NumericLiteral)
         {
-            var val = Current.Value;
+            string val = Current.Value;
             Advance();
             return val;
         }
         if (Current.Kind == TspTokenKind.True || Current.Kind == TspTokenKind.False)
         {
-            var val = Current.Value;
+            string val = Current.Value;
             Advance();
             return val;
         }
@@ -604,12 +632,12 @@ public class TspParser
         // #{ key: value, ... }
         Expect(TspTokenKind.Hash);
         Expect(TspTokenKind.OpenBrace);
-        var parts = new List<string>();
+        List<string> parts = new List<string>();
         while (Current.Kind != TspTokenKind.CloseBrace && Current.Kind != TspTokenKind.EndOfFile)
         {
-            var key = ExpectIdentifier();
+            string key = ExpectIdentifier();
             Expect(TspTokenKind.Colon);
-            var value = ParseDecoratorArgument() ?? "";
+            string value = ParseDecoratorArgument() ?? string.Empty;
             parts.Add($"{key}: {value}");
             ConsumeOptional(TspTokenKind.Comma);
         }
@@ -621,7 +649,7 @@ public class TspParser
 
     private string ParseTypeReference()
     {
-        var name = ParseDottedName();
+        string name = ParseDottedName();
 
         // Generic: Type<Args>
         // The lexer doesn't tokenize < and > separately for generics,
@@ -645,7 +673,7 @@ public class TspParser
         // Union in type position: A | B
         if (Current.Kind == TspTokenKind.Pipe)
         {
-            var parts = new List<string> { name };
+            List<string> parts = new List<string> { name };
             while (ConsumeOptional(TspTokenKind.Pipe))
             {
                 parts.Add(ParseTypeReferenceSingle());
@@ -656,7 +684,7 @@ public class TspParser
         // Intersection: A & B
         if (Current.Kind == TspTokenKind.Ampersand)
         {
-            var parts = new List<string> { name };
+            List<string> parts = new List<string> { name };
             while (ConsumeOptional(TspTokenKind.Ampersand))
             {
                 parts.Add(ParseTypeReferenceSingle());
@@ -673,12 +701,12 @@ public class TspParser
         if (Current.Kind == TspTokenKind.OpenParen)
         {
             Advance();
-            var inner = ParseTypeReference();
+            string inner = ParseTypeReference();
             Expect(TspTokenKind.CloseParen);
             return $"({inner})";
         }
 
-        var name = ParseDottedName();
+        string name = ParseDottedName();
 
         if (Current.Kind == TspTokenKind.Unknown_Token && Current.Value == "<")
         {
@@ -698,9 +726,9 @@ public class TspParser
     {
         // < already detected as Unknown_Token "<"
         Advance(); // skip <
-        var args = new List<string>();
+        List<string> args = new List<string>();
         int depth = 1;
-        var current = new System.Text.StringBuilder();
+        StringBuilder current = new System.Text.StringBuilder();
 
         while (_pos < _tokens.Count && depth > 0)
         {
@@ -721,7 +749,10 @@ public class TspParser
                 else
                 {
                     if (current.Length > 0)
+                    {
                         args.Add(current.ToString().Trim());
+                    }
+
                     Advance(); // skip final >
                 }
             }
@@ -734,7 +765,11 @@ public class TspParser
             else
             {
                 current.Append(Current.Value);
-                if (Current.Kind == TspTokenKind.Dot) current.Append('.');
+                if (Current.Kind == TspTokenKind.Dot)
+                {
+                    current.Append('.');
+                }
+
                 Advance();
             }
         }
@@ -750,7 +785,7 @@ public class TspParser
     {
         // < already detected as Unknown_Token "<"
         Advance(); // skip <
-        var names = new List<string>();
+        List<string> names = new List<string>();
 
         while (_pos < _tokens.Count)
         {
@@ -786,7 +821,10 @@ public class TspParser
         Expect(TspTokenKind.Import);
         // Skip the import path
         if (Current.Kind == TspTokenKind.StringLiteral)
+        {
             Advance();
+        }
+
         ConsumeOptional(TspTokenKind.Semicolon);
     }
 
@@ -802,7 +840,10 @@ public class TspParser
         Advance(); // skip 'alias'
         // Skip until semicolon or end of statement
         while (Current.Kind != TspTokenKind.Semicolon && Current.Kind != TspTokenKind.EndOfFile)
+        {
             Advance();
+        }
+
         ConsumeOptional(TspTokenKind.Semicolon);
     }
 
@@ -829,15 +870,23 @@ public class TspParser
         int depth = 1;
         while (depth > 0 && Current.Kind != TspTokenKind.EndOfFile)
         {
-            if (Current.Kind == TspTokenKind.OpenBrace) depth++;
-            if (Current.Kind == TspTokenKind.CloseBrace) depth--;
+            if (Current.Kind == TspTokenKind.OpenBrace)
+            {
+                depth++;
+            }
+
+            if (Current.Kind == TspTokenKind.CloseBrace)
+            {
+                depth--;
+            }
+
             Advance();
         }
     }
 
     private string ParseDottedName()
     {
-        var name = ExpectIdentifier();
+        string name = ExpectIdentifier();
         while (Current.Kind == TspTokenKind.Dot)
         {
             Advance();
@@ -850,19 +899,19 @@ public class TspParser
     {
         if (Current.Kind == TspTokenKind.StringLiteral || Current.Kind == TspTokenKind.TripleQuoteString)
         {
-            var val = Current.Value;
+            string val = Current.Value;
             Advance();
             return val;
         }
         if (Current.Kind == TspTokenKind.NumericLiteral)
         {
-            var val = Current.Value;
+            string val = Current.Value;
             Advance();
             return val;
         }
         if (Current.Kind == TspTokenKind.True || Current.Kind == TspTokenKind.False)
         {
-            var val = Current.Value;
+            string val = Current.Value;
             Advance();
             return val;
         }
@@ -872,12 +921,12 @@ public class TspParser
 
     private string? CurrentNamespace => _currentNamespace.Count > 0 ? string.Join(".", _currentNamespace) : null;
 
-    private TspToken Current => _pos < _tokens.Count ? _tokens[_pos] : new TspToken(TspTokenKind.EndOfFile, "", 0, 0);
+    private TspToken Current => _pos < _tokens.Count ? _tokens[_pos] : new TspToken(TspTokenKind.EndOfFile, string.Empty, 0, 0);
 
     private TspToken Peek(int offset)
     {
-        var idx = _pos + offset;
-        return idx < _tokens.Count ? _tokens[idx] : new TspToken(TspTokenKind.EndOfFile, "", 0, 0);
+        int idx = _pos + offset;
+        return idx < _tokens.Count ? _tokens[idx] : new TspToken(TspTokenKind.EndOfFile, string.Empty, 0, 0);
     }
 
     private void Advance() => _pos++;
@@ -885,7 +934,9 @@ public class TspParser
     private void Expect(TspTokenKind kind)
     {
         if (Current.Kind == kind)
+        {
             Advance();
+        }
         // Silently skip on mismatch — we're lenient
     }
 
@@ -903,14 +954,17 @@ public class TspParser
     {
         if (Current.Kind == TspTokenKind.Identifier || IsKeywordUsedAsIdentifier(Current.Kind))
         {
-            var val = Current.Value;
+            string val = Current.Value;
             Advance();
             return val;
         }
         // Recovery: return the token value and advance
-        var fallback = Current.Value;
+        string fallback = Current.Value;
         if (Current.Kind != TspTokenKind.EndOfFile)
+        {
             Advance();
+        }
+
         return fallback;
     }
 
@@ -918,7 +972,7 @@ public class TspParser
     {
         if (Current.Kind == TspTokenKind.StringLiteral || Current.Kind == TspTokenKind.TripleQuoteString)
         {
-            var val = Current.Value;
+            string val = Current.Value;
             Advance();
             return val;
         }

@@ -1,5 +1,8 @@
+// Loads package modules, resolves imports, and registers exported declarations.
+
 namespace Cop.Lang.Interpreter;
 
+using Cop.Core;
 using Cop.Lang.Ast;
 using Cop.Lang.Parser;
 
@@ -20,9 +23,21 @@ public sealed class ModuleLoader
     private readonly List<(ModuleNode Module, string FilePath, string Source)> _loadedFiles = [];
     private readonly Dictionary<string, List<ModuleNode>> _packageModules = new(StringComparer.Ordinal);
 
+    /// <summary>
+    /// The human-readable failures encountered while loading packages.
+    /// </summary>
     public IReadOnlyList<string> Errors => _errors;
+    /// <summary>
+    /// The structured source diagnostics produced during package loading.
+    /// </summary>
     public IReadOnlyList<CopDiagnostic> Diagnostics => _diagnostics;
+    /// <summary>
+    /// The package directories requiring provider assembly registration.
+    /// </summary>
     public IReadOnlyList<(string Dir, string PackageName)> ProviderPackages => _providerPackages;
+    /// <summary>
+    /// The parsed modules successfully loaded from package source files.
+    /// </summary>
     public IReadOnlyList<ModuleNode> LoadedModules => _loadedModules;
     /// <summary>Imported modules with their source locations, for compiler diagnostics.</summary>
     public IReadOnlyList<(ModuleNode Module, string FilePath, string Source)> LoadedFiles => _loadedFiles;
@@ -43,14 +58,16 @@ public sealed class ModuleLoader
     public void LoadPackage(string packageName, Evaluator evaluator)
     {
         if (!_loadedPackages.Add(packageName))
+        {
             return; // already loaded
+        }
 
-        var packageDir = FindPackageDir(packageName);
+        string? packageDir = FindPackageDir(packageName);
         if (packageDir is null)
         {
             // Try to suggest a close package name from available feeds
-            var available = GetAvailablePackageNames();
-            var suggestion = StringDistance.FindClosest(packageName, available);
+            List<string> available = GetAvailablePackageNames();
+            string? suggestion = StringDistance.FindClosest(packageName, available);
             _errors.Add($"Import '{packageName}' could not be resolved");
             _diagnostics.Add(new CopDiagnostic(
                 CopDiagnosticSeverity.Error,
@@ -59,7 +76,7 @@ public sealed class ModuleLoader
             return;
         }
 
-        var srcDir = Path.Combine(packageDir, "src");
+        string srcDir = Path.Combine(packageDir, "src");
         if (!Directory.Exists(srcDir))
         {
             _errors.Add($"Package '{packageName}' has no src/ directory");
@@ -72,25 +89,27 @@ public sealed class ModuleLoader
         // Check if this is a provider package
         DetectProvider(packageDir, packageName);
 
-        var copFiles = Directory.GetFiles(srcDir, "*.cop");
+        string[] copFiles = Directory.GetFiles(srcDir, "*.cop");
         Array.Sort(copFiles, StringComparer.Ordinal);
 
-        var modules = new List<(ModuleNode Module, string Path, string Source)>();
-        var allImports = new List<string>();
+        List<(ModuleNode Module, string Path, string Source)> modules = new List<(ModuleNode Module, string Path, string Source)>();
+        List<string> allImports = new List<string>();
 
-        foreach (var file in copFiles)
+        foreach (string file in copFiles)
         {
             try
             {
-                var source = File.ReadAllText(file);
-                var module = CopParser.Parse(source, file);
+                string source = File.ReadAllText(file);
+                ModuleNode module = CopParser.Parse(source, file);
                 modules.Add((module, file, source));
 
                 // Collect imports for transitive resolution
-                foreach (var decl in module.Declarations)
+                foreach (Declaration decl in module.Declarations)
                 {
                     if (decl is ImportDecl imp)
+                    {
                         allImports.Add(imp.ModuleName);
+                    }
                 }
             }
             catch (ParseException pex)
@@ -101,7 +120,7 @@ public sealed class ModuleLoader
                 _errors.Add($"in package '{packageName}': {pex.Message}");
                 _diagnostics.Add(pex.ToDiagnostic());
             }
-            catch (Exception ex) when (ex is not OutOfMemoryException)
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
                 _errors.Add($"{file}: {ex.Message}");
                 _diagnostics.Add(new CopDiagnostic(
@@ -112,11 +131,13 @@ public sealed class ModuleLoader
         }
 
         // Resolve transitive imports first (so dependencies are available)
-        foreach (var import in allImports)
+        foreach (string import in allImports)
+        {
             LoadPackage(import, evaluator);
+        }
 
         // Register exported declarations in the evaluator
-        foreach (var (module, path, source) in modules)
+        foreach ((ModuleNode? module, string? path, string? source) in modules)
         {
             _loadedModules.Add(module);
             _loadedFiles.Add((module, path, source));
@@ -126,9 +147,12 @@ public sealed class ModuleLoader
         if (modules.Count > 0)
         {
             if (!evaluator.GlobalEnvironment.TryLookup(packageName, out _))
+            {
                 evaluator.GlobalEnvironment.Define(packageName,
                     new CopProviderProxy(packageName, evaluator.GlobalEnvironment));
-            var bucket = _packageModules.TryGetValue(packageName, out var existing)
+            }
+
+            List<ModuleNode> bucket = _packageModules.TryGetValue(packageName, out List<ModuleNode>? existing)
                 ? existing : (_packageModules[packageName] = []);
             bucket.AddRange(modules.Select(m => m.Module));
         }
@@ -140,19 +164,23 @@ public sealed class ModuleLoader
     /// </summary>
     public void ResolveImports(IEnumerable<ModuleNode> userModules, Evaluator evaluator)
     {
-        var imports = new HashSet<string>(StringComparer.Ordinal);
+        HashSet<string> imports = new HashSet<string>(StringComparer.Ordinal);
 
-        foreach (var module in userModules)
+        foreach (ModuleNode module in userModules)
         {
-            foreach (var decl in module.Declarations)
+            foreach (Declaration decl in module.Declarations)
             {
                 if (decl is ImportDecl imp)
+                {
                     imports.Add(imp.ModuleName);
+                }
             }
         }
 
-        foreach (var import in imports)
+        foreach (string import in imports)
+        {
             LoadPackage(import, evaluator);
+        }
     }
 
     /// <summary>
@@ -161,15 +189,25 @@ public sealed class ModuleLoader
     public static List<string> ExtractFeedPaths(string source, string scriptsDir)
         => ExtractFeedPaths(Cop.Lang.Parser.CopParser.ParseWithRecovery(source, null, out _), scriptsDir);
 
+    /// <summary>
+    /// Resolves a module's feed declarations relative to its script directory.
+    /// </summary>
     public static List<string> ExtractFeedPaths(ModuleNode module, string scriptsDir)
     {
-        var paths = new List<string>();
-        var basePath = Path.GetFullPath(string.IsNullOrEmpty(scriptsDir) ? "." : scriptsDir);
-        foreach (var feedPath in module.FeedPaths)
+        List<string> paths = new List<string>();
+        string basePath = Path.GetFullPath(string.IsNullOrEmpty(scriptsDir) ? "." : scriptsDir);
+        foreach (string feedPath in module.FeedPaths)
         {
-            if (Uri.TryCreate(feedPath, UriKind.Absolute, out var uri) && !uri.IsFile) continue;
-            var resolved = Path.GetFullPath(uri is { IsFile: true } ? uri.LocalPath : feedPath, basePath);
-            if (Directory.Exists(resolved)) paths.Add(resolved);
+            if (Uri.TryCreate(feedPath, UriKind.Absolute, out Uri? uri) && !uri.IsFile)
+            {
+                continue;
+            }
+
+            string resolved = Path.GetFullPath(uri is { IsFile: true } ? uri.LocalPath : feedPath, basePath);
+            if (Directory.Exists(resolved))
+            {
+                paths.Add(resolved);
+            }
         }
         return paths;
     }
@@ -178,16 +216,26 @@ public sealed class ModuleLoader
     {
         // Each module gets its own scope for non-exported let bindings.
         // This prevents name collisions (e.g., multiple packages defining 'let cb = ...').
-        var moduleEnv = evaluator.GlobalEnvironment.Extend();
+        Environment moduleEnv = evaluator.GlobalEnvironment.Extend();
 
-        foreach (var decl in module.Declarations)
+        // Keep imported functions bound even when a caller later shadows their names.
+        // Runtime intrinsics and provider data can still be registered in the parent later.
+        foreach ((string? name, CopValue? value) in evaluator.GlobalEnvironment.AllBindings())
+        {
+            if (value is CopFunction or CopFunctionGroup)
+            {
+                moduleEnv.Define(name, value);
+            }
+        }
+
+        foreach (Declaration decl in module.Declarations)
         {
             switch (decl)
             {
                 case FunctionDecl fd:
                     // ALL functions/predicates go into moduleEnv (for use by module-internal let bindings).
                     // Exported ones are ALSO registered in globalEnv for external access.
-                    var func = new CopFunction(fd, moduleEnv);
+                    CopFunction func = new CopFunction(fd, moduleEnv);
                     moduleEnv.Define(fd.Name, func);
                     if (fd.IsExported)
                     {
@@ -204,20 +252,25 @@ public sealed class ModuleLoader
                     break;
 
                 case CommandDecl cd when cd.IsExported:
-                    var cmdCallable = new CopCommandFunction(cd, moduleEnv);
+                    CopCommandFunction cmdCallable = new CopCommandFunction(cd, moduleEnv);
                     evaluator.GlobalEnvironment.Define(cd.Name, cmdCallable);
                     break;
 
                 case EnumDecl ed when ed.IsExported:
-                    foreach (var member in ed.Members)
+                    foreach (string member in ed.Members)
+                    {
                         evaluator.GlobalEnvironment.Define(member, new CopString(member));
+                    }
                     // Register enum type name as a constructor: TypeKind('value') → CopString
                     evaluator.GlobalEnvironment.Define(ed.Name, new CopEnumConstructor(ed.Name));
                     break;
 
                 case FlagsDecl fd2 when fd2.IsExported:
                     for (int i = 0; i < fd2.Members.Count; i++)
+                    {
                         evaluator.GlobalEnvironment.Define(fd2.Members[i], new CopInt(1 << i));
+                    }
+
                     break;
             }
         }
@@ -231,20 +284,23 @@ public sealed class ModuleLoader
     /// </summary>
     public void EvalDeferredLetBindings(Evaluator evaluator, List<string> errors)
     {
-        foreach (var (ld, filePath, moduleEnv) in _deferredLetBindings)
+        foreach ((LetDecl? ld, string? filePath, Environment? moduleEnv) in _deferredLetBindings)
         {
             try
             {
-                var thunk = evaluator.CreateLetBinding(ld, moduleEnv);
+                CopThunk thunk = evaluator.CreateLetBinding(ld, moduleEnv);
 
                 // Always register in the module env (for module-local access)
                 moduleEnv.Define(ld.Name, thunk);
 
                 // Exported lets are also visible globally
                 if (ld.IsExported)
+                {
                     evaluator.GlobalEnvironment.Define(ld.Name, thunk);
+                }
             }
-            catch (Exception ex) when (ex is not OutOfMemoryException)
+            catch (Exception ex) when (ex is CopEvaluationException
+                or InvalidOperationException or ArgumentException)
             {
                 errors.Add($"{filePath}: {ex.Message}");
             }
@@ -253,13 +309,16 @@ public sealed class ModuleLoader
 
     private string? FindPackageDir(string packageName)
     {
-        var incompatibleProviders = new List<string>();
-        foreach (var feedPath in _feedPaths)
+        List<string> incompatibleProviders = new List<string>();
+        foreach (string feedPath in _feedPaths)
         {
-            var dir = ImportResolver.FindPackageDir(feedPath, packageName, incompatibleProviders.Add);
-            if (dir is not null) return dir;
+            string? dir = ImportResolver.FindPackageDir(feedPath, packageName, incompatibleProviders.Add);
+            if (dir is not null)
+            {
+                return dir;
+            }
         }
-        foreach (var error in incompatibleProviders.Distinct(StringComparer.Ordinal))
+        foreach (string? error in incompatibleProviders.Distinct(StringComparer.Ordinal))
         {
             _errors.Add(error);
             _diagnostics.Add(new CopDiagnostic(CopDiagnosticSeverity.Error, error));
@@ -274,11 +333,15 @@ public sealed class ModuleLoader
         // raw text, so a description that merely mentions "provider" is not misclassified.
         try
         {
-            var metadata = Cop.Core.PackageMetadata.TryLoadFromDirectory(packageDir);
+            PackageMetadata? metadata = Cop.Core.PackageMetadata.LoadFromDirectoryOrDefault(packageDir);
             if (metadata is not null && metadata.IsProvider)
+            {
                 _providerPackages.Add((packageDir, packageName));
+            }
         }
-        catch (Exception ex) when (ex is not OutOfMemoryException)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException
+            or System.Text.Json.JsonException or YamlDotNet.Core.YamlException
+            or ArgumentException)
         {
             _errors.Add($"Failed to read provider metadata in '{packageDir}': {ex.Message}");
         }
@@ -289,7 +352,7 @@ public sealed class ModuleLoader
     /// </summary>
     private static void RegisterFunctionWithOverloading(Environment env, string name, CopFunction func)
     {
-        if (env.TryLookup(name, out var existing))
+        if (env.TryLookup(name, out CopValue? existing))
         {
             if (existing is CopFunctionGroup group)
             {
@@ -298,7 +361,7 @@ public sealed class ModuleLoader
             }
             if (existing is CopFunction existingFunc)
             {
-                var newGroup = new CopFunctionGroup(name);
+                CopFunctionGroup newGroup = new CopFunctionGroup(name);
                 newGroup.Add(existingFunc);
                 newGroup.Add(func);
                 env.Define(name, newGroup);
@@ -314,21 +377,29 @@ public sealed class ModuleLoader
     /// </summary>
     private List<string> GetAvailablePackageNames()
     {
-        var names = new List<string>();
-        foreach (var feedPath in _feedPaths)
+        List<string> names = new List<string>();
+        foreach (string feedPath in _feedPaths)
         {
-            if (!Directory.Exists(feedPath)) continue;
-            foreach (var dir in Directory.GetDirectories(feedPath))
+            if (!Directory.Exists(feedPath))
             {
-                var name = Path.GetFileName(dir);
+                continue;
+            }
+
+            foreach (string dir in Directory.GetDirectories(feedPath))
+            {
+                string name = Path.GetFileName(dir);
                 if (!name.StartsWith('.'))
-                    names.Add(name);
-                // Also check subdirectories (e.g., dotnet/, js/, python/ under packages/)
-                foreach (var subDir in Directory.GetDirectories(dir))
                 {
-                    var subName = Path.GetFileName(subDir);
+                    names.Add(name);
+                }
+                // Also check subdirectories (e.g., dotnet/, js/, python/ under packages/)
+                foreach (string subDir in Directory.GetDirectories(dir))
+                {
+                    string subName = Path.GetFileName(subDir);
                     if (!subName.StartsWith('.') && Directory.Exists(Path.Combine(subDir, "src")))
+                    {
                         names.Add(subName);
+                    }
                 }
             }
         }

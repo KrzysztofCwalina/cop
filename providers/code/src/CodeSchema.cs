@@ -1,3 +1,5 @@
+// Defines the language-independent code-model schema.
+
 using Cop.Core;
 using Cop.Providers.SourceModel;
 
@@ -9,22 +11,28 @@ namespace Cop.Providers;
 /// </summary>
 public static class CodeSchema
 {
-    private static readonly ProviderSchema _schema = BuildSchema();
-    private static readonly ProviderSchema _typesOnly = BuildTypesOnlySchema();
+    private static readonly ProviderSchema s_schema = BuildSchema();
+    private static readonly ProviderSchema s_typesOnly = BuildTypesOnlySchema();
 
-    public static ProviderSchema Get() => _schema;
+    /// <summary>
+    /// Builds the provider schema for language-independent source facts.
+    /// </summary>
+    public static ProviderSchema Get() => s_schema;
 
-    public static ReadOnlyMemory<byte> GetJson() => _schema.ToJson();
+    /// <summary>
+    /// Serializes the shared source-model provider schema.
+    /// </summary>
+    public static ReadOnlyMemory<byte> GetJson() => s_schema.ToJson();
 
     /// <summary>
     /// Returns schema with only type definitions (no collections).
     /// Used by CodeSchemaProvider which registers types but has no data.
     /// </summary>
-    public static ReadOnlyMemory<byte> GetTypesOnlyJson() => _typesOnly.ToJson();
+    public static ReadOnlyMemory<byte> GetTypesOnlyJson() => s_typesOnly.ToJson();
 
     private static ProviderSchema BuildTypesOnlySchema() => new()
     {
-        Types = _schema.Types,
+        Types = s_schema.Types,
         Collections = []
     };
 
@@ -48,7 +56,7 @@ public static class CodeSchema
                     Coll("Fields", "Field"), Coll("Properties", "Property"), Coll("Events", "Event")),
 
                 TypeDef("Method", null,
-                    Prop("Name"),
+                    Prop("Name"), Prop("Kind"),
                     Opt("ReceiverType"), Coll("TypeParameters"),
                     Opt("Column", "int"), Opt("EndLine", "int"), Opt("EndColumn", "int"),
                     Prop("Modifiers", "int"),
@@ -87,7 +95,7 @@ public static class CodeSchema
 
                 TypeDef("TypeReference", null,
                     Prop("Name"), Opt("Namespace"),
-                    Bool("Generic"), Coll("GenericArguments", "TypeReference"),
+                    Bool("Generic"), Bool("IsAnonymous"), Coll("GenericArguments", "TypeReference"),
                     Prop("Length", "int")),
 
                 TypeDef("Statement", null,
@@ -104,11 +112,11 @@ public static class CodeSchema
                     Opt("File", "File"), Prop("Source"),
                     Opt("Method", "Method"), Opt("Parent", "Statement"),
                     Coll("Children", "Statement"), Coll("Ancestors", "Statement"),
-                    Opt("Condition"), Opt("Expression"),
+                    Opt("Condition"), Opt("Expression"), Opt("ConditionExpression", "CodeExpression"),
                     Coll("ConstructedTypeInterfaces")),
 
                 TypeDef("CodeExpression", null,
-                    Prop("Kind"), Opt("Name"), Opt("StringValue"),
+                    Prop("Kind"), Opt("Name"), Opt("StringValue"), Opt("BooleanValue", "bool"),
                     Opt("Target", "CodeExpression"), Coll("Children", "CodeExpression")),
 
                 TypeDef("CallableReference", null,
@@ -119,7 +127,10 @@ public static class CodeSchema
 
                 TypeDef("Line", null,
                     Prop("Text"), Prop("Number", "int"), Prop("Kind"), Opt("File", "File"), Prop("Source"),
-                    Prop("PreviousText"), Prop("NextText")),
+                    Prop("PreviousText"), Prop("NextText"), Coll("Comments", "Comment")),
+
+                TypeDef("Comment", null,
+                    Prop("Kind"), Prop("Content"), Prop("Line", "int")),
 
                 TypeDef("File", null,
                     Prop("Path"), Opt("FullPath"), Opt("SourceRoot"), Opt("Language"), Opt("Namespace"),
@@ -146,7 +157,7 @@ public static class CodeSchema
                 TypeDef("Project", null,
                     Prop("Name"), Prop("Path"), Opt("Language"),
                     Coll("References"), Coll("Packages"), Coll("Frameworks"),
-                    new ProviderPropertySchema { Name = "SourceFiles", Type = "string", Collection = true, Optional = true },
+                    new ProviderPropertySchema { Name = "SourceFiles", Type = "string", IsCollection = true, IsOptional = true },
                     Coll("Properties", "ProjectProperty")),
 
                 TypeDef("ProjectProperty", null,
@@ -173,9 +184,9 @@ public static class CodeSchema
     private static ProviderPropertySchema Prop(string name, string type = "string")
         => new() { Name = name, Type = type };
     private static ProviderPropertySchema Opt(string name, string type = "string")
-        => new() { Name = name, Type = type, Optional = true };
+        => new() { Name = name, Type = type, IsOptional = true };
     private static ProviderPropertySchema Bool(string name)
         => new() { Name = name, Type = "bool" };
     private static ProviderPropertySchema Coll(string name, string type = "string")
-        => new() { Name = name, Type = type, Collection = true };
+        => new() { Name = name, Type = type, IsCollection = true };
 }

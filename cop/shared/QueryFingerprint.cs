@@ -1,3 +1,5 @@
+// Builds canonical query cache keys while preserving order-sensitive operations.
+
 using System.Text;
 
 namespace Cop.Lang;
@@ -11,7 +13,7 @@ namespace Cop.Lang;
 /// </summary>
 public static class QueryFingerprint
 {
-    private static readonly HashSet<string> BarrierFunctions = new(StringComparer.OrdinalIgnoreCase)
+    private static readonly HashSet<string> s_barrierFunctions = new(StringComparer.OrdinalIgnoreCase)
     {
         "Select", "text"
     };
@@ -28,20 +30,20 @@ public static class QueryFingerprint
     {
         if (filters.Count == 0)
         {
-            var key = docPath is null ? baseCollection : $"{baseCollection}@{docPath}";
+            string key = docPath is null ? baseCollection : $"{baseCollection}@{docPath}";
             return pathOverride is null ? key : $"{key}#{pathOverride}";
         }
 
-        var sb = new StringBuilder(baseCollection);
-        var pendingPredicates = new List<string>();
+        StringBuilder sb = new StringBuilder(baseCollection);
+        List<string> pendingPredicates = new List<string>();
 
-        foreach (var filter in filters)
+        foreach (Expression filter in filters)
         {
             if (IsBarrier(filter, functionNames))
             {
                 FlushPredicates(sb, pendingPredicates);
                 // Built-in transforms (Select, Text) use '.' separator; user functions use ':'
-                bool isTransform = filter is CallExpr { Target: null } fc2 && BarrierFunctions.Contains(fc2.Name);
+                bool isTransform = filter is CallExpr { Target: null } fc2 && s_barrierFunctions.Contains(fc2.Name);
                 sb.Append(isTransform ? '.' : ':');
                 sb.Append(Serialize(filter));
             }
@@ -73,18 +75,28 @@ public static class QueryFingerprint
         if (filter is CallExpr { Target: null } fc)
         {
             // Built-in barriers: select, text
-            if (BarrierFunctions.Contains(fc.Name)) return true;
+            if (s_barrierFunctions.Contains(fc.Name))
+            {
+                return true;
+            }
             // User-defined function maps are also barriers
-            if (functionNames is not null && functionNames.Contains(fc.Name)) return true;
+            if (functionNames is not null && functionNames.Contains(fc.Name))
+            {
+                return true;
+            }
         }
         return false;
     }
 
     private static void FlushPredicates(StringBuilder sb, List<string> predicates)
     {
-        if (predicates.Count == 0) return;
+        if (predicates.Count == 0)
+        {
+            return;
+        }
+
         predicates.Sort(StringComparer.Ordinal);
-        foreach (var p in predicates)
+        foreach (string p in predicates)
         {
             sb.Append(':');
             sb.Append(p);
@@ -127,13 +139,13 @@ public static class QueryFingerprint
 
     private static string SerializeCall(CallExpr c)
     {
-        var args = c.Args.Count > 0
+        string args = c.Args.Count > 0
             ? $"({string.Join(",", c.Args.Select(Serialize))})"
             : "()";
         if (c.Target is not null)
         {
-            var target = Serialize(c.Target);
-            var prefix = c.Negated ? "!" : "";
+            string target = Serialize(c.Target);
+            string prefix = c.Negated ? "!" : "";
             return $"{prefix}{target}.{c.Name}{args}";
         }
         return $"{c.Name}{args}";
@@ -141,10 +153,10 @@ public static class QueryFingerprint
 
     private static string SerializeObject(ObjectLiteralExpr obj)
     {
-        var fields = obj.Fields
+        IEnumerable<string> fields = obj.Fields
             .OrderBy(kv => kv.Key, StringComparer.Ordinal)
             .Select(kv => $"{kv.Key}:{Serialize(kv.Value)}");
-        var prefix = obj.TypeName != null ? $"{obj.TypeName}" : "";
+        string prefix = obj.TypeName != null ? $"{obj.TypeName}" : "";
         return $"{prefix}{{{string.Join(",", fields)}}}";
     }
 }

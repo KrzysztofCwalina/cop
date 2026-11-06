@@ -1,3 +1,5 @@
+// Defines providers that expose asynchronous streams of runtime values.
+
 using System.Runtime.CompilerServices;
 
 namespace Cop.Core;
@@ -31,7 +33,7 @@ public abstract class StreamProvider
     /// </summary>
     public override string ToString()
     {
-        var name = GetType().Name;
+        string name = GetType().Name;
         return name.EndsWith("Stream", StringComparison.Ordinal)
             ? name[..^"Stream".Length]
             : name;

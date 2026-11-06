@@ -1,3 +1,5 @@
+// Provides a lightweight row view over a provider data table.
+
 namespace Cop.Core;
 
 /// <summary>
@@ -7,9 +9,15 @@ namespace Cop.Core;
 /// </summary>
 public sealed class RecordView
 {
-    public readonly DataTable Table;
-    public readonly int Index;
+    /// <summary>The provider table containing the referenced record.</summary>
+    public DataTable Table { get; }
 
+    /// <summary>The zero-based row index within the table.</summary>
+    public int Index { get; }
+
+    /// <summary>
+    /// References a row in the supplied table without copying its field data.
+    /// </summary>
     public RecordView(DataTable table, int index)
     {
         Table = table;

@@ -1,3 +1,5 @@
+// Discovers Go module dependencies and enclosing workspace context.
+
 using Cop.Providers.SourceModel;
 
 namespace Cop.Providers;
@@ -13,16 +15,16 @@ public static class GoProjectDiscovery
     /// </summary>
     public static List<ProjectInfo> Discover(string rootPath, IReadOnlySet<string>? excludedDirs)
     {
-        var manifestPaths = new List<string>();
+        List<string> manifestPaths = new List<string>();
         CollectManifests(rootPath, excludedDirs, manifestPaths);
 
-        var result = new List<ProjectInfo>();
-        foreach (var manifestPath in manifestPaths)
+        List<ProjectInfo> result = new List<ProjectInfo>();
+        foreach (string manifestPath in manifestPaths)
         {
-            var info = ParseGoMod(manifestPath, rootPath);
+            ProjectInfo? info = ParseGoMod(manifestPath, rootPath);
             if (info is not null)
             {
-                var directory = Path.GetDirectoryName(manifestPath);
+                string? directory = Path.GetDirectoryName(manifestPath);
                 while (directory is not null && Path.GetRelativePath(rootPath, directory) is var relative
                        && relative != ".." && !relative.StartsWith(".." + Path.DirectorySeparatorChar))
                 {
@@ -45,18 +47,18 @@ public static class GoProjectDiscovery
     {
         try
         {
-            var lines = File.ReadAllLines(filePath);
-            var relativePath = Path.GetRelativePath(rootPath, filePath).Replace('\\', '/');
+            string[] lines = File.ReadAllLines(filePath);
+            string relativePath = Path.GetRelativePath(rootPath, filePath).Replace('\\', '/');
             string? moduleName = null;
-            var dependencies = new List<string>();
+            List<string> dependencies = new List<string>();
             bool inRequire = false;
 
-            foreach (var line in lines)
+            foreach (string line in lines)
             {
-                var trimmed = StripComment(line).Trim();
+                string trimmed = StripComment(line).Trim();
 
                 // module declaration
-                if (TryReadTokenAfterKeyword(trimmed, "module", requireWhitespaceAfterToken: false, out var modulePath))
+                if (TryReadTokenAfterKeyword(trimmed, "module", requireWhitespaceAfterToken: false, out string? modulePath))
                 {
                     moduleName = modulePath;
                     continue;
@@ -75,7 +77,7 @@ public static class GoProjectDiscovery
                 }
 
                 // Single-line require
-                if (TryReadTokenAfterKeyword(trimmed, "require", requireWhitespaceAfterToken: true, out var dependency))
+                if (TryReadTokenAfterKeyword(trimmed, "require", requireWhitespaceAfterToken: true, out string? dependency))
                 {
                     dependencies.Add(dependency);
                     continue;
@@ -83,19 +85,23 @@ public static class GoProjectDiscovery
 
                 if (inRequire)
                 {
-                    if (TryReadFirstTokenBeforeWhitespace(trimmed, out var blockDependency) && !trimmed.StartsWith("//"))
+                    if (TryReadFirstTokenBeforeWhitespace(trimmed, out string? blockDependency) && !trimmed.StartsWith("//"))
+                    {
                         dependencies.Add(blockDependency);
+                    }
                 }
             }
 
             if (moduleName is null)
+            {
                 return null;
+            }
 
             // Use last path segment as project name
-            var name = moduleName.Contains('/') ? moduleName[(moduleName.LastIndexOf('/') + 1)..] : moduleName;
+            string name = moduleName.Contains('/') ? moduleName[(moduleName.LastIndexOf('/') + 1)..] : moduleName;
 
-            var properties = new Dictionary<string, string> { ["Module"] = moduleName.Trim('"') };
-            ReadContext(filePath, properties, "");
+            Dictionary<string, string> properties = new Dictionary<string, string> { ["Module"] = moduleName.Trim('"') };
+            ReadContext(filePath, properties, string.Empty);
             return new ProjectInfo(name.Trim('"'), relativePath, "go", dependencies.Distinct().ToList(), dependencies.Distinct().ToList(), [])
             { Properties = properties };
         }
@@ -111,11 +117,15 @@ public static class GoProjectDiscovery
         try
         {
             string? block = null;
-            var values = new Dictionary<string, List<string>>();
+            Dictionary<string, List<string>> values = new Dictionary<string, List<string>>();
             foreach (string line in File.ReadLines(filePath))
             {
                 string text = StripComment(line).Trim();
-                if (text.Length == 0) continue;
+                if (text.Length == 0)
+                {
+                    continue;
+                }
+
                 if (text == ")") { block = null; continue; }
                 string directive;
                 string value;
@@ -123,7 +133,11 @@ public static class GoProjectDiscovery
                 else
                 {
                     int space = text.IndexOfAny([' ', '\t']);
-                    if (space < 0) continue;
+                    if (space < 0)
+                    {
+                        continue;
+                    }
+
                     directive = text[..space];
                     value = text[(space + 1)..].Trim();
                     if (value == "(") { block = directive; continue; }
@@ -137,11 +151,22 @@ public static class GoProjectDiscovery
                     "use" => "Uses",
                     _ => null
                 };
-                if (key is null) continue;
-                if (!values.TryGetValue(key, out var list)) values[key] = list = [];
+                if (key is null)
+                {
+                    continue;
+                }
+
+                if (!values.TryGetValue(key, out List<string>? list))
+                {
+                    values[key] = list = [];
+                }
+
                 list.Add(value);
             }
-            foreach (var (key, value) in values) properties[prefix + key] = string.Join("\n", value);
+            foreach ((string? key, List<string>? value) in values)
+            {
+                properties[prefix + key] = string.Join("\n", value);
+            }
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
@@ -154,34 +179,54 @@ public static class GoProjectDiscovery
         bool quoted = false, escaped = false;
         for (int i = 0; i + 1 < text.Length; i++)
         {
-            if (text[i] == '"' && !escaped) quoted = !quoted;
-            if (!quoted && text[i] == '/' && text[i + 1] == '/') return text[..i];
+            if (text[i] == '"' && !escaped)
+            {
+                quoted = !quoted;
+            }
+
+            if (!quoted && text[i] == '/' && text[i + 1] == '/')
+            {
+                return text[..i];
+            }
+
             escaped = text[i] == '\\' && !escaped;
         }
         return text;
     }
     private static bool TryReadTokenAfterKeyword(string text, string keyword, bool requireWhitespaceAfterToken, out string token)
     {
-        token = "";
+        token = string.Empty;
         if (!text.StartsWith(keyword, StringComparison.Ordinal))
+        {
             return false;
+        }
 
-        var index = keyword.Length;
+        int index = keyword.Length;
         if (index >= text.Length || !char.IsWhiteSpace(text[index]))
+        {
             return false;
+        }
 
         while (index < text.Length && char.IsWhiteSpace(text[index]))
+        {
             index++;
+        }
 
-        var tokenStart = index;
+        int tokenStart = index;
         while (index < text.Length && !char.IsWhiteSpace(text[index]))
+        {
             index++;
+        }
 
         if (index == tokenStart)
+        {
             return false;
+        }
 
         if (requireWhitespaceAfterToken && (index >= text.Length || !char.IsWhiteSpace(text[index])))
+        {
             return false;
+        }
 
         token = text[tokenStart..index];
         return true;
@@ -189,13 +234,17 @@ public static class GoProjectDiscovery
 
     private static bool TryReadFirstTokenBeforeWhitespace(string text, out string token)
     {
-        token = "";
-        var index = 0;
+        token = string.Empty;
+        int index = 0;
         while (index < text.Length && !char.IsWhiteSpace(text[index]))
+        {
             index++;
+        }
 
         if (index == 0 || index >= text.Length)
+        {
             return false;
+        }
 
         token = text[..index];
         return true;
@@ -205,18 +254,30 @@ public static class GoProjectDiscovery
     {
         try
         {
-            var goMod = Path.Combine(dir, "go.mod");
+            string goMod = Path.Combine(dir, "go.mod");
             if (File.Exists(goMod))
             {
                 result.Add(goMod);
             }
 
-            foreach (var subDir in Directory.GetDirectories(dir))
+            foreach (string subDir in Directory.GetDirectories(dir))
             {
-                var dirName = Path.GetFileName(subDir);
-                if (excluded is not null && excluded.Contains(dirName)) continue;
-                if (dirName == "vendor") continue;
-                if ((File.GetAttributes(subDir) & FileAttributes.ReparsePoint) != 0) continue;
+                string dirName = Path.GetFileName(subDir);
+                if (excluded is not null && excluded.Contains(dirName))
+                {
+                    continue;
+                }
+
+                if (dirName == "vendor")
+                {
+                    continue;
+                }
+
+                if ((File.GetAttributes(subDir) & FileAttributes.ReparsePoint) != 0)
+                {
+                    continue;
+                }
+
                 CollectManifests(subDir, excluded, result);
             }
         }

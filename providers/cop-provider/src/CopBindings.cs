@@ -1,13 +1,17 @@
+// Maps Cop-specific declarations to runtime-accessible source-model fields.
+
 using Cop.Core;
 using Cop.Providers.SourceModel;
 
 namespace Cop.Providers;
 
+/// <summary>Builds runtime accessors for Cop-specific source declarations.</summary>
 public static class CopBindings
 {
+    /// <summary>Extends shared code bindings with Cop function metadata.</summary>
     public static RuntimeBindings Build()
     {
-        var bindings = CodeBindings.Build();
+        RuntimeBindings bindings = CodeBindings.Build();
         bindings.ClrTypeMappings[typeof(CopFunctionDeclaration)] = "CopFunction";
         bindings.Accessors["CopFunction"] = new(bindings.Accessors["Method"])
         {
@@ -17,6 +21,7 @@ public static class CopBindings
             ["IsExported"] = o => ((CopFunctionDeclaration)o).IsExported,
             ["HasGuard"] = o => ((CopFunctionDeclaration)o).HasGuard
         };
+        CodeBindings.AddDerivedAsyncAccessors(bindings);
         return bindings;
     }
 }

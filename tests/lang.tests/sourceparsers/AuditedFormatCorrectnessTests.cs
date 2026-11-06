@@ -12,14 +12,14 @@ namespace Cop.Tests.Lang.SourceParsers;
 public class AuditedFormatCorrectnessTests
 {
     [Test]
-    public void FormatSnapshot_IsLazyPerFileAndReusesParsedObjectsAcrossCollections()
+    public async Task FormatSnapshot_IsLazyPerFileAndReusesParsedObjectsAcrossCollections()
     {
         int discovered = 0, parsed = 0;
-        var snapshot = new DeferredFormatSnapshot(() => { discovered++; return ["b", "a"]; }, path =>
+        var snapshot = new DeferredFormatSnapshot(() => { discovered++; return ["b", "a"]; }, (path, cancellationToken) =>
         {
             parsed++;
             var item = new object();
-            return new() { ["Commands"] = [item], ["Scripts"] = [item] };
+            return ValueTask.FromResult<Dictionary<string, List<object>>>(new() { ["Commands"] = [item], ["Scripts"] = [item] });
         });
         var schema = new ProviderSchema
         {
@@ -27,27 +27,28 @@ public class AuditedFormatCorrectnessTests
         };
         var result = snapshot.Query(new ProviderQuery(), schema, new RuntimeBindings());
         Assert.That((discovered, parsed), Is.EqualTo((0, 0)));
-        var first = result.Collections["Commands"].First();
+        var first = (await result.Collections["Commands"].FirstAsync());
         Assert.That((discovered, parsed), Is.EqualTo((1, 1)));
-        Assert.That(result.Collections["Scripts"].First(), Is.SameAs(first));
+        Assert.That((await result.Collections["Scripts"].FirstAsync()), Is.SameAs(first));
         Assert.That((discovered, parsed), Is.EqualTo((1, 1)));
-        Assert.That(result.Collections["Scripts"].Count(), Is.EqualTo(2));
-        Assert.That(result.Collections["Commands"].Count(), Is.EqualTo(2));
+        Assert.That((await result.Collections["Scripts"].CountAsync()), Is.EqualTo(2));
+        Assert.That((await result.Collections["Commands"].CountAsync()), Is.EqualTo(2));
         Assert.That((discovered, parsed), Is.EqualTo((1, 2)));
     }
 
     [Test]
-    public void FormatSnapshot_ReportsReadFailuresInsteadOfSilentlyDroppingFiles()
+    public async Task FormatSnapshot_ReportsReadFailuresInsteadOfSilentlyDroppingFiles()
     {
         ProviderErrors.Clear();
         try
         {
-            var snapshot = new DeferredFormatSnapshot(() => ["missing.sql"], path => throw new IOException("locked"));
+            var snapshot = new DeferredFormatSnapshot(() => ["missing.sql"],
+                (path, cancellationToken) => throw new IOException("locked"));
             var result = snapshot.Query(new ProviderQuery(), new ProviderSchema
             {
                 Collections = [new() { Name = "Statements", ItemType = "SqlStatement" }]
             }, new RuntimeBindings());
-            Assert.That(result.Collections["Statements"].Count(), Is.EqualTo(0));
+            Assert.That((await result.Collections["Statements"].CountAsync()), Is.EqualTo(0));
             Assert.That(ProviderErrors.Drain(), Is.EqualTo(new[] { "Failed to read 'missing.sql': locked" }));
         }
         finally { ProviderErrors.Clear(); }
@@ -57,7 +58,7 @@ public class AuditedFormatCorrectnessTests
     [TestCase("powershell", "sample.ps1", "Write-Output 'first'", "Commands", "Scripts")]
     [TestCase("dockerfile", "Dockerfile", "FROM first", "Instructions", "Stages")]
     [TestCase("sql", "sample.sql", "SELECT id FROM first", "Statements", "Statements")]
-    public void FormatProviders_DeferReadAndShareTheExecutionSnapshot(string language, string name, string text, string first, string second)
+    public async System.Threading.Tasks.Task FormatProviders_DeferReadAndShareTheExecutionSnapshot(string language, string name, string text, string first, string second)
     {
         var root = Path.Combine(Path.GetTempPath(), "cop-format-lazy-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
@@ -69,14 +70,14 @@ public class AuditedFormatCorrectnessTests
                 "bash" => new BashProvider(), "powershell" => new PowerShellProvider(),
                 "dockerfile" => new DockerfileProvider(), _ => new SqlProvider()
             };
-            using var execution = new ToolchainExecutionScope();
-            var result = (DeferredProviderResult)provider.QueryDeferred(new ProviderQuery { RootPath = root })!;
+            await using var execution = new ToolchainExecutionScope();
+            var result = (DeferredProviderResult)(await provider.QueryDeferredAsync(new ProviderQuery { RootPath = root }, cancellationToken: CancellationToken.None))!;
             File.WriteAllText(path, text);
-            var item = result.Collections[first].Single();
+            var item = (await result.Collections[first].SingleAsync());
             File.Delete(path);
-            var repeated = (DeferredProviderResult)provider.QueryDeferred(new ProviderQuery { RootPath = root })!;
-            Assert.That(repeated.Collections[first].Single(), Is.SameAs(item));
-            Assert.That(repeated.Collections[second].Count(), Is.EqualTo(1));
+            var repeated = (DeferredProviderResult)(await provider.QueryDeferredAsync(new ProviderQuery { RootPath = root }, cancellationToken: CancellationToken.None))!;
+            Assert.That((await repeated.Collections[first].SingleAsync()), Is.SameAs(item));
+            Assert.That((await repeated.Collections[second].CountAsync()), Is.EqualTo(1));
         }
         finally { Directory.Delete(root, true); }
     }
@@ -123,7 +124,7 @@ public class AuditedFormatCorrectnessTests
     }
 
     [Test]
-    public void PowerShell_NativeAstFindsSubexpressionsAndDoesNotExecuteSource()
+    public async System.Threading.Tasks.Task PowerShell_NativeAstFindsSubexpressionsAndDoesNotExecuteSource()
     {
         if (ToolchainProcess.FindExecutable("pwsh") is null && ToolchainProcess.FindExecutable("powershell") is null)
             Assert.Ignore("Native PowerShell is not installed; fallback is tested independently.");
@@ -139,8 +140,8 @@ public class AuditedFormatCorrectnessTests
                 '@
                 Write-Output 'café'
                 """);
-            using var execution = new ToolchainExecutionScope();
-            var result = (Dictionary<string, List<object>>)new PowerShellProvider().Query(new ProviderQuery { RootPath = root })!;
+            await using var execution = new ToolchainExecutionScope();
+            var result = (Dictionary<string, List<object>>)(await new PowerShellProvider().QueryAsync(new ProviderQuery { RootPath = root }, cancellationToken: CancellationToken.None))!;
             var commands = result["Commands"].Cast<PowerShellCommandInfo>().ToArray();
             Assert.That(commands.Select(c => (c.Name, c.Line)), Is.EqualTo(new[]
             {

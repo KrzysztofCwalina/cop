@@ -1,14 +1,6 @@
-namespace Cop.Lang;
+// Defines diagnostic severity and source context for language tooling.
 
-/// <summary>
-/// Severity of a diagnostic message produced during parsing, binding, or verification.
-/// </summary>
-public enum CopDiagnosticSeverity
-{
-    Error,
-    Warning,
-    Info
-}
+namespace Cop.Lang;
 
 /// <summary>
 /// A structured diagnostic produced during parsing, binding, import resolution,
@@ -30,6 +22,7 @@ public sealed record CopDiagnostic(
     public string Location =>
         FilePath is not null ? $"{FilePath}({Line})" : $"line {Line}";
 
+    /// <summary>Formats the location, severity label, and diagnostic message.</summary>
     public override string ToString() => $"{Location}: {SeverityLabel}: {Message}";
 
     private string SeverityLabel => Severity switch

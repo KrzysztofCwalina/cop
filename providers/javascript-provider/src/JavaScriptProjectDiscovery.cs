@@ -1,3 +1,5 @@
+// Discovers JavaScript package dependencies and TypeScript project relationships.
+
 using System.Text.Json;
 using Cop.Core;
 using Cop.Providers.SourceModel;
@@ -8,41 +10,48 @@ namespace Cop.Providers;
 /// <summary>Package-manifest dependencies and compiler-defined TypeScript project membership.</summary>
 public static class JavaScriptProjectDiscovery
 {
-    public static List<ProjectInfo> Discover(string rootPath, IReadOnlySet<string>? excludedDirs,
-        string? toolchainSearchPath = null)
+    /// <summary>
+    /// Discovers JavaScript projects and their package or compiler references.
+    /// </summary>
+    public static async ValueTask<List<ProjectInfo>> DiscoverAsync(
+        string rootPath, IReadOnlySet<string>? excludedDirs,
+        string? toolchainSearchPath = null, CancellationToken cancellationToken = default)
     {
-        var paths = new List<string>();
+        List<string> paths = new List<string>();
         CollectManifests(Path.GetFullPath(rootPath), excludedDirs, paths);
         paths.Sort(StringComparer.Ordinal);
-        var packages = paths.Where(p => Path.GetFileName(p) == "package.json")
+        List<ProjectInfo> packages = paths.Where(p => Path.GetFileName(p) == "package.json")
             .Select(p => ParsePackageJson(p, rootPath)).OfType<ProjectInfo>().ToList();
-        foreach (var workspace in packages.Where(p => p.Properties.ContainsKey("WorkspacePatterns")))
+        foreach (ProjectInfo? workspace in packages.Where(p => p.Properties.ContainsKey("WorkspacePatterns")))
         {
-            var directory = Path.GetDirectoryName(Path.GetFullPath(workspace.Path, rootPath))!;
-            var patterns = JsonSerializer.Deserialize<string[]>(workspace.Properties["WorkspacePatterns"])!;
-            foreach (var package in packages)
+            string directory = Path.GetDirectoryName(Path.GetFullPath(workspace.Path, rootPath))!;
+            string[] patterns = JsonSerializer.Deserialize<string[]>(workspace.Properties["WorkspacePatterns"])!;
+            foreach (ProjectInfo? package in packages)
             {
-                var memberDirectory = Path.GetDirectoryName(Path.GetFullPath(package.Path, rootPath))!;
-                var relative = Path.GetRelativePath(directory, memberDirectory).Replace('\\', '/');
+                string memberDirectory = Path.GetDirectoryName(Path.GetFullPath(package.Path, rootPath))!;
+                string relative = Path.GetRelativePath(directory, memberDirectory).Replace('\\', '/');
                 if (relative != "." && !relative.StartsWith("../", StringComparison.Ordinal) && MatchesWorkspace(relative, patterns))
+                {
                     package.Properties["WorkspaceRoot"] = workspace.Name;
+                }
             }
         }
 
-        var result = new List<ProjectInfo>(packages);
-        var compiler = new TypeScriptProjection(toolchainSearchPath);
-        var configurations = paths.Where(p => Path.GetFileName(p) != "package.json").ToList();
-        var names = configurations.ToDictionary(path => Path.GetFullPath(path), path =>
+        List<ProjectInfo> result = new List<ProjectInfo>(packages);
+        TypeScriptProjection compiler = new TypeScriptProjection(toolchainSearchPath);
+        List<string> configurations = paths.Where(p => Path.GetFileName(p) != "package.json").ToList();
+        Dictionary<string, string> names = configurations.ToDictionary(path => Path.GetFullPath(path), path =>
         {
-            var directory = Path.GetDirectoryName(path)!;
-            var package = packages.FirstOrDefault(p =>
+            string directory = Path.GetDirectoryName(path)!;
+            ProjectInfo? package = packages.FirstOrDefault(p =>
                 Path.GetDirectoryName(Path.GetFullPath(p.Path, rootPath)) == directory);
             return (package?.Name ?? Path.GetRelativePath(rootPath, directory).Replace('\\', '/')) +
                 ":" + Path.GetFileNameWithoutExtension(path);
         }, OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
-        foreach (var path in configurations)
+        foreach (string path in configurations)
         {
-            var config = compiler.ReadProject(path);
+            TypeScriptProjection.ProjectConfiguration? config =
+                await compiler.ReadProjectAsync(path, cancellationToken).ConfigureAwait(false);
             if (config is null)
             {
                 ProviderWarnings.ReportOnce("javascript", "typescript-projects",
@@ -50,7 +59,11 @@ public static class JavaScriptProjectDiscovery
                     "Package-manifest dependency analysis remains available.");
                 continue;
             }
-            foreach (var error in config.Errors) ProviderErrors.Report($"{path}: {error}");
+            foreach (string error in config.Errors)
+            {
+                ProviderErrors.Report($"{path}: {error}");
+            }
+
             result.Add(new(names[path], Path.GetRelativePath(rootPath, path).Replace('\\', '/'), "javascript",
                 config.References.Select(reference => names.GetValueOrDefault(Path.GetFullPath(reference)) ??
                     Path.GetRelativePath(rootPath, reference).Replace('\\', '/')).ToList(), [], [])
@@ -60,7 +73,7 @@ public static class JavaScriptProjectDiscovery
                 {
                     ["DiscoveryScope"] = "TypeScript compiler config (include/exclude/files/extends/references)",
                     ["PathAliases"] = JsonSerializer.Serialize(config.PathAliases),
-                    ["BaseUrl"] = config.BaseUrl ?? ""
+                    ["BaseUrl"] = config.BaseUrl ?? string.Empty
                 }
             });
         }
@@ -71,30 +84,51 @@ public static class JavaScriptProjectDiscovery
     {
         try
         {
-            using var doc = JsonDocument.Parse(File.ReadAllText(filePath));
-            var root = doc.RootElement;
-            if (!root.TryGetProperty("name", out var nameElement) || nameElement.ValueKind != JsonValueKind.String ||
-                string.IsNullOrWhiteSpace(nameElement.GetString())) return null;
-            var dependencies = new SortedSet<string>(StringComparer.Ordinal);
-            var properties = new Dictionary<string, string>
+            using JsonDocument doc = JsonDocument.Parse(File.ReadAllText(filePath));
+            JsonElement root = doc.RootElement;
+            if (!root.TryGetProperty("name", out JsonElement nameElement) || nameElement.ValueKind != JsonValueKind.String ||
+                string.IsNullOrWhiteSpace(nameElement.GetString()))
+            {
+                return null;
+            }
+
+            SortedSet<string> dependencies = new SortedSet<string>(StringComparer.Ordinal);
+            Dictionary<string, string> properties = new Dictionary<string, string>
             {
                 ["DiscoveryScope"] = "package.json declared dependencies (runtime/development/peer/optional); no lockfile resolution"
             };
-            foreach (var section in new[] { "dependencies", "devDependencies", "peerDependencies", "optionalDependencies" })
+            foreach (string? section in new[] { "dependencies", "devDependencies", "peerDependencies", "optionalDependencies" })
             {
-                if (!root.TryGetProperty(section, out var value)) continue;
+                if (!root.TryGetProperty(section, out JsonElement value))
+                {
+                    continue;
+                }
+
                 if (value.ValueKind != JsonValueKind.Object)
+                {
                     throw new JsonException($"'{section}' must be an object.");
-                foreach (var property in value.EnumerateObject()) dependencies.Add(property.Name);
+                }
+
+                foreach (JsonProperty property in value.EnumerateObject())
+                {
+                    dependencies.Add(property.Name);
+                }
+
                 properties[section] = value.GetRawText();
             }
-            if (root.TryGetProperty("workspaces", out var workspaces))
+            if (root.TryGetProperty("workspaces", out JsonElement workspaces))
             {
-                if (workspaces.ValueKind == JsonValueKind.Object && workspaces.TryGetProperty("packages", out var patterns))
+                if (workspaces.ValueKind == JsonValueKind.Object && workspaces.TryGetProperty("packages", out JsonElement patterns))
+                {
                     workspaces = patterns;
+                }
+
                 if (workspaces.ValueKind != JsonValueKind.Array ||
                     workspaces.EnumerateArray().Any(p => p.ValueKind != JsonValueKind.String))
+                {
                     throw new JsonException("'workspaces' must be a string array or an object with a 'packages' array.");
+                }
+
                 properties["WorkspacePatterns"] = workspaces.GetRawText();
             }
             return new(nameElement.GetString()!, Path.GetRelativePath(rootPath, filePath).Replace('\\', '/'),
@@ -110,12 +144,14 @@ public static class JavaScriptProjectDiscovery
     private static bool MatchesWorkspace(string relative, IEnumerable<string> patterns)
     {
         bool matches = false;
-        foreach (var pattern in patterns)
+        foreach (string pattern in patterns)
         {
             bool exclude = pattern.StartsWith('!');
-            var glob = (exclude ? pattern[1..] : pattern).TrimEnd('/').Replace('\\', '/');
+            string glob = (exclude ? pattern[1..] : pattern).TrimEnd('/').Replace('\\', '/');
             if (MatchesGlob(relative, glob))
+            {
                 matches = !exclude;
+            }
         }
         return matches;
     }
@@ -123,28 +159,43 @@ public static class JavaScriptProjectDiscovery
     private static bool MatchesGlob(string path, string pattern)
     {
         // Dynamic programming bounds work by path length times pattern length, without backtracking.
-        var next = new bool[path.Length + 1];
+        bool[] next = new bool[path.Length + 1];
         next[path.Length] = true;
         for (int i = pattern.Length - 1; i >= 0; i--)
         {
             bool recursiveDirectory = pattern[i] == '/' && i >= 2 && pattern[i - 1] == '*' && pattern[i - 2] == '*';
             bool recursive = !recursiveDirectory && pattern[i] == '*' && i > 0 && pattern[i - 1] == '*';
-            var current = new bool[path.Length + 1];
+            bool[] current = new bool[path.Length + 1];
             bool directorySuffix = false;
             for (int j = path.Length; j >= 0; j--)
             {
                 if (recursiveDirectory)
                 {
-                    if (j < path.Length && path[j] == '/' && next[j + 1]) directorySuffix = true;
+                    if (j < path.Length && path[j] == '/' && next[j + 1])
+                    {
+                        directorySuffix = true;
+                    }
+
                     current[j] = next[j] || directorySuffix;
                 }
                 else if (pattern[i] == '*')
+                {
                     current[j] = next[j] || j < path.Length && (recursive || path[j] != '/') && current[j + 1];
+                }
                 else if (j < path.Length)
+                {
                     current[j] = (pattern[i] == '?' ? path[j] != '/' : pattern[i] == path[j]) && next[j + 1];
+                }
             }
-            if (recursiveDirectory) i -= 2;
-            else if (recursive) i--;
+            if (recursiveDirectory)
+            {
+                i -= 2;
+            }
+            else if (recursive)
+            {
+                i--;
+            }
+
             next = current;
         }
         return next[0];
@@ -154,18 +205,24 @@ public static class JavaScriptProjectDiscovery
     {
         try
         {
-            foreach (var path in Directory.EnumerateFiles(directory, "*.json"))
+            foreach (string path in Directory.EnumerateFiles(directory, "*.json"))
             {
-                var name = Path.GetFileName(path);
+                string name = Path.GetFileName(path);
                 if (name == "package.json" || name == "jsconfig.json" || name == "tsconfig.json" ||
                     name.StartsWith("tsconfig.", StringComparison.Ordinal) || name.StartsWith("jsconfig.", StringComparison.Ordinal))
+                {
                     result.Add(path);
+                }
             }
-            foreach (var subdirectory in Directory.EnumerateDirectories(directory).Order(StringComparer.Ordinal))
+            foreach (string? subdirectory in Directory.EnumerateDirectories(directory).Order(StringComparer.Ordinal))
             {
-                var name = Path.GetFileName(subdirectory);
+                string name = Path.GetFileName(subdirectory);
                 if (name is "node_modules" or ".git" || excluded?.Contains(name) == true ||
-                    File.GetAttributes(subdirectory).HasFlag(FileAttributes.ReparsePoint)) continue;
+                    File.GetAttributes(subdirectory).HasFlag(FileAttributes.ReparsePoint))
+                {
+                    continue;
+                }
+
                 CollectManifests(subdirectory, excluded, result);
             }
         }

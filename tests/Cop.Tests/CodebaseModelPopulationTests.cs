@@ -13,7 +13,7 @@ public class CodebaseModelPopulationTests
     [Test]
     [Explicit("Issue #24: Method.Statements undercounts a known four-statement method — remove when fixed")]
     [Category("PendingFix")]
-    public void MethodStatements_HasExactKnownCount()
+    public async Task MethodStatements_HasExactKnownCount()
     {
         // Issue #24
         var fixture = CreateFixture(nameof(MethodStatements_HasExactKnownCount));
@@ -35,7 +35,7 @@ public class CodebaseModelPopulationTests
                 }
                 """);
 
-            var messages = RunCop(fixture, """
+            var messages = (await RunCop(fixture, """
                 import code
                 import csharp
 
@@ -43,7 +43,7 @@ public class CodebaseModelPopulationTests
                 predicate isKnown(Method) => Method.Name == 'Known'
 
                 command MAIN = foreach cb.Methods:isKnown => '{item.Name}:{item.Statements.Count}'
-                """);
+                """));
 
             Assert.That(messages, Is.EqualTo(new[] { "Known:4" }));
         }
@@ -54,7 +54,7 @@ public class CodebaseModelPopulationTests
     }
 
     [Test]
-    public void StatementTree_ControlFlowFieldsArePopulated()
+    public async Task StatementTree_ControlFlowFieldsArePopulated()
     {
         // Issue #15
         var fixture = CreateFixture(nameof(StatementTree_ControlFlowFieldsArePopulated));
@@ -81,7 +81,7 @@ public class CodebaseModelPopulationTests
                 }
                 """);
 
-            var messages = RunCop(fixture, """
+            var messages = (await RunCop(fixture, """
                 import code
                 import csharp
 
@@ -90,7 +90,7 @@ public class CodebaseModelPopulationTests
                     Statement.InMethod == true && Statement.Method.Name == 'Known' && Statement:isControlFlow
 
                 command MAIN = foreach cb.Statements:isKnownControl => '{item.Kind}:braced={item.Braced}:children={item.Children.Count}:control=true'
-                """);
+                """));
 
             Assert.That(messages, Is.EqualTo(new[]
             {
@@ -107,7 +107,7 @@ public class CodebaseModelPopulationTests
     [Test]
     [Explicit("Issue #31: nested control-flow fixture returns no method statements/calls — remove when fixed")]
     [Category("PendingFix")]
-    public void NestedBlocks_DoNotDuplicateStatementsOrCalls()
+    public async Task NestedBlocks_DoNotDuplicateStatementsOrCalls()
     {
         // Issue #31
         var fixture = CreateFixture(nameof(NestedBlocks_DoNotDuplicateStatementsOrCalls));
@@ -134,7 +134,7 @@ public class CodebaseModelPopulationTests
                 }
                 """);
 
-            var messages = RunCop(fixture, """
+            var messages = (await RunCop(fixture, """
                 import code
                 import csharp
 
@@ -145,7 +145,7 @@ public class CodebaseModelPopulationTests
                 command MAIN =
                     foreach cb.Methods:isKnown => 'statements={item.Statements.Count}' |
                     foreach cb.Calls:isKnownStatement => 'call:{item.MemberName}'
-                """);
+                """));
 
             Assert.That(messages, Is.EqualTo(new[]
             {
@@ -161,7 +161,7 @@ public class CodebaseModelPopulationTests
     }
 
     [Test]
-    public void ProjectReferences_ArePopulatedWithKnownReferences()
+    public async Task ProjectReferences_ArePopulatedWithKnownReferences()
     {
         // Issue #30
         var fixture = CreateFixture(nameof(ProjectReferences_ArePopulatedWithKnownReferences));
@@ -169,7 +169,7 @@ public class CodebaseModelPopulationTests
         {
             WriteProjectFixture(fixture.TargetDir, targetFrameworkElement: "<TargetFramework>net10.0</TargetFramework>");
 
-            var messages = RunCop(fixture, """
+            var messages = (await RunCop(fixture, """
                 import code
                 import csharp
 
@@ -177,7 +177,7 @@ public class CodebaseModelPopulationTests
                 predicate isApp(Project) => Project.Name == 'App'
 
                 command MAIN = foreach cb.Projects:isApp => 'project={item.Name}:refs={item.References.Count}:packages={item.Packages.Count}'
-                """);
+                """));
 
             Assert.That(messages, Is.EqualTo(new[] { "project=App:refs=1:packages=1" }));
         }
@@ -188,7 +188,7 @@ public class CodebaseModelPopulationTests
     }
 
     [Test]
-    public void ProjectFrameworks_IncludeSingleTargetFramework()
+    public async Task ProjectFrameworks_IncludeSingleTargetFramework()
     {
         // Issue #48
         var fixture = CreateFixture(nameof(ProjectFrameworks_IncludeSingleTargetFramework));
@@ -196,7 +196,7 @@ public class CodebaseModelPopulationTests
         {
             WriteProjectFixture(fixture.TargetDir, targetFrameworkElement: "<TargetFramework>net10.0</TargetFramework>");
 
-            var messages = RunCop(fixture, """
+            var messages = (await RunCop(fixture, """
                 import code
                 import csharp
 
@@ -204,7 +204,7 @@ public class CodebaseModelPopulationTests
                 predicate isApp(Project) => Project.Name == 'App'
 
                 command MAIN = foreach cb.Projects:isApp => '{item.Name}:frameworks={item.Frameworks.Count}:{item.Frameworks}'
-                """);
+                """));
 
             Assert.That(messages, Is.EqualTo(new[] { "App:frameworks=1:[net10.0]" }));
         }
@@ -217,7 +217,7 @@ public class CodebaseModelPopulationTests
     [Test]
     [Explicit("Issue #3: Line/File fields and line predicates return no matches for a known C# fixture — remove when fixed")]
     [Category("PendingFix")]
-    public void LineAndFileFields_AndPredicatesMatchKnownFixture()
+    public async Task LineAndFileFields_AndPredicatesMatchKnownFixture()
     {
         // Issue #3
         var fixture = CreateFixture(nameof(LineAndFileFields_AndPredicatesMatchKnownFixture));
@@ -237,7 +237,7 @@ public class CodebaseModelPopulationTests
                 }
                 """);
 
-            var messages = RunCop(fixture, """
+            var messages = (await RunCop(fixture, """
                 import code
                 import csharp
 
@@ -250,7 +250,7 @@ public class CodebaseModelPopulationTests
                     foreach cb.Lines:inLineFile:isBlank => 'blank={item.Number}:{item.Kind}' |
                     foreach cb.Lines:inLineFile:isComment => 'comment={item.Number}:{item.Kind}:{item.Text}' |
                     foreach cb.Lines:inLineFile:isCSharp => 'csharp-line={item.Number}'
-                """);
+                """));
 
             Assert.That(messages, Is.EqualTo(new[]
             {
@@ -275,7 +275,7 @@ public class CodebaseModelPopulationTests
     }
 
     [Test]
-    public void PredicateFilteringStatements_ReturnsExactNonZeroMatches()
+    public async Task PredicateFilteringStatements_ReturnsExactNonZeroMatches()
     {
         // Issue #16
         var fixture = CreateFixture(nameof(PredicateFilteringStatements_ReturnsExactNonZeroMatches));
@@ -296,7 +296,7 @@ public class CodebaseModelPopulationTests
                 }
                 """);
 
-            var messages = RunCop(fixture, """
+            var messages = (await RunCop(fixture, """
                 import code
                 import csharp
 
@@ -304,7 +304,7 @@ public class CodebaseModelPopulationTests
                 predicate isWriteLine(Statement) => Statement.MemberName == 'WriteLine'
 
                 command MAIN = foreach cb.Statements:isWriteLine => 'write-line:{item.Line}:{item.MemberName}'
-                """);
+                """));
 
             Assert.That(messages, Is.EqualTo(new[]
             {
@@ -319,7 +319,7 @@ public class CodebaseModelPopulationTests
     }
 
     [Test]
-    public void ParameterLine_IsPopulated()
+    public async Task ParameterLine_IsPopulated()
     {
         // Regression: Parameter.Line was declared in code.cop and backed by a real CLR field,
         // but had no provider-schema entry or CLR accessor, so `parameter.Line` silently returned
@@ -337,7 +337,7 @@ public class CodebaseModelPopulationTests
                 }
                 """);
 
-            var messages = RunCop(fixture, """
+            var messages = (await RunCop(fixture, """
                 import code
                 import csharp
 
@@ -345,7 +345,7 @@ public class CodebaseModelPopulationTests
                 predicate isKnown(Method) => Method.Name == 'Known'
 
                 command MAIN = foreach cb.Methods:isKnown => 'param-line:{item.Parameters.First.Line}'
-                """);
+                """));
 
             // The method (and its `int value` parameter) is on line 4 of Sample.cs.
             Assert.That(messages, Is.EqualTo(new[] { "param-line:4" }));
@@ -366,10 +366,13 @@ public class CodebaseModelPopulationTests
         return new Fixture(root, scriptsDir, targetDir);
     }
 
-    private static IReadOnlyList<string> RunCop(Fixture fixture, string copSource)
+    private static async Task<IReadOnlyList<string>> RunCop(Fixture fixture, string copSource)
     {
         File.WriteAllText(Path.Combine(fixture.ScriptsDir, "main.cop"), copSource);
-        var result = Engine.Run(fixture.ScriptsDir, fixture.TargetDir, additionalFeedPaths: [PackagesDir]);
+        var result = (await Engine.RunAsync(fixture.ScriptsDir, fixture.TargetDir, new EngineRunOptions
+        {
+            AdditionalFeedPaths = [PackagesDir],
+        }));
 
         Assert.That(result.HasParseErrors, Is.False, "Parse errors: " + string.Join(Environment.NewLine, result.ParseErrors));
         Assert.That(result.HasFatalErrors, Is.False, "Fatal errors: " + string.Join(Environment.NewLine, result.Errors));

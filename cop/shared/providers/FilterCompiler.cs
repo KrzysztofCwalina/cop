@@ -1,3 +1,5 @@
+// Compiles provider filter expressions into executable record predicates.
+
 using Cop.Core;
 
 namespace Cop.Lang;
@@ -28,7 +30,11 @@ public static class FilterCompiler
         FilterExpression filter,
         Dictionary<string, Func<object, object?>> accessors)
     {
-        if (!CanCompile(filter, accessors)) return _ => true;
+        if (!CanCompile(filter, accessors))
+        {
+            return _ => true;
+        }
+
         return filter switch
         {
             PropertyFilter pf => CompilePropertyFilter(pf, accessors),
@@ -66,13 +72,15 @@ public static class FilterCompiler
     private static Func<object, bool> CompilePropertyFilter(
         PropertyFilter pf, Dictionary<string, Func<object, object?>> accessors)
     {
-        if (!accessors.TryGetValue(pf.Property, out var accessor))
+        if (!accessors.TryGetValue(pf.Property, out Func<object, object?>? accessor))
+        {
             return _ => true; // Unknown property — can't filter, pass through
+        }
 
         return item =>
         {
-            var value = accessor(item);
-            var boolVal = value is true;
+            object? value = accessor(item);
+            bool boolVal = value is true;
             return boolVal == pf.Value;
         };
     }
@@ -80,13 +88,18 @@ public static class FilterCompiler
     private static Func<object, bool> CompileStringOpFilter(
         StringOpFilter sf, Dictionary<string, Func<object, object?>> accessors)
     {
-        if (!accessors.TryGetValue(sf.Property, out var accessor))
+        if (!accessors.TryGetValue(sf.Property, out Func<object, object?>? accessor))
+        {
             return _ => true;
+        }
 
         return item =>
         {
-            var value = accessor(item)?.ToString();
-            if (value is null) return false;
+            string? value = accessor(item)?.ToString();
+            if (value is null)
+            {
+                return false;
+            }
 
             return sf.Op switch
             {
@@ -106,13 +119,15 @@ public static class FilterCompiler
     private static Func<object, bool> CompileComparisonFilter(
         ComparisonFilter cf, Dictionary<string, Func<object, object?>> accessors)
     {
-        if (!accessors.TryGetValue(cf.Property, out var accessor))
+        if (!accessors.TryGetValue(cf.Property, out Func<object, object?>? accessor))
+        {
             return _ => true;
+        }
 
         return item =>
         {
-            var value = accessor(item);
-            var numVal = value switch
+            object? value = accessor(item);
+            double numVal = value switch
             {
                 int i => (double)i,
                 long l => (double)l,
@@ -121,7 +136,10 @@ public static class FilterCompiler
                 _ => double.NaN
             };
 
-            if (double.IsNaN(numVal)) return false;
+            if (double.IsNaN(numVal))
+            {
+                return false;
+            }
 
             return cf.Op switch
             {
@@ -138,18 +156,25 @@ public static class FilterCompiler
     private static Func<object, bool> CompileContainsAnyFilter(
         ContainsAnyFilter caf, Dictionary<string, Func<object, object?>> accessors)
     {
-        if (!accessors.TryGetValue(caf.Property, out var accessor))
+        if (!accessors.TryGetValue(caf.Property, out Func<object, object?>? accessor))
+        {
             return _ => true;
+        }
 
         return item =>
         {
-            var value = accessor(item)?.ToString();
-            if (value is null) return false;
+            string? value = accessor(item)?.ToString();
+            if (value is null)
+            {
+                return false;
+            }
 
-            foreach (var v in caf.Values)
+            foreach (string v in caf.Values)
             {
                 if (value.Contains(v, StringComparison.OrdinalIgnoreCase))
+                {
                     return true;
+                }
             }
             return false;
         };
@@ -158,17 +183,21 @@ public static class FilterCompiler
     private static Func<object, bool> CompileInFilter(
         InFilter inf, Dictionary<string, Func<object, object?>> accessors)
     {
-        if (!accessors.TryGetValue(inf.Property, out var accessor))
+        if (!accessors.TryGetValue(inf.Property, out Func<object, object?>? accessor))
+        {
             return _ => true;
+        }
 
         return item =>
         {
-            var value = accessor(item)?.ToString() ?? "";
+            string value = accessor(item)?.ToString() ?? "";
 
-            foreach (var v in inf.Values)
+            foreach (string v in inf.Values)
             {
                 if (value.Equals(v, StringComparison.OrdinalIgnoreCase))
+                {
                     return true;
+                }
             }
             return false;
         };
@@ -177,11 +206,17 @@ public static class FilterCompiler
     private static Func<object, bool> CompileAndFilter(
         AndFilter af, Dictionary<string, Func<object, object?>> accessors)
     {
-        var compiled = af.Conditions.Select(c => Compile(c, accessors)).ToArray();
+        Func<object, bool>[] compiled = af.Conditions.Select(c => Compile(c, accessors)).ToArray();
         return item =>
         {
-            foreach (var pred in compiled)
-                if (!pred(item)) return false;
+            foreach (Func<object, bool>? pred in compiled)
+            {
+                if (!pred(item))
+                {
+                    return false;
+                }
+            }
+
             return true;
         };
     }
@@ -189,11 +224,17 @@ public static class FilterCompiler
     private static Func<object, bool> CompileOrFilter(
         OrFilter orf, Dictionary<string, Func<object, object?>> accessors)
     {
-        var compiled = orf.Conditions.Select(c => Compile(c, accessors)).ToArray();
+        Func<object, bool>[] compiled = orf.Conditions.Select(c => Compile(c, accessors)).ToArray();
         return item =>
         {
-            foreach (var pred in compiled)
-                if (pred(item)) return true;
+            foreach (Func<object, bool>? pred in compiled)
+            {
+                if (pred(item))
+                {
+                    return true;
+                }
+            }
+
             return false;
         };
     }
@@ -201,25 +242,32 @@ public static class FilterCompiler
     private static Func<object, bool> CompileNotFilter(
         NotFilter nf, Dictionary<string, Func<object, object?>> accessors)
     {
-        var inner = Compile(nf.Inner, accessors);
+        Func<object, bool> inner = Compile(nf.Inner, accessors);
         return item => !inner(item);
     }
 
     private static Func<object, bool> CompileCollectionContainsFilter(
         CollectionContainsFilter ccf, Dictionary<string, Func<object, object?>> accessors)
     {
-        if (!accessors.TryGetValue(ccf.Property, out var accessor))
+        if (!accessors.TryGetValue(ccf.Property, out Func<object, object?>? accessor))
+        {
             return _ => true;
+        }
 
         return item =>
         {
-            var value = accessor(item);
-            if (value is not System.Collections.IList list) return false;
+            object? value = accessor(item);
+            if (value is not System.Collections.IList list)
+            {
+                return false;
+            }
 
-            foreach (var elem in list)
+            foreach (object? elem in list)
             {
                 if (string.Equals(elem?.ToString(), ccf.Value, StringComparison.OrdinalIgnoreCase))
+                {
                     return true;
+                }
             }
             return false;
         };
@@ -228,23 +276,30 @@ public static class FilterCompiler
     private static Func<object, bool> CompileCollectionAnyFilter(
         CollectionAnyFilter canyf, Dictionary<string, Func<object, object?>> accessors)
     {
-        if (!accessors.TryGetValue(canyf.Property, out var accessor))
+        if (!accessors.TryGetValue(canyf.Property, out Func<object, object?>? accessor))
+        {
             return _ => true;
+        }
 
         // The item filter needs accessors for the child type — these are in the same
         // accessor dictionary if the child type's properties are registered (flattened).
         // For now, compile the item filter with the same accessors.
-        var itemPredicate = Compile(canyf.ItemFilter, accessors);
+        Func<object, bool> itemPredicate = Compile(canyf.ItemFilter, accessors);
 
         return item =>
         {
-            var value = accessor(item);
-            if (value is not System.Collections.IList list) return false;
+            object? value = accessor(item);
+            if (value is not System.Collections.IList list)
+            {
+                return false;
+            }
 
-            foreach (var elem in list)
+            foreach (object? elem in list)
             {
                 if (elem is not null && itemPredicate(elem))
+                {
                     return true;
+                }
             }
             return false;
         };
@@ -253,13 +308,18 @@ public static class FilterCompiler
     private static Func<object, bool> CompileCollectionCountFilter(
         CollectionCountFilter ccntf, Dictionary<string, Func<object, object?>> accessors)
     {
-        if (!accessors.TryGetValue(ccntf.Property, out var accessor))
+        if (!accessors.TryGetValue(ccntf.Property, out Func<object, object?>? accessor))
+        {
             return _ => true;
+        }
 
         return item =>
         {
-            var value = accessor(item);
-            if (value is not System.Collections.IList list) return false;
+            object? value = accessor(item);
+            if (value is not System.Collections.IList list)
+            {
+                return false;
+            }
 
             int count = list.Count;
             return ccntf.Op switch
@@ -277,13 +337,15 @@ public static class FilterCompiler
     private static Func<object, bool> CompileFlagsFilter(
         FlagsFilter ff, Dictionary<string, Func<object, object?>> accessors)
     {
-        if (!accessors.TryGetValue(ff.Property, out var accessor))
+        if (!accessors.TryGetValue(ff.Property, out Func<object, object?>? accessor))
+        {
             return _ => true;
+        }
 
         return item =>
         {
-            var value = accessor(item);
-            var numVal = value switch
+            object? value = accessor(item);
+            long numVal = value switch
             {
                 int i => (long)i,
                 long l => l,
@@ -301,14 +363,16 @@ public static class FilterCompiler
 
     private static string NormalizeIdentifier(string s)
     {
-        var len = s.Length;
-        var chars = len <= 128 ? stackalloc char[len] : new char[len];
+        int len = s.Length;
+        Span<char> chars = len <= 128 ? stackalloc char[len] : new char[len];
         int pos = 0;
         for (int i = 0; i < len; i++)
         {
-            var c = s[i];
+            char c = s[i];
             if (c != '_' && c != '-')
+            {
                 chars[pos++] = char.ToLowerInvariant(c);
+            }
         }
         return new string(chars[..pos]);
     }

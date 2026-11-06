@@ -1,3 +1,5 @@
+// Represents discovered projects, source membership, and dependencies.
+
 namespace Cop.Providers.SourceModel;
 
 /// <summary>

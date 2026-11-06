@@ -1,4 +1,8 @@
+// Coordinates program loading, provider registration, evaluation, and execution results.
+
+using System.Collections.Concurrent;
 using System.Diagnostics;
+using System.Text;
 using Cop.Core;
 using Cop.Lang;
 using Cop.Lang.Ast;
@@ -14,7 +18,7 @@ namespace Cop.Providers;
 public static class Engine
 {
     // Built-in providers — all accessed uniformly via RegisterSchema + QueryAndRegister
-    private static readonly DataProvider[] _rawProviders =
+    private static readonly DataProvider[] s_rawProviders =
     [
         new FilesystemProvider(),
         new CodeSchemaProvider(),
@@ -25,20 +29,20 @@ public static class Engine
 
     public sealed record ParsedModule(string FilePath, string Source, ModuleNode Module);
 
-    private static readonly BuiltinProvider[] _builtinProviders = _rawProviders.Select(ToBuiltin).ToArray();
+    private static readonly BuiltinProvider[] s_builtinProviders = s_rawProviders.Select(ToBuiltin).ToArray();
 
     /// <summary>
     /// When true, the engine times each top-level rule (let-binding) after provider
     /// data is loaded and prints a <c>[profile]</c> breakdown to stderr before running
     /// commands. Enabled via the CLI <c>-rp</c> flag.
     /// </summary>
-    public static bool ProfileRules;
+    public static bool IsRuleProfilingEnabled { get; set; }
 
     private static BuiltinProvider ToBuiltin(DataProvider provider)
     {
-        var schema = ProviderSchema.FromJson(provider.GetSchema());
-        var collNames = new HashSet<string>(schema.Collections.Select(c => c.Name), StringComparer.Ordinal);
-        var name = provider switch
+        ProviderSchema schema = ProviderSchema.FromJson(provider.GetSchema());
+        HashSet<string> collNames = new HashSet<string>(schema.Collections.Select(c => c.Name), StringComparer.Ordinal);
+        string name = provider switch
         {
             FilesystemProvider => "filesystem",
             CodeSchemaProvider => "code",
@@ -51,44 +55,52 @@ public static class Engine
     /// <summary>
     /// Discovers .cop scripts and source files, then runs all commands.
     /// </summary>
-    public static EngineResult Run(string scriptsDir, string rootPath, string? commandName = null, string[]? programArgs = null, string[]? commandFilter = null, Action<string>? diagLog = null, bool assertMode = false, string[]? additionalFeedPaths = null, string[]? scriptFiles = null, List<(string Dir, PackageMetadata Meta)>? providerPackages = null, ReviewOptions? reviewOptions = null)
+    public static async Task<EngineResult> RunAsync(
+        string scriptsDir, string rootPath, EngineRunOptions? options = null)
     {
-        var totalSw = Stopwatch.StartNew();
+        options ??= new EngineRunOptions();
+        options.CancellationToken.ThrowIfCancellationRequested();
+        Stopwatch totalSw = Stopwatch.StartNew();
 
         scriptsDir = Path.GetFullPath(scriptsDir);
         rootPath = Path.GetFullPath(rootPath);
 
         if (!Directory.Exists(scriptsDir))
+        {
             return new EngineResult([], [], [$"Scripts directory not found: {scriptsDir}"]);
+        }
 
-        var scriptFilePaths = scriptFiles ?? Directory.GetFiles(scriptsDir, "*.cop", SearchOption.AllDirectories);
+        string[] scriptFilePaths = options.ScriptFiles?.ToArray()
+            ?? Directory.GetFiles(scriptsDir, "*.cop", SearchOption.AllDirectories);
         // Only sort when discovering files ourselves. When scriptFiles is explicitly provided,
         // respect the caller's order (e.g., target file placed last for command priority).
-        if (scriptFiles is null)
+        if (options.ScriptFiles is null)
+        {
             Array.Sort(scriptFilePaths, StringComparer.Ordinal);
+        }
+
         if (scriptFilePaths.Length == 0)
+        {
             return new EngineResult([], [], []);
+        }
 
-        var parseErrors = new List<string>();
-        var modules = ParseModules(scriptFilePaths, parseErrors);
+        List<string> parseErrors = new List<string>();
+        List<ParsedModule> modules = ParseModules(scriptFilePaths, parseErrors);
         if (modules.Count == 0 && parseErrors.Count > 0)
+        {
             return new EngineResult([], parseErrors, []);
+        }
 
-        var feedPaths = CollectFeedPaths(scriptsDir, modules, additionalFeedPaths);
-        var result = ExecuteModules(
+        List<string> feedPaths = CollectFeedPaths(
+            scriptsDir, modules, options.AdditionalFeedPaths?.ToArray());
+        EngineResult result = await ExecuteModulesAsync(
             modules,
             feedPaths,
             rootPath,
             parseErrors,
-            commandName,
-            programArgs,
-            commandFilter,
-            diagLog,
-            topLevelProviderPackages: providerPackages,
-            assertMode: assertMode,
-            reviewOptions: reviewOptions);
+            options);
 
-        diagLog?.Invoke($"[diag] Total: {totalSw.ElapsedMilliseconds}ms");
+        options.DiagnosticLog?.Invoke($"[diag] Total: {totalSw.ElapsedMilliseconds}ms");
         return result;
     }
 
@@ -110,19 +122,20 @@ public static class Engine
 
     private static List<ParsedModule> ParseModules(IEnumerable<string> filePaths, List<string> parseErrors)
     {
-        var modules = new List<ParsedModule>();
-        foreach (var path in filePaths)
+        List<ParsedModule> modules = new List<ParsedModule>();
+        foreach (string path in filePaths)
         {
             try
             {
-                var source = File.ReadAllText(path);
+                string source = File.ReadAllText(path);
                 modules.Add(new ParsedModule(path, source, CopParser.Parse(source, path)));
             }
             catch (ParseException ex)
             {
                 parseErrors.Add(ex.Message);
             }
-            catch (Exception ex) when (ex is not OutOfMemoryException)
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or
+                System.Security.SecurityException)
             {
                 parseErrors.Add($"Error parsing {path}: {ex.Message}");
             }
@@ -136,12 +149,12 @@ public static class Engine
     /// </summary>
     internal static List<ParsedModule> ParseModulesWithDiagnostics(IEnumerable<string> filePaths, List<string> parseErrors, List<CopDiagnostic> diagnostics)
     {
-        var modules = new List<ParsedModule>();
-        foreach (var path in filePaths)
+        List<ParsedModule> modules = new List<ParsedModule>();
+        foreach (string path in filePaths)
         {
             try
             {
-                var source = File.ReadAllText(path);
+                string source = File.ReadAllText(path);
                 modules.Add(new ParsedModule(path, source, CopParser.Parse(source, path)));
             }
             catch (ParseException ex)
@@ -149,7 +162,8 @@ public static class Engine
                 parseErrors.Add(ex.Message);
                 diagnostics.Add(ex.ToDiagnostic());
             }
-            catch (Exception ex) when (ex is not OutOfMemoryException)
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or
+                System.Security.SecurityException)
             {
                 parseErrors.Add($"Error parsing {path}: {ex.Message}");
                 diagnostics.Add(new CopDiagnostic(
@@ -164,70 +178,120 @@ public static class Engine
 
     private static List<string> CollectFeedPaths(string scriptsDir, IEnumerable<ParsedModule> modules, string[]? additionalFeedPaths)
     {
-        var feedPaths = FindFeedPaths(scriptsDir);
-        var seen = new HashSet<string>(feedPaths, StringComparer.OrdinalIgnoreCase);
+        List<string> feedPaths = FindFeedPaths(scriptsDir);
+        HashSet<string> seen = new HashSet<string>(feedPaths, StringComparer.OrdinalIgnoreCase);
 
-        foreach (var module in modules)
+        foreach (ParsedModule module in modules)
         {
-            var scriptDir = Path.GetDirectoryName(module.FilePath) ?? scriptsDir;
-            foreach (var feedPath in ModuleLoader.ExtractFeedPaths(module.Source, scriptDir))
+            string scriptDir = Path.GetDirectoryName(module.FilePath) ?? scriptsDir;
+            foreach (string feedPath in ModuleLoader.ExtractFeedPaths(module.Source, scriptDir))
             {
                 if (seen.Add(feedPath))
+                {
                     feedPaths.Add(feedPath);
+                }
             }
         }
 
         if (additionalFeedPaths is not null)
         {
-            foreach (var feedPath in additionalFeedPaths)
+            foreach (string feedPath in additionalFeedPaths)
             {
-                var resolved = Path.GetFullPath(feedPath);
+                string resolved = Path.GetFullPath(feedPath);
                 if (Directory.Exists(resolved) && seen.Add(resolved))
+                {
                     feedPaths.Add(resolved);
+                }
             }
         }
 
         // Explicit and caller-supplied feeds must also precede the restored-package fallback.
-        var globalCache = Cop.Cli.Commands.PackageResolver.GlobalCachePath;
+        string globalCache = Cop.Cli.Commands.PackageResolver.GlobalCachePath;
         return feedPaths.OrderBy(path =>
             string.Equals(path, globalCache, StringComparison.OrdinalIgnoreCase)).ToList();
     }
 
-    private static EngineResult ExecuteModules(
+    private static void ResolveImportsRetainingCallerFunctions(
+        ModuleLoader loader, IEnumerable<ModuleNode> modules, Evaluator evaluator)
+    {
+        List<(string Name, CopValue Original, CopFunctionGroup Group)> callerFunctions = [];
+        foreach ((string name, CopValue value) in evaluator.GlobalEnvironment.AllBindings()
+            .ToArray())
+        {
+            CopFunctionGroup group;
+            if (value is CopFunction function)
+            {
+                group = new CopFunctionGroup(name);
+                group.Add(function);
+            }
+            else if (value is CopFunctionGroup existing)
+            {
+                group = existing;
+            }
+            else
+            {
+                continue;
+            }
+
+            // Retain imported overloads even if an enum later overwrites the global slot.
+            callerFunctions.Add((name, value, group));
+            evaluator.GlobalEnvironment.Define(name, group);
+        }
+
+        loader.ResolveImports(modules, evaluator);
+
+        // Imported enum and flag members must not replace caller-defined functions.
+        foreach ((string name, CopValue original, CopFunctionGroup group) in callerFunctions)
+        {
+            CopValue current = evaluator.GlobalEnvironment.Lookup(name);
+            if (current is CopString or CopInt || ReferenceEquals(current, group))
+            {
+                evaluator.GlobalEnvironment.Define(name,
+                    group.Functions.Count == 1 ? original : group);
+            }
+        }
+    }
+
+    private static async Task<EngineResult> ExecuteModulesAsync(
         List<ParsedModule> modules,
         List<string> feedPaths,
         string rootPath,
         List<string> parseErrors,
-        string? commandName,
-        string[]? programArgs,
-        string[]? commandFilter,
-        Action<string>? diagLog,
-        List<(string Dir, PackageMetadata Meta)>? topLevelProviderPackages,
-        bool assertMode = false,
-        Dictionary<string, List<ParsedModule>>? packageModuleMap = null,
-        ReviewOptions? reviewOptions = null)
+        EngineRunOptions options)
     {
-        using var statistics = new ExecutionStatistics();
-        var outputs = new List<PrintOutput>();
-        var warnings = new List<string>();
-        var errors = new List<string>();
-        var asserts = new List<AssertResult>();
-        var fileOutputLines = new Dictionary<string, List<string>>(StringComparer.Ordinal);
-        var setupSw = Stopwatch.StartNew();
+        string? commandName = options.CommandName;
+        string[]? programArgs = options.ProgramArgs?.ToArray();
+        string[]? commandFilter = options.CommandFilter?.ToArray();
+        Action<string>? diagLog = options.DiagnosticLog;
+        List<(string Dir, PackageMetadata Meta)>? topLevelProviderPackages =
+            options.ProviderPackages?.ToList();
+        bool assertMode = options.IsAssertMode;
+        Dictionary<string, List<ParsedModule>>? packageModuleMap = options.PackageModules;
+        ReviewOptions? reviewOptions = options.ReviewOptions;
+        options.CancellationToken.ThrowIfCancellationRequested();
+        using ExecutionStatistics statistics = new ExecutionStatistics();
+        List<PrintOutput> outputs = new List<PrintOutput>();
+        List<string> warnings = new List<string>();
+        List<string> errors = new List<string>();
+        List<AssertResult> asserts = new List<AssertResult>();
+        Dictionary<string, List<string>> fileOutputLines = new Dictionary<string, List<string>>(StringComparer.Ordinal);
+        Stopwatch setupSw = Stopwatch.StartNew();
 
         // Reset the provider-error sink for this run. Providers (which share this static) report a
         // file that failed to parse here; it is drained below and surfaced — providers must not hide
         // errors behind an incomplete or partial model.
         Cop.Core.ProviderErrors.Clear();
         Cop.Core.ProviderWarnings.Clear();
-        using var toolchainScope = new Cop.Core.ToolchainExecutionScope();
+        await using ToolchainExecutionScope toolchainScope = new ToolchainExecutionScope();
 
-        var bridge = CreateBridge(outputs, fileOutputLines, asserts, diagLog);
-        var evaluatedBindings = new System.Collections.Concurrent.ConcurrentDictionary<LetDecl, byte>(ReferenceEqualityComparer.Instance);
+        LanguageBridge bridge = CreateBridge(outputs, fileOutputLines, asserts, diagLog);
+        ConcurrentDictionary<LetDecl, byte> evaluatedBindings = new System.Collections.Concurrent.ConcurrentDictionary<LetDecl, byte>(ReferenceEqualityComparer.Instance);
         bridge.Evaluator.LetBindingEvaluated = declaration =>
         {
             if (evaluatedBindings.TryAdd(declaration, 0))
+            {
                 statistics.CommandCompleted();
+            }
         };
         bridge.Evaluator.EntryCommandCompleted = statistics.CommandCompleted;
         AnalysisContext context;
@@ -235,7 +299,9 @@ public static class Engine
         {
             context = new AnalysisContext(rootPath, reviewOptions ?? new ReviewOptions(), Console.Error.WriteLine);
             if (context.Options.Scope is "branch" or "pr" || context.Options.ReportScope == "changes")
-                _ = context.Changes;
+            {
+                _ = await context.GetChangesAsync(options.CancellationToken);
+            }
         }
         catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or IOException)
         {
@@ -245,28 +311,28 @@ public static class Engine
         // Per-item evaluator trace ([trace] lines) is a deep-debug firehose (millions of lines on
         // large repos). Enabled only at -ddd (CopDiagnostics.Trace); -d/-dd stay focused on [diag].
         bridge.Evaluator.TraceLog =
-            (diagLog is not null && Cop.Core.CopDiagnostics.Trace) ? diagLog : null;
+            (diagLog is not null && CopDiagnostics.IsTraceEnabled) ? diagLog : null;
 
         // Phase 1: Register functions, types, enums (NOT let bindings — those need provider data)
-        foreach (var module in modules)
+        foreach (ParsedModule module in modules)
         {
             try
             {
                 bridge.Evaluator.RegisterDeclarations(module.Module);
             }
-            catch (Exception ex) when (ex is not OutOfMemoryException)
+            catch (CopEvaluationException ex)
             {
                 errors.Add(ex.Message);
             }
         }
 
-        // Resolve imports (also phase-1 only: functions/types from imported packages)
-        var moduleLoader = new ModuleLoader(feedPaths);
+        ModuleLoader moduleLoader = new ModuleLoader(feedPaths);
         try
         {
-            moduleLoader.ResolveImports(modules.Select(m => m.Module), bridge.Evaluator);
+            ResolveImportsRetainingCallerFunctions(
+                moduleLoader, modules.Select(m => m.Module), bridge.Evaluator);
         }
-        catch (Exception ex) when (ex is not OutOfMemoryException)
+        catch (CopEvaluationException ex)
         {
             errors.Add(ex.Message);
         }
@@ -278,11 +344,12 @@ public static class Engine
         // Validate user modules (same checks as 'cop verify') before execution.
         // This catches issues like enum-vs-string comparisons that would silently fail at runtime.
         // Collect external symbols excluding user-declared names (those are already in the modules being bound).
-        var userDeclaredNames = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var module in modules)
-            foreach (var decl in module.Module.Declarations)
+        HashSet<string> userDeclaredNames = new HashSet<string>(StringComparer.Ordinal);
+        foreach (ParsedModule module in modules)
+        {
+            foreach (Declaration decl in module.Module.Declarations)
             {
-                var declName = decl switch
+                string? declName = decl switch
                 {
                     TypeDecl td => td.Name,
                     EnumDecl ed => ed.Name,
@@ -292,68 +359,83 @@ public static class Engine
                     CommandDecl cd => cd.Name,
                     _ => null
                 };
-                if (declName != null) userDeclaredNames.Add(declName);
+                if (declName != null)
+                {
+                    userDeclaredNames.Add(declName);
+                }
             }
-        var externalSymbols = Cop.Cli.Commands.VerifyCommand.CollectExternalSymbols(bridge.Evaluator.GlobalEnvironment, moduleLoader.LoadedModules, _builtinProviders.Select(p => p.Schema));
+        }
+
+        List<Symbol> externalSymbols = Cop.Cli.Commands.VerifyCommand.CollectExternalSymbols(bridge.Evaluator.GlobalEnvironment, moduleLoader.LoadedModules, s_builtinProviders.Select(p => p.Schema));
         externalSymbols.RemoveAll(s => userDeclaredNames.Contains(s.Name));
-        foreach (var module in modules)
+        foreach (ParsedModule module in modules)
         {
-            var binder = new Binder(module.FilePath, externalSymbols);
-            var bindingResult = binder.Bind(module.Module);
-            foreach (var diag in bindingResult.Diagnostics)
+            Binder binder = new Binder(module.FilePath, externalSymbols);
+            BindingResult bindingResult = binder.Bind(module.Module);
+            foreach (BindingDiagnostic diag in bindingResult.Diagnostics)
             {
                 if (diag.Severity == DiagnosticSeverity.Error)
+                {
                     errors.Add($"{diag.FilePath ?? module.FilePath}({diag.Line}): error: {diag.Message}");
+                }
                 else
+                {
                     // Binder warnings/info were silently dropped; surface them so they reach the user.
                     warnings.Add($"{diag.FilePath ?? module.FilePath}({diag.Line}): {(diag.Severity == DiagnosticSeverity.Warning ? "warning" : "info")}: {diag.Message}");
+                }
             }
         }
         if (errors.Count > 0)
+        {
             return new EngineResult(outputs, parseErrors, errors);
+        }
 
         // Build TypeRegistry for trait dispatch and computed property resolution
-        var typeRegistry = new TypeRegistry();
-        foreach (var bp in _builtinProviders)
+        TypeRegistry typeRegistry = new TypeRegistry();
+        foreach (BuiltinProvider bp in s_builtinProviders)
+        {
             ProviderLoader.RegisterSchema(bp.Instance, typeRegistry);
+        }
         // Only load types that define traits or conformances (have BaseType pointing to a trait, or computed properties)
-        var allTypeDecls = modules.SelectMany(m => m.Module.Declarations)
+        IEnumerable<TypeDecl> allTypeDecls = modules.SelectMany(m => m.Module.Declarations)
             .Concat(moduleLoader.LoadedModules.SelectMany(m => m.Declarations))
             .OfType<Cop.Lang.Ast.TypeDecl>();
-        var traitCandidates = allTypeDecls.Where(td =>
+        List<TypeDecl> traitCandidates = allTypeDecls.Where(td =>
             td.Properties.Any(p => p.ComputedExpr is not null || p.Type.Name.Contains("=>"))).ToList();
         // Load all trait-related types in one batch so conformance registration works
-        var traitTypeDefs = traitCandidates.Select(td =>
+        List<TypeDefinition> traitTypeDefs = traitCandidates.Select(td =>
         {
-            var props = td.Properties.Select(p =>
+            List<PropertyDefinition> props = td.Properties.Select(p =>
                 new PropertyDefinition(p.Name, p.Type.Name, p.IsOptional, p.Type.IsCollection, p.Line, p.ComputedExpr)).ToList();
             return new TypeDefinition(td.Name, td.BaseType, props, 0, td.IsExported, td.DocComment, td.Traits);
         }).ToList();
         typeRegistry.LoadTypeDefinitions(traitTypeDefs);
         bridge.Evaluator.TypeRegistry = typeRegistry;
 
-        var providerPackages = new List<(string Dir, PackageMetadata Meta)>();
-        var seenProviderDirs = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        List<(string Dir, PackageMetadata Meta)> providerPackages = new List<(string Dir, PackageMetadata Meta)>();
+        HashSet<string> seenProviderDirs = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         // Track provider entry points from explicit -p flags so import-detected duplicates are skipped
-        var explicitProviderEntries = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        HashSet<string> explicitProviderEntries = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         if (topLevelProviderPackages is not null)
         {
-            foreach (var providerPackage in topLevelProviderPackages)
+            foreach ((string Dir, PackageMetadata Meta) providerPackage in topLevelProviderPackages)
             {
                 if (seenProviderDirs.Add(providerPackage.Dir))
                 {
                     providerPackages.Add(providerPackage);
                     if (!string.IsNullOrEmpty(providerPackage.Meta.ProviderEntry))
+                    {
                         explicitProviderEntries.Add(providerPackage.Meta.ProviderEntry);
+                    }
                 }
             }
         }
 
-        foreach (var (dir, _) in moduleLoader.ProviderPackages)
+        foreach ((string? dir, string _) in moduleLoader.ProviderPackages)
         {
             diagLog?.Invoke($"[diag] Discovered provider package: {dir}");
-            var metadata = PackageMetadata.TryLoadFromDirectory(dir);
+            PackageMetadata? metadata = PackageMetadata.LoadFromDirectoryOrDefault(dir);
             if (metadata is not null && metadata.IsProvider && seenProviderDirs.Add(dir))
             {
                 // Skip if same provider entry point was already loaded from an explicit -p flag
@@ -366,22 +448,34 @@ public static class Engine
             }
         }
 
-        var query = new ProviderQuery
+        ProviderQuery query = new ProviderQuery
         {
             RootPath = rootPath,
             ExcludedDirectories = ExcludedDirectoryNames
         };
 
-        var queryService = new ProviderQueryService(rootPath, ExcludedDirectoryNames, diagLog);
+        await using ProviderQueryService queryService =
+            new ProviderQueryService(rootPath, ExcludedDirectoryNames, diagLog);
 
-        foreach (var (dir, meta) in providerPackages)
+        foreach ((string? dir, PackageMetadata? meta) in providerPackages)
         {
-            var loaded = ProviderLoader.Load(dir, meta, errors, out _, out _);
+            (ProviderLoader.LoadedProvider? Data,
+                List<ProviderLoader.LoadedStreamProvider> Sources,
+                List<ProviderLoader.LoadedSinkProvider> Sinks) package = await ProviderLoader.LoadAsync(
+                dir, meta, errors, options.CancellationToken);
+            ProviderLoader.LoadedProvider? loaded = package.Data;
+            if (loaded is not null)
+            {
+                queryService.RegisterOwnedProvider(loaded);
+            }
+            RegisterStreamingProviders(
+                package.Sources, package.Sinks, typeRegistry, queryService);
             diagLog?.Invoke($"[diag] Loading provider from {dir}: {(loaded is null ? "FAILED" : loaded.PackageName)}");
             if (loaded is null)
+            {
                 continue;
+            }
 
-            queryService.RegisterProvider(loaded.PackageName, loaded.Instance, loaded.Schema);
             // Register the provider's schema types (and accessors) into the TypeRegistry so
             // trait/subtype resolution works for provider-declared types — e.g. so a
             // language-specific subtype like CSharpType is known to be a subtype of Type.
@@ -393,7 +487,7 @@ public static class Engine
             RegisterProviderFunctions(bridge, loaded.PackageName, loaded.Instance, context);
         }
 
-        foreach (var builtinProvider in _builtinProviders)
+        foreach (BuiltinProvider builtinProvider in s_builtinProviders)
         {
             queryService.RegisterProvider(builtinProvider.Name, builtinProvider.Instance, builtinProvider.Schema);
             // Lazy: a built-in provider (e.g. filesystem / markdown parsing) is only
@@ -404,19 +498,23 @@ public static class Engine
         }
 
         // Re-register provider intrinsic with query service access (same pattern as print/save/assert)
-        bridge.RegisterFunction("provider", (args, env) =>
+        bridge.RegisterFunction("provider", async (args, env, cancellationToken) =>
         {
-            if (args.Count == 0) return CopNull.Instance;
-            var providerName = args[0].Display();
+            if (args.Count == 0)
+            {
+                return CopNull.Instance;
+            }
+
+            string providerName = await args[0].DisplayAsync(cancellationToken);
 
             if (args.Count > 1 && args[1] is not CopNull)
             {
-                var options = args[1].Display();
-                var providerQuery = new ProviderQuery
+                string path = await args[1].DisplayAsync(cancellationToken);
+                ProviderQuery providerQuery = new ProviderQuery
                 {
-                    RootPath = Path.IsPathRooted(options)
-                        ? options
-                        : Path.GetFullPath(Path.Combine(rootPath, options)),
+                    RootPath = Path.IsPathRooted(path)
+                        ? path
+                        : Path.GetFullPath(Path.Combine(rootPath, path)),
                     ExcludedDirectories = ExcludedDirectoryNames
                 };
                 // Return a queryable collection that defers provider execution until materialization.
@@ -430,15 +528,18 @@ public static class Engine
         // Register Program with Providers list — only explicit -p providers, not import-detected ones.
         // Import-detected providers are loaded for provider('name') intrinsic access,
         // but should NOT appear in Program.Providers (the user didn't request them for analysis).
-        var providerProxies = (topLevelProviderPackages ?? [])
-            .Select(pp => PackageMetadata.TryLoadFromDirectory(pp.Dir)?.Name ?? Path.GetFileName(pp.Dir))
+        List<CopValue> providerProxies = (topLevelProviderPackages ?? [])
+            .Select(pp => PackageMetadata.LoadFromDirectoryOrDefault(pp.Dir)?.Name ??
+                Path.GetFileName(pp.Dir))
             .Where(name => bridge.Evaluator.GlobalEnvironment.TryLookup(name, out _))
             .Select(name => (CopValue)new CopProviderProxy(name, bridge.Evaluator.GlobalEnvironment))
             .ToList();
         RegisterProgram(bridge, programArgs, providerProxies);
 
         if (errors.Count > 0)
+        {
             return new EngineResult(outputs, parseErrors, errors, Warnings: warnings);
+        }
 
         // Phase 2: Evaluate let bindings (now that provider data is available)
         // First: deferred let bindings from imported packages
@@ -448,21 +549,24 @@ public static class Engine
         // Multiple sibling modules may define `let X = X(...)` — the first module replaces
         // the function with its result, so subsequent modules need the original callable
         // restored temporarily when evaluating their RHS.
-        var originalCallables = new Dictionary<string, CopValue>(StringComparer.Ordinal);
-        foreach (var (name, value) in bridge.Evaluator.GlobalEnvironment.AllBindings())
+        Dictionary<string, CopValue> originalCallables = new Dictionary<string, CopValue>(StringComparer.Ordinal);
+        foreach ((string? name, CopValue? value) in bridge.Evaluator.GlobalEnvironment.AllBindings())
         {
             if (value is ICopCallable)
+            {
                 originalCallables[name] = value;
+            }
         }
 
         // Then: user module let bindings
-        foreach (var module in modules)
+        foreach (ParsedModule module in modules)
         {
             try
             {
-                bridge.Evaluator.EvalLetBindings(module.Module, originalCallables);
+                await bridge.Evaluator.EvalLetBindingsAsync(
+                    module.Module, originalCallables, options.CancellationToken);
             }
-            catch (Exception ex) when (ex is not OutOfMemoryException)
+            catch (CopEvaluationException ex)
             {
                 errors.Add(ex.Message);
                 diagLog?.Invoke($"[diag] Let initialization exception in '{module.FilePath}': {ex}");
@@ -470,25 +574,27 @@ public static class Engine
         }
 
         if (errors.Count > 0)
+        {
             return new EngineResult(outputs, parseErrors, errors, Warnings: warnings);
+        }
 
         // When multiple top-level packages are specified, register each package's 'command main'
         // under a package-qualified alias so all can be run in sequence.
         // Note: the parser converts `command foo` to FunctionDecl with name uppercased to "FOO".
         if (packageModuleMap is { Count: > 1 })
         {
-            foreach (var (pkgName, pkgModules) in packageModuleMap)
+            foreach ((string? pkgName, List<ParsedModule>? pkgModules) in packageModuleMap)
             {
                 bool found = false;
-                foreach (var mod in pkgModules)
+                foreach (ParsedModule mod in pkgModules)
                 {
-                    var mainFunc = mod.Module.Declarations
+                    FunctionDecl? mainFunc = mod.Module.Declarations
                         .OfType<FunctionDecl>()
                         .FirstOrDefault(fd => string.Equals(fd.Name, "MAIN", StringComparison.OrdinalIgnoreCase));
                     if (mainFunc is not null)
                     {
-                        var qualifiedName = NormalizeCommandName(pkgName);
-                        var cmdFunc = new CopFunction(mainFunc, bridge.Evaluator.GlobalEnvironment);
+                        string qualifiedName = NormalizeCommandName(pkgName);
+                        CopFunction cmdFunc = new CopFunction(mainFunc, bridge.Evaluator.GlobalEnvironment);
                         bridge.Evaluator.GlobalEnvironment.Define(qualifiedName, cmdFunc);
                         diagLog?.Invoke($"[diag] Registered package command '{qualifiedName}' from {pkgName}");
                         found = true;
@@ -496,12 +602,17 @@ public static class Engine
                     }
                 }
                 if (!found)
+                {
                     diagLog?.Invoke($"[diag] No 'command main' found in package '{pkgName}'");
+                }
             }
         }
 
-        if (ProfileRules)
-            ProfileAllRules(bridge, setupSw.ElapsedMilliseconds);
+        if (IsRuleProfilingEnabled)
+        {
+            await ProfileAllRulesAsync(
+                bridge, setupSw.ElapsedMilliseconds, options.CancellationToken);
+        }
 
         List<string> commandsToRun;
         if (assertMode)
@@ -532,13 +643,14 @@ public static class Engine
         }
 
         int? exitCode = null;
-        foreach (var command in commandsToRun)
+        foreach (string command in commandsToRun)
         {
+            options.CancellationToken.ThrowIfCancellationRequested();
             try
             {
                 diagLog?.Invoke($"[diag] Running command '{command}'");
-                var result = bridge.RunCommand(command);
-                diagLog?.Invoke($"[diag] Command '{command}' returned: {result?.GetType().Name} = {result?.Display()?.Substring(0, Math.Min(result?.Display()?.Length ?? 0, 100))}");
+                CopValue? result = await bridge.RunCommandAsync(command, options.CancellationToken);
+                diagLog?.Invoke($"[diag] Command '{command}' returned: {result?.GetType().Name}");
 
                 // If command returns an integer, use it as the exit code
                 if (result is CopInt exitInt)
@@ -547,7 +659,8 @@ public static class Engine
                 }
                 else
                 {
-                    var routedExitCode = TryRouteViolationsThroughCheck(bridge, result);
+                    int? routedExitCode = await TryRouteViolationsThroughCheckAsync(
+                        bridge, result, options.CancellationToken);
                     if (routedExitCode is not null)
                     {
                         // A raw [Violation] result was routed through CHECK; use CHECK's count as the
@@ -558,19 +671,24 @@ public static class Engine
                     {
                         // If a command returns a collection (e.g., let-binding used as a named rule),
                         // iterate items and produce output for each.
-                        CollectCollectionOutputs(result, outputs);
+                        await CollectCollectionOutputsAsync(
+                            result, outputs, options.CancellationToken);
                     }
                 }
                 diagLog?.Invoke($"[diag] After collect, outputs count = {outputs.Count}");
             }
-            catch (Exception ex) when (ex is not OutOfMemoryException)
+            catch (Exception ex) when (ex is CopEvaluationException or IOException or
+                UnauthorizedAccessException or System.Security.SecurityException or
+                HttpRequestException or TimeoutException or ArgumentException or
+                InvalidOperationException or NotSupportedException or FormatException or
+                System.Text.Json.JsonException)
             {
                 errors.Add($"Command '{command}' failed: {ex.Message}");
                 diagLog?.Invoke($"[diag] Command exception: {ex}");
             }
         }
 
-        try { context.AssertUnchanged(); }
+        try { await context.AssertUnchangedAsync(options.CancellationToken); }
         catch (Exception ex) when (ex is InvalidOperationException or IOException)
         {
             errors.Add($"Review snapshot: {ex.Message}");
@@ -578,18 +696,24 @@ public static class Engine
 
         // Check for "Command not found" errors and enhance with exported member listing
         errors.AddRange(bridge.Errors);
-        var notFoundErrors = errors.Where(e => e.Contains("not found") && e.Contains("Command")).ToList();
+        List<string> notFoundErrors = errors.Where(e => e.Contains("not found") && e.Contains("Command")).ToList();
         if (notFoundErrors.Count > 0)
         {
-            var exportedMembers = GetExportedMembers(modules);
+            List<string> exportedMembers = GetExportedMembers(modules);
             if (exportedMembers.Count > 0)
             {
-                foreach (var nfe in notFoundErrors)
+                foreach (string nfe in notFoundErrors)
+                {
                     errors.Remove(nfe);
-                var sb = new System.Text.StringBuilder();
+                }
+
+                StringBuilder sb = new System.Text.StringBuilder();
                 sb.AppendLine("Package has no 'command main'. Exported functions:");
-                foreach (var member in exportedMembers)
+                foreach (string member in exportedMembers)
+                {
                     sb.AppendLine($"  {member}");
+                }
+
                 errors.Add(sb.ToString().TrimEnd());
             }
         }
@@ -600,10 +724,10 @@ public static class Engine
         }
 
         // Collect structured diagnostics from module loader
-        var diagnostics = new List<CopDiagnostic>();
+        List<CopDiagnostic> diagnostics = new List<CopDiagnostic>();
         diagnostics.AddRange(moduleLoader.Diagnostics);
 
-        var fileOutputs = fileOutputLines
+        List<FileOutput> fileOutputs = fileOutputLines
             .Select(kv => new FileOutput(kv.Key, string.Join(System.Environment.NewLine, kv.Value)))
             .ToList();
 
@@ -618,13 +742,15 @@ public static class Engine
 
         // Drain only after commands and collection output have forced deferred provider work.
         warnings.AddRange(Cop.Core.ProviderWarnings.Drain());
-        var providerErrors = Cop.Core.ProviderErrors.Drain();
+        IReadOnlyList<string> providerErrors = Cop.Core.ProviderErrors.Drain();
         if (providerErrors.Count > 0)
         {
             warnings.Add($"Error: {providerErrors.Count} source analysis error(s) — the analysis model may be incomplete:");
             warnings.AddRange(providerErrors);
             if (exitCode.GetValueOrDefault() == 0)
+            {
                 exitCode = 1;
+            }
         }
 
         return new EngineResult(outputs, parseErrors, errors, resultCommandName, fileOutputs, warnings, asserts, diagnostics, exitCode)
@@ -640,24 +766,34 @@ public static class Engine
     /// </summary>
     private static void EnrichRuntimeErrorsWithSource(List<string> errors, List<ParsedModule> modules)
     {
-        if (errors.Count == 0 || modules.Count != 1) return;
+        if (errors.Count == 0 || modules.Count != 1)
+        {
+            return;
+        }
 
-        var file = modules[0].FilePath;
-        if (string.IsNullOrEmpty(file)) return;
+        string file = modules[0].FilePath;
+        if (string.IsNullOrEmpty(file))
+        {
+            return;
+        }
 
-        string source;
-        try { source = File.ReadAllText(file); }
-        catch { return; }
-
-        var rx = new System.Text.RegularExpressions.Regex(
-            @"^line (\d+): (.+)$", System.Text.RegularExpressions.RegexOptions.Singleline);
+        string source = modules[0].Source;
         for (int i = 0; i < errors.Count; i++)
         {
-            var m = rx.Match(errors[i]);
-            if (!m.Success || !int.TryParse(m.Groups[1].Value, out int line) || line < 1) continue;
+            string error = errors[i];
+            int separator = error.IndexOf(": ", StringComparison.Ordinal);
+            if (!error.StartsWith("line ", StringComparison.Ordinal) ||
+                separator <= 5 || separator + 2 >= error.Length ||
+                !int.TryParse(error.AsSpan(5, separator - 5),
+                    System.Globalization.NumberStyles.None,
+                    System.Globalization.CultureInfo.InvariantCulture, out int line) ||
+                line < 1)
+            {
+                continue;
+            }
 
-            var message = m.Groups[2].Value;
-            var snippet = ParseException.GetSourceLine(source, line);
+            string message = error[(separator + 2)..];
+            string? snippet = ParseException.GetSourceLine(source, line);
             errors[i] = snippet is not null
                 ? $"{file}({line}): error: {message}\n  {line} | {snippet}"
                 : $"{file}({line}): error: {message}";
@@ -671,20 +807,20 @@ public static class Engine
     /// not charged the cost of the leaves they reference (thunks memoize once forced).
     /// AI rules are skipped because forcing them would make a network call.
     /// </summary>
-    private static void ProfileAllRules(LanguageBridge bridge, long setupMs)
+    private static async ValueTask ProfileAllRulesAsync(
+        LanguageBridge bridge, long setupMs, CancellationToken cancellationToken)
     {
-        var evaluator = bridge.Evaluator;
-        var savedTrace = evaluator.TraceLog;
-        evaluator.TraceLog = null; // exclude trace logging overhead from measurements
+        Evaluator evaluator = bridge.Evaluator;
+        Action<string>? savedTrace = evaluator.TraceLog;
 
         // AI rules make network calls (ai.judge) — never force them while profiling.
-        var skip = new HashSet<string>(StringComparer.Ordinal)
+        HashSet<string> skip = new HashSet<string>(StringComparer.Ordinal)
         {
             "all-ai-violations",
             "core-purity-violations",
         };
 
-        var thunks = evaluator.GlobalEnvironment.AllBindings()
+        List<(string Name, CopThunk Thunk)> thunks = evaluator.GlobalEnvironment.AllBindings()
             .Where(b => b.Value is CopThunk && !skip.Contains(b.Key))
             .Select(b => (Name: b.Key, Thunk: (CopThunk)b.Value))
             // Leaves first (rules), aggregates ("all-*") last.
@@ -692,49 +828,67 @@ public static class Engine
             .ThenBy(t => t.Name, StringComparer.Ordinal)
             .ToList();
 
-        var results = new List<(string Name, double Ms, int Count, string? Error)>();
-        var sw = new Stopwatch();
-        foreach (var (name, thunk) in thunks)
+        List<(string Name, double Ms, int Count, string? Error)> results = new List<(string Name, double Ms, int Count, string? Error)>();
+        Stopwatch sw = new Stopwatch();
+        try
         {
-            sw.Restart();
-            try
+            evaluator.TraceLog = null;
+            foreach ((string? name, CopThunk? thunk) in thunks)
             {
-                var count = CountForced(thunk.Force());
-                sw.Stop();
-                results.Add((name, sw.Elapsed.TotalMilliseconds, count, null));
-            }
-            catch (Exception ex) when (ex is not OutOfMemoryException)
-            {
-                sw.Stop();
-                results.Add((name, sw.Elapsed.TotalMilliseconds, -1, ex.Message));
+                sw.Restart();
+                try
+                {
+                    int count = await CountForcedAsync(
+                        await thunk.ForceAsync(cancellationToken), cancellationToken);
+                    sw.Stop();
+                    results.Add((name, sw.Elapsed.TotalMilliseconds, count, null));
+                }
+                catch (Exception ex) when (ex is CopEvaluationException or IOException or
+                    UnauthorizedAccessException or System.Security.SecurityException or
+                    HttpRequestException or TimeoutException or ArgumentException or
+                    InvalidOperationException or NotSupportedException or FormatException or
+                    System.Text.Json.JsonException)
+                {
+                    sw.Stop();
+                    results.Add((name, sw.Elapsed.TotalMilliseconds, -1, ex.Message));
+                }
             }
         }
+        finally
+        {
+            evaluator.TraceLog = savedTrace;
+        }
 
-        evaluator.TraceLog = savedTrace;
-
-        var ruleTotal = results.Sum(r => r.Ms);
+        double ruleTotal = results.Sum(r => r.Ms);
         Console.Error.WriteLine();
         Console.Error.WriteLine($"[profile] setup (parse + load providers): {setupMs} ms");
         Console.Error.WriteLine($"[profile] rules total: {ruleTotal:F1} ms across {results.Count} rules");
         Console.Error.WriteLine($"[profile] {"ms",8}  {"items",6}  rule");
-        foreach (var r in results.OrderByDescending(r => r.Ms).ThenBy(r => r.Name, StringComparer.Ordinal))
+        foreach ((string Name, double Ms, int Count, string? Error) r in results.OrderByDescending(r => r.Ms).ThenBy(r => r.Name, StringComparer.Ordinal))
         {
-            var items = r.Count < 0 ? "ERR" : r.Count.ToString();
-            var err = r.Error is null ? "" : "  -- " + r.Error;
+            string items = r.Count < 0 ? "ERR" : r.Count.ToString();
+            string err = r.Error is null ? "" : "  -- " + r.Error;
             Console.Error.WriteLine($"[profile] {r.Ms,8:F2}  {items,6}  {r.Name}{err}");
         }
         Console.Error.WriteLine();
     }
 
     /// <summary>Forces and counts the items of a (possibly lazy) collection value.</summary>
-    private static int CountForced(CopValue v)
+    private static async ValueTask<int> CountForcedAsync(
+        CopValue v, CancellationToken cancellationToken)
     {
-        if (v is CopThunk t) v = t.Force();
+        while (v is CopThunk t)
+        {
+            v = await t.ForceAsync(cancellationToken);
+        }
+
         return v switch
         {
             CopList l => l.Items.Count,
-            CopLazyCollection lz => lz.Enumerate().Count(),
-            CopQueryable q => q.Enumerate().Count(),
+            CopLazyCollection lz => await lz.EnumerateAsync(cancellationToken)
+                .CountAsync(cancellationToken),
+            CopQueryable q => await q.EnumerateAsync(cancellationToken)
+                .CountAsync(cancellationToken),
             _ => 0,
         };
     }
@@ -745,31 +899,35 @@ public static class Engine
         List<AssertResult> asserts,
         Action<string>? diagLog)
     {
-        var ffi = new ForeignFunctionRegistry();
+        ForeignFunctionRegistry ffi = new ForeignFunctionRegistry();
         StandardLibrary.Register(ffi);
 
-        ffi.Register("print", (args, env) =>
+        ffi.RegisterAsync("print", async (args, env, cancellationToken) =>
         {
-            var text = args.Count > 0 ? args[0].Display() : string.Empty;
+            string text = args.Count > 0
+                ? await args[0].DisplayAsync(cancellationToken) : string.Empty;
             outputs.Add(CreatePrintOutput(text));
             return CopNull.Instance;
         });
 
-        ffi.Register("debug", (args, env) =>
+        ffi.RegisterAsync("debug", async (args, env, cancellationToken) =>
         {
-            var text = args.Count > 0 ? args[0].Display() : string.Empty;
+            string text = args.Count > 0
+                ? await args[0].DisplayAsync(cancellationToken) : string.Empty;
             diagLog?.Invoke($"[debug] {text}");
             return CopNull.Instance;
         });
 
-        ffi.Register("save", (args, env) =>
+        ffi.RegisterAsync("save", async (args, env, cancellationToken) =>
         {
             if (args.Count < 2)
+            {
                 return CopNull.Instance;
+            }
 
-            var path = args[0].Display();
-            var content = args[1].Display();
-            if (!fileOutputLines.TryGetValue(path, out var lines))
+            string path = await args[0].DisplayAsync(cancellationToken);
+            string content = await args[1].DisplayAsync(cancellationToken);
+            if (!fileOutputLines.TryGetValue(path, out List<string>? lines))
             {
                 lines = [];
                 fileOutputLines[path] = lines;
@@ -779,10 +937,12 @@ public static class Engine
             return CopNull.Instance;
         });
 
-        ffi.Register("assert", (args, env) =>
+        ffi.RegisterAsync("assert", async (args, env, cancellationToken) =>
         {
-            var passed = args.Count == 0 || args[0].IsTruthy;
-            var description = args.Count > 1 ? args[1].Display() : "assert";
+            bool passed = args.Count == 0 ||
+                await args[0].IsTruthyAsync(cancellationToken);
+            string description = args.Count > 1
+                ? await args[1].DisplayAsync(cancellationToken) : "assert";
             asserts.Add(new AssertResult(description, passed, passed ? string.Empty : $"assert failed: {description}", 0));
             return CopNull.Instance;
         });
@@ -790,70 +950,109 @@ public static class Engine
         return new LanguageBridge(ffi);
     }
 
-    // Invokes a provider function (from ObjectProvider.GetFunctions): marshals cop args → CLR,
-    // synchronously awaits the Task, and marshals the CLR result → CopValue.
+    // Marshals only the values passed to a provider, preserving lazy CLR semantic fields.
     private static void RegisterProviderFunctions(LanguageBridge bridge, string name, DataProvider provider, AnalysisContext context)
     {
-        var functions = provider.GetFunctions(context);
-        if (functions is null) return;
-        foreach (var (functionName, function) in functions)
+        Dictionary<string, Func<List<object?>, CancellationToken, ValueTask<object?>>>?
+            functions = provider.GetFunctions(context);
+        if (functions is null)
         {
-            var qualifiedName = $"{name}.{functionName}";
+            return;
+        }
+
+        foreach ((string functionName, Func<List<object?>, CancellationToken,
+            ValueTask<object?>> function) in functions)
+        {
+            string qualifiedName = $"{name}.{functionName}";
             bridge.Evaluator.GlobalEnvironment.Define(qualifiedName,
-                new CopExternalFunction(qualifiedName, (args, _) => InvokeProviderFunction(function, args)));
+                new CopExternalFunction(qualifiedName, (args, _, cancellationToken) =>
+                    InvokeProviderFunctionAsync(function, args, cancellationToken)));
         }
     }
 
-    private static CopValue InvokeProviderFunction(Func<List<object?>, Task<object?>> fn, IReadOnlyList<CopValue> args)
+    private static async ValueTask<CopValue> InvokeProviderFunctionAsync(
+        Func<List<object?>, CancellationToken, ValueTask<object?>> function,
+        IReadOnlyList<CopValue> args, CancellationToken cancellationToken)
     {
-        var clrArgs = args.Select(CopToClr).ToList();
-        var result = fn(clrArgs).GetAwaiter().GetResult();
+        List<object?> clrArgs = new(args.Count);
+        foreach (CopValue argument in args)
+        {
+            clrArgs.Add(await CopToClrAsync(argument, cancellationToken));
+        }
+        object? result = await function(clrArgs, cancellationToken);
         return DataObjectAdapter.Marshal(result);
     }
 
     // Converts a CopValue to a plain CLR value for passing into a provider function.
-    private static object? CopToClr(CopValue value)
+    private static async ValueTask<object?> CopToClrAsync(
+        CopValue value, CancellationToken cancellationToken)
     {
-        while (value is CopThunk thunk) value = thunk.Force();
+        cancellationToken.ThrowIfCancellationRequested();
+        while (value is CopThunk thunk)
+        {
+            value = await thunk.ForceAsync(cancellationToken);
+        }
+
         return value switch
         {
             CopNull => null,
             CopString s => s.Value,
             CopInt i => i.Value,
             CopNumber n => n.Value,
-            CopBool b => b.Value,
-            CopList l => l.Items.Select(CopToClr).ToList(),
-            CopLazyCollection lazy => lazy.Enumerate().Select(CopToClr).ToList(),
-            CopQueryable q => q.Enumerate().Select(CopToClr).ToList(),
-            CopProviderProxy { Data: { } data } => CopObjectToDataObject(data),
+            CopBool b => b.IsTrue,
+            CopList l => await CopCollectionToClrAsync(
+                l.Items.ToAsyncEnumerable(), cancellationToken),
+            CopLazyCollection lazy => await CopCollectionToClrAsync(
+                lazy.EnumerateAsync(cancellationToken), cancellationToken),
+            CopQueryable q => await CopCollectionToClrAsync(
+                q.EnumerateAsync(cancellationToken), cancellationToken),
+            CopProviderProxy { Data: { } data } =>
+                await CopObjectToDataObjectAsync(data, cancellationToken),
             CopDynamicObject d => d.Underlying,
-            CopObject o => CopObjectToDataObject(o),
-            _ => value.Display()
+            CopObject o => await CopObjectToDataObjectAsync(o, cancellationToken),
+            _ => await value.DisplayAsync(cancellationToken)
         };
     }
 
-    private static DataObject CopObjectToDataObject(CopObject obj)
+    private static async ValueTask<List<object?>> CopCollectionToClrAsync(
+        IAsyncEnumerable<CopValue> values, CancellationToken cancellationToken)
     {
-        var data = new DataObject(obj.TypeName ?? "Object");
-        foreach (var (key, val) in obj.Fields)
-            data.Set(key, CopToClr(val));
+        List<object?> items = [];
+        await foreach (CopValue value in values.WithCancellation(cancellationToken))
+        {
+            items.Add(await CopToClrAsync(value, cancellationToken));
+        }
+        return items;
+    }
+
+    private static async ValueTask<DataObject> CopObjectToDataObjectAsync(
+        CopObject obj, CancellationToken cancellationToken)
+    {
+        DataObject data = new DataObject(obj.TypeName ?? "Object");
+        foreach ((string? key, CopValue? val) in obj.Fields)
+        {
+            data.Set(key, await CopToClrAsync(val, cancellationToken));
+        }
+
         return data;
     }
 
     private static void RegisterProgram(LanguageBridge bridge, string[]? programArgs, List<CopValue>? providers = null)
     {
-        var args = (programArgs ?? [])
+        List<CopValue> args = (programArgs ?? [])
             .Select(arg => (CopValue)new CopString(arg))
             .ToList();
-        var programObj = new CopObject(new Dictionary<string, CopValue>(StringComparer.Ordinal)
+        CopObject programObj = new CopObject(new Dictionary<string, CopValue>(StringComparer.Ordinal)
         {
             ["Args"] = new CopList(args),
             ["Providers"] = new CopList(providers ?? [])
-        }) { TypeName = "Program" };
+        })
+        { TypeName = "Program" };
 
         // Register as both a value (Program) and FFI function (program())
         bridge.RegisterValue("Program", programObj);
-        bridge.RegisterFunction("program", (_, _) => programObj, 0);
+        bridge.RegisterFunction("program", (_, _, _) =>
+            ValueTask.FromResult<CopValue>(programObj), 0);
     }
 
     /// <summary>
@@ -865,12 +1064,20 @@ public static class Engine
         Cop.Lang.Interpreter.Environment env, string providerName,
         ProviderSchema schema, ProviderQuery query, ProviderQueryService service)
     {
-        var value = service.CreateValue(providerName, query);
+        CopValue value = service.CreateValue(providerName, query);
         if (value is CopQueryable collection && schema.Collections.Count == 1)
+        {
             env.Define($"{providerName}.{schema.Collections[0].Name}", collection);
+        }
+
         if (value is CopObject obj)
-            foreach (var (name, field) in obj.Fields)
+        {
+            foreach ((string? name, CopValue? field) in obj.Fields)
+            {
                 env.Define($"{providerName}.{name}", field);
+            }
+        }
+
         env.Define(providerName, new CopProviderProxy(providerName, env, value as CopObject));
     }
 
@@ -884,31 +1091,56 @@ public static class Engine
     /// Returns the exit code (CHECK's violation count) when it routed the result, or null when it
     /// did not (caller should fall back to the raw-dump path).
     /// </summary>
-    private static int? TryRouteViolationsThroughCheck(LanguageBridge bridge, CopValue? result)
+    private static async ValueTask<int?> TryRouteViolationsThroughCheckAsync(
+        LanguageBridge bridge, CopValue? result, CancellationToken cancellationToken)
     {
         if (result is null)
+        {
             return null;
+        }
+
         if (result is CopThunk thunk)
-            result = thunk.Force();
+        {
+            result = await thunk.ForceAsync(cancellationToken);
+        }
 
         List<CopValue>? items = result switch
         {
             CopList list => list.Items.ToList(),
-            CopLazyCollection lazy => lazy.Enumerate().ToList(),
-            CopQueryable q => q.Enumerate().ToList(),
+            CopLazyCollection lazy => await lazy.EnumerateAsync(cancellationToken)
+                .ToListAsync(cancellationToken),
+            CopQueryable q => await q.EnumerateAsync(cancellationToken)
+                .ToListAsync(cancellationToken),
             _ => null
         };
 
         // Only route non-empty collections whose every item is a Violation. Empty lists fall
         // through — they produce no output and a clean exit either way.
-        if (items is null || items.Count == 0 || !items.All(IsViolation))
-            return null;
-
-        var env = bridge.Evaluator.GlobalEnvironment;
-        if (env.TryLookup(CheckCommandName, out var check) && check is ICopCallable callable)
+        if (items is null || items.Count == 0)
         {
-            var checkResult = callable.Invoke([new CopList(items)], bridge.Evaluator, env);
-            if (checkResult is CopThunk t) checkResult = t.Force();
+            return null;
+        }
+        for (int i = 0; i < items.Count; i++)
+        {
+            while (items[i] is CopThunk item)
+            {
+                items[i] = await item.ForceAsync(cancellationToken);
+            }
+            if (!IsViolation(items[i]))
+            {
+                return null;
+            }
+        }
+
+        Lang.Interpreter.Environment env = bridge.Evaluator.GlobalEnvironment;
+        if (env.TryLookup(CheckCommandName, out CopValue? check) && check is ICopCallable callable)
+        {
+            CopValue checkResult = await callable.InvokeAsync(
+                [new CopList(items)], bridge.Evaluator, env, cancellationToken);
+            if (checkResult is CopThunk t)
+            {
+                checkResult = await t.ForceAsync(cancellationToken);
+            }
             // CHECK returns the violation count; fall back to the item count if it returns anything
             // else, so a non-empty violation list always yields a non-zero (failing) exit code.
             return checkResult is CopInt count ? count.Value : items.Count;
@@ -920,14 +1152,12 @@ public static class Engine
     /// <summary>
     /// The package-defined command the engine routes a <c>[Violation]</c> result through so it is
     /// formatted and exit-coded consistently. This is the engine's one (narrow, documented) coupling
-    /// to the violation/check domain; see <see cref="TryRouteViolationsThroughCheck"/>.
+    /// to the violation/check domain; see <see cref="TryRouteViolationsThroughCheckAsync"/>.
     /// </summary>
     private const string CheckCommandName = "CHECK";
 
     private static bool IsViolation(CopValue value)
     {
-        if (value is CopThunk thunk)
-            value = thunk.Force();
         return value switch
         {
             CopObject obj => string.Equals(obj.TypeName, "Violation", StringComparison.Ordinal),
@@ -936,33 +1166,31 @@ public static class Engine
         };
     }
 
-    private static void CollectCollectionOutputs(CopValue? result, List<PrintOutput> outputs)
+    private static async ValueTask CollectCollectionOutputsAsync(
+        CopValue? result, List<PrintOutput> outputs, CancellationToken cancellationToken)
     {
-        try
+        while (result is CopThunk thunk)
         {
-            // Force thunks before inspecting the result
-            if (result is CopThunk thunk)
-                result = thunk.Force();
-
-            IEnumerable<CopValue>? items = result switch
-            {
-                CopList list when list.Items.Count > 0 => list.Items,
-                CopLazyCollection lazy => lazy.Enumerate(),
-                _ => null
-            };
-
-            if (items is null) return;
-
-            foreach (var item in items)
-            {
-                var text = item.Display();
-                if (!string.IsNullOrEmpty(text))
-                    outputs.Add(CreatePrintOutput(text));
-            }
+            result = await thunk.ForceAsync(cancellationToken);
         }
-        catch (Exception ex)
+        IAsyncEnumerable<CopValue>? items = result switch
         {
-            outputs.Add(new PrintOutput($"[ERROR in CollectCollectionOutputs] {ex.GetType().Name}: {ex.Message}"));
+            CopList list => list.Items.ToAsyncEnumerable(),
+            CopLazyCollection lazy => lazy.EnumerateAsync(cancellationToken),
+            CopQueryable query => query.EnumerateAsync(cancellationToken),
+            _ => null
+        };
+        if (items is null)
+        {
+            return;
+        }
+        await foreach (CopValue item in items.WithCancellation(cancellationToken))
+        {
+            string text = await item.DisplayAsync(cancellationToken);
+            if (!string.IsNullOrEmpty(text))
+            {
+                outputs.Add(CreatePrintOutput(text));
+            }
         }
     }
 
@@ -971,21 +1199,21 @@ public static class Engine
 
     private static List<string> GetExportedMembers(List<ParsedModule> modules)
     {
-        var members = new List<string>();
-        foreach (var mod in modules)
+        List<string> members = new List<string>();
+        foreach (ParsedModule mod in modules)
         {
-            foreach (var decl in mod.Module.Declarations)
+            foreach (Declaration decl in mod.Module.Declarations)
             {
                 if (decl is FunctionDecl fd && fd.IsExported && !string.Equals(fd.Name, "MAIN", StringComparison.OrdinalIgnoreCase))
                 {
-                    var paramsStr = string.Join(", ", fd.Params.Select(p =>
+                    string paramsStr = string.Join(", ", fd.Params.Select(p =>
                         p.Type is not null ? $"{p.Name} : {FormatTypeRef(p.Type)}" : p.Name));
-                    var returnStr = fd.ReturnType is not null ? $" : {FormatTypeRef(fd.ReturnType)}" : "";
+                    string returnStr = fd.ReturnType is not null ? $" : {FormatTypeRef(fd.ReturnType)}" : "";
                     members.Add($"{fd.Name}({paramsStr}){returnStr}");
                 }
                 else if (decl is LetDecl ld && ld.IsExported)
                 {
-                    var typeStr = ld.TypeAnnotation is not null ? $" : {FormatTypeRef(ld.TypeAnnotation)}" : "";
+                    string typeStr = ld.TypeAnnotation is not null ? $" : {FormatTypeRef(ld.TypeAnnotation)}" : "";
                     members.Add($"{ld.Name}{typeStr}");
                 }
             }
@@ -999,9 +1227,11 @@ public static class Engine
     private static PrintOutput CreatePrintOutput(string text)
     {
         if (string.IsNullOrEmpty(text) || !text.Contains('{') || !text.Contains('@') || !text.Contains('}'))
+        {
             return new PrintOutput(text);
+        }
 
-        var spans = new List<TextSpan>();
+        List<TextSpan> spans = new List<TextSpan>();
         int position = 0;
         while (position < text.Length)
         {
@@ -1009,12 +1239,17 @@ public static class Engine
             if (open < 0)
             {
                 if (position < text.Length)
+                {
                     spans.Add(new TextSpan(text[position..]));
+                }
+
                 break;
             }
 
             if (open > position)
+            {
                 spans.Add(new TextSpan(text[position..open]));
+            }
 
             int at = text.IndexOf('@', open + 1);
             int close = text.IndexOf('}', open + 1);
@@ -1025,8 +1260,8 @@ public static class Engine
                 continue;
             }
 
-            var content = text[(open + 1)..at];
-            var annotation = text[(at + 1)..close];
+            string content = text[(open + 1)..at];
+            string annotation = text[(at + 1)..close];
             spans.Add(new TextSpan(content, RichString.ParseAnnotation(annotation)));
             position = close + 1;
         }
@@ -1046,103 +1281,121 @@ public static class Engine
     /// <summary>
     /// Runs packages from feeds: loads packages by name, executes selected rules.
     /// </summary>
-    public static EngineResult RunProject(
+    public static async Task<EngineResult> RunProjectAsync(
         List<string> feedPaths,
         List<string> packageNames,
         string rootPath,
         List<string> rules,
-        string[]? programArgs = null,
-        Action<string>? diagLog = null,
-        string[]? additionalScriptFiles = null,
-        string[]? providers = null,
-        ReviewOptions? reviewOptions = null)
+        EngineRunOptions? options = null)
     {
+        options ??= new EngineRunOptions();
+        Action<string>? diagLog = options.DiagnosticLog;
+        string[]? additionalScriptFiles = options.ScriptFiles?.ToArray();
+        string[]? providers = options.ProviderNames?.ToArray();
+        options.CancellationToken.ThrowIfCancellationRequested();
         rootPath = Path.GetFullPath(rootPath);
 
-        var parseErrors = new List<string>();
-        var fatalErrors = new List<string>();
-        var modules = new List<ParsedModule>();
-        var providerPackages = new List<(string Dir, PackageMetadata Meta)>();
-        var packageModuleMap = new Dictionary<string, List<ParsedModule>>(StringComparer.OrdinalIgnoreCase);
-        var normalizedFeedPaths = feedPaths
+        List<string> parseErrors = new List<string>();
+        List<string> fatalErrors = new List<string>();
+        List<ParsedModule> modules = new List<ParsedModule>();
+        List<(string Dir, PackageMetadata Meta)> providerPackages = new List<(string Dir, PackageMetadata Meta)>();
+        Dictionary<string, List<ParsedModule>> packageModuleMap = new Dictionary<string, List<ParsedModule>>(StringComparer.OrdinalIgnoreCase);
+        List<string> normalizedFeedPaths = feedPaths
             .Select(Path.GetFullPath)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
 
-        foreach (var packageName in packageNames)
+        foreach (string packageName in packageNames)
         {
             bool found = false;
-            foreach (var feedPath in normalizedFeedPaths)
+            foreach (string feedPath in normalizedFeedPaths)
             {
-                var packageDir = ImportResolver.FindPackageDir(feedPath, packageName);
+                string? packageDir = ImportResolver.FindPackageDir(feedPath, packageName);
                 if (packageDir is null)
+                {
                     continue;
+                }
 
-                var srcDir = Path.Combine(packageDir, "src");
+                string srcDir = Path.Combine(packageDir, "src");
                 if (Directory.Exists(srcDir))
                 {
-                    var copFiles = Directory.GetFiles(srcDir, "*.cop");
+                    string[] copFiles = Directory.GetFiles(srcDir, "*.cop");
                     Array.Sort(copFiles, StringComparer.Ordinal);
-                    var parsed = ParseModules(copFiles, parseErrors);
+                    List<ParsedModule> parsed = ParseModules(copFiles, parseErrors);
                     modules.AddRange(parsed);
                     packageModuleMap[packageName] = parsed;
                 }
 
-                DetectProviderPackage(Path.Combine(packageDir, "src"), packageName, normalizedFeedPaths, providerPackages, parseErrors);
+                DetectProviderPackage(Path.Combine(packageDir, "src"), providerPackages);
                 found = true;
                 break;
             }
 
             if (!found)
+            {
                 fatalErrors.Add($"Package '{packageName}' not found in any feed");
+            }
         }
 
         // Include additional script files (e.g., user-global checks)
         if (additionalScriptFiles is { Length: > 0 })
+        {
             modules.AddRange(ParseModules(additionalScriptFiles, parseErrors));
+        }
 
         // Resolve -p provider packages
         if (providers is { Length: > 0 })
         {
-            foreach (var providerName in providers)
+            foreach (string providerName in providers)
             {
                 string? pkgDir = null;
-                foreach (var feedPath in normalizedFeedPaths)
+                foreach (string feedPath in normalizedFeedPaths)
                 {
                     pkgDir = ImportResolver.FindPackageDir(feedPath, providerName);
-                    if (pkgDir != null) break;
+                    if (pkgDir != null)
+                    {
+                        break;
+                    }
                 }
                 if (pkgDir is null)
                 {
                     fatalErrors.Add($"Provider package '{providerName}' not found in any feed");
                     continue;
                 }
-                var metadata = PackageMetadata.TryLoadFromDirectory(pkgDir);
+                PackageMetadata? metadata = PackageMetadata.LoadFromDirectoryOrDefault(pkgDir);
                 if (metadata is not null && metadata.IsProvider)
+                {
                     providerPackages.Add((pkgDir, metadata));
+                }
                 else
+                {
                     fatalErrors.Add($"Package '{providerName}' is not a provider (no lib/ with DLL)");
+                }
             }
         }
 
         if (fatalErrors.Count > 0)
+        {
             return new EngineResult([], parseErrors, fatalErrors);
+        }
 
         if (modules.Count == 0)
+        {
             return new EngineResult([], parseErrors, ["No .cop files found in packages"]);
+        }
 
-        return ExecuteModules(
+        return await ExecuteModulesAsync(
             modules,
             normalizedFeedPaths,
             rootPath,
             parseErrors,
-            rules.Count == 0 ? "main" : null,
-            programArgs,
-            rules.Count > 0 ? [.. rules] : null,
-            diagLog: diagLog,
-            topLevelProviderPackages: providerPackages,
-            packageModuleMap: packageModuleMap.Count > 1 ? packageModuleMap : null,
-            reviewOptions: reviewOptions);
+            options with
+            {
+                CommandName = rules.Count == 0 ? "main" : null,
+                CommandFilter = rules.Count > 0 ? rules : null,
+                ProviderPackages = providerPackages,
+                PackageModules = packageModuleMap.Count > 1 ? packageModuleMap : null
+            });
     }
 
     /// <summary>
@@ -1158,24 +1411,26 @@ public static class Engine
         "dist", "build", "out", ".next", ".cache"
     };
 
-    private static void DetectProviderPackage(string copDirPath, string packageName, List<string> feedPaths, List<(string Dir, PackageMetadata Meta)> providerPackages, List<string> errors)
+    private static void DetectProviderPackage(
+        string copDirPath, List<(string Dir, PackageMetadata Meta)> providerPackages)
     {
         // copDirPath is the package's src/ or types/ directory (from ImportResolver).
         // The package root is its parent directory.
-        var packageDir = Path.GetDirectoryName(copDirPath);
-        if (packageDir is null) return;
-
-        var metadata = PackageMetadata.TryLoadFromDirectory(packageDir);
-        if (metadata is null) return;
-
-        try
+        string? packageDir = Path.GetDirectoryName(copDirPath);
+        if (packageDir is null)
         {
-            if (metadata.IsProvider)
-                providerPackages.Add((packageDir, metadata));
+            return;
         }
-        catch (Exception ex) when (ex is not OutOfMemoryException)
+
+        PackageMetadata? metadata = PackageMetadata.LoadFromDirectoryOrDefault(packageDir);
+        if (metadata is null)
         {
-            errors.Add($"Failed to parse metadata for package '{packageName}': {ex.Message}");
+            return;
+        }
+
+        if (metadata.IsProvider)
+        {
+            providerPackages.Add((packageDir, metadata));
         }
     }
 
@@ -1183,77 +1438,73 @@ public static class Engine
     /// Loads external CLR providers: registers their schemas into the type registry
     /// and queries them for collection data.
     /// </summary>
-    private static void LoadExternalProviders(TypeRegistry typeRegistry, List<(string Dir, PackageMetadata Meta)> providerPackages, string rootPath, List<string> errors, List<string> fatalErrors, IReadOnlySet<string>? excludedDirectories = null, ProviderQueryService? queryService = null, Action<string>? diagLog = null)
+    private static async ValueTask LoadExternalProvidersAsync(
+        ReplContext context, List<string> errors, List<string> fatalErrors,
+        CancellationToken cancellationToken)
     {
-        foreach (var (dir, meta) in providerPackages)
+        foreach ((string dir, PackageMetadata meta) in context.ProviderPackages)
         {
-            var loaded = ProviderLoader.Load(dir, meta, fatalErrors, out var sourceProviders, out var sinkProviders);
-
-            // Register source providers
-            foreach (var sp in sourceProviders)
+            (ProviderLoader.LoadedProvider? Data,
+                List<ProviderLoader.LoadedStreamProvider> Sources,
+                List<ProviderLoader.LoadedSinkProvider> Sinks) package = await ProviderLoader.LoadAsync(
+                dir, meta, fatalErrors, cancellationToken);
+            ProviderLoader.LoadedProvider? loaded = package.Data;
+            if (loaded is not null)
             {
-                var spSchema = ProviderLoader.RegisterSchema(sp.Instance, typeRegistry);
-                ProviderLoader.RegisterStreamProvider(sp.Instance, spSchema, sp.PackageName, typeRegistry);
+                context.QueryService.RegisterOwnedProvider(loaded);
+            }
+            RegisterStreamingProviders(package.Sources, package.Sinks,
+                context.TypeRegistry, context.QueryService);
+            if (loaded is null)
+            {
+                continue;
             }
 
-            // Register sink providers
-            foreach (var sk in sinkProviders)
-                ProviderLoader.RegisterSinkProvider(sk.Instance, sk.PackageName, typeRegistry);
-
-            if (loaded is null) continue;
-
             // Register schema, types, accessors, and bindings
-            var schema = ProviderLoader.RegisterSchema(loaded.Instance, typeRegistry);
+            ProviderLoader.RegisterSchema(loaded.Instance, context.TypeRegistry);
 
             // Query for data and register global collections
-            ProviderLoader.QueryAndRegister(loaded, typeRegistry, rootPath, errors, excludedDirectories);
+            await ProviderLoader.QueryAndRegisterAsync(loaded, context.TypeRegistry,
+                new ProviderQuery
+                {
+                    RootPath = context.RootPath,
+                    ExcludedDirectories = ExcludedDirectoryNames
+                }, errors, cancellationToken);
 
             // Initialize capabilities (document loaders, file parsers, etc.)
-            ProviderLoader.InitializeCapabilities(loaded.Instance, typeRegistry, rootPath);
+            ProviderLoader.InitializeCapabilities(
+                loaded.Instance, context.TypeRegistry, context.RootPath);
 
             // Register with query service for path-scoped queries
-            queryService?.RegisterProvider(loaded.PackageName, loaded.Instance, schema);
         }
     }
 
     /// <summary>
-    /// Phase 1: Loads external provider assemblies and registers their schemas (types, accessors, bindings)
-    /// into the type registry WITHOUT querying for data. Returns loaded providers for deferred querying.
+    /// Registers streaming capabilities and transfers all source and sink lifetimes.
     /// </summary>
-    private static List<(ProviderLoader.LoadedProvider Loaded, ProviderSchema Schema)> RegisterExternalProviderSchemas(
-        TypeRegistry typeRegistry, List<(string Dir, PackageMetadata Meta)> providerPackages,
-        string rootPath, List<string> fatalErrors, ProviderQueryService? queryService = null)
+    private static void RegisterStreamingProviders(
+        List<ProviderLoader.LoadedStreamProvider> sources,
+        List<ProviderLoader.LoadedSinkProvider> sinks,
+        TypeRegistry typeRegistry, ProviderQueryService queryService)
     {
-        var result = new List<(ProviderLoader.LoadedProvider, ProviderSchema)>();
-        foreach (var (dir, meta) in providerPackages)
+        foreach (ProviderLoader.LoadedStreamProvider source in sources)
         {
-            var loaded = ProviderLoader.Load(dir, meta, fatalErrors, out var sourceProviders, out var sinkProviders);
-
-            // Register source providers
-            foreach (var sp in sourceProviders)
-            {
-                var spSchema = ProviderLoader.RegisterSchema(sp.Instance, typeRegistry);
-                ProviderLoader.RegisterStreamProvider(sp.Instance, spSchema, sp.PackageName, typeRegistry);
-            }
-
-            // Register sink providers
-            foreach (var sk in sinkProviders)
-                ProviderLoader.RegisterSinkProvider(sk.Instance, sk.PackageName, typeRegistry);
-
-            if (loaded is null) continue;
-
-            // Register schema, types, accessors, and bindings (no data query)
-            var schema = ProviderLoader.RegisterSchema(loaded.Instance, typeRegistry);
-
-            // Initialize capabilities (document loaders, file parsers, etc.)
-            ProviderLoader.InitializeCapabilities(loaded.Instance, typeRegistry, rootPath);
-
-            // Register with query service for path-scoped queries
-            queryService?.RegisterProvider(loaded.PackageName, loaded.Instance, schema);
-
-            result.Add((loaded, schema));
+            queryService.RegisterOwnedResource(source.Instance);
         }
-        return result;
+        foreach (ProviderLoader.LoadedSinkProvider sink in sinks)
+        {
+            queryService.RegisterOwnedResource(sink.Instance);
+        }
+        foreach (ProviderLoader.LoadedStreamProvider source in sources)
+        {
+            ProviderSchema schema = ProviderLoader.RegisterSchema(source.Instance, typeRegistry);
+            ProviderLoader.RegisterStreamProvider(
+                source.Instance, schema, source.PackageName, typeRegistry);
+        }
+        foreach (ProviderLoader.LoadedSinkProvider sink in sinks)
+        {
+            ProviderLoader.RegisterSinkProvider(sink.Instance, sink.PackageName, typeRegistry);
+        }
     }
 
     /// <summary>
@@ -1272,79 +1523,97 @@ public static class Engine
         }
 
         // REPL only loads top-level .cop files; packages are resolved via import directives
-        var scriptFilePaths = Directory.GetFiles(scriptsDir, "*.cop", SearchOption.TopDirectoryOnly);
+        string[] scriptFilePaths = Directory.GetFiles(scriptsDir, "*.cop", SearchOption.TopDirectoryOnly);
         Array.Sort(scriptFilePaths, StringComparer.Ordinal);
-        var modules = new List<ParsedModule>();
-        var parseErrors = new List<string>();
+        List<ParsedModule> modules = new List<ParsedModule>();
+        List<string> parseErrors = new List<string>();
 
-        foreach (var path in scriptFilePaths)
+        foreach (string path in scriptFilePaths)
         {
             try
             {
-                var source = File.ReadAllText(path);
+                string source = File.ReadAllText(path);
                 modules.Add(new ParsedModule(path, source, Cop.Lang.Parser.CopParser.Parse(source, path)));
             }
             catch (ParseException ex)
             {
                 if (!IsValueOnlyFile(path))
+                {
                     parseErrors.Add(ex.Message);
+                }
             }
-            catch (Exception ex) when (ex is not OutOfMemoryException)
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or
+                System.Security.SecurityException)
             {
                 if (!IsValueOnlyFile(path))
+                {
                     parseErrors.Add($"Error parsing {path}: {ex.Message}");
+                }
             }
         }
 
         errors.AddRange(parseErrors);
 
         // Build type registry from modules using the new pipeline
-        var typeRegistry = new TypeRegistry();
-        foreach (var bp in _builtinProviders)
+        TypeRegistry typeRegistry = new TypeRegistry();
+        foreach (BuiltinProvider bp in s_builtinProviders)
+        {
             ProviderLoader.RegisterSchema(bp.Instance, typeRegistry);
+        }
+
         typeRegistry.RegisterProgramType();
 
         // Resolve imports and register types
-        var feedPaths = FindFeedPaths(scriptsDir);
-        var globalCachePath = Cop.Cli.Commands.PackageResolver.GlobalCachePath;
+        List<string> feedPaths = FindFeedPaths(scriptsDir);
+        string globalCachePath = Cop.Cli.Commands.PackageResolver.GlobalCachePath;
         if (Directory.Exists(globalCachePath) && !feedPaths.Contains(globalCachePath))
+        {
             feedPaths.Add(globalCachePath);
+        }
 
-        var moduleLoader = new Cop.Lang.Interpreter.ModuleLoader(feedPaths);
-        var bridge = CreateBridge([], [], [], null);
-        foreach (var module in modules)
+        ModuleLoader moduleLoader = new Cop.Lang.Interpreter.ModuleLoader(feedPaths);
+        LanguageBridge bridge = CreateBridge([], [], [], null);
+        foreach (ParsedModule module in modules)
         {
             try { bridge.Evaluator.RegisterDeclarations(module.Module); }
-            catch (Exception ex) when (ex is not OutOfMemoryException) { errors.Add(ex.Message); }
+            catch (CopEvaluationException ex) { errors.Add(ex.Message); }
         }
-        try { moduleLoader.ResolveImports(modules.Select(m => m.Module), bridge.Evaluator); }
-        catch (Exception ex) when (ex is not OutOfMemoryException) { errors.Add(ex.Message); }
+        try
+        {
+            ResolveImportsRetainingCallerFunctions(
+                moduleLoader, modules.Select(m => m.Module), bridge.Evaluator);
+        }
+        catch (CopEvaluationException ex) { errors.Add(ex.Message); }
         errors.AddRange(moduleLoader.Errors);
 
         // Detect provider packages
-        var providerPackages = new List<(string Dir, PackageMetadata Meta)>();
-        foreach (var (dir, _) in moduleLoader.ProviderPackages)
+        List<(string Dir, PackageMetadata Meta)> providerPackages = new List<(string Dir, PackageMetadata Meta)>();
+        foreach ((string? dir, string _) in moduleLoader.ProviderPackages)
         {
-            var metadata = PackageMetadata.TryLoadFromDirectory(dir);
+            PackageMetadata? metadata = PackageMetadata.LoadFromDirectoryOrDefault(dir);
             if (metadata is not null && metadata.IsProvider)
+            {
                 providerPackages.Add((dir, metadata));
+            }
         }
 
         // Load type definitions into TypeRegistry for completion
-        foreach (var module in modules)
+        foreach (ParsedModule module in modules)
         {
-            foreach (var decl in module.Module.Declarations)
+            foreach (Declaration decl in module.Module.Declarations)
             {
                 if (decl is Cop.Lang.Ast.TypeDecl typeDecl)
                 {
-                    var props = typeDecl.Properties.Select(p => new PropertyDefinition(p.Name, p.Type.Name, p.IsOptional, p.Type.IsCollection, p.Line, p.ComputedExpr)).ToList();
+                    List<PropertyDefinition> props = typeDecl.Properties.Select(p => new PropertyDefinition(p.Name, p.Type.Name, p.IsOptional, p.Type.IsCollection, p.Line, p.ComputedExpr)).ToList();
                     typeRegistry.LoadTypeDefinitions([new TypeDefinition(typeDecl.Name, typeDecl.BaseType, props, 0, typeDecl.IsExported, typeDecl.DocComment, typeDecl.Traits)]);
                 }
             }
         }
 
-        return new ReplContext(modules, typeRegistry, rootPath, scriptsDir, providerPackages,
-            totalFileCount: scriptFilePaths.Length);
+        return new ReplContext(modules, typeRegistry, rootPath, scriptsDir, providerPackages)
+        {
+            TotalFileCount = scriptFilePaths.Length
+        };
     }
 
     /// <summary>
@@ -1355,97 +1624,76 @@ public static class Engine
     {
         try
         {
-            var firstLine = File.ReadLines(path).FirstOrDefault()?.TrimStart();
-            if (firstLine is null) return false;
+            string? firstLine = File.ReadLines(path).FirstOrDefault()?.TrimStart();
+            if (firstLine is null)
+            {
+                return false;
+            }
+
             return firstLine.StartsWith('[') || firstLine.StartsWith('\'') ||
                    (firstLine.Length > 0 && (char.IsDigit(firstLine[0]) ||
                     (firstLine[0] == '-' && firstLine.Length > 1 && char.IsDigit(firstLine[1]))));
         }
-        catch { return false; }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or
+            System.Security.SecurityException)
+        {
+            Console.Error.WriteLine($"Could not inspect REPL input '{path}': {ex.Message}");
+            return false;
+        }
     }
 
     /// <summary>
     /// Loads provider data into the REPL context (lazy loading on first reference).
     /// </summary>
-    public static void LoadProviders(ReplContext context)
+    public static async ValueTask LoadProvidersAsync(
+        ReplContext context, CancellationToken cancellationToken = default)
     {
-        if (context.ProvidersLoaded) return;
+        cancellationToken.ThrowIfCancellationRequested();
+        if (context.HasLoadedProviders)
+        {
+            return;
+        }
 
-        var errors = new List<string>();
-        var fatalErrors = new List<string>();
+        List<string> errors = new List<string>();
+        List<string> fatalErrors = new List<string>();
 
         // Load external providers
-        LoadExternalProviders(context.TypeRegistry, context.ProviderPackages, context.RootPath, errors, fatalErrors, ExcludedDirectoryNames, context.QueryService);
+        await LoadExternalProvidersAsync(context, errors, fatalErrors, cancellationToken);
+        if (fatalErrors.Count > 0)
+        {
+            throw new InvalidOperationException(string.Join(System.Environment.NewLine, fatalErrors));
+        }
 
         // Query all built-in providers
-        foreach (var bp in _builtinProviders)
+        foreach (BuiltinProvider bp in s_builtinProviders)
         {
-            var query = new ProviderQuery
+            ProviderQuery query = new ProviderQuery
             {
                 RootPath = context.RootPath,
                 ExcludedDirectories = ExcludedDirectoryNames
             };
-            ProviderLoader.QueryAndRegister(bp.Instance, bp.Schema, bp.Name, context.TypeRegistry, query);
+            await ProviderLoader.QueryAndRegisterAsync(
+                new ProviderLoader.LoadedProvider(bp.Instance, bp.Schema, bp.Name),
+                context.TypeRegistry, query, cancellationToken: cancellationToken);
         }
 
         // Initialize capabilities
-        foreach (var bp in _builtinProviders)
+        foreach (BuiltinProvider bp in s_builtinProviders)
+        {
             ProviderLoader.InitializeCapabilities(bp.Instance, context.TypeRegistry, context.RootPath);
+        }
 
         // Register built-in providers with query service for path-scoped queries
-        foreach (var bp in _builtinProviders)
+        foreach (BuiltinProvider bp in s_builtinProviders)
+        {
             context.QueryService.RegisterProvider(bp.Name, bp.Instance, bp.Schema);
+        }
 
-        context.ProvidersLoaded = true;
+        context.HasLoadedProviders = true;
 
         if (errors.Count > 0)
+        {
             context.Warnings.AddRange(errors);
+        }
     }
-}
-
-/// <summary>
-/// Context object for a REPL session — holds parsed state and supports lazy provider loading.
-/// </summary>
-public class ReplContext
-{
-    public List<Engine.ParsedModule> Modules { get; }
-    public TypeRegistry TypeRegistry { get; }
-    public string RootPath { get; }
-    public string ScriptsDir { get; }
-    public List<(string Dir, PackageMetadata Meta)> ProviderPackages { get; }
-    public bool ProvidersLoaded { get; set; }
-    public List<string> Warnings { get; } = [];
-    public int TotalFileCount { get; }
-    public ProviderQueryService QueryService { get; set; }
-
-    public ReplContext(List<Engine.ParsedModule> modules, TypeRegistry typeRegistry, string rootPath, string scriptsDir, List<(string Dir, PackageMetadata Meta)> providerPackages, int totalFileCount = 0)
-    {
-        Modules = modules;
-        TypeRegistry = typeRegistry;
-        RootPath = rootPath;
-        ScriptsDir = scriptsDir;
-        ProviderPackages = providerPackages;
-        TotalFileCount = totalFileCount > 0 ? totalFileCount : modules.Count;
-        QueryService = new ProviderQueryService(Directory.GetCurrentDirectory(), Engine.ExcludedDirectoryNames);
-    }
-}
-
-/// <summary>
-/// Result of running the cop engine.
-/// </summary>
-public record EngineResult(
-    List<PrintOutput> Outputs,
-    List<string> ParseErrors,
-    List<string> Errors,
-    string? CommandName = null,
-    List<FileOutput>? FileOutputs = null,
-    List<string>? Warnings = null,
-    List<AssertResult>? Asserts = null,
-    List<CopDiagnostic>? Diagnostics = null,
-    int? ExitCode = null)
-{
-    public bool HasParseErrors => ParseErrors.Count > 0;
-    public bool HasFatalErrors => Errors.Count > 0;
-    public bool IsCommandMode => CommandName != null;
-    public ExecutionSummary? Statistics { get; init; }
 }

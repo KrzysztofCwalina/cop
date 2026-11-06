@@ -1,3 +1,6 @@
+// Edits interactive input with cursor movement, history, and completion support.
+
+using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Text;
 
@@ -16,11 +19,13 @@ public class LineEditor
     private int _lastPopupLines;
     private string _prompt = "cop> ";
 
+    /// <summary>Creates an editor using the session's completion provider.</summary>
     public LineEditor(ReplCompleter completer)
     {
         _completer = completer;
     }
 
+    /// <summary>Changes the prompt used when redrawing the current input line.</summary>
     public void SetPrompt(string prompt) => _prompt = prompt;
 
     /// <summary>
@@ -38,14 +43,14 @@ public class LineEditor
 
         Console.Write(prompt);
 
-        var buffer = new StringBuilder();
+        StringBuilder buffer = new StringBuilder();
         int cursor = 0;
         _historyIndex = _history.Count;
         string? savedInput = null;
 
         while (true)
         {
-            var key = Console.ReadKey(intercept: true);
+            ConsoleKeyInfo key = Console.ReadKey(intercept: true);
 
             // Dismiss popup for keys that move cursor without changing text
             if (_popup.IsVisible && key.Key is ConsoleKey.LeftArrow or ConsoleKey.RightArrow
@@ -65,9 +70,12 @@ public class LineEditor
                     else
                     {
                         Console.WriteLine();
-                        var line = buffer.ToString();
+                        string line = buffer.ToString();
                         if (!string.IsNullOrWhiteSpace(line))
+                        {
                             AddToHistory(line);
+                        }
+
                         return line;
                     }
                     break;
@@ -105,7 +113,9 @@ public class LineEditor
                         cursor--;
                         RedrawLine(prompt, buffer, cursor);
                         if (popupWasVisible)
+                        {
                             RefreshPopupFilter(buffer, cursor, prompt);
+                        }
                     }
                     break;
 
@@ -191,7 +201,9 @@ public class LineEditor
                     }
 
                     if (HandleControlKeys(key, buffer, ref cursor, prompt))
+                    {
                         break;
+                    }
 
                     // Regular character
                     if (key.KeyChar >= 32)
@@ -222,11 +234,15 @@ public class LineEditor
     private bool HandleControlKeys(ConsoleKeyInfo key, StringBuilder buffer, ref int cursor, string prompt)
     {
         if (!key.Modifiers.HasFlag(ConsoleModifiers.Control))
+        {
             return false;
+        }
 
         // Ctrl+keys change buffer/cursor in non-incremental ways; dismiss popup
         if (_popup.IsVisible)
+        {
             ClearPopup();
+        }
 
         switch (key.Key)
         {
@@ -261,8 +277,16 @@ public class LineEditor
 
             case ConsoleKey.W: // Kill word backward
                 int start = cursor;
-                while (start > 0 && buffer[start - 1] == ' ') start--;
-                while (start > 0 && buffer[start - 1] != ' ') start--;
+                while (start > 0 && buffer[start - 1] == ' ')
+                {
+                    start--;
+                }
+
+                while (start > 0 && buffer[start - 1] != ' ')
+                {
+                    start--;
+                }
+
                 if (start < cursor)
                 {
                     SetClipboard(buffer.ToString(start, cursor - start));
@@ -295,8 +319,8 @@ public class LineEditor
 
     private void HandleTab(StringBuilder buffer, ref int cursor, string prompt)
     {
-        var input = buffer.ToString();
-        var (candidates, replacementStart) = _completer.GetCompletions(input, cursor);
+        string input = buffer.ToString();
+        (List<string>? candidates, int replacementStart) = _completer.GetCompletions(input, cursor);
 
         if (candidates.Count == 0)
         {
@@ -318,8 +342,8 @@ public class LineEditor
 
     private void RefreshPopupFilter(StringBuilder buffer, int cursor, string prompt)
     {
-        var input = buffer.ToString();
-        var (candidates, _) = _completer.GetCompletions(input, cursor);
+        string input = buffer.ToString();
+        (List<string>? candidates, int _) = _completer.GetCompletions(input, cursor);
 
         if (candidates.Count == 0)
         {
@@ -341,11 +365,14 @@ public class LineEditor
 
     private void AcceptCompletion(StringBuilder buffer, ref int cursor, string prompt)
     {
-        var selected = _popup.SelectedItem;
-        if (selected is null) return;
+        string? selected = _popup.SelectedItem;
+        if (selected is null)
+        {
+            return;
+        }
 
-        var input = buffer.ToString();
-        var (_, replacementStart) = _completer.GetCompletions(input, cursor);
+        string input = buffer.ToString();
+        (List<string> _, int replacementStart) = _completer.GetCompletions(input, cursor);
         ApplyCompletion(buffer, ref cursor, selected, replacementStart, prompt);
     }
 
@@ -361,13 +388,17 @@ public class LineEditor
     private void RenderPopup(string prompt, int cursor)
     {
         if (_lastPopupLines > 0)
+        {
             Console.Write(_popup.Clear(_lastPopupLines));
+        }
 
-        var (content, lines) = _popup.Render(0);
+        (string? content, int lines) = _popup.Render(0);
         _lastPopupLines = lines;
 
         if (!string.IsNullOrEmpty(content))
+        {
             Console.Write(content);
+        }
     }
 
     private void ClearPopup()
@@ -382,10 +413,15 @@ public class LineEditor
 
     private void HistoryPrevious(StringBuilder buffer, ref int cursor, string prompt, ref string? savedInput)
     {
-        if (_history.Count == 0 || _historyIndex <= 0) return;
+        if (_history.Count == 0 || _historyIndex <= 0)
+        {
+            return;
+        }
 
         if (_historyIndex == _history.Count)
+        {
             savedInput = buffer.ToString();
+        }
 
         _historyIndex--;
         buffer.Clear();
@@ -396,21 +432,33 @@ public class LineEditor
 
     private void HistoryNext(StringBuilder buffer, ref int cursor, string prompt, ref string? savedInput)
     {
-        if (_historyIndex >= _history.Count) return;
+        if (_historyIndex >= _history.Count)
+        {
+            return;
+        }
 
         _historyIndex++;
         buffer.Clear();
         if (_historyIndex == _history.Count)
+        {
             buffer.Append(savedInput ?? "");
+        }
         else
+        {
             buffer.Append(_history[_historyIndex]);
+        }
+
         cursor = buffer.Length;
         RedrawLine(prompt, buffer, cursor);
     }
 
     private void AddToHistory(string line)
     {
-        if (_history.Count > 0 && _history[^1] == line) return;
+        if (_history.Count > 0 && _history[^1] == line)
+        {
+            return;
+        }
+
         _history.Add(line);
     }
 
@@ -426,31 +474,35 @@ public class LineEditor
         {
             if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
             {
-                var psi = new System.Diagnostics.ProcessStartInfo("powershell.exe", "-noprofile -command \"Set-Clipboard -Value $input\"")
+                ProcessStartInfo psi = new System.Diagnostics.ProcessStartInfo("powershell.exe", "-noprofile -command \"Set-Clipboard -Value $input\"")
                 {
                     RedirectStandardInput = true,
                     UseShellExecute = false,
                     CreateNoWindow = true
                 };
-                using var p = System.Diagnostics.Process.Start(psi);
+                using Process? p = System.Diagnostics.Process.Start(psi);
                 p?.StandardInput.Write(text);
                 p?.StandardInput.Close();
                 p?.WaitForExit(2000);
             }
             else if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
             {
-                var psi = new System.Diagnostics.ProcessStartInfo("pbcopy")
+                ProcessStartInfo psi = new System.Diagnostics.ProcessStartInfo("pbcopy")
                 {
                     RedirectStandardInput = true,
                     UseShellExecute = false
                 };
-                using var p = System.Diagnostics.Process.Start(psi);
+                using Process? p = System.Diagnostics.Process.Start(psi);
                 p?.StandardInput.Write(text);
                 p?.StandardInput.Close();
                 p?.WaitForExit(1000);
             }
         }
-        catch { /* clipboard not available */ }
+        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or
+            IOException or InvalidOperationException)
+        {
+            Console.Error.WriteLine($"Clipboard unavailable: {ex.Message}");
+        }
     }
 
     private static string? GetClipboard()
@@ -459,31 +511,35 @@ public class LineEditor
         {
             if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
             {
-                var psi = new System.Diagnostics.ProcessStartInfo("powershell.exe", "-noprofile -command Get-Clipboard")
+                ProcessStartInfo psi = new System.Diagnostics.ProcessStartInfo("powershell.exe", "-noprofile -command Get-Clipboard")
                 {
                     RedirectStandardOutput = true,
                     UseShellExecute = false,
                     CreateNoWindow = true
                 };
-                using var p = System.Diagnostics.Process.Start(psi);
-                var result = p?.StandardOutput.ReadToEnd()?.TrimEnd();
+                using Process? p = System.Diagnostics.Process.Start(psi);
+                string? result = p?.StandardOutput.ReadToEnd()?.TrimEnd();
                 p?.WaitForExit(2000);
                 return result;
             }
             else if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
             {
-                var psi = new System.Diagnostics.ProcessStartInfo("pbpaste")
+                ProcessStartInfo psi = new System.Diagnostics.ProcessStartInfo("pbpaste")
                 {
                     RedirectStandardOutput = true,
                     UseShellExecute = false
                 };
-                using var p = System.Diagnostics.Process.Start(psi);
-                var result = p?.StandardOutput.ReadToEnd();
+                using Process? p = System.Diagnostics.Process.Start(psi);
+                string? result = p?.StandardOutput.ReadToEnd();
                 p?.WaitForExit(1000);
                 return result;
             }
         }
-        catch { /* clipboard not available */ }
+        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or
+            IOException or InvalidOperationException)
+        {
+            Console.Error.WriteLine($"Clipboard unavailable: {ex.Message}");
+        }
         return null;
     }
 }

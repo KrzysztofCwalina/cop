@@ -27,22 +27,24 @@ public class FilesystemTests
             Directory.Delete(_tempDir, recursive: true);
     }
 
-    private TypeRegistry CreateRegistryAndScan(string rootPath)
+    private async Task<TypeRegistry> CreateRegistryAndScan(string rootPath)
     {
         var registry = new TypeRegistry();
         ProviderLoader.RegisterSchema(_fsProvider, registry);
-        ProviderLoader.QueryAndRegister(_fsProvider, _fsSchema, "files", registry, new ProviderQuery { RootPath = rootPath });
+        await ProviderLoader.QueryAndRegisterAsync(
+            new ProviderLoader.LoadedProvider(_fsProvider, _fsSchema, "files"),
+            registry, new ProviderQuery { RootPath = rootPath });
         return registry;
     }
 
     [Test]
-    public void Scan_EmptyFolder_IsDetected()
+    public async Task Scan_EmptyFolder_IsDetected()
     {
         Directory.CreateDirectory(Path.Combine(_tempDir, "src"));
         Directory.CreateDirectory(Path.Combine(_tempDir, "empty-dir"));
         File.WriteAllText(Path.Combine(_tempDir, "src", "file.txt"), "hello");
 
-        var registry = CreateRegistryAndScan(_tempDir);
+        var registry = (await CreateRegistryAndScan(_tempDir));
         var folders = registry.GetGlobalCollectionItems("files.Folders");
         var acc = registry.GetAccessors("Folder")!;
 
@@ -60,13 +62,13 @@ public class FilesystemTests
     }
 
     [Test]
-    public void Scan_Files_AreEnumerated()
+    public async Task Scan_Files_AreEnumerated()
     {
         Directory.CreateDirectory(Path.Combine(_tempDir, "docs"));
         File.WriteAllText(Path.Combine(_tempDir, "root.txt"), "root");
         File.WriteAllText(Path.Combine(_tempDir, "docs", "readme.md"), "# Hi");
 
-        var registry = CreateRegistryAndScan(_tempDir);
+        var registry = (await CreateRegistryAndScan(_tempDir));
         var diskFiles = registry.GetGlobalCollectionItems("files.Files");
         var acc = registry.GetAccessors("File")!;
 
@@ -85,11 +87,11 @@ public class FilesystemTests
     }
 
     [Test]
-    public void Scan_NestedFolders_DepthIsCorrect()
+    public async Task Scan_NestedFolders_DepthIsCorrect()
     {
         Directory.CreateDirectory(Path.Combine(_tempDir, "a", "b", "c"));
 
-        var registry = CreateRegistryAndScan(_tempDir);
+        var registry = (await CreateRegistryAndScan(_tempDir));
         var folders = registry.GetGlobalCollectionItems("files.Folders")!;
         var acc = registry.GetAccessors("Folder")!;
 
@@ -99,12 +101,12 @@ public class FilesystemTests
     }
 
     [Test]
-    public void Scan_PathsUseForwardSlashes()
+    public async Task Scan_PathsUseForwardSlashes()
     {
         Directory.CreateDirectory(Path.Combine(_tempDir, "parent", "child"));
         File.WriteAllText(Path.Combine(_tempDir, "parent", "child", "file.cs"), "");
 
-        var registry = CreateRegistryAndScan(_tempDir);
+        var registry = (await CreateRegistryAndScan(_tempDir));
         var folders = registry.GetGlobalCollectionItems("files.Folders")!;
         var files = registry.GetGlobalCollectionItems("files.Files")!;
         var fAcc = registry.GetAccessors("Folder")!;
@@ -116,7 +118,7 @@ public class FilesystemTests
     }
 
     [Test]
-    public void Integration_EmptyFolderCheck_EmitsDiagnostic()
+    public async Task Integration_EmptyFolderCheck_EmitsDiagnostic()
     {
         // Arrange: create directory structure
         var scriptsDir = Path.Combine(_tempDir, "checks");
@@ -135,7 +137,7 @@ public class FilesystemTests
         File.WriteAllText(Path.Combine(scriptsDir, "no-empty-folders.cop"), copSource);
 
         // Act
-        var result = Engine.Run(scriptsDir, codebaseDir);
+        var result = (await Engine.RunAsync(scriptsDir, codebaseDir));
 
         // Assert
         Assert.That(result.HasFatalErrors, Is.False, string.Join("; ", result.Errors));
@@ -145,7 +147,7 @@ public class FilesystemTests
     }
 
     [Test]
-    public void Integration_DerivedCollection_WorksWithGlobal()
+    public async Task Integration_DerivedCollection_WorksWithGlobal()
     {
         // Arrange
         var scriptsDir = Path.Combine(_tempDir, "checks");
@@ -166,7 +168,7 @@ public class FilesystemTests
         File.WriteAllText(Path.Combine(scriptsDir, "test.cop"), copSource);
 
         // Act
-        var result = Engine.Run(scriptsDir, codebaseDir);
+        var result = (await Engine.RunAsync(scriptsDir, codebaseDir));
 
         // Assert
         Assert.That(result.HasFatalErrors, Is.False, string.Join("; ", result.Errors));

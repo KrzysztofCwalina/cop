@@ -1,3 +1,5 @@
+// Executes bounded external analysis tools and provides a common violation schema.
+
 using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
@@ -11,11 +13,11 @@ namespace Cop.Providers.Tools;
 /// </summary>
 public abstract class ToolProvider : DataProvider
 {
-    private static readonly ReadOnlyMemory<byte> SchemaJson = BuildSchema();
+    private static readonly ReadOnlyMemory<byte> s_schemaJson = BuildSchema();
 
     private static ReadOnlyMemory<byte> BuildSchema()
     {
-        var schema = new ProviderSchema
+        ProviderSchema schema = new ProviderSchema
         {
             Types =
             [
@@ -37,29 +39,48 @@ public abstract class ToolProvider : DataProvider
         return schema.ToJson();
     }
 
-    public override ReadOnlyMemory<byte> GetSchema() => SchemaJson;
+    /// <inheritdoc />
+    public override ReadOnlyMemory<byte> GetSchema() => s_schemaJson;
 
-    public override object? Query(ProviderQuery query)
+    /// <inheritdoc />
+    public override async ValueTask<object?> QueryAsync(
+        ProviderQuery query, CancellationToken cancellationToken = default)
     {
-        var rootPath = query.RootPath ?? Directory.GetCurrentDirectory();
-        var excluded = query.ExcludedDirectories ?? new HashSet<string>();
+        string rootPath = query.RootPath ?? Directory.GetCurrentDirectory();
+        IReadOnlySet<string> excluded = query.ExcludedDirectories ?? new HashSet<string>();
 
-        var violations = RunTool(rootPath, excluded);
+        List<object> violations = await RunToolAsync(rootPath, excluded, cancellationToken)
+            .ConfigureAwait(false);
         return new Dictionary<string, List<object>> { ["Violations"] = violations };
     }
 
     protected abstract string ToolName { get; }
 
-    protected abstract List<object> RunTool(string rootPath, IReadOnlySet<string> excluded);
+    protected abstract ValueTask<List<object>> RunToolAsync(
+        string rootPath, IReadOnlySet<string> excluded, CancellationToken cancellationToken);
 
-    protected static (string Stdout, string Stderr, int ExitCode) RunProcess(
-        string fileName, string arguments, string workingDir, bool shell = false, int timeoutMs = 120_000)
+    /// <summary>Controls whether the platform shell resolves a tool command.</summary>
+    protected enum ToolInvocationMode { Direct, Shell }
+
+    /// <summary>Preserves a tool's raw argument string and execution policy.</summary>
+    protected sealed record ToolInvocation(string FileName, string Arguments, string WorkingDirectory)
     {
-        var psi = new ProcessStartInfo
+        /// <summary>Gets the process launcher policy.</summary>
+        public ToolInvocationMode Mode { get; init; }
+        /// <summary>Gets the maximum duration of the owned tool process.</summary>
+        public TimeSpan Timeout { get; init; } = TimeSpan.FromMinutes(2);
+    }
+
+    protected static async ValueTask<(string Stdout, string Stderr, int ExitCode)> RunProcessAsync(
+        ToolInvocation invocation, CancellationToken cancellationToken)
+    {
+        string fileName = invocation.FileName;
+        bool shell = invocation.Mode == ToolInvocationMode.Shell;
+        ProcessStartInfo psi = new ProcessStartInfo
         {
             FileName = shell ? GetShellExecutable() : fileName,
-            Arguments = shell ? GetShellArgs(fileName, arguments) : arguments,
-            WorkingDirectory = workingDir,
+            Arguments = shell ? GetShellArgs(fileName, invocation.Arguments) : invocation.Arguments,
+            WorkingDirectory = invocation.WorkingDirectory,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             UseShellExecute = false,
@@ -69,44 +90,91 @@ public abstract class ToolProvider : DataProvider
         };
 
         Console.Error.Write($"  Running {fileName}...");
-        var sw = Stopwatch.StartNew();
+        Stopwatch sw = Stopwatch.StartNew();
         int maxLineLen = 0;
 
-        using var process = Process.Start(psi)
+        cancellationToken.ThrowIfCancellationRequested();
+        using Process process = Process.Start(psi)
             ?? throw new InvalidOperationException($"Failed to start: {fileName}");
 
         // Stream stderr to console in real-time for progress visibility
-        var stderrBuilder = new StringBuilder();
+        StringBuilder stderrBuilder = new StringBuilder();
         process.ErrorDataReceived += (_, e) =>
         {
-            if (e.Data == null) return;
+            if (e.Data == null)
+            {
+                return;
+            }
+
             stderrBuilder.AppendLine(e.Data);
-            var line = e.Data.TrimEnd();
+            string line = e.Data.TrimEnd();
             if (line.Length > 0)
             {
-                var msg = $"\r  Running {fileName}... {Truncate(line, 60)}";
+                string msg = $"\r  Running {fileName}... {Truncate(line, 60)}";
                 // Pad with spaces to overwrite any remnant text from longer previous lines
-                if (msg.Length > maxLineLen) maxLineLen = msg.Length;
+                if (msg.Length > maxLineLen)
+                {
+                    maxLineLen = msg.Length;
+                }
+
                 Console.Error.Write(msg.PadRight(maxLineLen));
             }
         };
         process.BeginErrorReadLine();
 
-        var stdoutTask = process.StandardOutput.ReadToEndAsync();
+        Task<string> stdoutTask = process.StandardOutput.ReadToEndAsync();
 
-        if (!process.WaitForExit(timeoutMs))
+        using CancellationTokenSource timeout = new(invocation.Timeout);
+        using CancellationTokenSource linked = CancellationTokenSource.CreateLinkedTokenSource(
+            cancellationToken, timeout.Token);
+        try
         {
-            try { process.Kill(entireProcessTree: true); } catch { }
-            var timeoutMsg = $"\r  Running {fileName}... timed out after {timeoutMs / 1000}s";
+            await process.WaitForExitAsync(linked.Token).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException ex) when (
+            timeout.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
+        {
+            await StopProcessAsync(process).ConfigureAwait(false);
+            await stdoutTask.ConfigureAwait(false);
+            string timeoutMsg =
+                $"\r  Running {fileName}... timed out after {invocation.Timeout.TotalSeconds}s";
             Console.Error.WriteLine(timeoutMsg.PadRight(maxLineLen));
-            throw new TimeoutException($"{fileName} timed out after {timeoutMs / 1000}s");
+            throw new TimeoutException(
+                $"{fileName} timed out after {invocation.Timeout.TotalSeconds}s", ex);
+        }
+        catch (OperationCanceledException)
+        {
+            await StopProcessAsync(process).ConfigureAwait(false);
+            await stdoutTask.ConfigureAwait(false);
+            throw;
         }
 
-        stdoutTask.Wait();
+        string stdout = await stdoutTask.ConfigureAwait(false);
         sw.Stop();
-        var doneMsg = $"\r  Running {fileName}... done ({sw.Elapsed.TotalSeconds:F1}s)";
+        string doneMsg = $"\r  Running {fileName}... done ({sw.Elapsed.TotalSeconds:F1}s)";
         Console.Error.WriteLine(doneMsg.PadRight(maxLineLen));
-        return (stdoutTask.Result, stderrBuilder.ToString(), process.ExitCode);
+        if (process.ExitCode is 127 or 9009)
+        {
+            throw new FileNotFoundException(
+                $"Tool '{fileName}' could not be found by the command launcher: {stderrBuilder}");
+        }
+        return (stdout, stderrBuilder.ToString(), process.ExitCode);
+    }
+
+    private static async ValueTask StopProcessAsync(Process process)
+    {
+        if (!process.HasExited)
+        {
+            try { process.Kill(entireProcessTree: true); }
+            catch (InvalidOperationException ex) when (process.HasExited)
+            {
+                if (CopDiagnostics.IsTraceEnabled)
+                {
+                    Console.Error.WriteLine($"Tool exited before cancellation cleanup: {ex.Message}");
+                }
+            }
+        }
+        await process.WaitForExitAsync(CancellationToken.None).ConfigureAwait(false);
     }
 
     private static string Truncate(string s, int max) =>
@@ -114,19 +182,28 @@ public abstract class ToolProvider : DataProvider
 
     protected static string NormalizePath(string filePath, string rootPath)
     {
-        if (string.IsNullOrEmpty(filePath)) return "";
+        if (string.IsNullOrEmpty(filePath))
+        {
+            return string.Empty;
+        }
+
         if (Path.IsPathRooted(filePath))
+        {
             filePath = Path.GetRelativePath(rootPath, filePath);
+        }
+
         return filePath.Replace('\\', '/');
     }
 
     protected static bool IsExcluded(string filePath, IReadOnlySet<string> excluded)
     {
-        foreach (var dir in excluded)
+        foreach (string dir in excluded)
         {
             if (filePath.StartsWith(dir + "/", StringComparison.OrdinalIgnoreCase) ||
                 filePath.Equals(dir, StringComparison.OrdinalIgnoreCase))
+            {
                 return true;
+            }
         }
         return false;
     }
@@ -138,16 +215,4 @@ public abstract class ToolProvider : DataProvider
         OperatingSystem.IsWindows()
             ? $"/c \"{fileName} {arguments}\""
             : $"-c \"{fileName} {arguments}\"";
-}
-
-/// <summary>
-/// Represents a single violation record returned by tool providers.
-/// </summary>
-public class ToolViolation
-{
-    public string File { get; init; } = "";
-    public int Line { get; init; }
-    public string Severity { get; init; } = "warning";
-    public string Message { get; init; } = "";
-    public string Source { get; init; } = "";
 }

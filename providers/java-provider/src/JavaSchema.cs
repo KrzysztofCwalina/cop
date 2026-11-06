@@ -1,3 +1,5 @@
+// Extends the shared source schema with Java-specific declaration facts.
+
 using Cop.Core;
 
 namespace Cop.Providers;
@@ -9,15 +11,16 @@ namespace Cop.Providers;
 /// </summary>
 public static class JavaSchema
 {
-    private static readonly ProviderSchema _schema = Build();
+    private static readonly ProviderSchema s_schema = Build();
 
-    public static ReadOnlyMemory<byte> GetJson() => _schema.ToJson();
+    /// <summary>Serializes the Java provider schema as UTF-8 JSON.</summary>
+    public static ReadOnlyMemory<byte> GetJson() => s_schema.ToJson();
 
     private static ProviderSchema Build()
     {
-        var baseSchema = CodeSchema.Get();
+        ProviderSchema baseSchema = CodeSchema.Get();
 
-        var types = new List<ProviderTypeSchema>(baseSchema.Types)
+        List<ProviderTypeSchema> types = new List<ProviderTypeSchema>(baseSchema.Types)
         {
             new()
             {

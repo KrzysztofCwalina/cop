@@ -1,3 +1,5 @@
+// Discovers Cargo packages, workspace membership, and dependency relationships.
+
 using System.Text;
 using System.Globalization;
 using Cop.Core;
@@ -10,31 +12,48 @@ public static class RustProjectDiscovery
 {
     private sealed class Dependency
     {
-        public string Alias = "";
+        /// <summary>Names the dependency in the declaring manifest.</summary>
+        public string Alias = string.Empty;
+        /// <summary>Names the actual package when an alias is used.</summary>
         public string? Package;
+        /// <summary>Marks a dependency inherited from the workspace.</summary>
         public bool Workspace;
+        /// <summary>Marks a production rather than development dependency.</summary>
         public bool Production;
     }
 
     private sealed class Manifest(string path)
     {
+        /// <summary>Gets the Cargo manifest's filesystem path.</summary>
         public string Path { get; } = path;
+        /// <summary>Names the package declared by this manifest.</summary>
         public string? Name;
+        /// <summary>Locates an explicitly selected containing workspace.</summary>
         public string? WorkspacePath;
+        /// <summary>Marks a manifest that declares a workspace.</summary>
         public bool IsWorkspace;
+        /// <summary>Gets dependency declarations keyed by local alias.</summary>
         public Dictionary<string, Dependency> Dependencies { get; } = new(StringComparer.Ordinal);
+        /// <summary>Gets dependency defaults shared by workspace members.</summary>
         public Dictionary<string, Dependency> WorkspaceDependencies { get; } = new(StringComparer.Ordinal);
     }
 
+    /// <summary>
+    /// Discovers Cargo package and workspace projects under the target root.
+    /// </summary>
     public static List<ProjectInfo> Discover(string rootPath, IReadOnlySet<string>? excludedDirs)
     {
-        var paths = new List<string>();
+        List<string> paths = new List<string>();
         CollectManifests(rootPath, excludedDirs, paths);
-        var manifests = paths.Order(StringComparer.Ordinal).Select(Read).Where(m => m is not null).Cast<Manifest>().ToList();
-        var results = new List<ProjectInfo>();
-        foreach (var manifest in manifests)
+        List<Manifest> manifests = paths.Order(StringComparer.Ordinal).Select(Read).Where(m => m is not null).Cast<Manifest>().ToList();
+        List<ProjectInfo> results = new List<ProjectInfo>();
+        foreach (Manifest? manifest in manifests)
         {
-            if (manifest.Name is null) continue;
+            if (manifest.Name is null)
+            {
+                continue;
+            }
+
             Manifest? workspace;
             if (manifest.WorkspacePath is { } relativeWorkspace)
             {
@@ -47,21 +66,28 @@ public static class RustProjectDiscovery
                 workspace = manifests.Where(m => m.IsWorkspace && IsInside(manifest.Path, m.Path))
                     .OrderByDescending(m => m.Path.Length).FirstOrDefault();
             }
-            var references = new SortedSet<string>(StringComparer.Ordinal);
-            var packages = new SortedSet<string>(StringComparer.Ordinal);
-            foreach (var dependency in manifest.Dependencies.Values)
+            SortedSet<string> references = new SortedSet<string>(StringComparer.Ordinal);
+            SortedSet<string> packages = new SortedSet<string>(StringComparer.Ordinal);
+            foreach (Dependency dependency in manifest.Dependencies.Values)
             {
                 string alias = dependency.Alias;
                 string name = dependency.Package ?? alias;
                 if (dependency.Workspace)
                 {
-                    if (workspace?.WorkspaceDependencies.TryGetValue(alias, out var inherited) == true)
+                    if (workspace?.WorkspaceDependencies.TryGetValue(alias, out Dependency? inherited) == true)
+                    {
                         name = dependency.Package ?? inherited.Package ?? alias;
+                    }
                     else
+                    {
                         ProviderErrors.Report($"{manifest.Path}: warning: workspace dependency '{alias}' could not be resolved; retaining its alias.");
+                    }
                 }
                 packages.Add(name);
-                if (dependency.Production) references.Add(name);
+                if (dependency.Production)
+                {
+                    references.Add(name);
+                }
             }
             results.Add(new ProjectInfo(manifest.Name,
                 System.IO.Path.GetRelativePath(rootPath, manifest.Path).Replace('\\', '/'), "rust",
@@ -82,47 +108,90 @@ public static class RustProjectDiscovery
     {
         try
         {
-            var manifest = new Manifest(path);
+            Manifest manifest = new Manifest(path);
             List<string> table = [];
-            foreach (var (text, line) in Entries(File.ReadAllText(path)))
+            foreach ((string? text, int line) in Entries(File.ReadAllText(path)))
             {
                 if (text.StartsWith('['))
                 {
-                    if (!text.EndsWith(']')) throw new FormatException($"line {line}: unterminated table header");
+                    if (!text.EndsWith(']'))
+                    {
+                        throw new FormatException($"line {line}: unterminated table header");
+                    }
+
                     bool array = text.StartsWith("[[", StringComparison.Ordinal);
                     table = KeyPath(text[(array ? 2 : 1)..^(array ? 2 : 1)]);
-                    if (table.Count == 1 && table[0] == "workspace") manifest.IsWorkspace = true;
+                    if (table.Count == 1 && table[0] == "workspace")
+                    {
+                        manifest.IsWorkspace = true;
+                    }
+
                     continue;
                 }
                 int equals = OutsideIndex(text, '=');
-                if (equals < 0) throw new FormatException($"line {line}: expected key = value");
-                var key = KeyPath(text[..equals]);
+                if (equals < 0)
+                {
+                    throw new FormatException($"line {line}: expected key = value");
+                }
+
+                List<string> key = KeyPath(text[..equals]);
                 string value = text[(equals + 1)..].Trim();
-                if (key.Count == 0 || value.Length == 0) throw new FormatException($"line {line}: missing key or value");
+                if (key.Count == 0 || value.Length == 0)
+                {
+                    throw new FormatException($"line {line}: missing key or value");
+                }
+
                 List<string> full = [..table, ..key];
                 if (full.SequenceEqual(["package", "name"]))
+                {
                     manifest.Name = String(value) ?? throw new FormatException($"line {line}: package name must be a quoted string");
-                if (full.SequenceEqual(["package", "workspace"])) manifest.WorkspacePath = String(value);
+                }
+
+                if (full.SequenceEqual(["package", "workspace"]))
+                {
+                    manifest.WorkspacePath = String(value);
+                }
+
                 int depIndex = full.FindIndex(k => k is "dependencies" or "dev-dependencies" or "build-dependencies");
-                if (depIndex < 0 || full.Count <= depIndex + 1) continue;
+                if (depIndex < 0 || full.Count <= depIndex + 1)
+                {
+                    continue;
+                }
+
                 bool workspace = full[0] == "workspace";
-                if (workspace) manifest.IsWorkspace = true;
-                var dependencies = workspace ? manifest.WorkspaceDependencies : manifest.Dependencies;
+                if (workspace)
+                {
+                    manifest.IsWorkspace = true;
+                }
+
+                Dictionary<string, Dependency> dependencies = workspace ? manifest.WorkspaceDependencies : manifest.Dependencies;
                 string alias = full[depIndex + 1];
                 string identity = workspace ? alias : string.Join(".", full.Take(depIndex + 2).Select(k => k.Length + ":" + k));
-                if (!dependencies.TryGetValue(identity, out var dependency))
+                if (!dependencies.TryGetValue(identity, out Dependency? dependency))
+                {
                     dependencies.Add(identity, dependency = new Dependency { Alias = alias });
+                }
+
                 dependency.Production |= full[depIndex] == "dependencies";
                 if (full.Count > depIndex + 2)
+                {
                     Set(dependency, full[^1], value);
+                }
                 else if (value.StartsWith('{'))
                 {
                     foreach (string field in Split(value[1..^1], ','))
                     {
                         int separator = OutsideIndex(field, '=');
-                        if (separator < 0) continue;
-                        var fieldKey = KeyPath(field[..separator]);
-                        if (fieldKey.Count == 1) Set(dependency, fieldKey[0], field[(separator + 1)..].Trim());
+                        if (separator < 0)
+                        {
+                            continue;
+                        }
+
+                        List<string> fieldKey = KeyPath(field[..separator]);
+                        if (fieldKey.Count == 1)
+                        {
+                            Set(dependency, fieldKey[0], field[(separator + 1)..].Trim());
+                        }
                     }
                 }
             }
@@ -138,25 +207,48 @@ public static class RustProjectDiscovery
     private static void Set(Dependency dependency, string key, string value)
     {
         if (key == "package")
+        {
             dependency.Package = String(value) ?? throw new FormatException("dependency package must be a quoted string");
+        }
+
         if (key == "workspace")
         {
-            if (value is not "true" and not "false") throw new FormatException("dependency workspace must be a boolean");
+            if (value is not "true" and not "false")
+            {
+                throw new FormatException("dependency workspace must be a boolean");
+            }
+
             dependency.Workspace = value == "true";
         }
     }
 
     private static string? String(string value)
     {
-        if (value.Length < 2) return null;
-        if (value[0] == '\'' && value[^1] == '\'') return value[1..^1];
-        if (value[0] != '"' || value[^1] != '"') return null;
-        var decoded = new StringBuilder();
+        if (value.Length < 2)
+        {
+            return null;
+        }
+
+        if (value[0] == '\'' && value[^1] == '\'')
+        {
+            return value[1..^1];
+        }
+
+        if (value[0] != '"' || value[^1] != '"')
+        {
+            return null;
+        }
+
+        StringBuilder decoded = new StringBuilder();
         for (int i = 1; i < value.Length - 1; i++)
         {
             char c = value[i];
             if (c != '\\') { decoded.Append(c); continue; }
-            if (++i >= value.Length - 1) throw new FormatException("incomplete TOML string escape");
+            if (++i >= value.Length - 1)
+            {
+                throw new FormatException("incomplete TOML string escape");
+            }
+
             c = value[i];
             switch (c)
             {
@@ -170,7 +262,10 @@ public static class RustProjectDiscovery
                     int digits = c == 'u' ? 4 : 8;
                     if (i + digits >= value.Length - 1 || !int.TryParse(value.AsSpan(i + 1, digits),
                         NumberStyles.HexNumber, CultureInfo.InvariantCulture, out int scalar) || !Rune.IsValid(scalar))
+                    {
                         throw new FormatException("invalid TOML Unicode escape");
+                    }
+
                     decoded.Append(char.ConvertFromUtf32(scalar));
                     i += digits;
                     break;
@@ -191,11 +286,23 @@ public static class RustProjectDiscovery
             char c = text[i];
             if (quote != '\0')
             {
-                if (quote == '"' && c == '\\') i++;
-                else if (c == quote) quote = '\0';
+                if (quote == '"' && c == '\\')
+                {
+                    i++;
+                }
+                else if (c == quote)
+                {
+                    quote = '\0';
+                }
             }
-            else if (c is '"' or '\'') quote = c;
-            else if (c == character) return i;
+            else if (c is '"' or '\'')
+            {
+                quote = c;
+            }
+            else if (c == character)
+            {
+                return i;
+            }
         }
         return -1;
     }
@@ -209,27 +316,54 @@ public static class RustProjectDiscovery
             char c = text[i];
             if (quote != '\0')
             {
-                if (quote == '"' && c == '\\') i++;
-                else if (c == quote) quote = '\0';
+                if (quote == '"' && c == '\\')
+                {
+                    i++;
+                }
+                else if (c == quote)
+                {
+                    quote = '\0';
+                }
+
                 continue;
             }
-            if (c is '"' or '\'') quote = c;
-            else if (c is '{' or '[' or '(') depth++;
-            else if (c is '}' or ']' or ')') depth--;
+            if (c is '"' or '\'')
+            {
+                quote = c;
+            }
+            else if (c is '{' or '[' or '(')
+            {
+                depth++;
+            }
+            else if (c is '}' or ']' or ')')
+            {
+                depth--;
+            }
             else if (c == separator && depth == 0)
             {
-                if (i > start) yield return text[start..i];
+                if (i > start)
+                {
+                    yield return text[start..i];
+                }
+
                 start = i + 1;
             }
         }
-        if (quote != '\0' || depth != 0) throw new FormatException("unbalanced quoted key or value");
-        if (start < text.Length) yield return text[start..];
+        if (quote != '\0' || depth != 0)
+        {
+            throw new FormatException("unbalanced quoted key or value");
+        }
+
+        if (start < text.Length)
+        {
+            yield return text[start..];
+        }
     }
 
     // Joins multiline arrays/inline tables, respecting both TOML quoting styles and comments.
     private static IEnumerable<(string text, int line)> Entries(string source)
     {
-        var entry = new StringBuilder();
+        StringBuilder entry = new StringBuilder();
         char quote = '\0';
         bool triple = false;
         int depth = 0, line = 1, start = 1;
@@ -242,21 +376,36 @@ public static class RustProjectDiscovery
                 if (c == '\\' && quote == '"' && i + 1 < source.Length)
                 {
                     entry.Append(source[++i]);
-                    if (source[i] == '\n') line++;
+                    if (source[i] == '\n')
+                    {
+                        line++;
+                    }
+
                     continue;
                 }
                 if (c == quote)
                 {
-                    if (!triple) quote = '\0';
+                    if (!triple)
+                    {
+                        quote = '\0';
+                    }
                     else if (i + 2 < source.Length && source[i + 1] == quote && source[i + 2] == quote)
                     { entry.Append(source[++i]); entry.Append(source[++i]); quote = '\0'; triple = false; }
                 }
-                if (c == '\n') line++;
+                if (c == '\n')
+                {
+                    line++;
+                }
+
                 continue;
             }
             if (c == '#')
             {
-                while (i < source.Length && source[i] != '\n') i++;
+                while (i < source.Length && source[i] != '\n')
+                {
+                    i++;
+                }
+
                 c = '\n';
             }
             if (c is '"' or '\'')
@@ -267,24 +416,54 @@ public static class RustProjectDiscovery
                 if (triple) { entry.Append(source[++i]); entry.Append(source[++i]); }
                 continue;
             }
-            if (c is '[' or '{') depth++;
-            if (c is ']' or '}') depth--;
-            if (depth < 0) throw new FormatException($"line {line}: unexpected '{c}'");
+            if (c is '[' or '{')
+            {
+                depth++;
+            }
+
+            if (c is ']' or '}')
+            {
+                depth--;
+            }
+
+            if (depth < 0)
+            {
+                throw new FormatException($"line {line}: unexpected '{c}'");
+            }
+
             if (c == '\n')
             {
                 if (depth == 0)
                 {
-                    if (entry.ToString().Trim() is { Length: > 0 } text) yield return (text, start);
+                    if (entry.ToString().Trim() is { Length: > 0 } text)
+                    {
+                        yield return (text, start);
+                    }
+
                     entry.Clear();
                     start = line + 1;
                 }
-                else entry.Append(' ');
+                else
+                {
+                    entry.Append(' ');
+                }
+
                 line++;
             }
-            else entry.Append(c);
+            else
+            {
+                entry.Append(c);
+            }
         }
-        if (quote != '\0' || depth != 0) throw new FormatException($"line {start}: unterminated quoted value or table");
-        if (entry.ToString().Trim() is { Length: > 0 } last) yield return (last, start);
+        if (quote != '\0' || depth != 0)
+        {
+            throw new FormatException($"line {start}: unterminated quoted value or table");
+        }
+
+        if (entry.ToString().Trim() is { Length: > 0 } last)
+        {
+            yield return (last, start);
+        }
     }
 
     private static void CollectManifests(string directory, IReadOnlySet<string>? excluded, List<string> result)
@@ -292,12 +471,20 @@ public static class RustProjectDiscovery
         try
         {
             string path = System.IO.Path.Combine(directory, "Cargo.toml");
-            if (File.Exists(path)) result.Add(System.IO.Path.GetFullPath(path));
+            if (File.Exists(path))
+            {
+                result.Add(System.IO.Path.GetFullPath(path));
+            }
+
             foreach (string child in Directory.EnumerateDirectories(directory).Order(StringComparer.Ordinal))
             {
                 string name = System.IO.Path.GetFileName(child);
                 if (name is "target" or ".git" || excluded?.Contains(name) == true
-                    || File.GetAttributes(child).HasFlag(FileAttributes.ReparsePoint)) continue;
+                    || File.GetAttributes(child).HasFlag(FileAttributes.ReparsePoint))
+                {
+                    continue;
+                }
+
                 CollectManifests(child, excluded, result);
             }
         }

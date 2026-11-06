@@ -48,15 +48,15 @@ public class RustFrontendBundleTests
         new(bundleFactory: () => new MemoryStream(bytes, writable: false), cacheDirectory: _root);
 
     [Test]
-    public void OptionalArchiveIsLazyAndConcurrentPublicationReusesOneVerifiedDirectory()
+    public async Task OptionalArchiveIsLazyAndConcurrentPublicationReusesOneVerifiedDirectory()
     {
         byte[] bytes = Bundle();
         int opened = 0;
         var lazy = new RustSourceParser(bundleFactory: () => { opened++; return new MemoryStream(bytes); }, cacheDirectory: _root);
         Assert.That(lazy.Extensions, Is.EqualTo(new[] { ".rs" }));
         Assert.That(opened, Is.Zero, "provider construction must not extract a frontend");
-        var identities = Task.WhenAll(Enumerable.Range(0, 8)
-            .Select(_ => Task.Run(() => Parser(bytes).GetCacheIdentity("lib.rs")))).GetAwaiter().GetResult();
+        var identities = await Task.WhenAll(Enumerable.Range(0, 8)
+            .Select(_ => Task.Run(() => Parser(bytes).GetCacheIdentity("lib.rs"))));
         Assert.That(identities.Distinct().Count(), Is.EqualTo(1));
         Assert.That(lazy.GetCacheIdentity("lib.rs"), Is.EqualTo(identities[0]));
         Assert.That(lazy.CanCache("lib.rs"), Is.False);
@@ -84,7 +84,7 @@ public class RustFrontendBundleTests
     }
 
     [Test]
-    public void SourcePreparationUsesOriginalArchiveAndConcurrentAtomicPublicationWithIntegrityChecks()
+    public async Task SourcePreparationUsesOriginalArchiveAndConcurrentAtomicPublicationWithIntegrityChecks()
     {
         byte[] bytes = Bundle();
         var deployment = RustFrontendBundle.Find(() => new MemoryStream(bytes), _root)!;
@@ -92,8 +92,8 @@ public class RustFrontendBundleTests
         Assert.That(Directory.GetFiles(_root, "lib.rs", SearchOption.AllDirectories), Is.Empty);
         var preparations = Enumerable.Range(0, 8).Select(_ =>
             RustFrontendBundle.Find(() => new MemoryStream(bytes), _root)!).ToArray();
-        var sources = Task.WhenAll(preparations.Select(prepared =>
-            Task.Run(() => prepared.PrepareStandardLibrary!()))).GetAwaiter().GetResult();
+        var sources = await Task.WhenAll(preparations.Select(prepared =>
+            Task.Run(() => prepared.PrepareStandardLibrary!())));
         Assert.That(sources.Distinct().Count(), Is.EqualTo(1));
         Assert.That(deployment.PrepareStandardLibrary!(), Is.EqualTo(sources[0]));
         Assert.That(Directory.GetDirectories(_root), Has.Length.EqualTo(2),
@@ -114,9 +114,9 @@ public class RustFrontendBundleTests
     [TestCase("rust-stdlib\\..\\escaped")]
     [TestCase("rust-stdlib/.. /escaped")]
     [TestCase("rust-stdlib//ambiguous")]
-    public void TraversalAndAmbiguousNamesAreErrorsNotFallback(string entry)
+    public async Task TraversalAndAmbiguousNamesAreErrorsNotFallback(string entry)
     {
-        var parsed = Parser(Bundle(entry)).Parse("fixture.rs", "fn run(){}")!;
+        var parsed = (await Parser(Bundle(entry)).ParseAsync("fixture.rs", "fn run(){}", cancellationToken: CancellationToken.None))!;
         Assert.That(parsed.ParseErrors, Has.Count.EqualTo(1));
         Assert.That(parsed.ParseErrors.Single(), Does.Contain("Unsafe Rust frontend bundle entry"));
         Assert.That(parsed.Methods, Is.Empty);
@@ -150,12 +150,12 @@ public class RustFrontendBundleTests
     }
 
     [Test]
-    public void MissingArchiveHasGenuineStructuralFallbackRatherThanBackendFailure()
+    public async Task MissingArchiveHasGenuineStructuralFallbackRatherThanBackendFailure()
     {
         var parser = new RustSourceParser(bundleFactory: () => null, cacheDirectory: _root);
-        var file = parser.Parse("fixture.rs", "pub struct Alpha; impl Alpha { pub fn run(&self) {} }")!;
+        var file = (await parser.ParseAsync("fixture.rs", "pub struct Alpha; impl Alpha { pub fn run(&self) {} }", cancellationToken: CancellationToken.None))!;
         Assert.That(file.ParseErrors, Is.Empty);
-        Assert.That(file.Types.Where(t => t.Kind == TypeKind.Struct).SelectMany(t => t.Methods).Select(m => m.Name),
+        Assert.That(await file.Types.Where(t => t.Kind == TypeKind.Struct).ToAsyncEnumerable().SelectMany(AsyncSourceFacts.MethodsAsync).Select(m => m.Name).ToArrayAsync(),
             Is.EqualTo(new[] { "run" }));
         Assert.That(parser.CanCache("fixture.rs"), Is.True);
         Assert.That(Directory.GetFileSystemEntries(_root), Is.Empty);

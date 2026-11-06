@@ -1,3 +1,5 @@
+// Exposes OpenAPI paths and operations as queryable provider collections.
+
 using System.Collections.Concurrent;
 using Cop.Core;
 using Cop.Providers.SourceModel;
@@ -10,11 +12,12 @@ namespace Cop.Providers.OpenApi;
 /// </summary>
 public sealed class OpenApiProvider : DataProvider
 {
-    public override ReadOnlyMemory<byte> GetSchema() => _schema.ToJson();
+    /// <inheritdoc />
+    public override ReadOnlyMemory<byte> GetSchema() => s_schema.ToJson();
 
-    private static readonly ProviderSchema _schema = BuildSchema();
+    private static readonly ProviderSchema s_schema = BuildSchema();
 
-    private static readonly HashSet<string> OpenApiExtensions = new(StringComparer.OrdinalIgnoreCase)
+    private static readonly HashSet<string> s_openApiExtensions = new(StringComparer.OrdinalIgnoreCase)
         { ".yaml", ".yml", ".json" };
 
     private static ProviderSchema BuildSchema()
@@ -44,8 +47,9 @@ public sealed class OpenApiProvider : DataProvider
     private static ProviderPropertySchema Prop(string name, string type = "string")
         => new() { Name = name, Type = type };
     private static ProviderPropertySchema Opt(string name, string type = "string")
-        => new() { Name = name, Type = type, Optional = true };
+        => new() { Name = name, Type = type, IsOptional = true };
 
+    /// <inheritdoc />
     public override RuntimeBindings GetRuntimeBindings()
     {
         return new RuntimeBindings
@@ -64,55 +68,82 @@ public sealed class OpenApiProvider : DataProvider
         };
     }
 
-    public override object? Query(ProviderQuery query)
+    /// <inheritdoc />
+    public override async ValueTask<object?> QueryAsync(
+        ProviderQuery query, CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         if (query.RootPath is null)
+        {
             return new Dictionary<string, List<object>>();
+        }
 
-        var rootPath = query.RootPath;
-        var excluded = query.ExcludedDirectories;
+        string rootPath = query.RootPath;
+        IReadOnlySet<string>? excluded = query.ExcludedDirectories;
 
-        var filePaths = new List<string>();
+        List<string> filePaths = new List<string>();
         CollectOpenApiCandidateFiles(rootPath, excluded, filePaths);
 
-        var parsed = new ConcurrentBag<(SourceFile File, OpenApiParser.OpenApiParseResult Spec)>();
-        Parallel.ForEach(filePaths,
-            new ParallelOptions { MaxDegreeOfParallelism = Environment.ProcessorCount },
-            filePath =>
+        ConcurrentBag<(SourceFile File, OpenApiParser.OpenApiParseResult Spec)> parsed = new ConcurrentBag<(SourceFile File, OpenApiParser.OpenApiParseResult Spec)>();
+        await Parallel.ForEachAsync(filePaths,
+            new ParallelOptions
+            {
+                MaxDegreeOfParallelism = Environment.ProcessorCount,
+                CancellationToken = cancellationToken
+            }, async (filePath, token) =>
             {
                 try
                 {
-                    var text = File.ReadAllText(filePath);
-                    var extension = Path.GetExtension(filePath);
-                    var spec = extension.Equals(".json", StringComparison.OrdinalIgnoreCase)
+                    string text = await File.ReadAllTextAsync(filePath, token).ConfigureAwait(false);
+                    string extension = Path.GetExtension(filePath);
+                    OpenApiParser.OpenApiParseResult spec = extension.Equals(".json", StringComparison.OrdinalIgnoreCase)
                         ? OpenApiParser.ParseJson(text)
                         : OpenApiParser.ParseYaml(text);
                     ExecutionStatistics.RecordInputFile(filePath);
 
                     if (spec.Operations.Count == 0 && spec.Paths.Count == 0)
+                    {
                         return;
+                    }
 
-                    var relativePath = Path.GetRelativePath(rootPath, filePath).Replace('\\', '/');
-                    var sourceFile = new SourceFile(relativePath, "openapi", [], [], text);
+                    string relativePath = Path.GetRelativePath(rootPath, filePath).Replace('\\', '/');
+                    SourceFile sourceFile = new SourceFile(relativePath, "openapi", [], [], text);
                     parsed.Add((sourceFile, spec));
                 }
-                catch { }
-            });
+                catch (System.Text.Json.JsonException ex)
+                {
+                    throw new InvalidDataException(
+                        $"Cannot parse OpenAPI candidate '{filePath}': {ex.Message}", ex);
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                    throw new IOException(
+                        $"Cannot read OpenAPI candidate '{filePath}': {ex.Message}", ex);
+                }
+            }).ConfigureAwait(false);
 
-        var sorted = parsed.OrderBy(p => p.File.Path, StringComparer.Ordinal).ToList();
+        List<(SourceFile File, OpenApiParser.OpenApiParseResult Spec)> sorted = parsed.OrderBy(p => p.File.Path, StringComparer.Ordinal).ToList();
 
-        var operations = new List<object>();
-        var paths = new List<object>();
-        foreach (var (file, spec) in sorted)
+        List<object> operations = new List<object>();
+        List<object> paths = new List<object>();
+        foreach ((SourceFile? file, OpenApiParser.OpenApiParseResult? spec) in sorted)
         {
             operations.AddRange(spec.Operations.Select(o => (object)(o with { File = file })));
             paths.AddRange(spec.Paths.Select(p => (object)(p with { File = file })));
         }
 
-        var collections = new Dictionary<string, List<object>>(StringComparer.Ordinal);
-        var requested = query.Collection;
-        if (requested is null || requested == "Operations") collections["Operations"] = operations;
-        if (requested is null || requested == "Paths") collections["Paths"] = paths;
+        Dictionary<string, List<object>> collections = new Dictionary<string, List<object>>(StringComparer.Ordinal);
+        string? requested = query.Collection;
+        if (requested is null || requested == "Operations")
+        {
+            collections["Operations"] = operations;
+        }
+
+        if (requested is null || requested == "Paths")
+        {
+            collections["Paths"] = paths;
+        }
+
         return ApplyQueryFilters(query, collections);
     }
 
@@ -120,20 +151,29 @@ public sealed class OpenApiProvider : DataProvider
     {
         try
         {
-            foreach (var file in Directory.GetFiles(dir))
+            foreach (string file in Directory.GetFiles(dir))
             {
-                if (OpenApiExtensions.Contains(Path.GetExtension(file)))
+                if (s_openApiExtensions.Contains(Path.GetExtension(file)))
+                {
                     result.Add(file);
+                }
             }
-            foreach (var subDir in Directory.GetDirectories(dir))
+            foreach (string subDir in Directory.GetDirectories(dir))
             {
-                var dirName = Path.GetFileName(subDir);
-                if (excluded is not null && excluded.Contains(dirName)) continue;
+                string dirName = Path.GetFileName(subDir);
+                if (excluded is not null && excluded.Contains(dirName))
+                {
+                    continue;
+                }
+
                 CollectOpenApiCandidateFiles(subDir, excluded, result);
             }
         }
-        catch (UnauthorizedAccessException) { }
-        catch (IOException) { }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            throw new IOException(
+                $"Cannot enumerate OpenAPI candidates in '{dir}': {ex.Message}", ex);
+        }
     }
 
     private static Dictionary<string, Dictionary<string, Func<object, object?>>> BuildAccessors()

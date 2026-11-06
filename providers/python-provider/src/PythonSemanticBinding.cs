@@ -1,3 +1,5 @@
+// Attaches deferred Python type and symbol analysis to parsed source files.
+
 using System.Text;
 using System.Text.Json;
 using Cop.Core;
@@ -7,25 +9,33 @@ namespace Cop.Providers.SourceParsers;
 
 internal static class PythonSemanticBinding
 {
+    /// <summary>
+    /// Defers Python semantic binding until a source fact is requested.
+    /// </summary>
     public static void Attach(SourceFile file, PythonToolchain toolchain)
     {
-        var path = Path.GetFullPath(file.Path);
-        var lines = file.RawText.Split('\n');
-        foreach (var statement in file.Statements.Where(s => s.Kind == "call"))
+        string path = Path.GetFullPath(file.Path);
+        string[] lines = file.RawText.Split('\n');
+        foreach (StatementInfo? statement in file.Statements.Where(s => s.Kind == "call"))
         {
-            statement.DeferSemanticAnalysis(new(() =>
+            statement.DeferSemanticAnalysisAsync(new(async cancellationToken =>
             {
-                var line = lines[statement.Line - 1];
-                var byteColumn = Encoding.UTF8.GetByteCount(line.AsSpan(0, statement.Column!.Value - 1));
-                var endByteColumn = Encoding.UTF8.GetByteCount(lines[statement.EndLine!.Value - 1].AsSpan(0, statement.EndColumn!.Value - 1));
-                using var result = toolchain.Analyze(path, file.RawText, "binding", statement.Line,
-                    byteColumn, statement.EndLine, endByteColumn)
+                string line = lines[statement.Line - 1];
+                int byteColumn = Encoding.UTF8.GetByteCount(line.AsSpan(0, statement.Column!.Value - 1));
+                int endByteColumn = Encoding.UTF8.GetByteCount(lines[statement.EndLine!.Value - 1].AsSpan(0, statement.EndColumn!.Value - 1));
+                using JsonDocument result = await toolchain.AnalyzeAsync(
+                    new(path, file.RawText)
+                    {
+                        Mode = "binding", Line = statement.Line, ByteColumn = byteColumn,
+                        EndLine = statement.EndLine, EndByteColumn = endByteColumn
+                    }, cancellationToken).ConfigureAwait(false)
                     ?? throw new InvalidOperationException("The Python interpreter became unavailable during semantic analysis.");
-                var root = result.RootElement;
+                JsonElement root = result.RootElement;
                 statement.ReceiverType = Type(Get(root, "receiver"));
                 statement.ValueType = Type(Get(root, "value"));
-                var selected = Get(root, "callable");
+                JsonElement selected = Get(root, "callable");
                 if (selected.ValueKind == JsonValueKind.Object)
+                {
                     statement.ReferencedCallable = new(String(selected, "name")!, String(selected, "signature")!)
                     {
                         DeclaringType = String(selected, "declaringType"), Namespace = String(selected, "namespace"),
@@ -35,17 +45,22 @@ internal static class PythonSemanticBinding
                         Line = Integer(selected, "line"), Column = Integer(selected, "column"),
                         EndLine = Integer(selected, "endLine"), EndColumn = Integer(selected, "endColumn"),
                     };
-                var diagnostics = Get(root, "diagnostics").EnumerateArray().Select(d => d.GetString()).ToList();
+                }
+
+                List<string?> diagnostics = Get(root, "diagnostics").EnumerateArray().Select(d => d.GetString()).ToList();
                 if (diagnostics.Count > 0)
+                {
                     ProviderWarnings.ReportOnce("python", $"binding:{file.Path}:{statement.Line}:{statement.Column}",
                         $"Partial source binding at {file.Path}({statement.Line},{statement.Column}): {string.Join("; ", diagnostics)}. Unknown semantic facts remain unavailable.");
+                }
+
                 return true;
             }));
         }
     }
 
     private static JsonElement Get(JsonElement node, string key) =>
-        node.TryGetProperty(key, out var value) ? value : default;
+        node.TryGetProperty(key, out JsonElement value) ? value : default;
     private static string? String(JsonElement node, string key) =>
         Get(node, key).ValueKind == JsonValueKind.String ? Get(node, key).GetString() : null;
     private static int? Integer(JsonElement node, string key) =>

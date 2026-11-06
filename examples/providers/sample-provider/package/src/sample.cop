@@ -15,5 +15,5 @@ type Widget = {
     FilePath : string
 }
 
-predicate isLarge(Widget) = Widget.Size:gt(100)
-predicate isUncategorized(Widget) = Widget.Category:eq('uncategorized')
+predicate isLarge(Widget) => Widget.Size > 100
+predicate isUncategorized(Widget) => Widget.Category:equals('uncategorized')

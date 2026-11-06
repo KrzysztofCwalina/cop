@@ -28,12 +28,13 @@ public class SelfCheckStructureTests
     public void TearDown() => Directory.Delete(_root, recursive: true);
 
     [Test]
-    public void Issue054_AllSelfChecksPassStrictStructureWithoutExceptions()
+    public void Issue054_AllSelfChecksPassStrictStructureWithApprovedFormattingChecks()
     {
         var checks = Path.Combine(_repo, "cop-checks");
         var files = Directory.GetFiles(checks, "*.cop", SearchOption.AllDirectories);
         Assert.That(files, Has.Length.EqualTo(41));
-        var diagnostics = VerifyCommand.CollectDiagnostics(files, checks, File.ReadAllText, strictStructure: true);
+        var diagnostics = VerifyCommand.CollectDiagnostics(files, checks, File.ReadAllText,
+            strictStructure: true, allowTextChecks: ["hasTab", "hasTrailingWhitespace"]);
         Assert.That(diagnostics, Is.Empty, string.Join("\n", diagnostics.Select(d => d.Message)));
     }
 
@@ -111,38 +112,78 @@ public class SelfCheckStructureTests
     }
 
     [Test]
-    public void GroupedSelfChecks_RunCopAndCSharpRulesThroughRootMain()
+    public async Task GroupedSelfChecks_RunCopAndCSharpRulesThroughRootMain()
     {
         var target = Path.Combine(_root, "target");
         Directory.CreateDirectory(target);
         File.WriteAllText(Path.Combine(target, "Wrong.cop"),
             "export function misplaced(value : string) : string => intrinsic");
         File.WriteAllText(Path.Combine(target, "Sample.cs"),
-            "namespace Fixture; public interface IUnexpected { }");
+            """
+            // Fixture for the repository's interface policy.
+            namespace Fixture.Example;
+            /// <summary>A contract rejected by the repository's interface policy.</summary>
+            public interface IUnexpected
+            {
+                /// <summary>Executes the fixture operation.</summary>
+                void Run();
+            }
+            """);
         var checks = Path.Combine(_repo, "cop-checks");
         var main = Path.Combine(checks, "main.cop");
         var files = Directory.GetFiles(checks, "*.cop", SearchOption.AllDirectories)
             .Where(f => f != main).Order(StringComparer.Ordinal).Append(main).ToArray();
-        var result = Engine.Run(checks, target, scriptFiles: files,
-            additionalFeedPaths: [Path.Combine(_repo, "packages")]);
+        var result = (await Engine.RunAsync(checks, target, new EngineRunOptions
+        {
+            ScriptFiles = files,
+            AdditionalFeedPaths = [Path.Combine(_repo, "packages")],
+        }));
 
         Assert.That(result.HasFatalErrors, Is.False, string.Join("\n", result.Errors));
         Assert.That(result.Outputs.Select(o => o.Message), Is.EqualTo(new[]
         {
             "Wrong.cop(1): error: Intrinsic declaration must be in intrinsics.cop, not Wrong.cop",
-            "Sample.cs(1): error: Use an abstract class instead of interface IUnexpected (Sample.cs)"
+            "Sample.cs(4): error: Use an abstract class instead of interface IUnexpected (Sample.cs)"
         }));
     }
 
+    [TestCase("tests")]
+    [TestCase("samples")]
+    [TestCase("examples")]
+    public async Task DefaultCSharpChecksExcludeNonProductionFixtures(string folder)
+    {
+        var target = Path.Combine(_root, "target");
+        var excluded = Path.Combine(target, folder);
+        Directory.CreateDirectory(excluded);
+        File.WriteAllText(Path.Combine(excluded, "Sample.cs"),
+            "namespace Fixture; public class sample { public void Run() { var value = Missing(); } }");
+        var checks = Path.Combine(_repo, "cop-checks");
+        var main = Path.Combine(checks, "main.cop");
+        var files = Directory.GetFiles(checks, "*.cop", SearchOption.AllDirectories)
+            .Where(f => f != main).Order(StringComparer.Ordinal).Append(main).ToArray();
+        var result = (await Engine.RunAsync(checks, target, new EngineRunOptions
+        {
+            ScriptFiles = files,
+            AdditionalFeedPaths = [Path.Combine(_repo, "packages")],
+        }));
+
+        Assert.That(result.HasFatalErrors, Is.False, string.Join("\n", result.Errors));
+        Assert.That(result.Outputs.Select(o => o.Message), Is.Empty);
+        Assert.That(result.ExitCode, Is.EqualTo(0));
+    }
+
     [Test]
-    public void RepositoryPassesDefaultSelfChecks()
+    public async Task RepositoryPassesDefaultSelfChecks()
     {
         var checks = Path.Combine(_repo, "cop-checks");
         var main = Path.Combine(checks, "main.cop");
         var files = Directory.GetFiles(checks, "*.cop", SearchOption.AllDirectories)
             .Where(f => f != main).Order(StringComparer.Ordinal).Append(main).ToArray();
-        var result = Engine.Run(checks, _repo, scriptFiles: files,
-            additionalFeedPaths: [Path.Combine(_repo, "packages")]);
+        var result = (await Engine.RunAsync(checks, _repo, new EngineRunOptions
+        {
+            ScriptFiles = files,
+            AdditionalFeedPaths = [Path.Combine(_repo, "packages")],
+        }));
 
         Assert.That(result.HasFatalErrors, Is.False, string.Join("\n", result.Errors));
         Assert.That(result.Outputs.Select(o => o.Message), Is.Empty);
@@ -151,7 +192,7 @@ public class SelfCheckStructureTests
 
     [TestCase(false)]
     [TestCase(true)]
-    public void SelfChecksHandleLegacyNegativeFixtureNamesWithoutChangingTheTarget(bool hasViolation)
+    public async Task SelfChecksHandleLegacyNegativeFixtureNamesWithoutChangingTheTarget(bool hasViolation)
     {
         var target = Path.Combine(_root, "target");
         Directory.CreateDirectory(target);
@@ -168,8 +209,11 @@ public class SelfCheckStructureTests
 
         for (int run = 0; run < 2; run++)
         {
-            var result = Engine.Run(checks, target, scriptFiles: files,
-                additionalFeedPaths: [Path.Combine(_repo, "packages")]);
+            var result = (await Engine.RunAsync(checks, target, new EngineRunOptions
+            {
+                ScriptFiles = files,
+                AdditionalFeedPaths = [Path.Combine(_repo, "packages")],
+            }));
 
             Assert.That(result.HasFatalErrors, Is.False, string.Join("\n", result.Errors));
             Assert.That(result.Warnings!.Where(w => w.Contains("source analysis error")), Is.Empty);
@@ -186,7 +230,7 @@ public class SelfCheckStructureTests
     }
 
     [Test]
-    public void RepositoryHasNoUnapprovedRegexImports()
+    public async Task RepositoryHasNoUnapprovedRegexImports()
     {
         File.Copy(Path.Combine(_repo, "cop-checks", "csharp", "no-regex.cop"), Path.Combine(_root, "rule.cop"));
         File.WriteAllText(Path.Combine(_root, "main.cop"), """
@@ -195,7 +239,10 @@ public class SelfCheckStructureTests
             let codebase = codebase(csharp.parse())
             command MAIN = CHECK(no-regex)
             """);
-        var result = Engine.Run(_root, _repo, additionalFeedPaths: [Path.Combine(_repo, "packages")]);
+        var result = (await Engine.RunAsync(_root, _repo, new EngineRunOptions
+        {
+            AdditionalFeedPaths = [Path.Combine(_repo, "packages")],
+        }));
 
         Assert.That(result.HasParseErrors, Is.False, string.Join("\n", result.ParseErrors));
         Assert.That(result.HasFatalErrors, Is.False, string.Join("\n", result.Errors));
@@ -224,9 +271,9 @@ public class SelfCheckStructureTests
     }
 
     [Test]
-    public void Issue054_EnvironmentCheckUsesCallsAndOnlyTheActualVariableName()
+    public async Task Issue054_EnvironmentCheckUsesCallsAndOnlyTheActualVariableName()
     {
-        AssertCheck(Path.Combine("csharp", "no-environment.cop"), "no-environment", "Input.cs", """
+        await AssertCheck(Path.Combine("csharp", "no-environment.cop"), "no-environment", "Input.cs", """
             using System;
             namespace Fixture;
             class Example {
@@ -246,9 +293,9 @@ public class SelfCheckStructureTests
     }
 
     [Test]
-    public void EnvironmentCheckKeepsUnapprovedCallsOnTheSameLine()
+    public async Task EnvironmentCheckKeepsUnapprovedCallsOnTheSameLine()
     {
-        AssertCheck(Path.Combine("csharp", "no-environment.cop"), "no-environment", "Input.cs", """
+        await AssertCheck(Path.Combine("csharp", "no-environment.cop"), "no-environment", "Input.cs", """
             using System;
             namespace Fixture;
             class Example {
@@ -261,9 +308,9 @@ public class SelfCheckStructureTests
     }
 
     [Test]
-    public void EnvironmentCheckAllowsOnlyLiteralSearchPathReads()
+    public async Task EnvironmentCheckAllowsOnlyLiteralSearchPathReads()
     {
-        AssertCheck(Path.Combine("csharp", "no-environment.cop"), "no-environment", "Input.cs", """
+        await AssertCheck(Path.Combine("csharp", "no-environment.cop"), "no-environment", "Input.cs", """
             using System;
             namespace Fixture;
             class Example {
@@ -279,9 +326,9 @@ public class SelfCheckStructureTests
 
     [TestCase("cop/cli/commands/CopInstallation.cs", true)]
     [TestCase("cop/cli/commands/Other.cs", false)]
-    public void EnvironmentCheckLimitsPathUpdatesToTheInstaller(string file, bool isInstaller)
+    public async Task EnvironmentCheckLimitsPathUpdatesToTheInstaller(string file, bool isInstaller)
     {
-        AssertCheck(Path.Combine("csharp", "no-environment.cop"), "no-environment", file, """
+        await AssertCheck(Path.Combine("csharp", "no-environment.cop"), "no-environment", file, """
             using System;
             namespace Fixture;
             class Example {
@@ -300,13 +347,13 @@ public class SelfCheckStructureTests
     [TestCase("providers/java-provider/src/JavaSemanticContext.cs", "Discover", "CLASSPATH", false, true)]
     [TestCase("providers/rust-provider/src/RustFrontend.cs", "Bind", "CARGO_HOME", true, true)]
     [TestCase("providers/rust-provider/src/Other.cs", "Bind", "CARGO_HOME", false, false)]
-    public void EnvironmentCheckLimitsReviewedFrontendContextToItsOwner(
+    public async Task EnvironmentCheckLimitsReviewedFrontendContextToItsOwner(
         string file, string method, string variable, bool allowsComputed, bool allowsLiteral)
     {
         int[] violations = allowsLiteral
             ? allowsComputed ? [6, 8, 11] : [6, 7, 8, 11]
             : [5, 6, 7, 8, 11];
-        AssertCheck(Path.Combine("csharp", "no-environment.cop"), "no-environment", file, $$"""
+        await AssertCheck(Path.Combine("csharp", "no-environment.cop"), "no-environment", file, $$"""
             using System;
             namespace Fixture;
             class Example {
@@ -324,9 +371,9 @@ public class SelfCheckStructureTests
     }
 
     [Test]
-    public void Issue054_FfiApprovalUsesTheDecodedFirstArgumentOnly()
+    public async Task Issue054_FfiApprovalUsesTheDecodedFirstArgumentOnly()
     {
-        AssertCheck(Path.Combine("csharp", "no-new-ffi.cop"), "no-new-ffi", "Input.cs", """
+        await AssertCheck(Path.Combine("csharp", "no-new-ffi.cop"), "no-new-ffi", "Input.cs", """
             class Example {
                 void RegisterAll(Registry ffi) {
                     ffi.Register("print", () => "");
@@ -349,9 +396,9 @@ public class SelfCheckStructureTests
     [TestCase("src/Input.cs", true)]
     [TestCase("samples/Input.cs", true)]
     [TestCase("examples/Input.cs", true)]
-    public void FfiCheckExemptsTestsButStillChecksOtherSources(string file, bool hasViolations)
+    public async Task FfiCheckExemptsTestsButStillChecksOtherSources(string file, bool hasViolations)
     {
-        AssertCheck(Path.Combine("csharp", "no-new-ffi.cop"), "no-new-ffi", file, """
+        await AssertCheck(Path.Combine("csharp", "no-new-ffi.cop"), "no-new-ffi", file, """
             class Example {
                 void EvalForeignFunction(Registry ffi) {
                     ffi.Register("double", () => 0);
@@ -367,17 +414,17 @@ public class SelfCheckStructureTests
 
     [TestCase("src/Input.cop", true)]
     [TestCase("tests/Input.cop", false)]
-    public void FfiCheckPreservesCopCallCoverage(string file, bool hasViolation)
+    public async Task FfiCheckPreservesCopCallCoverage(string file, bool hasViolation)
     {
-        AssertCheck(Path.Combine("csharp", "no-new-ffi.cop"), "no-new-ffi", file,
+        await AssertCheck(Path.Combine("csharp", "no-new-ffi.cop"), "no-new-ffi", file,
             "let registration = ffi.Register('unexpected')", "cop", hasViolation ? [1] : [],
             "Unapproved runtime function; use a .cop package or get explicit approval");
     }
 
     [Test]
-    public void Issue054_NullableCheckUsesActiveParsedDirectives()
+    public async Task Issue054_NullableCheckUsesActiveParsedDirectives()
     {
-        AssertCheck(Path.Combine("csharp", "derived", "no-nullable-disable.cop"), "derived-no-nullable-disable", "Input.cs", """
+        await AssertCheck(Path.Combine("csharp", "derived", "no-nullable-disable.cop"), "derived-no-nullable-disable", "Input.cs", """
             #nullable enable
             // #nullable disable
             class Example { string Decoy = "#nullable disable"; }
@@ -400,9 +447,9 @@ public class SelfCheckStructureTests
     [TestCase("checks/java-checks")]
     [TestCase("checks/go-checks")]
     [TestCase("checks/rust-checks")]
-    public void Issue054_PackageCheckUsesCopCallAndMemberNodesIncludingCachedRuns(string package)
+    public async Task Issue054_PackageCheckUsesCopCallAndMemberNodesIncludingCachedRuns(string package)
     {
-        AssertCheck(Path.Combine("cop", "packages", "language-checks-require-parser.cop"),
+        await AssertCheck(Path.Combine("cop", "packages", "language-checks-require-parser.cop"),
             "lang-provider-hardcoded-violations", Path.Combine(package, "Input.cop"), """
             # codebase(Program.Providers)
             let decoy = 'codebase(Program.Providers)'
@@ -420,9 +467,9 @@ public class SelfCheckStructureTests
     [TestCase("tests/Input.cs", false)]
     [TestCase("samples/Input.cs", false)]
     [TestCase("examples/Input.cs", true)]
-    public void NamespaceCheckPreservesItsFixtureExemptions(string file, bool hasViolation)
+    public async Task NamespaceCheckPreservesItsFixtureExemptions(string file, bool hasViolation)
     {
-        AssertCheck(Path.Combine("csharp", "types-require-namespaces.cop"), "types-without-namespace", file,
+        await AssertCheck(Path.Combine("csharp", "types-require-namespaces.cop"), "types-without-namespace", file,
             "class Example { }", "csharp", hasViolation ? [1] : [],
             $"Example in {file} must be in a namespace");
     }
@@ -431,9 +478,9 @@ public class SelfCheckStructureTests
     [TestCase("tests/Input.cs", false)]
     [TestCase("samples/Input.cs", false)]
     [TestCase("examples/Input.cs", false)]
-    public void InterfaceCheckExemptsTestsSamplesAndExamples(string file, bool hasViolation)
+    public async Task InterfaceCheckExemptsTestsSamplesAndExamples(string file, bool hasViolation)
     {
-        AssertCheck(Path.Combine("csharp", "no-interfaces.cop"), "no-new-interfaces", file,
+        await AssertCheck(Path.Combine("csharp", "no-interfaces.cop"), "no-new-interfaces", file,
             "namespace Example; interface IUnexpected { }", "csharp", hasViolation ? [1] : [],
             $"Use an abstract class instead of interface IUnexpected ({file})");
     }
@@ -441,7 +488,7 @@ public class SelfCheckStructureTests
     [TestCase("[]", new[] { 2, 3, 6 })]
     [TestCase("['IAllowed']", new[] { 3, 6 })]
     [TestCase("['iallowed', 'IFirst', 'ISecond']", new int[] { })]
-    public void InterfaceQueryUsesCallerScopeAllowlistAndDiagnostic(string allowed, int[] lines)
+    public async Task InterfaceQueryUsesCallerScopeAllowlistAndDiagnostic(string allowed, int[] lines)
     {
         var target = Path.Combine(_root, "target");
         Directory.CreateDirectory(target);
@@ -468,8 +515,10 @@ public class SelfCheckStructureTests
             $"Input.cs({line}): error: Caller policy rejects {names[line]}");
         for (int run = 0; run < 2; run++)
         {
-            var result = Engine.Run(_root, target,
-                additionalFeedPaths: [Path.Combine(_repo, "packages")]);
+            var result = (await Engine.RunAsync(_root, target, new EngineRunOptions
+            {
+                AdditionalFeedPaths = [Path.Combine(_repo, "packages")],
+            }));
 
             Assert.That(result.HasParseErrors, Is.False, string.Join("\n", result.ParseErrors));
             Assert.That(result.HasFatalErrors, Is.False, string.Join("\n", result.Errors));
@@ -482,20 +531,20 @@ public class SelfCheckStructureTests
     [TestCase("tests/Input.cs", false)]
     [TestCase("samples/Input.cs", false)]
     [TestCase("examples/Input.cs", true)]
-    public void ExceptionChecksOnlyExemptTestsAndSamples(string file, bool hasViolation)
+    public async Task ExceptionChecksOnlyExemptTestsAndSamples(string file, bool hasViolation)
     {
-        AssertCheck(Path.Combine("csharp", "derived", "exception-naming.cop"),
+        await AssertCheck(Path.Combine("csharp", "derived", "exception-naming.cop"),
             "derived-exception-naming", file, "namespace Fixture; class Failure : Exception { }",
             "csharp", hasViolation ? [1] : [],
             $"Failure derives from Exception but is not named *Exception ({file})");
-        AssertCheck(Path.Combine("csharp", "derived", "exception-suffix-implies-base.cop"),
+        await AssertCheck(Path.Combine("csharp", "derived", "exception-suffix-implies-base.cop"),
             "derived-exception-suffix-implies-base", file, "namespace Fixture; class FailureException { }",
             "csharp", hasViolation ? [1] : [],
             "FailureException is named *Exception but does not derive from Exception");
     }
 
     [Test]
-    public void SharedFileScopesPreserveDistinctExemptions()
+    public async Task SharedFileScopesPreserveDistinctExemptions()
     {
         var scripts = Path.Combine(_root, "cop-checks");
         var target = Path.Combine(_root, "target");
@@ -520,8 +569,12 @@ public class SelfCheckStructureTests
         var checks = Path.Combine(_repo, "cop-checks");
         var files = Directory.GetFiles(checks, "*.cop", SearchOption.AllDirectories)
             .Order(StringComparer.Ordinal).Append(program).ToArray();
-        var result = Engine.Run(checks, target, commandName: "FILE_SCOPES", scriptFiles: files,
-            additionalFeedPaths: [Path.Combine(_repo, "packages")]);
+        var result = (await Engine.RunAsync(checks, target, new EngineRunOptions
+        {
+            CommandName = "FILE_SCOPES",
+            ScriptFiles = files,
+            AdditionalFeedPaths = [Path.Combine(_repo, "packages")],
+        }));
 
         Assert.That(result.HasParseErrors, Is.False, string.Join("\n", result.ParseErrors));
         Assert.That(result.HasFatalErrors, Is.False, string.Join("\n", result.Errors));
@@ -541,9 +594,9 @@ public class SelfCheckStructureTests
     [TestCase("tests/Input.cs", false)]
     [TestCase("samples/Input.cs", true)]
     [TestCase("examples/Input.cs", true)]
-    public void FixtureLocationCheckOnlyExemptsTests(string file, bool hasViolation)
+    public async Task FixtureLocationCheckOnlyExemptsTests(string file, bool hasViolation)
     {
-        AssertCheck(Path.Combine("csharp", "derived", "test-fixtures-under-tests.cop"),
+        await AssertCheck(Path.Combine("csharp", "derived", "test-fixtures-under-tests.cop"),
             "derived-tests-location", file, "using NUnit.Framework; namespace Fixture; [TestFixture] class Example { }",
             "csharp", hasViolation ? [1] : [],
             $"Test fixture Example must live under tests/ ({file})");
@@ -553,9 +606,9 @@ public class SelfCheckStructureTests
     [TestCase("tests/Input.cs", false)]
     [TestCase("samples/Input.cs", false)]
     [TestCase("examples/Input.cs", true)]
-    public void EnvironmentCheckOnlyExemptsTestsAndSamples(string file, bool hasViolation)
+    public async Task EnvironmentCheckOnlyExemptsTestsAndSamples(string file, bool hasViolation)
     {
-        AssertCheck(Path.Combine("csharp", "no-environment.cop"), "no-environment", file,
+        await AssertCheck(Path.Combine("csharp", "no-environment.cop"), "no-environment", file,
             "class Example { string? Read() => Environment.GetEnvironmentVariable(\"MODE\"); }",
             "csharp", hasViolation ? [1] : [],
             "Use CLI flags or config instead of environment variables for Cop settings");
@@ -565,9 +618,9 @@ public class SelfCheckStructureTests
     [TestCase("tests/Input.cs", true)]
     [TestCase("samples/Input.cs", false)]
     [TestCase("examples/Input.cs", false)]
-    public void ProviderNamespaceCheckOnlyExemptsSamplesAndExamples(string file, bool hasViolation)
+    public async Task ProviderNamespaceCheckOnlyExemptsSamplesAndExamples(string file, bool hasViolation)
     {
-        AssertCheck(Path.Combine("csharp", "derived", "provider-namespace.cop"),
+        await AssertCheck(Path.Combine("csharp", "derived", "provider-namespace.cop"),
             "derived-provider-namespace", file, "namespace Other; class ExampleProvider : DataProvider { }",
             "csharp", hasViolation ? [1] : [],
             "ExampleProvider: namespace must start with Cop.Providers, not Other");
@@ -575,9 +628,9 @@ public class SelfCheckStructureTests
 
     [TestCase("cop/cli/cop.csproj", true)]
     [TestCase("providers/example/Example.csproj", false)]
-    public void AspNetFrameworkCheckOnlyAppliesToCliProjects(string file, bool hasViolation)
+    public async Task AspNetFrameworkCheckOnlyAppliesToCliProjects(string file, bool hasViolation)
     {
-        AssertCheck(Path.Combine("csharp", "cli-no-aspnet-framework.cop"), "no-aspnet-in-cli", file, """
+        await AssertCheck(Path.Combine("csharp", "cli-no-aspnet-framework.cop"), "no-aspnet-in-cli", file, """
             <Project Sdk="Microsoft.NET.Sdk">
               <PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup>
               <ItemGroup><FrameworkReference Include="Microsoft.AspNetCore.App" /></ItemGroup>
@@ -588,9 +641,9 @@ public class SelfCheckStructureTests
     }
 
     [Test]
-    public void RegexCheckPreservesInfrastructureNameExemptions()
+    public async Task RegexCheckPreservesInfrastructureNameExemptions()
     {
-        AssertCheck(Path.Combine("csharp", "no-regex.cop"), "no-regex", "Input.cs", """
+        await AssertCheck(Path.Combine("csharp", "no-regex.cop"), "no-regex", "Input.cs", """
             using System.Text.RegularExpressions;
             namespace Fixture;
             class Unexpected { }
@@ -604,7 +657,7 @@ public class SelfCheckStructureTests
     }
 
     [Test]
-    public void Issue103_NamedDiagnosticTemplateRendersEveryType()
+    public async Task Issue103_NamedDiagnosticTemplateRendersEveryType()
     {
         var target = Path.Combine(_root, "target");
         Directory.CreateDirectory(target);
@@ -621,7 +674,10 @@ public class SelfCheckStructureTests
             command MAIN = CHECK(codebase.Types:toError(message))
             """);
 
-        var result = Engine.Run(_root, target, additionalFeedPaths: [Path.Combine(_repo, "packages")]);
+        var result = (await Engine.RunAsync(_root, target, new EngineRunOptions
+        {
+            AdditionalFeedPaths = [Path.Combine(_repo, "packages")],
+        }));
 
         Assert.That(result.HasFatalErrors, Is.False, string.Join("\n", result.Errors));
         Assert.That(result.Outputs.Select(o => o.Message), Is.EqualTo(new[]
@@ -633,7 +689,7 @@ public class SelfCheckStructureTests
     }
 
     [Test]
-    public void RegexCheckUsesSharedCodebaseSelection()
+    public async Task RegexCheckUsesSharedCodebaseSelection()
     {
         var target = Path.Combine(_root, "target");
         var selected = Path.Combine(target, "selected");
@@ -656,7 +712,10 @@ public class SelfCheckStructureTests
             command MAIN = CHECK(no-regex)
             """);
 
-        var result = Engine.Run(_root, target, additionalFeedPaths: [Path.Combine(_repo, "packages")]);
+        var result = (await Engine.RunAsync(_root, target, new EngineRunOptions
+        {
+            AdditionalFeedPaths = [Path.Combine(_repo, "packages")],
+        }));
 
         Assert.That(result.HasFatalErrors, Is.False, string.Join("\n", result.Errors));
         Assert.That(result.Outputs.Select(o => o.Message), Is.EqualTo(new[]
@@ -668,10 +727,10 @@ public class SelfCheckStructureTests
 
     [TestCase("providers/java-provider/src/JavaSemanticContext.cs", "Discover", false)]
     [TestCase("providers/rust-provider/src/RustFrontend.cs", "Bind", true)]
-    public void FrontendEnvironmentExemptionsRequireExactlyOneArgument(
+    public async Task FrontendEnvironmentExemptionsRequireExactlyOneArgument(
         string file, string method, bool allowsComputedName)
     {
-        AssertCheck(Path.Combine("csharp", "no-environment.cop"), "no-environment", file, $$"""
+        await AssertCheck(Path.Combine("csharp", "no-environment.cop"), "no-environment", file, $$"""
             using System;
             namespace Fixture;
             class Example {
@@ -690,9 +749,9 @@ public class SelfCheckStructureTests
     [TestCase("Cop.Providers.Example", false)]
     [TestCase("Cop.ProvidersExtra", false)]
     [TestCase("Other", true)]
-    public void ProviderNamespaceCheckPreservesPrefixMatching(string ns, bool hasViolation)
+    public async Task ProviderNamespaceCheckPreservesPrefixMatching(string ns, bool hasViolation)
     {
-        AssertCheck(Path.Combine("csharp", "derived", "provider-namespace.cop"),
+        await AssertCheck(Path.Combine("csharp", "derived", "provider-namespace.cop"),
             "derived-provider-namespace", "Input.cs",
             $"namespace {ns}; class SampleProvider : DataProvider {{ }}",
             "csharp", hasViolation ? [1] : [],
@@ -702,10 +761,10 @@ public class SelfCheckStructureTests
     [TestCase(null, false)]
     [TestCase("net10.0", true)]
     [TestCase("net10.0;net9.0", true)]
-    public void MultiTargetingCheckRejectsNonblankTargetFrameworksProperties(string? value, bool hasViolation)
+    public async Task MultiTargetingCheckRejectsNonblankTargetFrameworksProperties(string? value, bool hasViolation)
     {
         var setting = value is null ? "" : $"<TargetFrameworks>{value}</TargetFrameworks>";
-        AssertCheck(Path.Combine("csharp", "derived", "single-target-framework.cop"),
+        await AssertCheck(Path.Combine("csharp", "derived", "single-target-framework.cop"),
             "derived-single-target-framework", "Input.csproj",
             $"<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup>{setting}</PropertyGroup></Project>",
             "csharp", hasViolation ? [0] : [],
@@ -715,9 +774,9 @@ public class SelfCheckStructureTests
     [Test]
     [Explicit("Issue #101: empty project properties are omitted from the parsed model — remove when fixed")]
     [Category("PendingFix")]
-    public void Issue101_EmptyTargetFrameworksPropertyRemainsVisibleToStructuralChecks()
+    public async Task Issue101_EmptyTargetFrameworksPropertyRemainsVisibleToStructuralChecks()
     {
-        AssertCheck(Path.Combine("csharp", "derived", "single-target-framework.cop"),
+        await AssertCheck(Path.Combine("csharp", "derived", "single-target-framework.cop"),
             "derived-single-target-framework", "Input.csproj",
             "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFrameworks /></PropertyGroup></Project>",
             "csharp", [0],
@@ -730,7 +789,7 @@ public class SelfCheckStructureTests
         "Project Input must set <Nullable>enable</Nullable>")]
     [TestCase("target-framework.cop", "derived-target-framework", "TargetFramework", "net10.0", "net9.0",
         "Project Input must target net10.0")]
-    public void ProjectSettingChecksPreserveExplicitValueAndMissingSettingBehavior(
+    public async Task ProjectSettingChecksPreserveExplicitValueAndMissingSettingBehavior(
         string rule, string binding, string property, string allowed, string forbidden, string message)
     {
         var scripts = Path.Combine(_root, "cop-checks");
@@ -750,7 +809,10 @@ public class SelfCheckStructureTests
             var setting = value is null ? "" : $"<{property}>{value}</{property}>";
             File.WriteAllText(Path.Combine(target, "Input.csproj"),
                 $"<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup>{setting}</PropertyGroup></Project>");
-            var result = Engine.Run(scripts, target, additionalFeedPaths: [Path.Combine(_repo, "packages")]);
+            var result = (await Engine.RunAsync(scripts, target, new EngineRunOptions
+            {
+                AdditionalFeedPaths = [Path.Combine(_repo, "packages")],
+            }));
 
             Assert.That(result.HasFatalErrors, Is.False, string.Join("\n", result.Errors));
             Assert.That(result.Outputs.Select(o => o.Message), Is.EqualTo(value == forbidden
@@ -760,7 +822,7 @@ public class SelfCheckStructureTests
         }
     }
 
-    private void AssertCheck(string check, string binding, string file, string source,
+    private async Task AssertCheck(string check, string binding, string file, string source,
         string language, int[] lines, string message)
     {
         var scripts = Path.Combine(_root, "cop-checks");
@@ -784,8 +846,12 @@ public class SelfCheckStructureTests
             $"{path}({line}): error: {string.Format(message, line)}").ToArray();
         for (int run = 0; run < 2; run++)
         {
-            var result = Engine.Run(checks, target, commandName: "SELF_CHECK", scriptFiles: files,
-                additionalFeedPaths: [Path.Combine(_repo, "packages")]);
+            var result = (await Engine.RunAsync(checks, target, new EngineRunOptions
+            {
+                CommandName = "SELF_CHECK",
+                ScriptFiles = files,
+                AdditionalFeedPaths = [Path.Combine(_repo, "packages")],
+            }));
             Assert.That(result.HasParseErrors, Is.False, string.Join("\n", result.ParseErrors));
             Assert.That(result.HasFatalErrors, Is.False, string.Join("\n", result.Errors));
             Assert.That(result.Outputs.Select(o => o.Message), Is.EqualTo(expected), $"Run {run + 1}");

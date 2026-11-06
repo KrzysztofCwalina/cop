@@ -1,3 +1,5 @@
+// Runs StyleCop analysis and projects diagnostics into provider violations.
+
 using Cop.Core;
 
 namespace Cop.Providers.Tools;
@@ -9,23 +11,36 @@ public class CSharpStyleCopProvider : ToolProvider
 {
     protected override string ToolName => "dotnet";
 
-    protected override List<object> RunTool(string rootPath, IReadOnlySet<string> excluded)
+    protected override async ValueTask<List<object>> RunToolAsync(
+        string rootPath, IReadOnlySet<string> excluded, CancellationToken cancellationToken)
     {
         // Clean first to force analyzer re-run
-        RunProcess("dotnet", "clean --nologo -v q", rootPath);
+        await RunProcessAsync(new("dotnet", "clean --nologo -v q", rootPath),
+            cancellationToken).ConfigureAwait(false);
 
-        var (stdout, stderr, _) = RunProcess("dotnet", "build -consoleloggerparameters:NoSummary", rootPath);
-        var output = stdout + "\n" + stderr;
+        (string? stdout, string? stderr, int _) = await RunProcessAsync(
+            new("dotnet", "build -consoleloggerparameters:NoSummary", rootPath),
+            cancellationToken).ConfigureAwait(false);
+        string output = stdout + "\n" + stderr;
 
-        var violations = new List<object>();
-        foreach (var rawLine in output.Split('\n'))
+        List<object> violations = new List<object>();
+        foreach (string rawLine in output.Split('\n'))
         {
-            if (!TryParseDiagnostic(rawLine.Trim(), out var diagnosticFilePath, out var diagnosticLine, out var severity, out var ruleId, out var message)) continue;
+            if (!TryParseDiagnostic(rawLine.Trim(), out string? diagnosticFilePath, out string? diagnosticLine, out string? severity, out string? ruleId, out string? message))
+            {
+                continue;
+            }
 
-            if (!ruleId.StartsWith("SA") && !ruleId.StartsWith("CS")) continue;
+            if (!ruleId.StartsWith("SA") && !ruleId.StartsWith("CS"))
+            {
+                continue;
+            }
 
-            var filePath = NormalizePath(diagnosticFilePath, rootPath);
-            if (string.IsNullOrEmpty(filePath) || IsExcluded(filePath, excluded)) continue;
+            string filePath = NormalizePath(diagnosticFilePath, rootPath);
+            if (string.IsNullOrEmpty(filePath) || IsExcluded(filePath, excluded))
+            {
+                continue;
+            }
 
             violations.Add(new ToolViolation
             {
@@ -53,20 +68,32 @@ public class CSharpStyleCopProvider : ToolProvider
         ruleId = string.Empty;
         message = string.Empty;
 
-        for (var markerStart = 1; markerStart < line.Length; markerStart++)
+        for (int markerStart = 1; markerStart < line.Length; markerStart++)
         {
-            if (line[markerStart] != '(') continue;
+            if (line[markerStart] != '(')
+            {
+                continue;
+            }
 
-            var lineStart = markerStart + 1;
-            var lineEnd = ReadDigits(line, lineStart);
-            if (lineEnd == lineStart || lineEnd >= line.Length || line[lineEnd] != ',') continue;
+            int lineStart = markerStart + 1;
+            int lineEnd = ReadDigits(line, lineStart);
+            if (lineEnd == lineStart || lineEnd >= line.Length || line[lineEnd] != ',')
+            {
+                continue;
+            }
 
-            var columnStart = lineEnd + 1;
-            var columnEnd = ReadDigits(line, columnStart);
-            if (columnEnd == columnStart || columnEnd + 1 >= line.Length || line[columnEnd] != ')' || line[columnEnd + 1] != ':') continue;
+            int columnStart = lineEnd + 1;
+            int columnEnd = ReadDigits(line, columnStart);
+            if (columnEnd == columnStart || columnEnd + 1 >= line.Length || line[columnEnd] != ')' || line[columnEnd + 1] != ':')
+            {
+                continue;
+            }
 
-            var position = columnEnd + 2;
-            if (!ReadWhitespace(line, ref position)) return false;
+            int position = columnEnd + 2;
+            if (!ReadWhitespace(line, ref position))
+            {
+                return false;
+            }
 
             if (TryReadToken(line, ref position, "warning"))
             {
@@ -81,19 +108,28 @@ public class CSharpStyleCopProvider : ToolProvider
                 return false;
             }
 
-            if (!ReadWhitespace(line, ref position)) return false;
+            if (!ReadWhitespace(line, ref position))
+            {
+                return false;
+            }
 
-            var ruleStart = position;
+            int ruleStart = position;
             while (position < line.Length && IsRuleIdChar(line[position]))
             {
                 position++;
             }
 
-            var ruleEnd = position;
-            if (ruleEnd == ruleStart || ruleEnd >= line.Length || line[ruleEnd] != ':') return false;
+            int ruleEnd = position;
+            if (ruleEnd == ruleStart || ruleEnd >= line.Length || line[ruleEnd] != ':')
+            {
+                return false;
+            }
 
             position++;
-            if (!ReadWhitespace(line, ref position) || position >= line.Length) return false;
+            if (!ReadWhitespace(line, ref position) || position >= line.Length)
+            {
+                return false;
+            }
 
             filePath = line[..markerStart];
             lineNumber = line[lineStart..lineEnd];
@@ -117,7 +153,7 @@ public class CSharpStyleCopProvider : ToolProvider
 
     private static bool ReadWhitespace(string text, ref int position)
     {
-        var start = position;
+        int start = position;
         while (position < text.Length && char.IsWhiteSpace(text[position]))
         {
             position++;
@@ -145,12 +181,16 @@ public class CSharpStyleCopProvider : ToolProvider
 
     private static string StripProjectSuffix(string text)
     {
-        for (var i = 1; i < text.Length - 1; i++)
+        for (int i = 1; i < text.Length - 1; i++)
         {
-            if (text[i] != '[' || !char.IsWhiteSpace(text[i - 1])) continue;
+            if (text[i] != '[' || !char.IsWhiteSpace(text[i - 1]))
+            {
+                continue;
+            }
+
             if (text[^1] == ']' && i + 1 < text.Length - 1)
             {
-                var suffixStart = i - 1;
+                int suffixStart = i - 1;
                 while (suffixStart > 0 && char.IsWhiteSpace(text[suffixStart - 1]))
                 {
                     suffixStart--;

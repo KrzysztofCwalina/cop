@@ -9,7 +9,7 @@ public class TypeSpecProviderTests
     private static string RepoRoot => Path.GetFullPath(Path.Combine(TestContext.CurrentContext.TestDirectory, "..", "..", "..", "..", ".."));
 
     [Test]
-    public void TypeSpecHttpProvider_PutPathSegments_FindsOddSegmentPut()
+    public async Task TypeSpecHttpProvider_PutPathSegments_FindsOddSegmentPut()
     {
         var scriptsDir = Path.Combine(RepoRoot, "samples", "static-analysis", "typespec-http");
         var rootPath = Path.Combine(scriptsDir, "spec");
@@ -17,7 +17,7 @@ public class TypeSpecProviderTests
         if (!Directory.Exists(scriptsDir) || !Directory.Exists(rootPath))
             Assert.Ignore("Sample directory not found");
 
-        var result = Engine.Run(scriptsDir, rootPath);
+        var result = (await Engine.RunAsync(scriptsDir, rootPath));
 
         // Should have no fatal errors
         Assert.That(result.Errors, Is.Empty, $"Fatal errors: {string.Join("; ", result.Errors)}");
@@ -46,7 +46,7 @@ public class TypeSpecProviderTests
             Assert.Ignore("dynamic-routes.tsp not found");
 
         var source = File.ReadAllText(dynamicFile);
-        var rawSpec = TypeSpecProvider.TspParser.Parse(source);
+        var rawSpec = Cop.Providers.TypeSpec.TspParser.Parse(source);
 
         // Should have parsed 4 interfaces (ResourceOperations, Customers, OrderOperations, Orders)
         Assert.That(rawSpec.Interfaces, Has.Count.EqualTo(4), $"Expected 4 interfaces. Got: {string.Join(", ", rawSpec.Interfaces.Select(i => i.Name))}");
@@ -62,7 +62,7 @@ public class TypeSpecProviderTests
         Assert.That(customersIface.Operations, Has.Count.EqualTo(0), "Before transform, Customers has no own operations");
 
         // Now run the HTTP transformer which resolves extends
-        var httpSpec = TypeSpecProvider.HttpTransformer.Transform(rawSpec);
+        var httpSpec = Cop.Providers.TypeSpec.HttpTransformer.Transform(rawSpec);
 
         // Customers should now have inherited operations with Customer type substituted
         var customerOps = httpSpec.Operations.Where(o => o.Interface == "Customers").ToList();

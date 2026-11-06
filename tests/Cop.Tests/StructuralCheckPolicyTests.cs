@@ -36,6 +36,7 @@ public class StructuralCheckPolicyTests
     [TestCase("Sample.Source:matches('class')", "Source")]
     [TestCase("Sample.Source:contains('class')", "Source")]
     [TestCase("Sample.Source == 'class'", "Source")]
+    [TestCase("Sample.Source == nic", "Source")]
     [TestCase("Sample.Text:startsWith('class')", "Text")]
     [TestCase("Sample.Condition == 'x'", "Condition")]
     [TestCase("Sample.Expression == 'x'", "Expression")]
@@ -65,6 +66,34 @@ public class StructuralCheckPolicyTests
         Assert.That(diagnostics, Is.Empty);
     }
 
+    [TestCase("Comment.Content:startsWith(' ')")]
+    public void AllowsFormattingChecksOnParsedCommentContent(string expression)
+    {
+        var diagnostics = Check("type Comment = { Content : string }\n" +
+            $"predicate spaced(Comment) => {expression}\n");
+        Assert.That(diagnostics, Is.Empty);
+    }
+
+    [TestCase("let bad = Content:contains('class')")]
+    [TestCase("let bad = Get('Content'):contains('class')")]
+    public void BareContentWithoutAnImplicitReceiverProducesADiagnostic(string source)
+    {
+        var diagnostics = Check(source);
+        Assert.That(diagnostics, Has.Count.EqualTo(1));
+        Assert.That(diagnostics[0].Message, Does.Contain("'Content'"));
+    }
+
+    [Test]
+    public void DoesNotTreatOtherContentPropertiesAsParsedComments()
+    {
+        var diagnostics = Check("""
+            type Region = { Content : string }
+            predicate bad(Region) => Region.Content:contains('class')
+            """);
+        Assert.That(diagnostics, Has.Count.EqualTo(1));
+        Assert.That(diagnostics[0].Message, Does.Contain("'Content'"));
+    }
+
     [TestCase("Line:contains('class')")]
     [TestCase("text(Line):contains('class')")]
     [TestCase("'{Line}':contains('class')")]
@@ -73,6 +102,16 @@ public class StructuralCheckPolicyTests
     {
         Assert.That(Check("type Line = { Text : string }\n" +
             $"predicate bad(Line) => {expression}\n"), Has.Count.EqualTo(1));
+    }
+
+    [TestCase("reference == nic")]
+    [TestCase("reference != nic")]
+    [TestCase("nic == reference")]
+    [TestCase("nic != reference")]
+    public void AllowsNullChecksWithoutConvertingStructuredFactsToText(string expression)
+    {
+        Assert.That(Check("type TypeReference = { Name : string }\n" +
+            $"predicate present(reference: TypeReference) => {expression}\n"), Is.Empty);
     }
 
     [Test]
@@ -183,6 +222,50 @@ public class StructuralCheckPolicyTests
     }
 
     [Test]
+    public void NamedApprovalCanSelectAnImportedPrivateCheckWithoutApprovingOthers()
+    {
+        var diagnostics = Check(Model + """
+            let samples : [Sample] = []
+            let selected = samples:hasTab
+            let structural = samples:bad
+            """, ["hasTab"], imported: """
+            predicate hasTab(Sample) => Sample.Text:contains('\t')
+            predicate bad(Sample) => Sample.Source:contains('class')
+            """);
+        Assert.That(diagnostics, Has.Count.EqualTo(1));
+        Assert.That(diagnostics[0].FilePath, Is.EqualTo("helper.cop"));
+        Assert.That(diagnostics[0].Message, Does.Contain("'Source'"));
+    }
+
+    [Test]
+    public void LocalApprovalDoesNotApproveAnImportedCheckWithTheSameName()
+    {
+        var diagnostics = Check(Model + """
+            predicate approved(Sample) => Sample.Name:contains('Service')
+            let samples : [Sample] = []
+            let selected = samples:approved
+            """, ["approved"], imported:
+            "predicate approved(Sample) => Sample.Source:contains('class')\n");
+        Assert.That(diagnostics, Has.Count.EqualTo(1));
+        Assert.That(diagnostics[0].FilePath, Is.EqualTo("helper.cop"));
+    }
+
+    [Test]
+    public void AmbiguousImportedApprovalDoesNotApproveEitherCheck()
+    {
+        var source = Model + "let samples : [Sample] = []\nlet selected = samples:bad\n";
+        const string imported = "predicate bad(Sample) => Sample.Source:contains('class')\n";
+        var diagnostics = StructuralCheckPolicy.Check(
+            [(CopParser.Parse(source, "checks.cop"), "checks.cop", source)],
+            [(CopParser.Parse(imported, "one.cop"), "one.cop", imported),
+             (CopParser.Parse(imported, "two.cop"), "two.cop", imported)],
+            ["bad"]);
+        Assert.That(diagnostics, Has.Count.EqualTo(3));
+        Assert.That(diagnostics.Count(d => d.Message.StartsWith(
+            "Ambiguous text-check exception", StringComparison.Ordinal)), Is.EqualTo(1));
+    }
+
+    [Test]
     public void DoesNotScanUnusedImportedTextChecks()
     {
         Assert.That(Check("let count = 1\n", imported: Model +
@@ -211,7 +294,8 @@ public class StructuralCheckPolicyTests
         {
             using var output = new StringWriter();
             Console.SetOut(output);
-            Assert.That(VerifyCommand.Execute(file, json: true), Is.EqualTo(0));
+            Assert.That(VerifyCommand.Execute(file,
+                new VerificationOptions { IsJsonOutputEnabled = true }), Is.EqualTo(0));
             output.GetStringBuilder().Clear();
             var command = VerifyCommand.Create();
             Assert.That(command.Parse([file, "--strict-structure", "--json"]).Invoke(), Is.EqualTo(1));
@@ -235,11 +319,12 @@ public class StructuralCheckPolicyTests
     [Test]
     public void VerifyRejectsApprovalWithoutStrictMode()
     {
-        Assert.That(VerifyCommand.Execute(null, allowTextChecks: ["bad"]), Is.EqualTo(1));
+        Assert.That(VerifyCommand.Execute(null,
+            new VerificationOptions { AllowedTextChecks = ["bad"] }), Is.EqualTo(1));
     }
 
     [Test]
-    public void PackagedStructuralExampleVerifiesAndRunsWithoutMatchingTextDecoys()
+    public async Task PackagedStructuralExampleVerifiesAndRunsWithoutMatchingTextDecoys()
     {
         var repo = new DirectoryInfo(TestContext.CurrentContext.TestDirectory);
         while (repo is not null && !File.Exists(Path.Combine(repo.FullName, "cop.sln")))
@@ -278,7 +363,10 @@ public class StructuralCheckPolicyTests
                 """);
             var diagnostics = VerifyCommand.CollectDiagnostics([main], scripts, File.ReadAllText, strictStructure: true);
             Assert.That(diagnostics, Is.Empty);
-            var result = Engine.Run(scripts, target, additionalFeedPaths: [packages]);
+            var result = (await Engine.RunAsync(scripts, target, new EngineRunOptions
+            {
+                AdditionalFeedPaths = [packages],
+            }));
             Assert.That(result.HasParseErrors, Is.False, string.Join("\n", result.ParseErrors));
             Assert.That(result.HasFatalErrors, Is.False, string.Join("\n", result.Errors));
             Assert.That(result.Outputs.Select(o => o.Message), Is.EqualTo(new[]

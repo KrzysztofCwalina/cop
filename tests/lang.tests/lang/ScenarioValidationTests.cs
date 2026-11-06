@@ -19,7 +19,7 @@ public class ScenarioValidationTests
     }
 
     [Test]
-    public void S1_HelloWorld_DetectsVarUsage()
+    public async Task S1_HelloWorld_DetectsVarUsage()
     {
         // Arrange: samples/static-analysis/no-var has no-var.cop and app.cs
         // no-var.cop: import code, usesVar predicate, foreach with file path and line
@@ -27,7 +27,7 @@ public class ScenarioValidationTests
         var sampleDir = GetSamplesDir("static-analysis/no-var");
 
         // Act: Run the check engine against the sample directory
-        var result = Engine.Run(sampleDir, sampleDir);
+        var result = (await Engine.RunAsync(sampleDir, sampleDir));
 
         // Assert: No fatal errors or parse errors
         Assert.That(result.Errors, Is.Empty,
@@ -52,13 +52,13 @@ public class ScenarioValidationTests
     }
 
     [Test]
-    public void S1_HelloWorld_ImportCodeResolvesTypes()
+    public async Task S1_HelloWorld_ImportCodeResolvesTypes()
     {
         // Verify that 'import code' properly resolves the code package
         // and types (Statement, etc.) are available for predicate evaluation
         var sampleDir = GetSamplesDir("static-analysis/no-var");
 
-        var result = Engine.Run(sampleDir, sampleDir);
+        var result = (await Engine.RunAsync(sampleDir, sampleDir));
 
         // If import resolution failed, there would be errors or no outputs
         Assert.That(result.Errors, Is.Empty);
@@ -67,12 +67,12 @@ public class ScenarioValidationTests
     }
 
     [Test]
-    public void S1_HelloWorld_PrintInterpolation()
+    public async Task S1_HelloWorld_PrintInterpolation()
     {
         // Verify that {item.File.Path}:{item.Line} interpolation works
         var sampleDir = GetSamplesDir("static-analysis/no-var");
 
-        var result = Engine.Run(sampleDir, sampleDir);
+        var result = (await Engine.RunAsync(sampleDir, sampleDir));
 
         Assert.That(result.Outputs, Has.Count.GreaterThan(0));
         var message = result.Outputs[0].Message;

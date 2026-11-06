@@ -19,7 +19,7 @@ public class LanguageFeatureExecutionTests
         return dir ?? throw new InvalidOperationException("Could not find repo root (cop.sln)");
     }
 
-    private static IReadOnlyList<string> RunInProc(string source, string commandName = "main")
+    private static async Task<IReadOnlyList<string>> RunInProc(string source, string commandName = "main")
     {
         var root = Path.Combine(TestContext.CurrentContext.WorkDirectory, "language-feature-execution", Guid.NewGuid().ToString("N"));
         var scriptsDir = Path.Combine(root, "scripts");
@@ -30,7 +30,11 @@ public class LanguageFeatureExecutionTests
         try
         {
             File.WriteAllText(Path.Combine(scriptsDir, "program.cop"), source);
-            var result = Engine.Run(scriptsDir, targetDir, commandName: commandName, additionalFeedPaths: [PackagesDir]);
+            var result = (await Engine.RunAsync(scriptsDir, targetDir, new EngineRunOptions
+            {
+                CommandName = commandName,
+                AdditionalFeedPaths = [PackagesDir],
+            }));
 
             Assert.That(result.HasParseErrors, Is.False, string.Join(Environment.NewLine, result.ParseErrors));
             Assert.That(result.HasFatalErrors, Is.False, string.Join(Environment.NewLine, result.Errors));
@@ -87,107 +91,107 @@ public class LanguageFeatureExecutionTests
     }
 
     [Test]
-    public void ListAggregatesAndTransforms_ElementAtDistinctSumMax_RunOnListValue()
+    public async Task ListAggregatesAndTransforms_ElementAtDistinctSumMax_RunOnListValue()
     {
         // Issue #46
-        var outputs = RunInProc("""
+        var outputs = (await RunInProc("""
             let Items = [1 2 2 3]
             command main =
                 print(Items.ElementAt(1)) &
                 print(Items.Distinct().Count) &
                 print(Items.Sum(item)) &
                 print(Items.Max(item))
-            """);
+            """));
 
         Assert.That(outputs, Is.EqualTo(new[] { "2", "3", "8", "3" }));
     }
 
     [Test]
-    public void ListAppend_AppendsSingleValue()
+    public async Task ListAppend_AppendsSingleValue()
     {
         // Issue #45
-        var outputs = RunInProc("""
+        var outputs = (await RunInProc("""
             let Items = [1 2] + 3
             command main = foreach Items => '{item}'
-            """);
+            """));
 
         Assert.That(outputs, Is.EqualTo(new[] { "1", "2", "3" }));
     }
 
     [Test]
-    public void ValuePipe_CallsFunctionOnValue()
+    public async Task ValuePipe_CallsFunctionOnValue()
     {
         // Issue #44
-        var outputs = RunInProc("""
+        var outputs = (await RunInProc("""
             function inc(n) => n + 1
             let Six = 5:inc
             command main = print(Six)
-            """);
+            """));
 
         Assert.That(outputs, Is.EqualTo(new[] { "6" }));
     }
 
     [Test]
-    public void ObjectOperations_GetKeysAndQuotedKeys_Work()
+    public async Task ObjectOperations_GetKeysAndQuotedKeys_Work()
     {
         // Issue #43
-        var outputs = RunInProc("""
+        var outputs = (await RunInProc("""
             let Person = { Name: 'Ada' 'quoted-key': 7 }
             command main =
                 print(Person.Get('Name')) &
                 print(Person.Get('quoted-key')) &
                 print(Person.Keys.Count)
-            """);
+            """));
 
         Assert.That(outputs, Is.EqualTo(new[] { "Ada", "7", "2" }));
     }
 
     [Test]
-    public void StringProperties_LowerUpperNormalizedWords_Work()
+    public async Task StringProperties_LowerUpperNormalizedWords_Work()
     {
         // Issue #42
-        var outputs = RunInProc("""
+        var outputs = (await RunInProc("""
             let Name = 'Foo_Bar'
             command main =
                 print(Name.Lower) &
                 print(Name.Upper) &
                 print(Name.Normalized) &
                 foreach Name.Words => print('{item}')
-            """);
+            """));
 
         Assert.That(outputs, Is.EqualTo(new[] { "foo_bar", "FOO_BAR", "foobar", "foo", "bar" }));
     }
 
     [Test]
-    public void VerbatimStrings_Tokenize()
+    public async Task VerbatimStrings_Tokenize()
     {
         // Issue #41
-        var outputs = RunInProc("""
+        var outputs = (await RunInProc("""
             command main = print(@'a\nb')
-            """);
+            """));
 
         Assert.That(outputs, Is.EqualTo(new[] { @"a\nb" }));
     }
 
     [Test]
-    public void MatchExpression_Wildcard_ReturnsMatchedArm()
+    public async Task MatchExpression_Wildcard_ReturnsMatchedArm()
     {
         // Issue #40
-        var outputs = RunInProc("""
+        var outputs = (await RunInProc("""
             let Result = 'x' ? 'y' => 'no' | _ => 'yes'
             command main = print(Result)
-            """);
+            """));
 
         Assert.That(outputs, Is.EqualTo(new[] { "yes" }));
     }
 
     [Test]
-    public void StringInterpolation_NonMemberExpression_EvaluatesExpression()
+    public async Task StringInterpolation_NonMemberExpression_EvaluatesExpression()
     {
         // Issue #39
-        var outputs = RunInProc("""
+        var outputs = (await RunInProc("""
             command main = print('{1 + 2}')
-            """);
+            """));
 
         Assert.That(outputs, Is.EqualTo(new[] { "3" }));
     }
@@ -217,90 +221,90 @@ public class LanguageFeatureExecutionTests
     }
 
     [Test]
-    public void BooleanPredicateComposition_AndHonorsRightHandPredicate()
+    public async Task BooleanPredicateComposition_AndHonorsRightHandPredicate()
     {
         // Issue #23
-        var outputs = RunInProc("""
+        var outputs = (await RunInProc("""
             predicate A(int) => item == 1
             predicate B(int) => item == 2
             predicate C(int) => item == 2
             predicate isMatch(int) => (A || B) && C
             command main = foreach [1 2 3]:isMatch => '{item}'
-            """);
+            """));
 
         Assert.That(outputs, Is.EqualTo(new[] { "2" }));
     }
 
     [Test]
-    public void SoleNegatedBarePredicate_IsInvokedPerItem()
+    public async Task SoleNegatedBarePredicate_IsInvokedPerItem()
     {
         // Issue #36
-        var outputs = RunInProc("""
+        var outputs = (await RunInProc("""
             predicate isOne(int) => item == 1
             predicate isNotOne(int) => !isOne
             command main = foreach [1 2]:isNotOne => '{item}'
-            """);
+            """));
 
         Assert.That(outputs, Is.EqualTo(new[] { "2" }));
     }
 
     [Test]
-    public void CollectionEmpty_ReturnsFalseForNonEmptyAndTrueForEmpty()
+    public async Task CollectionEmpty_ReturnsFalseForNonEmptyAndTrueForEmpty()
     {
         // Issue #32
-        var outputs = RunInProc("""
+        var outputs = (await RunInProc("""
             command main =
                 print([1]:empty) &
                 print([]:empty)
-            """);
+            """));
 
         Assert.That(outputs, Is.EqualTo(new[] { "false", "true" }));
     }
 
     [Test]
-    public void InMembershipFilter_MatchesRightElements()
+    public async Task InMembershipFilter_MatchesRightElements()
     {
         // Issue #1
-        var outputs = RunInProc("""
+        var outputs = (await RunInProc("""
             command main = foreach [1 2 3]:in([1 3]) => '{item}'
-            """);
+            """));
 
         Assert.That(outputs, Is.EqualTo(new[] { "1", "3" }));
     }
 
     [Test]
-    public void CurriedFunction_UsedAsFilter_DoesNotCrash()
+    public async Task CurriedFunction_UsedAsFilter_DoesNotCrash()
     {
         // Issue #34
-        var outputs = RunInProc("""
+        var outputs = (await RunInProc("""
             function greaterThan(limit) => item > limit
             command main = foreach [1 2 3]:greaterThan(1) => '{item}'
-            """);
+            """));
 
         Assert.That(outputs, Is.EqualTo(new[] { "2", "3" }));
     }
 
     [Test]
-    public void IdentifierA_CommandNameA_Works()
+    public async Task IdentifierA_CommandNameA_Works()
     {
         // Issue #9
-        var outputs = RunInProc("""
+        var outputs = (await RunInProc("""
             command a = print('ok')
-            """, commandName: "a");
+            """, commandName: "a"));
 
         Assert.That(outputs, Is.EqualTo(new[] { "ok" }));
     }
 
     [Test]
-    public void MultiLineColonFilterPipeChains_ProduceResults()
+    public async Task MultiLineColonFilterPipeChains_ProduceResults()
     {
         // Issue #4
-        var outputs = RunInProc("""
+        var outputs = (await RunInProc("""
             predicate isPositive(int) => item > 0
             command main = foreach [0 1 2]
                 :isPositive
                 => '{item}'
-            """);
+            """));
 
         Assert.That(outputs, Is.EqualTo(new[] { "1", "2" }));
     }

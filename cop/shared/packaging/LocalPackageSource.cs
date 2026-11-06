@@ -1,3 +1,5 @@
+// Finds package metadata and source content in local directories.
+
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -20,19 +22,24 @@ public class LocalPackageSource
     public List<string> ListPackages(string directoryPath)
     {
         if (!Directory.Exists(directoryPath))
+        {
             return new List<string>();
+        }
 
-        var packages = new List<string>();
+        List<string> packages = new List<string>();
         CollectPackageNames(directoryPath, packages);
         return packages.OrderBy(name => name).ToList();
     }
 
     private static void CollectPackageNames(string dirPath, List<string> packages)
     {
-        foreach (var subDir in Directory.GetDirectories(dirPath))
+        foreach (string subDir in Directory.GetDirectories(dirPath))
         {
-            var name = Path.GetFileName(subDir);
-            if (string.IsNullOrEmpty(name) || name.StartsWith('.')) continue;
+            string name = Path.GetFileName(subDir);
+            if (string.IsNullOrEmpty(name) || name.StartsWith('.'))
+            {
+                continue;
+            }
 
             if (IsPackageDir(subDir))
             {
@@ -55,11 +62,13 @@ public class LocalPackageSource
         string packageName,
         CancellationToken ct = default)
     {
-        var packageDir = FindPackagePath(feedDirectory, packageName);
-        var files = new Dictionary<string, byte[]>();
+        string? packageDir = FindPackagePath(feedDirectory, packageName);
+        Dictionary<string, byte[]> files = new Dictionary<string, byte[]>();
 
         if (packageDir is null)
+        {
             throw new PackageNotFoundException($"Package '{packageName}' not found under '{feedDirectory}'");
+        }
 
         await CollectFilesRecursiveAsync(packageDir, "", files, ct);
         return files;
@@ -73,24 +82,28 @@ public class LocalPackageSource
         string packageName,
         CancellationToken ct = default)
     {
-        var packageDir = FindPackagePath(feedDirectory, packageName);
+        string? packageDir = FindPackagePath(feedDirectory, packageName);
         if (packageDir is null)
+        {
             throw new PackageNotFoundException($"Package '{packageName}' not found under '{feedDirectory}'");
+        }
 
         // Prefer cop.json
-        var jsonPath = Path.Combine(packageDir, PackageMetadata.MetadataFileName);
+        string jsonPath = Path.Combine(packageDir, PackageMetadata.MetadataFileName);
         if (File.Exists(jsonPath))
         {
-            var json = await File.ReadAllTextAsync(jsonPath, ct);
+            string json = await File.ReadAllTextAsync(jsonPath, ct);
             return PackageMetadata.ParseFromJson(json);
         }
 
         // Legacy fallback: {name}.md
-        var metadataPath = Path.Combine(packageDir, $"{packageName}.md");
+        string metadataPath = Path.Combine(packageDir, $"{packageName}.md");
         if (!File.Exists(metadataPath))
+        {
             throw new PackageNotFoundException($"Metadata file not found: {metadataPath}");
+        }
 
-        var content = await File.ReadAllTextAsync(metadataPath, ct);
+        string content = await File.ReadAllTextAsync(metadataPath, ct);
         return PackageMetadata.ParseFromMarkdown(content);
     }
 
@@ -100,22 +113,26 @@ public class LocalPackageSource
         Dictionary<string, byte[]> files,
         CancellationToken ct)
     {
-        foreach (var filePath in Directory.GetFiles(dirPath))
+        foreach (string filePath in Directory.GetFiles(dirPath))
         {
             ct.ThrowIfCancellationRequested();
-            var fileName = Path.GetFileName(filePath);
-            var relPath = string.IsNullOrEmpty(relativePath)
+            string fileName = Path.GetFileName(filePath);
+            string relPath = string.IsNullOrEmpty(relativePath)
                 ? fileName
                 : $"{relativePath}/{fileName}";
             files[relPath] = await File.ReadAllBytesAsync(filePath, ct);
         }
 
-        foreach (var subDir in Directory.GetDirectories(dirPath))
+        foreach (string subDir in Directory.GetDirectories(dirPath))
         {
             ct.ThrowIfCancellationRequested();
-            var dirName = Path.GetFileName(subDir);
-            if (dirName.StartsWith('.')) continue;
-            var relPath = string.IsNullOrEmpty(relativePath)
+            string dirName = Path.GetFileName(subDir);
+            if (dirName.StartsWith('.'))
+            {
+                continue;
+            }
+
+            string relPath = string.IsNullOrEmpty(relativePath)
                 ? dirName
                 : $"{relativePath}/{dirName}";
             await CollectFilesRecursiveAsync(subDir, relPath, files, ct);
@@ -128,21 +145,36 @@ public class LocalPackageSource
     /// </summary>
     public static string? FindPackagePath(string feedDirectory, string packageName)
     {
-        if (!Directory.Exists(feedDirectory)) return null;
+        if (!Directory.Exists(feedDirectory))
+        {
+            return null;
+        }
 
-        var direct = Path.Combine(feedDirectory, packageName);
+        string direct = Path.Combine(feedDirectory, packageName);
         if (Directory.Exists(direct) && IsPackageDir(direct))
+        {
             return direct;
+        }
 
         // Recurse into group folders (non-package subdirectories)
-        foreach (var subDir in Directory.GetDirectories(feedDirectory))
+        foreach (string subDir in Directory.GetDirectories(feedDirectory))
         {
-            var dirName = Path.GetFileName(subDir);
-            if (string.IsNullOrEmpty(dirName) || dirName.StartsWith('.')) continue;
-            if (IsPackageDir(subDir)) continue;
+            string dirName = Path.GetFileName(subDir);
+            if (string.IsNullOrEmpty(dirName) || dirName.StartsWith('.'))
+            {
+                continue;
+            }
 
-            var result = FindPackagePath(subDir, packageName);
-            if (result is not null) return result;
+            if (IsPackageDir(subDir))
+            {
+                continue;
+            }
+
+            string? result = FindPackagePath(subDir, packageName);
+            if (result is not null)
+            {
+                return result;
+            }
         }
 
         return null;

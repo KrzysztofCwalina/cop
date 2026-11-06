@@ -1,3 +1,5 @@
+// Runs dotnet format and converts formatting findings into provider violations.
+
 using System.Text.Json;
 using Cop.Core;
 
@@ -10,36 +12,42 @@ public class CSharpFormatProvider : ToolProvider
 {
     protected override string ToolName => "dotnet";
 
-    protected override List<object> RunTool(string rootPath, IReadOnlySet<string> excluded)
+    protected override async ValueTask<List<object>> RunToolAsync(
+        string rootPath, IReadOnlySet<string> excluded, CancellationToken cancellationToken)
     {
-        var reportDir = Path.Combine(Path.GetTempPath(), $"cop-format-{Guid.NewGuid():N}");
+        string reportDir = Path.Combine(Path.GetTempPath(), $"cop-format-{Guid.NewGuid():N}");
         Directory.CreateDirectory(reportDir);
 
         try
         {
-            RunProcess("dotnet", $"format --verify-no-changes --report \"{reportDir}\"", rootPath);
+            await RunProcessAsync(
+                new("dotnet", $"format --verify-no-changes --report \"{reportDir}\"", rootPath),
+                cancellationToken).ConfigureAwait(false);
 
-            var violations = new List<object>();
-            foreach (var jsonFile in Directory.GetFiles(reportDir, "*.json", SearchOption.AllDirectories))
+            List<object> violations = new List<object>();
+            foreach (string jsonFile in Directory.GetFiles(reportDir, "*.json", SearchOption.AllDirectories))
             {
-                var json = File.ReadAllText(jsonFile);
-                var entries = ParseReportEntries(json);
+                string json = await File.ReadAllTextAsync(jsonFile, cancellationToken)
+                    .ConfigureAwait(false);
+                List<JsonElement> entries = ParseReportEntries(json);
 
-                foreach (var entry in entries)
+                foreach (JsonElement entry in entries)
                 {
-                    var filePath = NormalizePath(
-                        entry.GetProperty("FilePath").GetString() ?? entry.GetProperty("FileName").GetString() ?? "",
+                    string filePath = NormalizePath(
+                        entry.GetProperty("FilePath").GetString() ?? entry.GetProperty("FileName").GetString() ?? string.Empty,
                         rootPath);
                     if (string.IsNullOrEmpty(filePath) || IsExcluded(filePath, excluded))
-                        continue;
-
-                    if (entry.TryGetProperty("FileChanges", out var changes))
                     {
-                        foreach (var change in changes.EnumerateArray())
+                        continue;
+                    }
+
+                    if (entry.TryGetProperty("FileChanges", out JsonElement changes))
+                    {
+                        foreach (JsonElement change in changes.EnumerateArray())
                         {
-                            var line = change.TryGetProperty("LineNumber", out var ln) ? ln.GetInt32() : 0;
-                            var ruleId = change.TryGetProperty("DiagnosticId", out var did) ? did.GetString() : "IDE0055";
-                            var message = change.TryGetProperty("FormatDescription", out var desc) ? desc.GetString() : "Formatting violation";
+                            int line = change.TryGetProperty("LineNumber", out JsonElement ln) ? ln.GetInt32() : 0;
+                            string? ruleId = change.TryGetProperty("DiagnosticId", out JsonElement did) ? did.GetString() : "IDE0055";
+                            string? message = change.TryGetProperty("FormatDescription", out JsonElement desc) ? desc.GetString() : "Formatting violation";
                             violations.Add(new ToolViolation
                             {
                                 File = filePath,
@@ -56,24 +64,40 @@ public class CSharpFormatProvider : ToolProvider
         }
         finally
         {
-            try { Directory.Delete(reportDir, true); } catch { }
+            try
+            {
+                Directory.Delete(reportDir, true);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                ProviderWarnings.ReportOnce("dotnet-format", reportDir,
+                    $"Cannot remove formatting report directory '{reportDir}': {ex.Message}");
+            }
         }
     }
 
     private static List<JsonElement> ParseReportEntries(string json)
     {
-        var doc = JsonDocument.Parse(json);
-        var root = doc.RootElement;
+        using JsonDocument doc = JsonDocument.Parse(json);
+        JsonElement root = doc.RootElement;
 
         if (root.ValueKind == JsonValueKind.Array)
-            return [.. root.EnumerateArray()];
+        {
+            return root.EnumerateArray().Select(entry => entry.Clone()).ToList();
+        }
 
         if (root.ValueKind == JsonValueKind.Object)
         {
-            if (root.TryGetProperty("Files", out var files) || root.TryGetProperty("files", out files))
-                return [.. files.EnumerateArray()];
+            if (root.TryGetProperty("Files", out JsonElement files) || root.TryGetProperty("files", out files))
+            {
+                if (files.ValueKind == JsonValueKind.Array)
+                {
+                    return files.EnumerateArray().Select(entry => entry.Clone()).ToList();
+                }
+            }
         }
 
-        return [];
+        throw new InvalidDataException(
+            "The dotnet format report must be an array or an object containing a Files array.");
     }
 }

@@ -1,7 +1,9 @@
+// Exposes HTTP services and operations derived from parsed TypeSpec declarations.
+
 using Cop.Core;
 using Cop.Lang;
 
-namespace TypeSpecProvider;
+namespace Cop.Providers.TypeSpec;
 
 /// <summary>
 /// DataProvider for HTTP protocol graph derived from TypeSpec.
@@ -12,9 +14,10 @@ namespace TypeSpecProvider;
 public class TypeSpecHttpProvider : DataProvider
 {
 
-    public override ReadOnlyMemory<byte> GetSchema() => _schema.ToJson();
+    /// <inheritdoc />
+    public override ReadOnlyMemory<byte> GetSchema() => s_schema.ToJson();
 
-    private static readonly ProviderSchema _schema = BuildSchema();
+    private static readonly ProviderSchema s_schema = BuildSchema();
 
     private static ProviderSchema BuildSchema()
     {
@@ -25,7 +28,7 @@ public class TypeSpecHttpProvider : DataProvider
                 new() { Name = "TspDecorator", Properties =
                 [
                     new() { Name = "Name" },
-                    new() { Name = "Arguments", Collection = true },
+                    new() { Name = "Arguments", IsCollection = true },
                 ]},
                 new() { Name = "HttpParameter", Properties =
                 [
@@ -33,7 +36,7 @@ public class TypeSpecHttpProvider : DataProvider
                     new() { Name = "Type" },
                     new() { Name = "In" },
                     new() { Name = "Optional", Type = "bool" },
-                    new() { Name = "Style", Optional = true },
+                    new() { Name = "Style", IsOptional = true },
                 ]},
                 new() { Name = "HttpHeader", Properties =
                 [
@@ -43,9 +46,9 @@ public class TypeSpecHttpProvider : DataProvider
                 new() { Name = "HttpResponse", Properties =
                 [
                     new() { Name = "StatusCode" },
-                    new() { Name = "Description", Optional = true },
-                    new() { Name = "Body", Optional = true },
-                    new() { Name = "Headers", Type = "HttpHeader", Collection = true },
+                    new() { Name = "Description", IsOptional = true },
+                    new() { Name = "Body", IsOptional = true },
+                    new() { Name = "Headers", Type = "HttpHeader", IsCollection = true },
                 ]},
                 new() { Name = "HttpOperation", Properties =
                 [
@@ -53,17 +56,17 @@ public class TypeSpecHttpProvider : DataProvider
                     new() { Name = "Verb" },
                     new() { Name = "Path" },
                     new() { Name = "UriTemplate" },
-                    new() { Name = "Parameters", Type = "HttpParameter", Collection = true },
-                    new() { Name = "Responses", Type = "HttpResponse", Collection = true },
-                    new() { Name = "Interface", Optional = true },
-                    new() { Name = "Decorators", Type = "TspDecorator", Collection = true },
+                    new() { Name = "Parameters", Type = "HttpParameter", IsCollection = true },
+                    new() { Name = "Responses", Type = "HttpResponse", IsCollection = true },
+                    new() { Name = "Interface", IsOptional = true },
+                    new() { Name = "Decorators", Type = "TspDecorator", IsCollection = true },
                 ]},
                 new() { Name = "HttpService", Properties =
                 [
                     new() { Name = "Name" },
                     new() { Name = "Namespace" },
-                    new() { Name = "Operations", Type = "HttpOperation", Collection = true },
-                    new() { Name = "Auth", Optional = true },
+                    new() { Name = "Operations", Type = "HttpOperation", IsCollection = true },
+                    new() { Name = "Auth", IsOptional = true },
                 ]},
             ],
             Collections =
@@ -74,41 +77,49 @@ public class TypeSpecHttpProvider : DataProvider
         };
     }
 
-    public override object? Query(ProviderQuery query)
+    /// <inheritdoc />
+    public override async ValueTask<object?> QueryAsync(
+        ProviderQuery query, CancellationToken cancellationToken = default)
     {
-        var rawSpec = new TspSpec();
+        TspSpec rawSpec = new TspSpec();
         if (query.RootPath is not null && Directory.Exists(query.RootPath))
-            rawSpec = TspParser.ParseFiles(query.RootPath);
+        {
+            rawSpec = await TspParser.ParseFilesAsync(
+                query.RootPath, cancellationToken: cancellationToken).ConfigureAwait(false);
+        }
 
-        var httpSpec = HttpTransformer.Transform(rawSpec);
-        var requested = query.Collection;
+        HttpSpec httpSpec = HttpTransformer.Transform(rawSpec);
+        string? requested = query.Collection;
         bool Want(string name) => requested is null || requested == name;
 
-        var db = new DataStoreBuilder();
+        DataStoreBuilder db = new DataStoreBuilder();
 
         // Child tables
         // TspDecorator: stride 2 (Name, Arguments-range)
-        var decorators = db.AddTable("Decorators", "TspDecorator", 2);
+        DataTableBuilder decorators = db.AddTable("Decorators", "TspDecorator", 2);
         // TspDecorator.Arguments: stride 1
-        var decArgs = db.AddTable("TspDecorator.Arguments", "string", 1);
+        DataTableBuilder decArgs = db.AddTable("TspDecorator.Arguments", "string", 1);
         // HttpParameter: stride 5 (Name, Type, In, Optional, Style)
-        var parameters = db.AddTable("Parameters", "HttpParameter", 5);
+        DataTableBuilder parameters = db.AddTable("Parameters", "HttpParameter", 5);
         // HttpHeader: stride 2 (Name, Type)
-        var headers = db.AddTable("Headers", "HttpHeader", 2);
+        DataTableBuilder headers = db.AddTable("Headers", "HttpHeader", 2);
         // HttpResponse: stride 4 (StatusCode, Description, Body, Headers-range)
-        var responses = db.AddTable("Responses", "HttpResponse", 4);
+        DataTableBuilder responses = db.AddTable("Responses", "HttpResponse", 4);
         // HttpOperation: stride 8 (Name, Verb, Path, UriTemplate, Parameters-range, Responses-range, Interface, Decorators-range)
-        var operations = db.AddTable("Operations", "HttpOperation", 8);
+        DataTableBuilder operations = db.AddTable("Operations", "HttpOperation", 8);
 
         // Top-level tables
-        var services = Want("Services") ? db.AddTable("Services", "HttpService", 4) : null;
+        DataTableBuilder? services = Want("Services") ? db.AddTable("Services", "HttpService", 4) : null;
 
         // Populate all operations once (shared by both top-level Operations and Services.Operations)
-        var opIndexMap = new Dictionary<HttpOperation, int>(ReferenceEqualityComparer.Instance);
-        foreach (var o in httpSpec.Operations)
+        Dictionary<HttpOperation, int> opIndexMap = new Dictionary<HttpOperation, int>(ReferenceEqualityComparer.Instance);
+        foreach (HttpOperation o in httpSpec.Operations)
         {
             if (query.Collection == "Operations" && !MatchesFilter(query.CollectionFilters?.GetValueOrDefault("Operations") ?? query.Filter, "Name", o.Name, "Verb", o.Verb))
+            {
                 continue;
+            }
+
             opIndexMap[o] = operations.Count;
             AddOperation(operations, parameters, responses, headers, decorators, decArgs, o);
         }
@@ -116,10 +127,13 @@ public class TypeSpecHttpProvider : DataProvider
         // Services: Name(0), Namespace(1), Operations(2→Operations), Auth(3)
         if (services is not null)
         {
-            foreach (var s in httpSpec.Services)
+            foreach (HttpService s in httpSpec.Services)
             {
                 if (!MatchesFilter(query.CollectionFilters?.GetValueOrDefault("Services") ?? query.Filter, "Name", s.Name, "Namespace", s.Namespace))
+                {
                     continue;
+                }
+
                 int row = services.AddRow();
                 services.SetString(row, 0, s.Name);
                 services.SetString(row, 1, s.Namespace);
@@ -127,11 +141,15 @@ public class TypeSpecHttpProvider : DataProvider
                 // Find the range of this service's operations in the shared operations table
                 int opStart = -1;
                 int opCount = 0;
-                foreach (var o in s.Operations)
+                foreach (HttpOperation o in s.Operations)
                 {
-                    if (opIndexMap.TryGetValue(o, out var idx))
+                    if (opIndexMap.TryGetValue(o, out int idx))
                     {
-                        if (opStart < 0) opStart = idx;
+                        if (opStart < 0)
+                        {
+                            opStart = idx;
+                        }
+
                         opCount++;
                     }
                 }
@@ -156,27 +174,27 @@ public class TypeSpecHttpProvider : DataProvider
 
         // Parameters
         int paramStart = parameters.Count;
-        foreach (var p in o.Parameters)
+        foreach (HttpParameter p in o.Parameters)
         {
             int pRow = parameters.AddRow();
             parameters.SetString(pRow, 0, p.Name);
             parameters.SetString(pRow, 1, p.Type);
             parameters.SetString(pRow, 2, p.In);
-            parameters.SetBool(pRow, 3, p.Optional);
+            parameters.SetBool(pRow, 3, p.IsOptional);
             parameters.SetString(pRow, 4, p.Style);
         }
         operations.SetRange(row, 4, paramStart, o.Parameters.Count);
 
         // Responses
         int respStart = responses.Count;
-        foreach (var r in o.Responses)
+        foreach (HttpResponse r in o.Responses)
         {
             int rRow = responses.AddRow();
             responses.SetString(rRow, 0, r.StatusCode);
             responses.SetString(rRow, 1, r.Description);
             responses.SetString(rRow, 2, r.Body);
             int hdrStart = headers.Count;
-            foreach (var h in r.Headers)
+            foreach (HttpHeader h in r.Headers)
             {
                 int hRow = headers.AddRow();
                 headers.SetString(hRow, 0, h.Name);
@@ -194,12 +212,12 @@ public class TypeSpecHttpProvider : DataProvider
         DataTableBuilder decorators, DataTableBuilder decArgs, List<TspDecorator> items)
     {
         int start = decorators.Count;
-        foreach (var d in items)
+        foreach (TspDecorator d in items)
         {
             int row = decorators.AddRow();
             decorators.SetString(row, 0, d.Name);
             int argStart = decArgs.Count;
-            foreach (var a in d.Arguments)
+            foreach (string a in d.Arguments)
             {
                 int aRow = decArgs.AddRow();
                 decArgs.SetString(aRow, 0, a);
@@ -212,9 +230,17 @@ public class TypeSpecHttpProvider : DataProvider
     private static bool MatchesFilter(FilterExpression? filter, string prop1, string? val1,
         string? prop2 = null, string? val2 = null)
     {
-        if (filter is null) return true;
-        var accessors = new Dictionary<string, Func<object, object?>> { [prop1] = _ => val1 };
-        if (prop2 is not null) accessors[prop2] = _ => val2;
+        if (filter is null)
+        {
+            return true;
+        }
+
+        Dictionary<string, Func<object, object?>> accessors = new Dictionary<string, Func<object, object?>> { [prop1] = _ => val1 };
+        if (prop2 is not null)
+        {
+            accessors[prop2] = _ => val2;
+        }
+
         return FilterCompiler.Compile(filter, accessors)(filter);
     }
 }

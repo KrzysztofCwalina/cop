@@ -1,54 +1,6 @@
+// Catalogs built-in language operations and their tooling metadata.
+
 namespace Cop.Lang;
-
-/// <summary>
-/// The category a built-in operation surfaces as in tooling. A single operation name may appear
-/// under more than one kind (e.g. <c>equals</c> is both a string and a numeric predicate, with a
-/// different help string for each), so the registry stores one entry per (name, kind) surface.
-/// </summary>
-public enum IntrinsicKind
-{
-    StringPredicate,
-    NumericPredicate,
-    CollectionPredicate,
-    UniversalPredicate,
-    ObjectPredicate,
-    StringTransform,
-    CollectionTransform,
-    StringProperty,
-    CollectionProperty,
-
-    /// <summary>
-    /// A built-in utility function (print, read, text, concat, take, …) — not a primitive
-    /// predicate/transform/property. These are surfaced to the REPL and excluded from being treated
-    /// as property names by provider pushdown. They are NOT projected into editor metadata (the
-    /// editor learns them by parsing the core .cop intrinsic declarations).
-    /// </summary>
-    Utility,
-}
-
-/// <summary>
-/// One built-in operation surface: its canonical name, short-form aliases, category, editor/REPL
-/// detail, and the cross-cutting flags consumers care about.
-/// </summary>
-public sealed record IntrinsicOp(
-    string Name,
-    IntrinsicKind Kind,
-    string Detail,
-    string[] Aliases,
-    bool Pushable = false,
-    bool IsBuiltinFilter = false,
-    bool IsCollectionCombinator = false)
-{
-    /// <summary>The canonical name plus every alias.</summary>
-    public IEnumerable<string> AllNames
-    {
-        get
-        {
-            yield return Name;
-            foreach (var a in Aliases) yield return a;
-        }
-    }
-}
 
 /// <summary>
 /// The single authoritative catalog of cop's built-in primitive operations (predicates on strings,
@@ -177,7 +129,7 @@ public static class IntrinsicRegistry
         All.SelectMany(o => o.Aliases.Select(a => (o.Name, a)))
            .Distinct();
 
-    private static readonly IntrinsicKind[] PredicateKinds =
+    private static readonly IntrinsicKind[] s_predicateKinds =
     [
         IntrinsicKind.StringPredicate, IntrinsicKind.NumericPredicate, IntrinsicKind.CollectionPredicate,
         IntrinsicKind.UniversalPredicate, IntrinsicKind.ObjectPredicate,
@@ -185,7 +137,7 @@ public static class IntrinsicRegistry
 
     /// <summary>Distinct canonical names of every built-in predicate (no aliases). For completion.</summary>
     public static IReadOnlyList<string> PredicateNames() =>
-        All.Where(o => PredicateKinds.Contains(o.Kind)).Select(o => o.Name).Distinct().ToList();
+        All.Where(o => s_predicateKinds.Contains(o.Kind)).Select(o => o.Name).Distinct().ToList();
 
     /// <summary>Distinct canonical names of string/collection transforms plus utility functions. For completion.</summary>
     public static IReadOnlyList<string> TransformNames() =>

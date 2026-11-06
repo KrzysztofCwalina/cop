@@ -1,3 +1,5 @@
+// Reuses compiled regular expressions within a bounded, thread-safe cache.
+
 using System.Collections.Concurrent;
 using System.Text.RegularExpressions;
 
@@ -11,23 +13,27 @@ namespace Cop.Core;
 internal static class RegexCache
 {
     private const int MaxEntries = 1024;
-    private static readonly ConcurrentDictionary<(string Pattern, RegexOptions Options), Regex> _cache = new();
+    private static readonly ConcurrentDictionary<(string Pattern, RegexOptions Options), Regex> s_cache = new();
 
     /// <summary>
     /// Gets or creates a Regex for the given pattern and options.
     /// </summary>
     public static Regex Get(string pattern, RegexOptions options = RegexOptions.None)
     {
-        var key = (pattern, options);
-        if (_cache.TryGetValue(key, out var cached))
+        (string pattern, RegexOptions options) key = (pattern, options);
+        if (s_cache.TryGetValue(key, out Regex? cached))
+        {
             return cached;
+        }
 
         // Evict all if over capacity (simple bounded strategy)
-        if (_cache.Count >= MaxEntries)
-            _cache.Clear();
+        if (s_cache.Count >= MaxEntries)
+        {
+            s_cache.Clear();
+        }
 
-        var regex = new Regex(pattern, options);
-        _cache.TryAdd(key, regex);
+        Regex regex = new Regex(pattern, options);
+        s_cache.TryAdd(key, regex);
         return regex;
     }
 

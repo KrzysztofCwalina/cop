@@ -1,3 +1,5 @@
+// Exposes parsed Bash scripts and commands through the provider query contract.
+
 using Cop.Core;
 using Cop.Providers.SourceModel;
 
@@ -9,11 +11,12 @@ namespace Cop.Providers.Bash;
 /// </summary>
 public sealed class BashProvider : DataProvider
 {
-    public override ReadOnlyMemory<byte> GetSchema() => _schema.ToJson();
+    /// <inheritdoc />
+    public override ReadOnlyMemory<byte> GetSchema() => s_schema.ToJson();
 
-    private static readonly ProviderSchema _schema = BuildSchema();
+    private static readonly ProviderSchema s_schema = BuildSchema();
 
-    private static readonly HashSet<string> BashExtensions = new(StringComparer.OrdinalIgnoreCase)
+    private static readonly HashSet<string> s_bashExtensions = new(StringComparer.OrdinalIgnoreCase)
         { ".sh", ".bash" };
 
     private static ProviderSchema BuildSchema()
@@ -43,8 +46,9 @@ public sealed class BashProvider : DataProvider
     private static ProviderPropertySchema Prop(string name, string type = "string")
         => new() { Name = name, Type = type };
     private static ProviderPropertySchema Opt(string name, string type = "string")
-        => new() { Name = name, Type = type, Optional = true };
+        => new() { Name = name, Type = type, IsOptional = true };
 
+    /// <inheritdoc />
     public override RuntimeBindings GetRuntimeBindings()
     {
         return new RuntimeBindings
@@ -63,31 +67,42 @@ public sealed class BashProvider : DataProvider
         };
     }
 
-    public override object? Query(ProviderQuery query)
+    /// <inheritdoc />
+    public override async ValueTask<object?> QueryAsync(
+        ProviderQuery query, CancellationToken cancellationToken = default)
     {
-        var result = (DeferredProviderResult)QueryDeferred(query);
-        return result.Collections.ToDictionary(c => c.Key, c => c.Value.ToList(), StringComparer.Ordinal);
+        DeferredProviderResult result = (DeferredProviderResult)
+            (await QueryDeferredAsync(query, cancellationToken).ConfigureAwait(false))!;
+        return await ProviderCollections.MaterializeAsync(result, cancellationToken)
+            .ConfigureAwait(false);
     }
 
     private readonly Dictionary<string, DeferredFormatSnapshot> _snapshots = new(StringComparer.Ordinal);
 
-    public override object QueryDeferred(ProviderQuery query)
+    /// <inheritdoc />
+    public override ValueTask<object?> QueryDeferredAsync(
+        ProviderQuery query, CancellationToken cancellationToken = default)
     {
-        if (query.RootPath is null) return new DeferredProviderResult(new Dictionary<string, IEnumerable<object>>());
-        var key = DeferredFormatSnapshot.Key(query);
-        var root = Path.GetFullPath(query.RootPath);
-        if (!_snapshots.TryGetValue(key, out var snapshot))
+        if (query.RootPath is null)
+        {
+            return ValueTask.FromResult<object?>(new DeferredProviderResult(
+                new Dictionary<string, IAsyncEnumerable<object>>()));
+        }
+
+        string key = DeferredFormatSnapshot.Key(query);
+        string root = Path.GetFullPath(query.RootPath);
+        if (!_snapshots.TryGetValue(key, out DeferredFormatSnapshot? snapshot))
         {
             snapshot = new(() =>
             {
-                var paths = new List<string>();
+                List<string> paths = new List<string>();
                 CollectBashFiles(root, query.ExcludedDirectories, paths);
                 return paths;
-            }, path =>
+            }, async (path, token) =>
             {
-                var text = File.ReadAllText(path);
-                var file = new SourceFile(Path.GetRelativePath(root, path).Replace('\\', '/'), "bash", [], [], text);
-                var script = BashParser.Parse(text);
+                string text = await File.ReadAllTextAsync(path, token).ConfigureAwait(false);
+                SourceFile file = new SourceFile(Path.GetRelativePath(root, path).Replace('\\', '/'), "bash", [], [], text);
+                BashParser.BashParseResult script = BashParser.Parse(text);
                 return new()
                 {
                     ["Commands"] = script.Commands.Select(c => (object)(c with { File = file })).ToList(),
@@ -96,23 +111,34 @@ public sealed class BashProvider : DataProvider
             });
             _snapshots.Add(key, snapshot);
         }
-        return snapshot.Query(query, _schema, GetRuntimeBindings());
+        cancellationToken.ThrowIfCancellationRequested();
+        return ValueTask.FromResult<object?>(snapshot.Query(query, s_schema, GetRuntimeBindings()));
     }
 
     private static void CollectBashFiles(string dir, IReadOnlySet<string>? excluded, List<string> result)
     {
         try
         {
-            foreach (var file in Directory.GetFiles(dir))
+            foreach (string file in Directory.GetFiles(dir))
             {
-                if (BashExtensions.Contains(Path.GetExtension(file)))
+                if (s_bashExtensions.Contains(Path.GetExtension(file)))
+                {
                     result.Add(file);
+                }
             }
-            foreach (var subDir in Directory.GetDirectories(dir))
+            foreach (string subDir in Directory.GetDirectories(dir))
             {
-                if ((File.GetAttributes(subDir) & FileAttributes.ReparsePoint) != 0) continue;
-                var dirName = Path.GetFileName(subDir);
-                if (excluded is not null && excluded.Contains(dirName)) continue;
+                if ((File.GetAttributes(subDir) & FileAttributes.ReparsePoint) != 0)
+                {
+                    continue;
+                }
+
+                string dirName = Path.GetFileName(subDir);
+                if (excluded is not null && excluded.Contains(dirName))
+                {
+                    continue;
+                }
+
                 CollectBashFiles(subDir, excluded, result);
             }
         }

@@ -1,3 +1,5 @@
+// Registers Go parsing, project discovery, schemas, and runtime bindings.
+
 using Cop.Core;
 using Cop.Providers.SourceModel;
 using Cop.Providers.SourceParsers;
@@ -10,42 +12,40 @@ namespace Cop.Providers;
 public class GoProvider : DataProvider
 {
 
+    /// <inheritdoc />
     public override ReadOnlyMemory<byte> GetSchema() => GoSchema.GetJson();
 
+    /// <inheritdoc />
     public override RuntimeBindings GetRuntimeBindings() => GoBindings.Build();
 
+    /// <inheritdoc />
     public override IReadOnlyDictionary<string, object?> GetQueryMetadata(ProviderQuery query) =>
         CodeBindings.SourceMetadata(query, ".go");
+    /// <inheritdoc />
     public override string QueryResultType => "Codebase";
 
-    public override object QueryDeferred(ProviderQuery query)
+    /// <inheritdoc />
+    public override ValueTask<object?> QueryDeferredAsync(
+        ProviderQuery query, CancellationToken cancellationToken = default)
     {
         GoTypeDeclaration.RegisterCacheFactory();
         GoMethodDeclaration.RegisterCacheFactory();
         GoStatementInfo.RegisterCacheFactory();
-        var parsers = new SourceParserRegistry();
+        SourceParserRegistry parsers = new SourceParserRegistry();
         parsers.Register(new GoSourceParser());
-        return CodeCollectionBuilder.CollectDeferred(parsers, query, this,
-            () => GoProjectDiscovery.Discover(query.RootPath!, query.ExcludedDirectories));
+        cancellationToken.ThrowIfCancellationRequested();
+        return ValueTask.FromResult<object?>(CodeCollectionBuilder.CollectDeferred(
+            parsers, query, this, _ => ValueTask.FromResult(
+                GoProjectDiscovery.Discover(query.RootPath!, query.ExcludedDirectories))));
     }
 
-    public override object? Query(ProviderQuery query)
+    /// <inheritdoc />
+    public override async ValueTask<object?> QueryAsync(
+        ProviderQuery query, CancellationToken cancellationToken = default)
     {
-        GoTypeDeclaration.RegisterCacheFactory();
-        GoMethodDeclaration.RegisterCacheFactory();
-        GoStatementInfo.RegisterCacheFactory();
-        var parsers = new SourceParserRegistry();
-        parsers.Register(new GoSourceParser());
-        var collections = CodeCollectionBuilder.CollectAndParse(parsers, query, this);
-
-        // Discover projects from go.mod
-        if (query.RootPath is not null)
-        {
-            var projects = GoProjectDiscovery.Discover(query.RootPath, query.ExcludedDirectories);
-            if (query.Collection == null || query.Collection == "Projects")
-                collections["Projects"] = projects.Cast<object>().ToList();
-        }
-
-        return ApplyQueryFilters(query, collections);
+        DeferredProviderResult result = (DeferredProviderResult)
+            (await QueryDeferredAsync(query, cancellationToken).ConfigureAwait(false))!;
+        return await ProviderCollections.MaterializeAsync(result, cancellationToken)
+            .ConfigureAwait(false);
     }
 }

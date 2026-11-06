@@ -1,3 +1,5 @@
+// Resolves syntax references to declarations and records binding diagnostics.
+
 namespace Cop.Lang.Interpreter;
 
 using Cop.Lang.Ast;
@@ -71,25 +73,33 @@ public sealed class Binder
     /// </summary>
     public BindingResult Bind(ModuleNode module)
     {
-        var globalScope = new Scope(label: "global");
+        Scope globalScope = new Scope(label: "global");
         _result = new BindingResult(module, globalScope);
         _currentScope = globalScope;
 
         // Pre-populate with external/intrinsic symbols
-        foreach (var ext in _externalSymbols)
+        foreach (Symbol ext in _externalSymbols)
+        {
             globalScope.Declare(ext);
+        }
 
         // Pass 1: register all top-level declarations
-        foreach (var decl in module.Declarations)
+        foreach (Declaration decl in module.Declarations)
+        {
             RegisterDeclaration(decl);
+        }
 
         // Pass 2: bind bodies (resolve identifiers within function/command bodies)
-        foreach (var decl in module.Declarations)
+        foreach (Declaration decl in module.Declarations)
+        {
             BindDeclarationBody(decl);
+        }
 
         // Pass 3: validate type references, arity, and unresolved symbols
-        foreach (var decl in module.Declarations)
+        foreach (Declaration decl in module.Declarations)
+        {
             ValidateDeclaration(decl);
+        }
 
         return _result;
     }
@@ -128,10 +138,10 @@ public sealed class Binder
 
     private void RegisterType(TypeDecl decl)
     {
-        var properties = decl.Properties.Select(p =>
+        List<PropertySymbol> properties = decl.Properties.Select(p =>
             new PropertySymbol(p.Name, p.Type, p.IsOptional)).ToList();
 
-        var symbol = new TypeSymbol(decl.Name, decl.BaseType, properties)
+        TypeSymbol symbol = new TypeSymbol(decl.Name, decl.BaseType, properties)
         {
             IsExported = decl.IsExported,
             DeclarationLine = decl.Line
@@ -143,7 +153,7 @@ public sealed class Binder
             // the base `type X = { ... }` (e.g. a TextFilePosition conformance used for violations).
             // The conformance form carries a BaseType; the runtime merges it onto the existing
             // type, so the binder must not flag it as a duplicate declaration.
-            var existing = _currentScope.ResolveLocal(decl.Name);
+            Symbol? existing = _currentScope.ResolveLocal(decl.Name);
             if (decl.BaseType is not null && existing is TypeSymbol)
             {
                 // trait-conformance overload — OK
@@ -164,10 +174,10 @@ public sealed class Binder
 
     private void RegisterEnum(EnumDecl decl)
     {
-        var members = decl.Members.Select(m =>
+        List<EnumMemberSymbol> members = decl.Members.Select(m =>
             new EnumMemberSymbol(m, decl.Name)).ToList();
 
-        var symbol = new EnumSymbol(decl.Name, decl.MemberType, members)
+        EnumSymbol symbol = new EnumSymbol(decl.Name, decl.MemberType, members)
         {
             IsExported = decl.IsExported,
             DeclarationLine = decl.Line
@@ -176,12 +186,16 @@ public sealed class Binder
         if (!_currentScope.Declare(symbol))
         {
             if (!IsExternalStub(_currentScope.ResolveLocal(decl.Name)))
+            {
                 ReportDuplicate(decl.Name, decl.Line);
+            }
         }
 
         // Enum members are injected into module scope (Cop convention)
-        foreach (var member in members)
+        foreach (EnumMemberSymbol? member in members)
+        {
             _currentScope.Declare(member);
+        }
 
         _result.RecordResolution(decl, symbol);
     }
@@ -189,10 +203,10 @@ public sealed class Binder
     private void RegisterFlags(FlagsDecl decl)
     {
         // Flags are treated as enums with bitwise semantics
-        var members = decl.Members.Select(m =>
+        List<EnumMemberSymbol> members = decl.Members.Select(m =>
             new EnumMemberSymbol(m, decl.Name)).ToList();
 
-        var symbol = new EnumSymbol(decl.Name, null, members)
+        EnumSymbol symbol = new EnumSymbol(decl.Name, null, members)
         {
             IsExported = decl.IsExported,
             DeclarationLine = decl.Line
@@ -201,27 +215,31 @@ public sealed class Binder
         if (!_currentScope.Declare(symbol))
         {
             if (!IsExternalStub(_currentScope.ResolveLocal(decl.Name)))
+            {
                 ReportDuplicate(decl.Name, decl.Line);
+            }
         }
 
-        foreach (var member in members)
+        foreach (EnumMemberSymbol? member in members)
+        {
             _currentScope.Declare(member);
+        }
 
         _result.RecordResolution(decl, symbol);
     }
 
     private void RegisterFunction(FunctionDecl decl)
     {
-        var parameters = decl.Params.Select((p, i) =>
+        List<ParameterSymbol> parameters = decl.Params.Select((p, i) =>
             new ParameterSymbol(p.Name, p.Type, i)).ToList();
 
-        var callableKind = decl.Body is BlockBody
+        CallableKind callableKind = decl.Body is BlockBody
             ? CallableKind.Command
             : decl.ReturnType?.Name == "bool" || decl.Guard is not null
                 ? CallableKind.Predicate
                 : CallableKind.Function;
 
-        var symbol = new FunctionSymbol(decl.Name, callableKind, parameters, decl.ReturnType)
+        FunctionSymbol symbol = new FunctionSymbol(decl.Name, callableKind, parameters, decl.ReturnType)
         {
             NarrowingType = decl.Guard is not null ? decl.ReturnType : null,
             Declaration = decl,
@@ -231,9 +249,11 @@ public sealed class Binder
 
         if (!_currentScope.Declare(symbol))
         {
-            var existing = _currentScope.ResolveLocal(decl.Name);
+            Symbol? existing = _currentScope.ResolveLocal(decl.Name);
             if (!IsAllowedFunctionOverload(existing, symbol, decl, callableKind))
+            {
                 ReportDuplicate(decl.Name, decl.Line);
+            }
         }
 
         _result.RecordResolution(decl, symbol);
@@ -246,14 +266,18 @@ public sealed class Binder
         CallableKind candidateKind)
     {
         if (existing is not FunctionSymbol existingFn)
+        {
             return false;
+        }
 
         // A builtin/intrinsic stub injected by the verify harness (CallableKind.External, carrying
         // no real source declaration) is authoritatively replaced by the package's own in-source
         // declaration of that intrinsic — that is not a duplicate. A signature-bearing imported
         // callable (Function/Predicate) is still subject to the overload rules below.
         if (existingFn.CallableKind == CallableKind.External)
+        {
             return true;
+        }
 
         // A self-import injects a signature-less stub (no AST declaration, empty parameter list)
         // for each of the package's own exports. The arity-difference rule below already tolerates
@@ -264,7 +288,9 @@ public sealed class Binder
         // signature-aware rules below.
         if (IsImportedCallableWithoutDeclaration(existingFn)
             && existingFn.Parameters.Count == 0 && candidateDecl.Params.Count == 0)
+        {
             return true;
+        }
 
         // Overloading rules:
         // 1. Predicates: allowed when their parameter signatures differ. This includes
@@ -275,12 +301,14 @@ public sealed class Binder
         //    overload them, but an identical signature remains a duplicate.
         // 3. Functions: allowed if different arity (parameter count).
         // 4. Commands: never allowed.
-        var candidateIsPredicate = candidateDecl.IsPredicate || candidateKind == CallableKind.Predicate;
-        var existingIsPredicate = existingFn.CallableKind == CallableKind.Predicate
+        bool candidateIsPredicate = candidateDecl.IsPredicate || candidateKind == CallableKind.Predicate;
+        bool existingIsPredicate = existingFn.CallableKind == CallableKind.Predicate
             || existingFn.Declaration?.IsPredicate == true;
 
         if (candidateIsPredicate && (existingIsPredicate || IsImportedCallableWithoutDeclaration(existingFn)))
+        {
             return !HaveSameParameterSignature(existingFn.Parameters, candidate.Parameters);
+        }
 
         return candidateKind == CallableKind.Function
             && existingFn.CallableKind == CallableKind.Function
@@ -306,12 +334,16 @@ public sealed class Binder
         IReadOnlyList<ParameterSymbol> right)
     {
         if (left.Count != right.Count)
+        {
             return false;
+        }
 
-        for (var i = 0; i < left.Count; i++)
+        for (int i = 0; i < left.Count; i++)
         {
             if (!HaveSameType(left[i].DeclaredType, right[i].DeclaredType))
+            {
                 return false;
+            }
         }
 
         return true;
@@ -320,7 +352,9 @@ public sealed class Binder
     private static bool HaveSameType(TypeRef? left, TypeRef? right)
     {
         if (left is null || right is null)
+        {
             return left is null && right is null;
+        }
 
         return left.Name == right.Name
             && left.IsCollection == right.IsCollection
@@ -329,7 +363,7 @@ public sealed class Binder
 
     private void RegisterLet(LetDecl decl)
     {
-        var symbol = new VariableSymbol(decl.Name, decl.TypeAnnotation, isReadOnly: true)
+        VariableSymbol symbol = new VariableSymbol(decl.Name, decl.TypeAnnotation, isReadOnly: true)
         {
             IsExported = decl.IsExported,
             DeclarationLine = decl.Line
@@ -338,11 +372,15 @@ public sealed class Binder
         if (!_currentScope.Declare(symbol))
         {
             // Allow let to shadow an imported function (common pattern: let codebase = codebase(...))
-            var existing = _currentScope.ResolveLocal(decl.Name);
+            Symbol? existing = _currentScope.ResolveLocal(decl.Name);
             if (existing is FunctionSymbol)
+            {
                 _currentScope.DeclareOrReplace(symbol);
+            }
             else
+            {
                 ReportDuplicate(decl.Name, decl.Line);
+            }
         }
 
         _result.RecordResolution(decl, symbol);
@@ -350,17 +388,19 @@ public sealed class Binder
 
     private void RegisterCommand(CommandDecl decl)
     {
-        var parameters = (decl.Parameters ?? []).Select((p, i) =>
+        List<ParameterSymbol> parameters = (decl.Parameters ?? []).Select((p, i) =>
             new ParameterSymbol(p, null, i)).ToList();
 
-        var symbol = new FunctionSymbol(decl.Name, CallableKind.Command, parameters)
+        FunctionSymbol symbol = new FunctionSymbol(decl.Name, CallableKind.Command, parameters)
         {
             IsExported = decl.IsExported,
             DeclarationLine = decl.Line
         };
 
         if (!_currentScope.Declare(symbol))
+        {
             ReportDuplicate(decl.Name, decl.Line);
+        }
 
         _result.RecordResolution(decl, symbol);
     }
@@ -387,22 +427,24 @@ public sealed class Binder
 
     private void BindFunctionBody(FunctionDecl decl)
     {
-        var funcScope = _currentScope.CreateChild($"function:{decl.Name}");
+        Scope funcScope = _currentScope.CreateChild($"function:{decl.Name}");
         _result.RecordScope(decl, funcScope);
 
         // Add parameters to function scope
-        foreach (var param in decl.Params)
+        foreach (Parameter param in decl.Params)
         {
-            var paramSymbol = new ParameterSymbol(param.Name, param.Type, 0);
+            ParameterSymbol paramSymbol = new ParameterSymbol(param.Name, param.Type, 0);
             funcScope.Declare(paramSymbol);
         }
 
-        var previousScope = _currentScope;
+        Scope previousScope = _currentScope;
         _currentScope = funcScope;
 
         // Bind guard if present
         if (decl.Guard is not null)
+        {
             BindExpression(decl.Guard);
+        }
 
         // Bind body
         switch (decl.Body)
@@ -411,16 +453,22 @@ public sealed class Binder
                 BindExpression(eb.Expr);
                 break;
             case MappingBody mb:
-                foreach (var mapping in mb.Mappings)
+                foreach (FieldMapping mapping in mb.Mappings)
+                {
                     BindExpression(mapping.Value);
+                }
+
                 break;
             case BlockBody bb:
                 // Commands (and brace-bodied functions) desugar to a FunctionDecl with a
                 // BlockBody. Without binding its statements, Pass 2 never resolved identifiers in
                 // a command body, so an undefined reference such as `command main = CHECK(missing)`
                 // was silently ignored by verify (Pass 3 validates the same body for arity).
-                foreach (var stmt in bb.Statements)
+                foreach (Statement stmt in bb.Statements)
+                {
                     BindStatement(stmt);
+                }
+
                 break;
         }
 
@@ -429,24 +477,26 @@ public sealed class Binder
 
     private void BindCommandBody(CommandDecl decl)
     {
-        var cmdScope = _currentScope.CreateChild($"command:{decl.Name}");
+        Scope cmdScope = _currentScope.CreateChild($"command:{decl.Name}");
         _result.RecordScope(decl, cmdScope);
 
         // Add command parameters to scope
         if (decl.Parameters is not null)
         {
-            foreach (var param in decl.Parameters)
+            foreach (string param in decl.Parameters)
             {
-                var paramSymbol = new ParameterSymbol(param, null, 0);
+                ParameterSymbol paramSymbol = new ParameterSymbol(param, null, 0);
                 cmdScope.Declare(paramSymbol);
             }
         }
 
-        var previousScope = _currentScope;
+        Scope previousScope = _currentScope;
         _currentScope = cmdScope;
 
-        foreach (var stmt in decl.Body)
+        foreach (Statement stmt in decl.Body)
+        {
             BindStatement(stmt);
+        }
 
         _currentScope = previousScope;
     }
@@ -461,7 +511,7 @@ public sealed class Binder
         {
             case LetStatement ls:
                 BindExpression(ls.Value);
-                var varSymbol = new VariableSymbol(ls.Name, ls.TypeAnnotation, isReadOnly: true)
+                VariableSymbol varSymbol = new VariableSymbol(ls.Name, ls.TypeAnnotation, isReadOnly: true)
                 {
                     DeclarationLine = ls.Line
                 };
@@ -471,18 +521,21 @@ public sealed class Binder
 
             case ForEachStatement fs:
                 BindExpression(fs.Collection);
-                var loopScope = _currentScope.CreateChild("foreach");
-                var iterVar = new VariableSymbol(fs.Variable, null, isReadOnly: true)
+                Scope loopScope = _currentScope.CreateChild("foreach");
+                VariableSymbol iterVar = new VariableSymbol(fs.Variable, null, isReadOnly: true)
                 {
                     DeclarationLine = fs.Line
                 };
                 loopScope.Declare(iterVar);
                 _result.RecordResolution(fs, iterVar);
 
-                var prev = _currentScope;
+                Scope prev = _currentScope;
                 _currentScope = loopScope;
-                foreach (var s in fs.Body)
+                foreach (Statement s in fs.Body)
+                {
                     BindStatement(s);
+                }
+
                 _currentScope = prev;
                 break;
 
@@ -492,8 +545,11 @@ public sealed class Binder
 
             case PipelineStatement ps:
                 BindExpression(ps.Source);
-                foreach (var stage in ps.Stages)
+                foreach (PipelineStage stage in ps.Stages)
+                {
                     BindExpression(stage.Expr);
+                }
+
                 break;
         }
     }
@@ -507,7 +563,7 @@ public sealed class Binder
         switch (expr)
         {
             case IdentifierExpr id:
-                var symbol = _currentScope.Resolve(id.Name);
+                Symbol? symbol = _currentScope.Resolve(id.Name);
                 if (symbol is not null)
                 {
                     _result.RecordResolution(id, symbol);
@@ -547,7 +603,7 @@ public sealed class Binder
                 // not its value — so don't bind the argument as a value reference. Binding it would
                 // emit a false "Undefined variable" and, for `let x = ... nameof(x)`, a spurious
                 // self-reference. Still validate the name resolves so a typo'd check name is caught.
-                if (IsNameOf(ce, out var nameofTarget))
+                if (IsNameOf(ce, out IdentifierExpr? nameofTarget))
                 {
                     ValidateNameOfTarget(nameofTarget);
                     break;
@@ -555,8 +611,11 @@ public sealed class Binder
                 // The callee (an intrinsic like CHECK/print, a user function, or a short
                 // predicate used as a function) is resolved dynamically — don't flag it.
                 BindCalleeOrDynamic(ce.Callee);
-                foreach (var arg in ce.Args)
+                foreach (Expression arg in ce.Args)
+                {
                     BindExpression(arg);
+                }
+
                 break;
 
             case MemberExpr me:
@@ -572,13 +631,13 @@ public sealed class Binder
                 break;
 
             case LambdaExpr le:
-                var lambdaScope = _currentScope.CreateChild("lambda");
-                foreach (var p in le.Params)
+                Scope lambdaScope = _currentScope.CreateChild("lambda");
+                foreach (Parameter p in le.Params)
                 {
-                    var ps = new ParameterSymbol(p.Name, p.Type, 0);
+                    ParameterSymbol ps = new ParameterSymbol(p.Name, p.Type, 0);
                     lambdaScope.Declare(ps);
                 }
-                var outer = _currentScope;
+                Scope outer = _currentScope;
                 _currentScope = lambdaScope;
                 BindExpression(le.Body);
                 _currentScope = outer;
@@ -592,25 +651,36 @@ public sealed class Binder
 
             case MatchExpr match:
                 BindExpression(match.Discriminant);
-                foreach (var arm in match.Arms)
+                foreach (MatchArm arm in match.Arms)
+                {
                     BindExpression(arm.Body);
+                }
+
                 break;
 
             case ListExpr list:
-                foreach (var elem in list.Elements)
+                foreach (Expression elem in list.Elements)
+                {
                     BindExpression(elem);
+                }
+
                 break;
 
             case ObjectExpr obj:
-                foreach (var field in obj.Fields)
+                foreach (FieldInit field in obj.Fields)
+                {
                     BindExpression(field.Value);
+                }
+
                 break;
 
             case InterpolatedStringExpr interp:
-                foreach (var part in interp.Parts)
+                foreach (StringPart part in interp.Parts)
                 {
                     if (part is ExpressionPart ep)
+                    {
                         BindExpression(ep.Expr);
+                    }
                 }
                 break;
 
@@ -623,15 +693,18 @@ public sealed class Binder
 
             case ForEachExpr fe:
                 BindExpression(fe.Loop.Collection);
-                var feScope = _currentScope.CreateChild("foreach");
+                Scope feScope = _currentScope.CreateChild("foreach");
                 feScope.Declare(new VariableSymbol(fe.Loop.Variable, null, isReadOnly: true)
                 {
                     DeclarationLine = fe.Loop.Line
                 });
-                var feOuter = _currentScope;
+                Scope feOuter = _currentScope;
                 _currentScope = feScope;
-                foreach (var s in fe.Loop.Body)
+                foreach (Statement s in fe.Loop.Body)
+                {
                     BindStatement(s);
+                }
+
                 _currentScope = feOuter;
                 break;
         }
@@ -648,9 +721,11 @@ public sealed class Binder
     {
         if (expr is IdentifierExpr id)
         {
-            var symbol = _currentScope.Resolve(id.Name);
+            Symbol? symbol = _currentScope.Resolve(id.Name);
             if (symbol is not null)
+            {
                 _result.RecordResolution(id, symbol);
+            }
         }
         else
         {
@@ -683,7 +758,7 @@ public sealed class Binder
     /// </summary>
     private void ValidateNameOfTarget(IdentifierExpr id)
     {
-        var symbol = _currentScope.Resolve(id.Name);
+        Symbol? symbol = _currentScope.Resolve(id.Name);
         if (symbol is not null)
         {
             _result.RecordResolution(id, symbol);
@@ -732,8 +807,11 @@ public sealed class Binder
                 ValidateExpression(ld.Value);
                 break;
             case CommandDecl cd:
-                foreach (var stmt in cd.Body)
+                foreach (Statement stmt in cd.Body)
+                {
                     ValidateStatement(stmt);
+                }
+
                 break;
         }
     }
@@ -742,20 +820,24 @@ public sealed class Binder
     {
         // Validate base type
         if (decl.BaseType is not null)
+        {
             ValidateTypeName(decl.BaseType, decl.Line);
+        }
 
         // Detect circular inheritance (e.g. `type A : B` with `type B : A`, or `type A : A`).
         DetectInheritanceCycle(decl);
 
         // Validate property types
-        foreach (var prop in decl.Properties)
+        foreach (PropertyDecl prop in decl.Properties)
+        {
             ValidateTypeRef(prop.Type);
+        }
     }
 
     private void DetectInheritanceCycle(TypeDecl decl)
     {
-        var seen = new HashSet<string>(StringComparer.Ordinal) { decl.Name };
-        var current = decl.BaseType;
+        HashSet<string> seen = new HashSet<string>(StringComparer.Ordinal) { decl.Name };
+        string? current = decl.BaseType;
         while (current is not null)
         {
             if (!seen.Add(current))
@@ -776,14 +858,16 @@ public sealed class Binder
     private void ValidateFunctionDecl(FunctionDecl decl)
     {
         // Validate parameter types
-        foreach (var param in decl.Params)
+        foreach (Parameter param in decl.Params)
+        {
             ValidateTypeRef(param.Type);
+        }
 
         // Validate return type
         ValidateTypeRef(decl.ReturnType);
 
         // Set parameter context for enum-vs-string comparison checks
-        var previousParams = _currentFunctionParams;
+        IReadOnlyList<Parameter>? previousParams = _currentFunctionParams;
         _currentFunctionParams = decl.Params;
 
         // Validate body expressions
@@ -793,15 +877,21 @@ public sealed class Binder
                 ValidateExpression(eb.Expr);
                 break;
             case MappingBody mb:
-                foreach (var mapping in mb.Mappings)
+                foreach (FieldMapping mapping in mb.Mappings)
+                {
                     ValidateExpression(mapping.Value);
+                }
+
                 break;
             case BlockBody bb:
                 // Commands and brace-bodied functions carry a BlockBody. Without validating it,
                 // Pass 3 checks (arity, type references, enum-vs-string comparisons) never ran on a
                 // command body — e.g. `command main = print(f(1, 2, 3))` silently passed verify.
-                foreach (var stmt in bb.Statements)
+                foreach (Statement stmt in bb.Statements)
+                {
                     ValidateStatement(stmt);
+                }
+
                 break;
         }
 
@@ -818,23 +908,32 @@ public sealed class Binder
                 break;
             case ForEachStatement fs:
                 ValidateExpression(fs.Collection);
-                foreach (var s in fs.Body)
+                foreach (Statement s in fs.Body)
+                {
                     ValidateStatement(s);
+                }
+
                 break;
             case ExpressionStatement es:
                 ValidateExpression(es.Expr);
                 break;
             case PipelineStatement ps:
                 ValidateExpression(ps.Source);
-                foreach (var stage in ps.Stages)
+                foreach (PipelineStage stage in ps.Stages)
+                {
                     ValidateExpression(stage.Expr);
+                }
+
                 break;
         }
     }
 
     private void ValidateExpression(Expression? expr)
     {
-        if (expr is null) return;
+        if (expr is null)
+        {
+            return;
+        }
 
         switch (expr)
         {
@@ -857,8 +956,11 @@ public sealed class Binder
                 ValidateExpression(ie.Index);
                 break;
             case LambdaExpr le:
-                foreach (var p in le.Params)
+                foreach (Parameter p in le.Params)
+                {
                     ValidateTypeRef(p.Type);
+                }
+
                 ValidateExpression(le.Body);
                 break;
             case ConditionalExpr cond:
@@ -868,22 +970,33 @@ public sealed class Binder
                 break;
             case MatchExpr match:
                 ValidateExpression(match.Discriminant);
-                foreach (var arm in match.Arms)
+                foreach (MatchArm arm in match.Arms)
+                {
                     ValidateExpression(arm.Body);
+                }
+
                 break;
             case ListExpr list:
-                foreach (var elem in list.Elements)
+                foreach (Expression elem in list.Elements)
+                {
                     ValidateExpression(elem);
+                }
+
                 break;
             case ObjectExpr obj:
-                foreach (var field in obj.Fields)
+                foreach (FieldInit field in obj.Fields)
+                {
                     ValidateExpression(field.Value);
+                }
+
                 break;
             case InterpolatedStringExpr interp:
-                foreach (var part in interp.Parts)
+                foreach (StringPart part in interp.Parts)
                 {
                     if (part is ExpressionPart ep)
+                    {
                         ValidateExpression(ep.Expr);
+                    }
                 }
                 break;
             case FilterExpr filter:
@@ -892,8 +1005,11 @@ public sealed class Binder
                 break;
             case ForEachExpr fe:
                 ValidateExpression(fe.Loop.Collection);
-                foreach (var s in fe.Loop.Body)
+                foreach (Statement s in fe.Loop.Body)
+                {
                     ValidateStatement(s);
+                }
+
                 break;
         }
     }
@@ -902,13 +1018,15 @@ public sealed class Binder
     {
         // Validate argument expressions recursively
         ValidateExpression(ce.Callee);
-        foreach (var arg in ce.Args)
+        foreach (Expression arg in ce.Args)
+        {
             ValidateExpression(arg);
+        }
 
         // Check arity if callee resolves to a known function
         if (ce.Callee is IdentifierExpr id)
         {
-            var symbol = _currentScope.Resolve(id.Name);
+            Symbol? symbol = _currentScope.Resolve(id.Name);
             if (symbol is FunctionSymbol func && func.Parameters.Count > 0)
             {
                 // Only check arity when we have a clear mismatch.
@@ -940,7 +1058,11 @@ public sealed class Binder
     /// </summary>
     private void ValidateTypeRef(TypeRef? typeRef)
     {
-        if (typeRef is null) return;
+        if (typeRef is null)
+        {
+            return;
+        }
+
         ValidateTypeName(typeRef.Name, typeRef.Line);
     }
 
@@ -950,21 +1072,35 @@ public sealed class Binder
     private void ValidateTypeName(string name, int line)
     {
         // Single uppercase letters are generic type parameter placeholders (A-Z)
-        if (name.Length == 1 && name[0] >= 'A' && name[0] <= 'Z') return;
+        if (name.Length == 1 && name[0] >= 'A' && name[0] <= 'Z')
+        {
+            return;
+        }
 
         // 'computed' is the synthetic type of a computed property (`name => expr`) used in
         // conformance/struct bodies; it has no declared type to resolve.
-        if (name == "computed") return;
+        if (name == "computed")
+        {
+            return;
+        }
 
         // Function types like '(T) => bool' or '(A, T) => A' are always valid structurally
-        if (name.Contains("=>")) return;
+        if (name.Contains("=>"))
+        {
+            return;
+        }
 
         // Core primitive types are always valid
-        if (name is "string" or "int" or "float" or "bool" or "byte" or "bytes" or "object") return;
-
-        var symbol = _currentScope.Resolve(name);
-        if (symbol is TypeSymbol or EnumSymbol)
+        if (name is "string" or "int" or "float" or "bool" or "byte" or "bytes" or "object")
+        {
             return;
+        }
+
+        Symbol? symbol = _currentScope.Resolve(name);
+        if (symbol is TypeSymbol or EnumSymbol)
+        {
+            return;
+        }
 
         // Named subset / collection reference patterns:
         // - Plural collection names (e.g., 'Types' → 'Type' is a known type)
@@ -974,15 +1110,19 @@ public sealed class Binder
             // Try stripping trailing 's' (Types → Type, Statements → Statement...)
             if (name.EndsWith('s'))
             {
-                var singular = name[..^1];
+                string singular = name[..^1];
                 if (_currentScope.Resolve(singular) is TypeSymbol)
+                {
                     return;
+                }
                 // Handle 'ies' → 'y' (e.g., Entries → Entry) — not common but safe
             }
             // Try stripping trailing digits (Region2 → Region)
-            var baseName = name.TrimEnd('0', '1', '2', '3', '4', '5', '6', '7', '8', '9');
+            string baseName = name.TrimEnd('0', '1', '2', '3', '4', '5', '6', '7', '8', '9');
             if (baseName.Length < name.Length && _currentScope.Resolve(baseName) is TypeSymbol)
+            {
                 return;
+            }
         }
 
         if (symbol is null)
@@ -1014,7 +1154,10 @@ public sealed class Binder
     /// </summary>
     private void ValidateEnumComparison(BinaryExpr be)
     {
-        if (be.Op is not (BinaryOp.Equal or BinaryOp.NotEqual)) return;
+        if (be.Op is not (BinaryOp.Equal or BinaryOp.NotEqual))
+        {
+            return;
+        }
 
         // Check both directions: member == literal, or literal == member
         TryReportEnumStringMismatch(be.Left, be.Right, be.Line);
@@ -1025,16 +1168,22 @@ public sealed class Binder
     {
         // The literal side must be a string literal
         if (possibleLiteral is not LiteralExpr { Value: string })
+        {
             return;
+        }
 
         // The other side must be a member access (e.g., Type.Kind)
         if (possibleMember is not MemberExpr me)
+        {
             return;
+        }
 
         // Try to resolve the property type of the member access
-        var enumTypeName = TryResolvePropertyEnumType(me);
+        string? enumTypeName = TryResolvePropertyEnumType(me);
         if (enumTypeName is null)
+        {
             return;
+        }
 
         // We found an enum-typed property being compared to a string literal
         _result.ReportDiagnostic(
@@ -1058,7 +1207,7 @@ public sealed class Binder
             // Check if it's a function parameter with a type annotation
             if (_currentFunctionParams is not null)
             {
-                foreach (var param in _currentFunctionParams)
+                foreach (Parameter param in _currentFunctionParams)
                 {
                     if (param.Name == id.Name && param.Type is not null)
                     {
@@ -1071,29 +1220,41 @@ public sealed class Binder
             // If not a parameter, check scope for variable with type annotation
             if (objectTypeName is null)
             {
-                var symbol = _currentScope.Resolve(id.Name);
+                Symbol? symbol = _currentScope.Resolve(id.Name);
                 if (symbol is VariableSymbol vs && vs.DeclaredType is not null)
+                {
                     objectTypeName = vs.DeclaredType.Name;
+                }
                 else if (symbol is ParameterSymbol ps && ps.DeclaredType is not null)
+                {
                     objectTypeName = ps.DeclaredType.Name;
+                }
             }
         }
 
-        if (objectTypeName is null) return null;
+        if (objectTypeName is null)
+        {
+            return null;
+        }
 
         // Look up the type symbol to find the property
-        var typeSymbol = _currentScope.Resolve(objectTypeName);
-        if (typeSymbol is not TypeSymbol ts) return null;
+        Symbol? typeSymbol = _currentScope.Resolve(objectTypeName);
+        if (typeSymbol is not TypeSymbol ts)
+        {
+            return null;
+        }
 
         // Find the property by name
-        foreach (var prop in ts.Properties)
+        foreach (PropertySymbol prop in ts.Properties)
         {
             if (prop.Name == me.Member && prop.DeclaredType is not null)
             {
                 // Check if the property type is an enum
-                var propTypeSymbol = _currentScope.Resolve(prop.DeclaredType.Name);
+                Symbol? propTypeSymbol = _currentScope.Resolve(prop.DeclaredType.Name);
                 if (propTypeSymbol is EnumSymbol)
+                {
                     return prop.DeclaredType.Name;
+                }
             }
         }
 

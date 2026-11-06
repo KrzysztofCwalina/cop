@@ -86,16 +86,16 @@ public class LanguageParityContractTests
             .SetName("{m}_" + language);
 
     [TestCaseSource(nameof(Corpus))]
-    public void CommonFacts_AreExactOnColdAndWarmQueries(string language, string extension, string source,
+    public async System.Threading.Tasks.Task CommonFacts_AreExactOnColdAndWarmQueries(string language, string extension, string source,
         int typeLine, int methodLine, int callLine, string malformed)
     {
         File.WriteAllText(Path.Combine(_root, "sample" + extension), source);
         string? cold = null;
-        using var scope = new ToolchainExecutionScope();
+        await using var scope = new ToolchainExecutionScope();
         for (int run = 0; run < 2; run++)
         {
             ProviderErrors.Clear();
-            var file = Read(language);
+            var file = (await ReadAsync(language, cancellationToken: CancellationToken.None));
             Assert.That(file.ParseErrors, Is.Empty);
             Assert.That(ProviderErrors.Drain(), Is.Empty);
             Assert.That(file.Types.Select(type => (type.Name, type.Line)),
@@ -159,15 +159,15 @@ public class LanguageParityContractTests
     }
 
     [TestCaseSource(nameof(Corpus))]
-    public void MalformedSource_IsVisibleOnEveryQuery_NotCachedAsSuccess(string language, string extension, string source,
+    public async System.Threading.Tasks.Task MalformedSource_IsVisibleOnEveryQuery_NotCachedAsSuccess(string language, string extension, string source,
         int typeLine, int methodLine, int callLine, string malformed)
     {
         File.WriteAllText(Path.Combine(_root, "sample" + extension), malformed);
-        using var scope = new ToolchainExecutionScope();
+        await using var scope = new ToolchainExecutionScope();
         for (int run = 0; run < 2; run++)
         {
             ProviderErrors.Clear();
-            _ = Read(language);
+            _ = (await ReadAsync(language, cancellationToken: CancellationToken.None));
             var diagnostics = ProviderErrors.Drain();
             Assert.That(diagnostics, Is.Not.Empty,
                 $"{language}: malformed source must not silently produce an empty/partial model.");
@@ -175,7 +175,7 @@ public class LanguageParityContractTests
         }
     }
 
-    private SourceFile Read(string language)
+    private async Task<SourceFile> ReadAsync(string language, CancellationToken cancellationToken = default)
     {
         DataProvider provider = language switch
         {
@@ -188,8 +188,8 @@ public class LanguageParityContractTests
             "cop" => new CopProvider(),
             _ => throw new ArgumentOutOfRangeException(nameof(language))
         };
-        var result = (DeferredProviderResult)provider.QueryDeferred(new ProviderQuery { RootPath = _root, Collection = "Files" })!;
-        return result.Collections["Files"].Cast<SourceFile>().Single();
+        var result = (DeferredProviderResult)(await provider.QueryDeferredAsync(new ProviderQuery { RootPath = _root, Collection = "Files" }, cancellationToken: cancellationToken))!;
+        return (await result.Collections["Files"].Cast<SourceFile>().SingleAsync());
     }
 
     private static IEnumerable<StatementInfo> Descendants(IEnumerable<StatementInfo> roots)

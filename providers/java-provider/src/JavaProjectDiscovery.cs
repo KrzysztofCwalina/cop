@@ -1,3 +1,5 @@
+// Discovers Java projects and their build-system dependencies.
+
 using Cop.Providers.SourceModel;
 using System.Xml.Linq;
 using Cop.Providers.SourceParsers;
@@ -15,28 +17,35 @@ public static class JavaProjectDiscovery
     /// </summary>
     public static List<ProjectInfo> Discover(string rootPath, IReadOnlySet<string>? excludedDirs)
     {
-        var manifestPaths = new List<string>();
+        List<string> manifestPaths = new List<string>();
         CollectManifests(rootPath, excludedDirs, manifestPaths);
 
-        var result = new List<ProjectInfo>();
-        foreach (var manifestPath in manifestPaths)
+        List<ProjectInfo> result = new List<ProjectInfo>();
+        foreach (string manifestPath in manifestPaths)
         {
-            var info = ParseManifest(manifestPath, rootPath);
+            ProjectInfo? info = ParseManifest(manifestPath, rootPath);
             if (info is not null)
+            {
                 result.Add(info);
+            }
         }
         return result;
     }
 
     private static ProjectInfo? ParseManifest(string filePath, string rootPath)
     {
-        var fileName = Path.GetFileName(filePath);
-        var relativePath = Path.GetRelativePath(rootPath, filePath).Replace('\\', '/');
+        string fileName = Path.GetFileName(filePath);
+        string relativePath = Path.GetRelativePath(rootPath, filePath).Replace('\\', '/');
 
         if (fileName == "pom.xml")
+        {
             return ParsePomXml(filePath, relativePath);
+        }
+
         if (fileName is "build.gradle" or "build.gradle.kts")
+        {
             return ParseBuildGradle(filePath, relativePath);
+        }
 
         return null;
     }
@@ -45,19 +54,23 @@ public static class JavaProjectDiscovery
     {
         try
         {
-            var root = XDocument.Load(filePath).Root;
-            var name = root?.Elements().FirstOrDefault(e => e.Name.LocalName == "artifactId")?.Value.Trim();
+            XElement? root = XDocument.Load(filePath).Root;
+            string? name = root?.Elements().FirstOrDefault(e => e.Name.LocalName == "artifactId")?.Value.Trim();
             if (string.IsNullOrEmpty(name))
+            {
                 return null;
+            }
 
-            var dependencies = new List<string>();
-            foreach (var dependency in root!.Elements().Where(e => e.Name.LocalName == "dependencies")
+            List<string> dependencies = new List<string>();
+            foreach (XElement? dependency in root!.Elements().Where(e => e.Name.LocalName == "dependencies")
                          .SelectMany(e => e.Elements()).Where(e => e.Name.LocalName == "dependency"))
             {
                 string? group = dependency.Elements().FirstOrDefault(e => e.Name.LocalName == "groupId")?.Value.Trim();
                 string? artifact = dependency.Elements().FirstOrDefault(e => e.Name.LocalName == "artifactId")?.Value.Trim();
                 if (!string.IsNullOrEmpty(group) && !string.IsNullOrEmpty(artifact))
+                {
                     dependencies.Add($"{group}:{artifact}");
+                }
             }
 
             return new ProjectInfo(name, relativePath, "java", dependencies, dependencies, []);
@@ -73,18 +86,20 @@ public static class JavaProjectDiscovery
     {
         try
         {
-            var content = File.ReadAllText(filePath);
+            string content = File.ReadAllText(filePath);
 
             // Use directory name as project name
-            var name = Path.GetFileName(Path.GetDirectoryName(filePath)) ?? "unknown";
+            string name = Path.GetFileName(Path.GetDirectoryName(filePath)) ?? "unknown";
 
             // Extract dependencies: implementation 'group:artifact:version'
-            var dependencies = new List<string>();
-            foreach (var dependency in ReadGradleDependencies(content))
+            List<string> dependencies = new List<string>();
+            foreach (string dependency in ReadGradleDependencies(content))
             {
-                var parts = dependency.Split(':');
+                string[] parts = dependency.Split(':');
                 if (parts.Length >= 2)
+                {
                     dependencies.Add($"{parts[0]}:{parts[1]}");
+                }
             }
 
             return new ProjectInfo(name, relativePath, "java", dependencies, dependencies, []);
@@ -98,17 +113,32 @@ public static class JavaProjectDiscovery
 
     internal static IEnumerable<string> ReadGradleDependencies(string content, IReadOnlySet<string>? selectedConfigurations = null)
     {
-        var tokens = new JavaLexer(content).Tokenize(singleQuotedStrings: true);
+        List<JavaToken> tokens = new JavaLexer(content).Tokenize(JavaLiteralDialect.Gradle);
         string[] configurations = ["implementation", "api", "compile", "compileOnly", "runtimeOnly", "testImplementation", "testRuntimeOnly", "annotationProcessor"];
         for (int i = 0; i + 1 < tokens.Count; i++)
         {
             if (tokens[i].Kind != JavaTokenKind.Identifier
-                || !(selectedConfigurations?.Contains(tokens[i].Value) ?? configurations.Contains(tokens[i].Value))) continue;
+                || !(selectedConfigurations?.Contains(tokens[i].Value) ?? configurations.Contains(tokens[i].Value)))
+            {
+                continue;
+            }
+
             int valueIndex = i + 1;
-            if (tokens[valueIndex].Value == "(") valueIndex++;
-            if (valueIndex >= tokens.Count || tokens[valueIndex].Kind != JavaTokenKind.StringLiteral) continue;
+            if (tokens[valueIndex].Value == "(")
+            {
+                valueIndex++;
+            }
+
+            if (valueIndex >= tokens.Count || tokens[valueIndex].Kind != JavaTokenKind.StringLiteral)
+            {
+                continue;
+            }
+
             string value = tokens[valueIndex].Value;
-            if (value.Length >= 2 && !value.Contains('$')) yield return value[1..^1];
+            if (value.Length >= 2 && !value.Contains('$'))
+            {
+                yield return value[1..^1];
+            }
         }
     }
 
@@ -116,30 +146,42 @@ public static class JavaProjectDiscovery
     {
         try
         {
-            var pom = Path.Combine(dir, "pom.xml");
+            string pom = Path.Combine(dir, "pom.xml");
             if (File.Exists(pom))
             {
                 result.Add(pom);
             }
 
-            var gradle = Path.Combine(dir, "build.gradle");
+            string gradle = Path.Combine(dir, "build.gradle");
             if (!File.Exists(pom) && File.Exists(gradle))
             {
                 result.Add(gradle);
             }
 
-            var gradleKts = Path.Combine(dir, "build.gradle.kts");
+            string gradleKts = Path.Combine(dir, "build.gradle.kts");
             if (!File.Exists(pom) && !File.Exists(gradle) && File.Exists(gradleKts))
             {
                 result.Add(gradleKts);
             }
 
-            foreach (var subDir in Directory.GetDirectories(dir))
+            foreach (string subDir in Directory.GetDirectories(dir))
             {
-                var dirName = Path.GetFileName(subDir);
-                if (excluded is not null && excluded.Contains(dirName)) continue;
-                if (dirName is "target" or "build" or ".gradle") continue;
-                if ((File.GetAttributes(subDir) & FileAttributes.ReparsePoint) != 0) continue;
+                string dirName = Path.GetFileName(subDir);
+                if (excluded is not null && excluded.Contains(dirName))
+                {
+                    continue;
+                }
+
+                if (dirName is "target" or "build" or ".gradle")
+                {
+                    continue;
+                }
+
+                if ((File.GetAttributes(subDir) & FileAttributes.ReparsePoint) != 0)
+                {
+                    continue;
+                }
+
                 CollectManifests(subDir, excluded, result);
             }
         }

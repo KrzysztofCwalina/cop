@@ -1,3 +1,5 @@
+// Exposes source-model collections and properties to the Cop interpreter.
+
 using Cop.Core;
 using Cop.Lang;
 using Cop.Providers.SourceModel;
@@ -10,6 +12,9 @@ namespace Cop.Providers;
 /// </summary>
 public static class CodeBindings
 {
+    /// <summary>
+    /// Describes the shared source collections for query planning.
+    /// </summary>
     public static IReadOnlyDictionary<string, object?> SourceMetadata(ProviderQuery query, params string[] extensions) =>
         new Dictionary<string, object?>
         {
@@ -23,6 +28,9 @@ public static class CodeBindings
             }
         };
 
+    /// <summary>
+    /// Builds shared source-model property accessors and CLR type mappings.
+    /// </summary>
     public static RuntimeBindings Build()
     {
         return new RuntimeBindings
@@ -36,6 +44,7 @@ public static class CodeBindings
                 [typeof(StatementInfo)] = "Statement",
                 [typeof(ExpressionInfo)] = "CodeExpression",
                 [typeof(LineInfo)] = "Line",
+                [typeof(CommentInfo)] = "Comment",
                 [typeof(SourceFile)] = "File",
                 [typeof(MemberInfo)] = "Member",
                 [typeof(ApiEntry)] = "Api",
@@ -49,11 +58,12 @@ public static class CodeBindings
                 [typeof(CallableReference)] = "CallableReference",
             },
             Accessors = BuildAccessors(),
+            AsyncAccessors = BuildAsyncAccessors(),
             CollectionExtractors = BuildExtractors(),
             MethodEvaluators = new()
             {
                 [("Type", "inheritsFrom")] = (target, args) =>
-                    ((TypeDeclaration)target).InheritsFrom(args[0]?.ToString() ?? ""),
+                    ((TypeDeclaration)target).InheritsFrom(args[0]?.ToString() ?? string.Empty),
             },
             TextConverters = new()
             {
@@ -65,6 +75,77 @@ public static class CodeBindings
                 ["ProjectProperty"] = o => $"{((ProjectProperty)o).Name}={((ProjectProperty)o).Value}",
             },
         };
+    }
+
+    /// <summary>Copies asynchronous base-field bindings to language-specific model types.</summary>
+    public static void AddDerivedAsyncAccessors(RuntimeBindings bindings)
+    {
+        foreach ((Type clrType, string name) in bindings.ClrTypeMappings)
+        {
+            string? parent = typeof(TypeDeclaration).IsAssignableFrom(clrType) ? "Type"
+                : typeof(StatementInfo).IsAssignableFrom(clrType) ? "Statement"
+                : typeof(SourceFile).IsAssignableFrom(clrType) ? "File" : null;
+            if (parent is null || parent == name)
+            {
+                continue;
+            }
+            if (!bindings.AsyncAccessors.TryGetValue(name, out Dictionary<string,
+                    Func<object, CancellationToken, ValueTask<object?>>>? fields))
+            {
+                bindings.AsyncAccessors[name] = fields = new();
+            }
+            foreach ((string field, Func<object, CancellationToken, ValueTask<object?>> read)
+                     in bindings.AsyncAccessors[parent])
+            {
+                fields.TryAdd(field, read);
+            }
+        }
+    }
+
+    private static Dictionary<string,
+        Dictionary<string, Func<object, CancellationToken, ValueTask<object?>>>>
+        BuildAsyncAccessors()
+    {
+        Dictionary<string, Dictionary<string, Func<object, object?>>> accessors = BuildAccessors();
+        Dictionary<string, Dictionary<string,
+            Func<object, CancellationToken, ValueTask<object?>>>> result = new();
+        foreach ((string type, string[] fields) in new Dictionary<string, string[]>
+        {
+            ["Statement"] = ["ReceiverType", "ValueType", "ReferencedCallable",
+                "TypeName", "ConstructedTypeInterfaces"],
+            ["Type"] = ["Methods", "MethodNames", "Interfaces"],
+            ["File"] = ["Projects"]
+        })
+        {
+            Dictionary<string, Func<object, CancellationToken, ValueTask<object?>>> reads = new();
+            result[type] = reads;
+            foreach (string field in fields)
+            {
+                reads[field] = async (item, token) =>
+                {
+                    switch (item)
+                    {
+                        case StatementInfo statement when field == "TypeName":
+                            await statement.EnsureTypeNameAnalysisAsync(token).ConfigureAwait(false);
+                            break;
+                        case StatementInfo statement:
+                            await statement.EnsureSemanticAnalysisAsync(token).ConfigureAwait(false);
+                            break;
+                        case TypeDeclaration declaration when field is "Methods" or "MethodNames":
+                            await declaration.EnsureMembersAsync(token).ConfigureAwait(false);
+                            break;
+                        case TypeDeclaration declaration:
+                            await declaration.EnsureSemanticAnalysisAsync(token).ConfigureAwait(false);
+                            break;
+                        case SourceFile file:
+                            await file.EnsureProjectsAsync(token).ConfigureAwait(false);
+                            break;
+                    }
+                    return accessors[type][field](item);
+                };
+            }
+        }
+        return result;
     }
 
     internal static Dictionary<string, Dictionary<string, Func<object, object?>>> BuildAccessors()
@@ -106,6 +187,7 @@ public static class CodeBindings
             ["Method"] = new()
             {
                 ["Name"] = o => ((MethodDeclaration)o).Name,
+                ["Kind"] = o => ((MethodDeclaration)o).Kind,
                 ["ReceiverType"] = o => ((MethodDeclaration)o).ReceiverType,
                 ["TypeParameters"] = o => ((MethodDeclaration)o).TypeParameters,
                 ["Column"] = o => ((MethodDeclaration)o).Column,
@@ -176,6 +258,7 @@ public static class CodeBindings
                 ["Name"] = o => ((TypeReference)o).Name,
                 ["Namespace"] = o => ((TypeReference)o).Namespace,
                 ["Generic"] = o => (object)((TypeReference)o).IsGeneric,
+                ["IsAnonymous"] = o => (object)((TypeReference)o).IsAnonymous,
                 ["GenericArguments"] = o => (object)((TypeReference)o).GenericArguments,
                 ["Length"] = o => (object)((TypeReference)o).OriginalText.Length,
             },
@@ -194,6 +277,7 @@ public static class CodeBindings
                 ["Arguments"] = o => (object)((StatementInfo)o).Arguments,
                 ["CallTarget"] = o => ((StatementInfo)o).CallTarget,
                 ["ValueExpression"] = o => ((StatementInfo)o).ValueExpression,
+                ["ConditionExpression"] = o => ((StatementInfo)o).ConditionExpression,
                 ["ArgumentExpressions"] = o => ((StatementInfo)o).ArgumentExpressions,
                 ["Line"] = o => (object)((StatementInfo)o).Line,
                 ["InMethod"] = o => (object)((StatementInfo)o).IsInMethod,
@@ -204,7 +288,7 @@ public static class CodeBindings
                 ["Source"] = o => ((StatementInfo)o).Source,
                 ["Method"] = o => ((StatementInfo)o).Method,
                 ["Parent"] = o => ((StatementInfo)o).Parent,
-                ["Children"] = o => (object)((StatementInfo)o)._children,
+                ["Children"] = o => (object)((StatementInfo)o).MutableChildren,
                 ["Ancestors"] = o => (object)((StatementInfo)o).GetAncestors(),
                 ["Condition"] = o => ((StatementInfo)o).Condition,
                 ["Expression"] = o => ((StatementInfo)o).Expression,
@@ -217,6 +301,7 @@ public static class CodeBindings
                 ["Kind"] = o => ((ExpressionInfo)o).Kind,
                 ["Name"] = o => ((ExpressionInfo)o).Name,
                 ["StringValue"] = o => ((ExpressionInfo)o).StringValue,
+                ["BooleanValue"] = o => ((ExpressionInfo)o).BooleanValue,
                 ["Target"] = o => ((ExpressionInfo)o).Target,
                 ["Children"] = o => ((ExpressionInfo)o).Children,
             },
@@ -244,6 +329,13 @@ public static class CodeBindings
                 ["CopIgnore"] = o => ((LineInfo)o).CopIgnore,
                 ["PreviousText"] = o => ((LineInfo)o).PreviousText,
                 ["NextText"] = o => ((LineInfo)o).NextText,
+                ["Comments"] = o => ((LineInfo)o).Comments,
+            },
+            ["Comment"] = new()
+            {
+                ["Kind"] = o => ((CommentInfo)o).Kind,
+                ["Content"] = o => ((CommentInfo)o).Content,
+                ["Line"] = o => ((CommentInfo)o).Line,
             },
             ["File"] = new()
             {
@@ -318,6 +410,9 @@ public static class CodeBindings
         };
     }
 
+    /// <summary>
+    /// Builds collection extractors for parsed source files.
+    /// </summary>
     public static Dictionary<string, Func<object, List<object>>> BuildExtractors()
     {
         return new()
@@ -326,39 +421,41 @@ public static class CodeBindings
             ["Statements"] = doc => ((SourceFile)doc).Statements.Cast<object>().ToList(),
             ["Methods"] = doc =>
             {
-                var file = (SourceFile)doc;
-                var result = file.Methods.Cast<object>().ToList();
+                SourceFile file = (SourceFile)doc;
+                List<object> result = file.Methods.Cast<object>().ToList();
                 CollectMethods(file.Types, result);
                 return result.Distinct(ReferenceEqualityComparer.Instance).ToList();
             },
             ["Calls"] = doc => ((SourceFile)doc).Statements.Where(s => s.Kind == "call").Cast<object>().ToList(),
             ["Lines"] = doc =>
             {
-                var file = (SourceFile)doc;
-                var result = new List<object>();
-                string pendingCopIgnore = "";
+                SourceFile file = (SourceFile)doc;
+                List<object> result = new List<object>();
+                ILookup<int, CommentInfo> comments = file.Comments.ToLookup(c => c.Line);
+                string pendingCopIgnore = string.Empty;
                 for (int i = 0; i < file.Lines.Count; i++)
                 {
-                    var text = file.Lines[i];
-                    var lineNum = i + 1;
-                    var kind = file.CommentLines.Contains(lineNum) ? "comment"
+                    string text = file.Lines[i];
+                    int lineNum = i + 1;
+                    string kind = file.CommentLines.Contains(lineNum) ? "comment"
                              : string.IsNullOrWhiteSpace(text) ? "blank"
                              : "code";
-                    var lineInfo = new LineInfo(text, lineNum)
+                    LineInfo lineInfo = new LineInfo(text, lineNum)
                     {
                         File = file,
                         Kind = kind,
                         CopIgnore = pendingCopIgnore,
-                        PreviousText = i > 0 ? file.Lines[i - 1] : "",
-                        NextText = i < file.Lines.Count - 1 ? file.Lines[i + 1] : ""
+                        PreviousText = i > 0 ? file.Lines[i - 1] : string.Empty,
+                        NextText = i < file.Lines.Count - 1 ? file.Lines[i + 1] : string.Empty,
+                        Comments = comments[lineNum].ToList()
                     };
                     result.Add(lineInfo);
 
                     // Detect cop-ignore: in comment lines — applies to NEXT line
-                    pendingCopIgnore = "";
+                    pendingCopIgnore = string.Empty;
                     if (kind == "comment")
                     {
-                        var idx = text.IndexOf("cop-ignore:", StringComparison.Ordinal);
+                        int idx = text.IndexOf("cop-ignore:", StringComparison.Ordinal);
                         if (idx >= 0)
                         {
                             pendingCopIgnore = text[(idx + "cop-ignore:".Length)..].Trim();
@@ -370,7 +467,7 @@ public static class CodeBindings
             ["Files"] = doc => [(object)(SourceFile)doc],
             ["Members"] = doc => ((SourceFile)doc).Types.SelectMany(t =>
             {
-                var members = new List<object>();
+                List<object> members = new List<object>();
                 members.AddRange(t.Methods.Select(m => new MemberInfo(m.Name, t.Name, m.Line)));
                 members.AddRange(t.Properties.Select(p => new MemberInfo(p.Name, t.Name, p.Line)));
                 members.AddRange(t.Events.Select(e => new MemberInfo(e.Name, t.Name, e.Line)));
@@ -379,39 +476,70 @@ public static class CodeBindings
             }).ToList(),
             ["Api"] = doc =>
             {
-                var file = (SourceFile)doc;
-                var entries = new List<object>();
-                foreach (var type in file.Types)
+                SourceFile file = (SourceFile)doc;
+                List<object> entries = new List<object>();
+                foreach (TypeDeclaration type in file.Types)
                 {
-                    if (!type.IsPublic) continue;
+                    if (!type.IsPublic)
+                    {
+                        continue;
+                    }
+
                     entries.Add(ApiEntry.ForType(type));
                     if (type.Kind == TypeKind.Enum)
                     {
-                        foreach (var value in type.EnumValues)
+                        foreach (string value in type.EnumValues)
+                        {
                             entries.Add(ApiEntry.ForEnumValue(type, value));
+                        }
+
                         continue;
                     }
-                    foreach (var ctor in type.Constructors)
+                    foreach (MethodDeclaration ctor in type.Constructors)
+                    {
                         if (ctor.IsPublic || ctor.IsProtected)
+                        {
                             entries.Add(ApiEntry.ForConstructor(type, ctor));
-                    foreach (var method in type.Methods)
+                        }
+                    }
+
+                    foreach (MethodDeclaration method in type.Methods)
+                    {
                         if (method.IsPublic || method.IsProtected)
+                        {
                             entries.Add(ApiEntry.ForMethod(type, method));
-                    foreach (var prop in type.Properties)
+                        }
+                    }
+
+                    foreach (PropertyDeclaration prop in type.Properties)
+                    {
                         if (prop.IsPublic || prop.IsProtected)
+                        {
                             entries.Add(ApiEntry.ForProperty(type, prop));
-                    foreach (var evt in type.Events)
+                        }
+                    }
+
+                    foreach (EventDeclaration evt in type.Events)
+                    {
                         if (evt.IsPublic || evt.IsProtected)
+                        {
                             entries.Add(ApiEntry.ForEvent(type, evt));
-                    foreach (var field in type.Fields)
+                        }
+                    }
+
+                    foreach (FieldDeclaration field in type.Fields)
+                    {
                         if (field.IsPublic || field.IsProtected)
+                        {
                             entries.Add(ApiEntry.ForField(type, field));
+                        }
+                    }
                 }
                 return entries;
             },
             ["Regions"] = doc =>
             {
-                var file = (SourceFile)doc;
+                SourceFile file = (SourceFile)doc;
                 return file.Regions.Select(r => (object)(r with { File = file })).ToList();
             },
         };
@@ -420,7 +548,7 @@ public static class CodeBindings
     /// <summary>Recursively flattens all methods declared in the given types (including nested types).</summary>
     private static void CollectMethods(IEnumerable<TypeDeclaration> types, List<object> result)
     {
-        foreach (var type in types)
+        foreach (TypeDeclaration type in types)
         {
             result.AddRange(type.DeclaredMethods);
             CollectMethods(type.NestedTypes, result);

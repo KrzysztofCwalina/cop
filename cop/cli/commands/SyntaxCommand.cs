@@ -1,18 +1,26 @@
+// Parses Cop source and reports syntax errors without executing the program.
+
 using System.CommandLine;
 using Cop.Lang;
 
 namespace Cop.Cli.Commands;
 
+/// <summary>
+/// Checks source syntax without loading providers or executing commands.
+/// </summary>
 public static class SyntaxCommand
 {
+    /// <summary>
+    /// Creates the syntax-check command for a source file or directory.
+    /// </summary>
     public static Command Create()
     {
-        var pathArg = new Argument<string>("path")
+        Argument<string> pathArg = new Argument<string>("path")
         {
             Arity = ArgumentArity.ZeroOrOne,
             Description = ".cop file or directory to validate syntax"
         };
-        var command = new Command("syntax", "Validate .cop file syntax without executing")
+        Command command = new Command("syntax", "Validate .cop file syntax without executing")
         {
             pathArg
         };
@@ -20,6 +28,9 @@ public static class SyntaxCommand
         return command;
     }
 
+    /// <summary>
+    /// Parses the selected source files and reports syntax diagnostics.
+    /// </summary>
     public static int Execute(string? path)
     {
         path ??= Directory.GetCurrentDirectory();
@@ -46,11 +57,11 @@ public static class SyntaxCommand
         }
 
         int errors = 0;
-        foreach (var file in files)
+        foreach (string file in files)
         {
             try
             {
-                var source = File.ReadAllText(file);
+                string source = File.ReadAllText(file);
                 Cop.Lang.Parser.CopParser.Parse(source, file);
             }
             catch (ParseException ex)
@@ -58,7 +69,7 @@ public static class SyntaxCommand
                 Console.Error.WriteLine(ex.Message);
                 errors++;
             }
-            catch (Exception ex) when (ex is not OutOfMemoryException)
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
                 Console.Error.WriteLine($"{file}: {ex.Message}");
                 errors++;

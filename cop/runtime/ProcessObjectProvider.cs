@@ -1,3 +1,5 @@
+// Loads provider collections from an external process through the provider protocol.
+
 using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
@@ -16,14 +18,18 @@ namespace Cop.Providers;
 ///
 /// The provider process is launched on first use and stays alive for the session.
 /// </summary>
-public sealed class ProcessObjectProvider : DataProvider, IDisposable
+public sealed class ProcessObjectProvider : DataProvider, IAsyncDisposable
 {
     private readonly string _runtime;     // e.g., "node", "python"
     private readonly string _entryScript; // e.g., "src/index.js"
     private readonly string _workingDir;  // package directory
     private Process? _process;
-    private readonly object _lock = new();
-    private bool _disposed;
+    private readonly SemaphoreSlim _requests = new(1, 1);
+    private readonly CancellationTokenSource _lifetime = new();
+    private readonly object _disposeGate = new();
+    private Task? _disposeTask;
+    private ReadOnlyMemory<byte> _schema;
+    private volatile bool _disposed;
 
     /// <summary>Timeout for provider responses (default 900s for large repo support).</summary>
     public TimeSpan Timeout { get; set; } = TimeSpan.FromSeconds(900);
@@ -31,6 +37,7 @@ public sealed class ProcessObjectProvider : DataProvider, IDisposable
     /// <summary>Collected stderr output for diagnostics.</summary>
     private readonly StringBuilder _stderr = new();
 
+    /// <summary>Configures a provider process that starts lazily on its first request.</summary>
     public ProcessObjectProvider(string runtime, string entryScript, string workingDir)
     {
         _runtime = runtime;
@@ -38,20 +45,38 @@ public sealed class ProcessObjectProvider : DataProvider, IDisposable
         _workingDir = workingDir;
     }
 
+    /// <inheritdoc />
     public override ReadOnlyMemory<byte> GetSchema()
     {
-        var request = """{"method":"getSchema"}""";
-        var response = SendRequest(request);
-        return Encoding.UTF8.GetBytes(response);
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        if (_schema.IsEmpty)
+        {
+            throw new InvalidOperationException(
+                "Initialize the process provider asynchronously before reading its schema.");
+        }
+        return _schema;
     }
 
-    public override byte[] Query(ProviderQuery query)
+    /// <summary>Loads the process schema before synchronous metadata registration.</summary>
+    public async ValueTask InitializeAsync(CancellationToken cancellationToken = default)
     {
-        var request = BuildQueryRequest(query);
-        var response = SendRequest(request);
-        return Encoding.UTF8.GetBytes(response);
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        cancellationToken.ThrowIfCancellationRequested();
+        if (_schema.IsEmpty)
+        {
+            _schema = await SendRequestAsync("""{"method":"getSchema"}""", cancellationToken);
+        }
     }
 
+    /// <inheritdoc />
+    public override async ValueTask<object?> QueryAsync(
+        ProviderQuery query, CancellationToken cancellationToken = default)
+    {
+        string request = BuildQueryRequest(query);
+        return await SendRequestAsync(request, cancellationToken);
+    }
+
+    /// <inheritdoc />
     public override string ToString()
     {
         return $"Process({_runtime})";
@@ -61,95 +86,186 @@ public sealed class ProcessObjectProvider : DataProvider, IDisposable
     /// Sends a JSON request to the provider process and returns the JSON response.
     /// Ensures the process is running, writes the length-prefixed message, and reads the response.
     /// </summary>
-    private string SendRequest(string jsonRequest)
+    private async ValueTask<byte[]> SendRequestAsync(
+        string jsonRequest, CancellationToken cancellationToken)
     {
-        lock (_lock)
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        using CancellationTokenSource deadline =
+            CancellationTokenSource.CreateLinkedTokenSource(
+                cancellationToken, _lifetime.Token);
+        deadline.CancelAfter(Timeout);
+        bool entered = false;
+        bool completed = false;
+        try
         {
+            await _requests.WaitAsync(deadline.Token);
+            entered = true;
             EnsureProcessRunning();
-
-            var process = _process!;
-            var stdin = process.StandardInput;
-            var stdout = process.StandardOutput;
-
-            // Write request with Content-Length framing
-            var requestBytes = Encoding.UTF8.GetBytes(jsonRequest);
-            var header = $"Content-Length: {requestBytes.Length}\r\n\r\n";
-            stdin.Write(header);
-            stdin.Write(jsonRequest);
-            stdin.Flush();
-
-            // Read response with Content-Length framing
-            var response = ReadFramedMessage(stdout);
-            return response;
+            Process process = _process!;
+            Task<byte[]> exchange = ExchangeFrameAsync(
+                process, jsonRequest, deadline.Token).AsTask();
+            try
+            {
+                byte[] response = await exchange.WaitAsync(deadline.Token);
+                completed = true;
+                return response;
+            }
+            catch (OperationCanceledException) when (deadline.IsCancellationRequested)
+            {
+                // Windows anonymous-pipe I/O may not honor cancellation until its process exits.
+                await StopProcessAsync();
+                try
+                {
+                    await exchange;
+                }
+                catch (Exception ex) when (ex is IOException or InvalidOperationException or
+                    OperationCanceledException)
+                {
+                    throw new OperationCanceledException(
+                        "Provider exchange was interrupted.", ex, deadline.Token);
+                }
+                throw;
+            }
         }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            throw;
+        }
+        catch (OperationCanceledException ex) when (
+            !cancellationToken.IsCancellationRequested && !_lifetime.IsCancellationRequested)
+        {
+            throw new TimeoutException(
+                $"Provider process ({_runtime}) did not respond within " +
+                $"{Timeout.TotalSeconds}s. Stderr: {GetStderr()}", ex);
+        }
+        finally
+        {
+            if (entered)
+            {
+                try
+                {
+                    if (!completed)
+                    {
+                        await StopProcessAsync();
+                    }
+                }
+                finally
+                {
+                    _requests.Release();
+                }
+            }
+        }
+    }
+
+    private async ValueTask<byte[]> ExchangeFrameAsync(
+        Process process, string jsonRequest, CancellationToken cancellationToken)
+    {
+        byte[] requestBytes = Encoding.UTF8.GetBytes(jsonRequest);
+        byte[] header = Encoding.ASCII.GetBytes(
+            $"Content-Length: {requestBytes.Length}\r\n\r\n");
+        await process.StandardInput.BaseStream.WriteAsync(header, cancellationToken);
+        await process.StandardInput.BaseStream.WriteAsync(requestBytes, cancellationToken);
+        await process.StandardInput.BaseStream.FlushAsync(cancellationToken);
+        return await ReadFramedMessageAsync(
+            process.StandardOutput.BaseStream, cancellationToken);
     }
 
     /// <summary>
     /// Reads a length-prefixed message from the provider's stdout.
     /// Expects: Content-Length: N\r\n\r\n{json}
     /// </summary>
-    private string ReadFramedMessage(StreamReader reader)
+    private async ValueTask<byte[]> ReadFramedMessageAsync(
+        Stream reader, CancellationToken cancellationToken)
     {
         int contentLength = -1;
 
         // Read headers until empty line
         while (true)
         {
-            var line = ReadLineWithTimeout(reader);
+            string? line = await ReadHeaderLineAsync(reader, cancellationToken);
             if (line is null)
+            {
                 throw new InvalidOperationException($"Provider process ({_runtime}) closed stdout unexpectedly. Stderr: {GetStderr()}");
+            }
 
             if (line.Length == 0)
+            {
                 break; // End of headers
+            }
 
             if (line.StartsWith("Content-Length:", StringComparison.OrdinalIgnoreCase))
             {
-                var value = line["Content-Length:".Length..].Trim();
+                string value = line["Content-Length:".Length..].Trim();
                 if (!int.TryParse(value, out contentLength))
+                {
                     throw new InvalidOperationException($"Provider process ({_runtime}) sent invalid Content-Length: '{value}'");
+                }
             }
         }
 
         if (contentLength < 0)
+        {
             throw new InvalidOperationException($"Provider process ({_runtime}) did not send Content-Length header. Stderr: {GetStderr()}");
+        }
 
         // Read exactly contentLength bytes
-        var buffer = new char[contentLength];
+        byte[] buffer = new byte[contentLength];
         int totalRead = 0;
         while (totalRead < contentLength)
         {
-            var read = reader.Read(buffer, totalRead, contentLength - totalRead);
+            int read = await reader.ReadAsync(
+                buffer.AsMemory(totalRead), cancellationToken);
             if (read == 0)
+            {
                 throw new InvalidOperationException($"Provider process ({_runtime}) closed stdout before sending full response. Stderr: {GetStderr()}");
+            }
+
             totalRead += read;
         }
 
-        return new string(buffer, 0, totalRead);
+        return buffer;
     }
 
     /// <summary>
-    /// Reads a line from the stream with timeout support.
+    /// Reads an ASCII framing header without decoding any UTF-8 payload bytes.
     /// </summary>
-    private string? ReadLineWithTimeout(StreamReader reader)
+    private static async ValueTask<string?> ReadHeaderLineAsync(
+        Stream reader, CancellationToken cancellationToken)
     {
-        var task = Task.Run(() => reader.ReadLine());
-        if (task.Wait(Timeout))
-            return task.Result;
-        throw new TimeoutException($"Provider process ({_runtime}) did not respond within {Timeout.TotalSeconds}s. Stderr: {GetStderr()}");
+        List<byte> bytes = [];
+        byte[] next = new byte[1];
+        while (true)
+        {
+            int read = await reader.ReadAsync(next, cancellationToken);
+            if (read == 0)
+            {
+                return bytes.Count == 0 ? null : Encoding.ASCII.GetString(bytes.ToArray());
+            }
+            if (next[0] == '\n')
+            {
+                return Encoding.ASCII.GetString(bytes.ToArray()).TrimEnd('\r');
+            }
+            bytes.Add(next[0]);
+        }
     }
 
     private void EnsureProcessRunning()
     {
         if (_process is not null && !_process.HasExited)
+        {
             return;
+        }
 
         _process?.Dispose();
-        _stderr.Clear();
+        lock (_stderr)
+        {
+            _stderr.Clear();
+        }
 
-        var psi = new ProcessStartInfo
+        ProcessStartInfo psi = new ProcessStartInfo
         {
             FileName = _runtime,
-            Arguments = _entryScript,
             WorkingDirectory = _workingDir,
             RedirectStandardInput = true,
             RedirectStandardOutput = true,
@@ -159,6 +275,7 @@ public sealed class ProcessObjectProvider : DataProvider, IDisposable
             StandardOutputEncoding = Encoding.UTF8,
             StandardErrorEncoding = Encoding.UTF8,
         };
+        psi.ArgumentList.Add(_entryScript);
 
         try
         {
@@ -175,33 +292,45 @@ public sealed class ProcessObjectProvider : DataProvider, IDisposable
         _process.ErrorDataReceived += (_, e) =>
         {
             if (e.Data is not null)
-                _stderr.AppendLine(e.Data);
+            {
+                lock (_stderr)
+                {
+                    _stderr.AppendLine(e.Data);
+                }
+            }
         };
         _process.BeginErrorReadLine();
     }
 
     private string GetStderr()
     {
-        var text = _stderr.ToString().Trim();
-        return text.Length > 0 ? text : "(no stderr output)";
+        lock (_stderr)
+        {
+            string text = _stderr.ToString().Trim();
+            return text.Length > 0 ? text : "(no stderr output)";
+        }
     }
 
     private static string BuildQueryRequest(ProviderQuery query)
     {
-        using var stream = new MemoryStream();
-        using var writer = new Utf8JsonWriter(stream);
+        using MemoryStream stream = new MemoryStream();
+        using Utf8JsonWriter writer = new Utf8JsonWriter(stream);
         writer.WriteStartObject();
         writer.WriteString("method", "query");
 
         writer.WriteStartObject("params");
 
         if (query.RootPath is not null)
+        {
             writer.WriteString("rootPath", query.RootPath);
+        }
 
         if (query.Collection is not null)
+        {
             writer.WriteString("collection", query.Collection);
+        }
 
-        var filterOptions = new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
+        JsonSerializerOptions filterOptions = new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
         if (query.Filter is not null)
         {
             writer.WritePropertyName("filter");
@@ -216,16 +345,22 @@ public sealed class ProcessObjectProvider : DataProvider, IDisposable
         if (query.ExcludedDirectories is not null)
         {
             writer.WriteStartArray("excludedDirectories");
-            foreach (var d in query.ExcludedDirectories)
+            foreach (string d in query.ExcludedDirectories)
+            {
                 writer.WriteStringValue(d);
+            }
+
             writer.WriteEndArray();
         }
 
         if (query.Options is not null)
         {
             writer.WriteStartObject("options");
-            foreach (var (k, v) in query.Options)
+            foreach ((string? k, string? v) in query.Options)
+            {
                 writer.WriteString(k, v);
+            }
+
             writer.WriteEndObject();
         }
 
@@ -236,21 +371,62 @@ public sealed class ProcessObjectProvider : DataProvider, IDisposable
         return Encoding.UTF8.GetString(stream.ToArray());
     }
 
-    public void Dispose()
+    /// <summary>Closes provider input and terminates a process that does not exit promptly.</summary>
+    public ValueTask DisposeAsync()
     {
-        if (_disposed) return;
-        _disposed = true;
+        lock (_disposeGate)
+        {
+            _disposed = true;
+            return new ValueTask(_disposeTask ??= DisposeCoreAsync());
+        }
+    }
 
-        if (_process is not null && !_process.HasExited)
+    private async Task DisposeCoreAsync()
+    {
+        await _lifetime.CancelAsync();
+        await _requests.WaitAsync();
+        try
+        {
+            if (_process is { } process && !process.HasExited)
+            {
+                process.StandardInput.Close();
+                Task exit = process.WaitForExitAsync();
+                if (await Task.WhenAny(exit, Task.Delay(TimeSpan.FromSeconds(3))) == exit)
+                {
+                    await exit;
+                }
+            }
+        }
+        finally
         {
             try
             {
-                _process.StandardInput.Close();
-                if (!_process.WaitForExit(3000))
-                    _process.Kill();
+                await StopProcessAsync();
             }
-            catch { /* best effort */ }
+            finally
+            {
+                _requests.Release();
+                _requests.Dispose();
+                _lifetime.Dispose();
+            }
         }
-        _process?.Dispose();
+    }
+
+    private async ValueTask StopProcessAsync()
+    {
+        Process? process = _process;
+        _process = null;
+        if (process is null)
+        {
+            return;
+        }
+        using (process)
+        {
+            if (!process.HasExited)
+            {
+                process.Kill(entireProcessTree: true);
+                await process.WaitForExitAsync();
+            }
+        }
     }
 }

@@ -1,3 +1,5 @@
+// Parses Dockerfile instructions, stage aliases, and stage references.
+
 using System.Text;
 using System.Text.Json;
 
@@ -9,63 +11,82 @@ namespace Cop.Providers.Dockerfile;
 /// </summary>
 public static class DockerfileParser
 {
+    /// <summary>
+    /// Contains Dockerfile instructions and the build stages they define.
+    /// </summary>
     public record DockerfileParseResult(List<DockerInstructionInfo> Instructions, List<DockerStageInfo> Stages);
 
+    /// <summary>
+    /// Extracts instructions and build-stage relationships from Dockerfile text.
+    /// </summary>
     public static DockerfileParseResult Parse(string text)
     {
-        var instructions = new List<DockerInstructionInfo>();
-        var stages = new List<DockerStageInfo>();
-        var lines = text.Split('\n');
+        List<DockerInstructionInfo> instructions = new List<DockerInstructionInfo>();
+        List<DockerStageInfo> stages = new List<DockerStageInfo>();
+        string[] lines = text.Split('\n');
 
-        var logical = new StringBuilder();
+        StringBuilder logical = new StringBuilder();
         int logicalLine = 0;
         char escape = '\\';
         bool seenInstruction = false;
 
         for (int i = 0; i < lines.Length; i++)
         {
-            var raw = lines[i].TrimEnd('\r');
+            string raw = lines[i].TrimEnd('\r');
             if (raw.TrimStart().StartsWith('#'))
             {
-                if (!seenInstruction && TryGetEscapeDirective(raw, out var directive))
+                if (!seenInstruction && TryGetEscapeDirective(raw, out char directive))
+                {
                     escape = directive;
+                }
+
                 continue;
             }
-            var withoutComment = raw.TrimEnd();
-            var trimmed = withoutComment.TrimStart();
+            string withoutComment = raw.TrimEnd();
+            string trimmed = withoutComment.TrimStart();
 
             if (logical.Length == 0 && trimmed.Length == 0)
+            {
                 continue;
+            }
 
             if (logical.Length == 0)
+            {
                 logicalLine = i + 1;
+            }
 
             bool continued = EndsWithContinuation(withoutComment, escape);
-            var part = continued ? withoutComment.TrimEnd()[..^1] : withoutComment;
+            string part = continued ? withoutComment.TrimEnd()[..^1] : withoutComment;
 
             if (logical.Length > 0)
+            {
                 logical.Append(' ');
+            }
+
             logical.Append(part.Trim());
 
             if (!continued)
             {
                 seenInstruction = true;
-                var header = logical.ToString();
+                string header = logical.ToString();
                 if (header.StartsWith("RUN ", StringComparison.OrdinalIgnoreCase)
                     || header.StartsWith("COPY ", StringComparison.OrdinalIgnoreCase)
                     || header.StartsWith("ADD ", StringComparison.OrdinalIgnoreCase))
                 {
-                    foreach (var (delimiter, stripTabs) in HeredocDelimiters(header))
+                    foreach ((string? delimiter, bool stripTabs) in HeredocDelimiters(header))
                     {
                         bool closed = false;
                         while (++i < lines.Length)
                         {
-                            var content = lines[i].TrimEnd('\r');
+                            string content = lines[i].TrimEnd('\r');
                             if ((stripTabs ? content.TrimStart('\t') : content) == delimiter)
                             { closed = true; break; }
                             logical.Append('\n').Append(content);
                         }
-                        if (!closed) Cop.Core.ProviderErrors.Report($"Dockerfile({logicalLine}): unterminated heredoc '{delimiter}'");
+                        if (!closed)
+                        {
+                            Cop.Core.ProviderErrors.Report($"Dockerfile({logicalLine}): unterminated heredoc '{delimiter}'");
+                        }
                     }
                 }
                 AddInstruction(logical.ToString(), logicalLine, instructions, stages);
@@ -75,47 +96,58 @@ public static class DockerfileParser
         }
 
         if (logical.Length > 0)
+        {
             AddInstruction(logical.ToString(), logicalLine, instructions, stages);
+        }
 
         return new DockerfileParseResult(instructions, stages);
     }
 
     private static void AddInstruction(string text, int line, List<DockerInstructionInfo> instructions, List<DockerStageInfo> stages)
     {
-        var trimmed = text.Trim();
+        string trimmed = text.Trim();
         if (trimmed.Length == 0)
+        {
             return;
+        }
 
         int split = IndexOfWhitespace(trimmed);
-        var keyword = split < 0 ? trimmed : trimmed[..split];
+        string keyword = split < 0 ? trimmed : trimmed[..split];
         if (keyword.Length == 0 || !keyword.All(c => char.IsLetter(c)))
+        {
             return;
+        }
 
-        var instruction = keyword.ToUpperInvariant();
-        var argument = split < 0 ? "" : trimmed[(split + 1)..].Trim();
+        string instruction = keyword.ToUpperInvariant();
+        string argument = split < 0 ? string.Empty : trimmed[(split + 1)..].Trim();
         int stage = stages.Count == 0 ? -1 : stages.Count - 1;
 
         if (instruction == "FROM")
         {
-            var (image, name) = ParseFrom(argument);
+            (string? image, string? name) = ParseFrom(argument);
             stage = stages.Count;
             stages.Add(new DockerStageInfo(name, image, stage, line));
         }
 
-        var tokens = SplitTokens(argument);
-        var copyFrom = instruction is "COPY" or "ADD"
+        List<string> tokens = SplitTokens(argument);
+        string? copyFrom = instruction is "COPY" or "ADD"
             ? tokens.FirstOrDefault(t => t.StartsWith("--from=", StringComparison.OrdinalIgnoreCase))?["--from=".Length..]
             : null;
         int referencedStage = -1;
         if (copyFrom is not null)
+        {
             referencedStage = stages.Take(Math.Max(0, stage)).ToList().FindIndex(s => s.Name.Equals(copyFrom, StringComparison.OrdinalIgnoreCase)
                 || s.Index.ToString(System.Globalization.CultureInfo.InvariantCulture) == copyFrom);
+        }
+
         if (instruction == "FROM")
+        {
             referencedStage = stages.Take(stage).ToList().FindIndex(s => s.Name.Length > 0
                 && s.Name.Equals(stages[stage].Image, StringComparison.OrdinalIgnoreCase));
+        }
 
-        var arguments = new List<string>();
-        var jsonArgument = WithoutLeadingFlags(argument);
+        List<string> arguments = new List<string>();
+        string jsonArgument = WithoutLeadingFlags(argument);
         bool jsonForm = jsonArgument.StartsWith('[');
         if (jsonForm && instruction is "RUN" or "CMD" or "ENTRYPOINT" or "SHELL" or "COPY" or "ADD")
         {
@@ -130,20 +162,23 @@ public static class DockerfileParser
 
     private static (string Image, string Name) ParseFrom(string argument)
     {
-        var tokens = SplitTokens(argument);
-        string image = "";
+        List<string> tokens = SplitTokens(argument);
+        string image = string.Empty;
         int imageIndex = -1;
 
         for (int i = 0; i < tokens.Count; i++)
         {
             if (tokens[i].StartsWith("--", StringComparison.Ordinal))
+            {
                 continue;
+            }
+
             image = tokens[i];
             imageIndex = i;
             break;
         }
 
-        string name = "";
+        string name = string.Empty;
         for (int i = imageIndex + 1; i + 1 < tokens.Count; i++)
         {
             if (tokens[i].Equals("AS", StringComparison.OrdinalIgnoreCase))
@@ -158,18 +193,23 @@ public static class DockerfileParser
 
     private static List<string> SplitTokens(string s)
     {
-        var tokens = new List<string>();
-        var current = new StringBuilder();
+        List<string> tokens = new List<string>();
+        StringBuilder current = new StringBuilder();
         char quote = '\0';
 
-        foreach (var c in s)
+        foreach (char c in s)
         {
             if (quote != '\0')
             {
                 if (c == quote)
+                {
                     quote = '\0';
+                }
                 else
+                {
                     current.Append(c);
+                }
+
                 continue;
             }
 
@@ -193,7 +233,9 @@ public static class DockerfileParser
         }
 
         if (current.Length > 0)
+        {
             tokens.Add(current.ToString());
+        }
 
         return tokens;
     }
@@ -201,22 +243,38 @@ public static class DockerfileParser
     private static int IndexOfWhitespace(string s)
     {
         for (int i = 0; i < s.Length; i++)
+        {
             if (char.IsWhiteSpace(s[i]))
+            {
                 return i;
+            }
+        }
+
         return -1;
     }
 
     private static bool TryGetEscapeDirective(string text, out char escape)
     {
         escape = default;
-        var directive = text.AsSpan().TrimStart();
-        if (directive.IsEmpty || directive[0] != '#') return false;
+        ReadOnlySpan<char> directive = text.AsSpan().TrimStart();
+        if (directive.IsEmpty || directive[0] != '#')
+        {
+            return false;
+        }
+
         directive = directive[1..].Trim();
         int equals = directive.IndexOf('=');
         if (equals < 0 || !directive[..equals].TrimEnd().Equals("escape", StringComparison.OrdinalIgnoreCase))
+        {
             return false;
-        var value = directive[(equals + 1)..].Trim();
-        if (value.Length != 1 || value[0] is not ('\\' or '`')) return false;
+        }
+
+        ReadOnlySpan<char> value = directive[(equals + 1)..].Trim();
+        if (value.Length != 1 || value[0] is not ('\\' or '`'))
+        {
+            return false;
+        }
+
         escape = value[0];
         return true;
     }
@@ -225,15 +283,31 @@ public static class DockerfileParser
     {
         for (int i = 0; i + 1 < header.Length; i++)
         {
-            if (header[i] != '<' || header[i + 1] != '<') continue;
+            if (header[i] != '<' || header[i + 1] != '<')
+            {
+                continue;
+            }
+
             int position = i + 2;
             bool stripTabs = position < header.Length && header[position] == '-';
-            if (stripTabs) position++;
+            if (stripTabs)
+            {
+                position++;
+            }
+
             char quote = position < header.Length && header[position] is '\'' or '"' ? header[position++] : '\0';
             int start = position;
-            if (position == header.Length || !IsDelimiterStart(header[position])) continue;
+            if (position == header.Length || !IsDelimiterStart(header[position]))
+            {
+                continue;
+            }
+
             while (++position < header.Length && (IsDelimiterStart(header[position]) || char.IsAsciiDigit(header[position]))) { }
-            if (quote != '\0' && (position == header.Length || header[position] != quote)) continue;
+            if (quote != '\0' && (position == header.Length || header[position] != quote))
+            {
+                continue;
+            }
+
             yield return (header[start..position], stripTabs);
             i = quote == '\0' ? position - 1 : position;
         }
@@ -247,9 +321,21 @@ public static class DockerfileParser
         while (argument.AsSpan(start).StartsWith("--", StringComparison.Ordinal))
         {
             int end = start + 2;
-            while (end < argument.Length && !char.IsWhiteSpace(argument[end])) end++;
-            if (end == start + 2 || end == argument.Length) break;
-            while (end < argument.Length && char.IsWhiteSpace(argument[end])) end++;
+            while (end < argument.Length && !char.IsWhiteSpace(argument[end]))
+            {
+                end++;
+            }
+
+            if (end == start + 2 || end == argument.Length)
+            {
+                break;
+            }
+
+            while (end < argument.Length && char.IsWhiteSpace(argument[end]))
+            {
+                end++;
+            }
+
             start = end;
         }
         return argument[start..];
@@ -257,7 +343,7 @@ public static class DockerfileParser
 
     private static bool EndsWithContinuation(string s, char escape)
     {
-        var trimmed = s.TrimEnd();
+        string trimmed = s.TrimEnd();
         return trimmed.Length > 0 && trimmed[^1] == escape;
     }
 }

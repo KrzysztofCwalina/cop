@@ -33,10 +33,15 @@ virtual dispatch. Missing semantic context is reported on demand and unresolved 
 absent. Syntax-only queries do not require a complete compilation. Only syntax is cached;
 semantic facts are rebound against current dependencies on each execution.
 
-The provider bundles the .NET 10 reference metadata selected by the SDK when Cop is built.
+The provider bundles the .NET 10 core reference metadata selected when Cop is built.
 Roslyn source binding and read-only assembly API inspection use the same bundled contracts,
 including in a self-contained, single-file deployment. No installed .NET SDK/runtime,
 adjacent framework DLLs, runtime downloads, or execution of the analyzed code is required.
+These guarantees cover the bundled core contracts. Additional project `FrameworkReference`
+items, such as `Microsoft.AspNetCore.App`, use an installed matching targeting pack.
+Pack lookup uses the runtime installation or SDK locations from `dotnet --list-sdks`;
+it never evaluates project build targets. Missing packs produce an explicit warning,
+and unresolved types are reported when the affected file demands semantic facts.
 Assembly inspection still resolves non-framework dependencies beside the inspected library.
 
 Conditional access (`client?.Ping()`), direct generic calls, and nested object creation
@@ -55,6 +60,11 @@ Types expose their own `Namespace` and generic parameters; methods expose generi
 parameters, and parameters expose optionality. `File.Imports` preserves using aliases
 and static imports, including namespace-scoped directives; `Usings` remains compatible.
 Source spans use 1-based positions with an exclusive end.
+
+`CSharpStatement.IsUsingResource` identifies a call directly initializing a `using`
+or `await using` resource, including parenthesized and target-typed creation.
+Calls inside the initializer's arguments or the using body are not resources of that
+using statement. This fact describes syntax, not ownership transferred to another object.
 
 Semantic compilations are separated by discovered projects and connected through
 `ProjectReference`; unrelated projects cannot contribute symbols to one another.

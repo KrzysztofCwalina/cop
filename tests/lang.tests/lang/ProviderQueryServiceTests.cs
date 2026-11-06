@@ -27,8 +27,8 @@ public class ProviderQueryServiceTests
     public void Query_UnknownProvider_Throws()
     {
         var svc = new ProviderQueryService(_testDir);
-        var ex = Assert.Throws<InvalidOperationException>(() =>
-            svc.Query("unknown", "Types", _testDir));
+        var ex = Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            await svc.QueryAsync("unknown", "Types", _testDir, cancellationToken: CancellationToken.None));
         Assert.That(ex!.Message, Does.Contain("not found"));
     }
 
@@ -40,13 +40,13 @@ public class ProviderQueryServiceTests
         var schema = ProviderSchema.FromJson(provider.GetSchema());
         svc.RegisterProvider("fake", provider, schema);
 
-        var ex = Assert.Throws<InvalidOperationException>(() =>
-            svc.Query("fake", "Items", Path.Combine(_testDir, "nonexistent")));
+        var ex = Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            await svc.QueryAsync("fake", "Items", Path.Combine(_testDir, "nonexistent"), cancellationToken: CancellationToken.None));
         Assert.That(ex!.Message, Does.Contain("not found"));
     }
 
     [Test]
-    public void Query_RelativePath_ResolvesAgainstInvocationDirectory()
+    public async Task Query_RelativePath_ResolvesAgainstInvocationDirectory()
     {
         var subDir = Path.Combine(_testDir, "sub");
         Directory.CreateDirectory(subDir);
@@ -56,28 +56,28 @@ public class ProviderQueryServiceTests
         var schema = ProviderSchema.FromJson(provider.GetSchema());
         svc.RegisterProvider("fake", provider, schema);
 
-        var result = svc.Query("fake", "Items", "sub");
+        var result = (await svc.QueryAsync("fake", "Items", "sub", cancellationToken: CancellationToken.None));
         Assert.That(result, Has.Count.EqualTo(1));
         Assert.That(result[0], Is.EqualTo(subDir));
     }
 
     [Test]
-    public void Query_SamePath_IsCached()
+    public async Task Query_SamePath_IsCached()
     {
         var svc = new ProviderQueryService(_testDir);
         var provider = new FakeProvider();
         var schema = ProviderSchema.FromJson(provider.GetSchema());
         svc.RegisterProvider("fake", provider, schema);
 
-        var result1 = svc.Query("fake", "Items", _testDir);
-        var result2 = svc.Query("fake", "Items", _testDir);
+        var result1 = (await svc.QueryAsync("fake", "Items", _testDir, cancellationToken: CancellationToken.None));
+        var result2 = (await svc.QueryAsync("fake", "Items", _testDir, cancellationToken: CancellationToken.None));
 
         Assert.That(ReferenceEquals(result1, result2), Is.True, "Cache should return same instance");
         Assert.That(provider.QueryCount, Is.EqualTo(1), "Provider should only be queried once");
     }
 
     [Test]
-    public void Query_DifferentPaths_AreNotCached()
+    public async Task Query_DifferentPaths_AreNotCached()
     {
         var dir1 = Path.Combine(_testDir, "a");
         var dir2 = Path.Combine(_testDir, "b");
@@ -89,22 +89,22 @@ public class ProviderQueryServiceTests
         var schema = ProviderSchema.FromJson(provider.GetSchema());
         svc.RegisterProvider("fake", provider, schema);
 
-        var result1 = svc.Query("fake", "Items", dir1);
-        var result2 = svc.Query("fake", "Items", dir2);
+        var result1 = (await svc.QueryAsync("fake", "Items", dir1, cancellationToken: CancellationToken.None));
+        var result2 = (await svc.QueryAsync("fake", "Items", dir2, cancellationToken: CancellationToken.None));
 
         Assert.That(ReferenceEquals(result1, result2), Is.False);
         Assert.That(provider.QueryCount, Is.EqualTo(2));
     }
 
     [Test]
-    public void Query_ProviderNameIsCaseInsensitive()
+    public async Task Query_ProviderNameIsCaseInsensitive()
     {
         var svc = new ProviderQueryService(_testDir);
         var provider = new FakeProvider();
         var schema = ProviderSchema.FromJson(provider.GetSchema());
         svc.RegisterProvider("Fake", provider, schema);
 
-        var result = svc.Query("fake", "Items", _testDir);
+        var result = (await svc.QueryAsync("fake", "Items", _testDir, cancellationToken: CancellationToken.None));
         Assert.That(result, Has.Count.EqualTo(1));
     }
 
@@ -125,13 +125,14 @@ public class ProviderQueryServiceTests
 
         public override ReadOnlyMemory<byte> GetSchema() => SchemaBytes;
 
-        public override object? Query(ProviderQuery query)
+        public override ValueTask<object?> QueryAsync(ProviderQuery query,
+            CancellationToken cancellationToken = default)
         {
             QueryCount++;
-            return new Dictionary<string, List<object>>
+            return ValueTask.FromResult<object?>(new Dictionary<string, List<object>>
             {
                 ["Items"] = [query.RootPath!]
-            };
+            });
         }
     }
 }

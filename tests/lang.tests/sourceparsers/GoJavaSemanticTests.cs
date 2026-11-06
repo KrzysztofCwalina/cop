@@ -42,7 +42,7 @@ public class GoJavaSemanticTests
     }
 
     [Test]
-    public void Java_AttributionSelectsImportedTypeFactoryAndOverload()
+    public async System.Threading.Tasks.Task Java_AttributionSelectsImportedTypeFactoryAndOverload()
     {
         Native("java");
         Write("library\\Service.java", """
@@ -67,24 +67,24 @@ public class GoJavaSemanticTests
             }
             """;
         string path = Write("Caller.java", source);
-        using var scope = new ToolchainExecutionScope();
+        await using var scope = new ToolchainExecutionScope();
         var parser = new JavaSourceParser();
         Assert.That(parser.CanCache(path), Is.False);
-        var file = parser.Parse(path, source)!;
+        var file = (await parser.ParseAsync(path, source, cancellationToken: CancellationToken.None))!;
         Assert.That(ProviderErrors.Drain(), Is.Empty);
         var calls = file.Statements.Where(s => s.MemberName == "select").ToList();
         Assert.That(calls, Has.Count.EqualTo(3));
-        Assert.That(calls[0].ReceiverType!.Name, Is.EqualTo("library.Service"));
-        Assert.That(calls[0].ReferencedCallable!.DeclaringType, Is.EqualTo("library.Service"));
-        Assert.That(calls[0].ReferencedCallable!.Parameters.Select(t => t.Name), Is.EqualTo(new[] { "java.lang.String" }));
-        Assert.That(calls[0].ReferencedCallable!.Signature, Is.EqualTo("library.Service.select(java.lang.String)java.lang.String"));
-        Assert.That(calls[0].ValueType!.Name, Is.EqualTo("java.lang.String"));
-        Assert.That(calls[0].ReferencedCallable!.SourceFile, Is.EqualTo(Path.Combine(_root, "library", "Service.java")));
-        Assert.That(calls[0].ReferencedCallable!.Line, Is.EqualTo(4));
-        Assert.That(calls[1].ReferencedCallable!.Parameters.Select(t => t.Name), Is.EqualTo(new[] { "int" }));
-        Assert.That(calls[1].ValueType!.Name, Is.EqualTo("int"));
-        Assert.That(calls[2].ReferencedCallable!.DeclaringType, Is.EqualTo("control.Service"));
-        Assert.That(calls[2].ValueType!.Name, Is.EqualTo("boolean"));
+        Assert.That((await AsyncSourceFacts.SemanticAsync(calls[0], CancellationToken.None)).ReceiverType!.Name, Is.EqualTo("library.Service"));
+        Assert.That((await AsyncSourceFacts.SemanticAsync(calls[0], CancellationToken.None)).ReferencedCallable!.DeclaringType, Is.EqualTo("library.Service"));
+        Assert.That((await AsyncSourceFacts.SemanticAsync(calls[0], CancellationToken.None)).ReferencedCallable!.Parameters.Select(t => t.Name), Is.EqualTo(new[] { "java.lang.String" }));
+        Assert.That((await AsyncSourceFacts.SemanticAsync(calls[0], CancellationToken.None)).ReferencedCallable!.Signature, Is.EqualTo("library.Service.select(java.lang.String)java.lang.String"));
+        Assert.That((await AsyncSourceFacts.SemanticAsync(calls[0], CancellationToken.None)).ValueType!.Name, Is.EqualTo("java.lang.String"));
+        Assert.That((await AsyncSourceFacts.SemanticAsync(calls[0], CancellationToken.None)).ReferencedCallable!.SourceFile, Is.EqualTo(Path.Combine(_root, "library", "Service.java")));
+        Assert.That((await AsyncSourceFacts.SemanticAsync(calls[0], CancellationToken.None)).ReferencedCallable!.Line, Is.EqualTo(4));
+        Assert.That((await AsyncSourceFacts.SemanticAsync(calls[1], CancellationToken.None)).ReferencedCallable!.Parameters.Select(t => t.Name), Is.EqualTo(new[] { "int" }));
+        Assert.That((await AsyncSourceFacts.SemanticAsync(calls[1], CancellationToken.None)).ValueType!.Name, Is.EqualTo("int"));
+        Assert.That((await AsyncSourceFacts.SemanticAsync(calls[2], CancellationToken.None)).ReferencedCallable!.DeclaringType, Is.EqualTo("control.Service"));
+        Assert.That((await AsyncSourceFacts.SemanticAsync(calls[2], CancellationToken.None)).ValueType!.Name, Is.EqualTo("boolean"));
         Assert.That(ProviderErrors.Drain(), Is.Empty);
         Assert.That(Directory.EnumerateFiles(_root, "*.class", SearchOption.AllDirectories), Is.Empty);
     }
@@ -114,9 +114,8 @@ public class GoJavaSemanticTests
             """);
         string classes = Path.Combine(_root, "dependency-classes");
         Directory.CreateDirectory(classes);
-        var compile = await ToolchainProcess.RunAsync(compiler, ["-proc:none", "-d", classes, library, processor], _root,
-            timeout: TimeSpan.FromSeconds(30), environment: new Dictionary<string, string?>
-            { ["JAVA_TOOL_OPTIONS"] = null, ["JDK_JAVA_OPTIONS"] = null, ["_JAVA_OPTIONS"] = null, ["JDK_JAVAC_OPTIONS"] = null });
+        var compile = await ToolchainProcess.RunAsync(new Cop.Core.ToolchainCommand(compiler, ["-proc:none", "-d", classes, library, processor], _root, new Dictionary<string, string?>
+            { ["JAVA_TOOL_OPTIONS"] = null, ["JDK_JAVA_OPTIONS"] = null, ["_JAVA_OPTIONS"] = null, ["JDK_JAVAC_OPTIONS"] = null }), new Cop.Core.ToolchainRunOptions { Timeout = TimeSpan.FromSeconds(30) });
         Assert.That(compile.Status, Is.EqualTo(ToolchainStatus.Success), compile.StandardError);
         Directory.CreateDirectory(Path.Combine(classes, "META-INF", "services"));
         File.WriteAllText(Path.Combine(classes, "META-INF", "services", "javax.annotation.processing.Processor"), "Processor\n");
@@ -124,33 +123,33 @@ public class GoJavaSemanticTests
         System.IO.Compression.ZipFile.CreateFromDirectory(classes, Path.Combine(_root, "target", "libs", "library.jar"));
         string source = "class Caller { void run() { var value = api.Service.value(); } }";
         string path = Write("target\\Caller.java", source);
-        var file = new JavaSourceParser().Parse(path, source)!;
+        var file = (await new JavaSourceParser().ParseAsync(path, source, cancellationToken: CancellationToken.None))!;
         var call = file.Statements.Single(s => s.Kind == "call");
-        Assert.That(call.ReferencedCallable!.DeclaringType, Is.EqualTo("api.Service"));
-        Assert.That(call.ValueType!.Name, Is.EqualTo("long"));
+        Assert.That((await AsyncSourceFacts.SemanticAsync(call, CancellationToken.None)).ReferencedCallable!.DeclaringType, Is.EqualTo("api.Service"));
+        Assert.That((await AsyncSourceFacts.SemanticAsync(call, CancellationToken.None)).ValueType!.Name, Is.EqualTo("long"));
         Assert.That(ProviderErrors.Drain(), Is.Empty);
         Assert.That(File.Exists(marker), Is.False, "Annotation processors must never execute.");
         Assert.That(Directory.EnumerateFiles(Path.Combine(_root, "target"), "*.class", SearchOption.AllDirectories), Is.Empty);
     }
 
     [Test]
-    public void Java_NamedModuleSourceContextIsAttributedWithoutGeneratingClasses()
+    public async Task Java_NamedModuleSourceContextIsAttributedWithoutGeneratingClasses()
     {
         Native("java");
         Write("module-info.java", "module fixture.application { exports library; }");
         Write("library\\Service.java", "package library; public class Service { public static long value() { return 7; } }");
         string source = "package application; import library.Service; public class Caller { void run() { var result = Service.value(); } }";
         string path = Write("application\\Caller.java", source);
-        var call = new JavaSourceParser().Parse(path, source)!.Statements.Single(s => s.Kind == "call");
-        Assert.That(call.ReferencedCallable!.DeclaringType, Is.EqualTo("library.Service"));
-        Assert.That(call.ValueType!.Name, Is.EqualTo("long"));
+        var call = (await new JavaSourceParser().ParseAsync(path, source, cancellationToken: CancellationToken.None))!.Statements.Single(s => s.Kind == "call");
+        Assert.That((await AsyncSourceFacts.SemanticAsync(call, CancellationToken.None)).ReferencedCallable!.DeclaringType, Is.EqualTo("library.Service"));
+        Assert.That((await AsyncSourceFacts.SemanticAsync(call, CancellationToken.None)).ValueType!.Name, Is.EqualTo("long"));
         Assert.That(ProviderErrors.Drain(), Is.Empty);
         Assert.That(Directory.EnumerateFiles(_root, "*.class", SearchOption.AllDirectories), Is.Empty);
     }
 
     [TestCase(false)]
     [TestCase(true)]
-    public void Java_ProductionContextDoesNotAnalyzeOrRequireTestDependencies(bool gradle)
+    public async Task Java_ProductionContextDoesNotAnalyzeOrRequireTestDependencies(bool gradle)
     {
         Native("java");
         Write(gradle ? "build.gradle.kts" : "pom.xml", gradle
@@ -162,27 +161,27 @@ public class GoJavaSemanticTests
             "package library; public class Service { public static long value() { return 7; } }");
         string source = "package application; import library.Service; public class Caller { void run() { var result = Service.value(); } }";
         string path = Write("src\\main\\java\\application\\Caller.java", source);
-        var call = new JavaSourceParser().Parse(path, source)!.Statements.Single(s => s.Kind == "call");
-        Assert.That(call.ReferencedCallable!.DeclaringType, Is.EqualTo("library.Service"));
-        Assert.That(call.ValueType!.Name, Is.EqualTo("long"));
+        var call = (await new JavaSourceParser().ParseAsync(path, source, cancellationToken: CancellationToken.None))!.Statements.Single(s => s.Kind == "call");
+        Assert.That((await AsyncSourceFacts.SemanticAsync(call, CancellationToken.None)).ReferencedCallable!.DeclaringType, Is.EqualTo("library.Service"));
+        Assert.That((await AsyncSourceFacts.SemanticAsync(call, CancellationToken.None)).ValueType!.Name, Is.EqualTo("long"));
         Assert.That(ProviderErrors.Drain(), Is.Empty);
     }
 
     [Test]
-    public void Java_EmptyProjectClasspathCannotBindCopHelperClasses()
+    public async Task Java_EmptyProjectClasspathCannotBindCopHelperClasses()
     {
         Native("java");
         string source = "class Caller { void run() { CopJavaAnalysis.quote(\"value\"); } }";
         string path = Write("Caller.java", source);
-        var call = new JavaSourceParser().Parse(path, source)!.Statements.Single(s => s.Kind == "call");
-        Assert.That(call.ReferencedCallable, Is.Null);
+        var call = (await new JavaSourceParser().ParseAsync(path, source, cancellationToken: CancellationToken.None))!.Statements.Single(s => s.Kind == "call");
+        Assert.That((await AsyncSourceFacts.SemanticAsync(call, CancellationToken.None)).ReferencedCallable, Is.Null);
         var errors = ProviderErrors.Drain();
         Assert.That(errors, Has.Count.EqualTo(1));
         Assert.That(errors.Single(), Does.Contain("CopJavaAnalysis"));
     }
 
     [Test]
-    public void Go_TypeCheckingSelectsImportedTypeFactoryAssignmentAndCrossFileMethod()
+    public async System.Threading.Tasks.Task Go_TypeCheckingSelectsImportedTypeFactoryAssignmentAndCrossFileMethod()
     {
         Native("go");
         Write("go.mod", "module example.test/semantic\n\ngo 1.18\n");
@@ -206,28 +205,28 @@ public class GoJavaSemanticTests
             }
             """;
         string path = Write("caller.go", source);
-        using var scope = new ToolchainExecutionScope();
+        await using var scope = new ToolchainExecutionScope();
         var parser = new GoSourceParser();
         Assert.That(parser.CanCache(path), Is.False);
-        var file = parser.Parse(path, source)!;
+        var file = (await parser.ParseAsync(path, source, cancellationToken: CancellationToken.None))!;
         Assert.That(ProviderErrors.Drain(), Is.Empty);
         var calls = file.Statements.Where(s => s.MemberName == "Select").ToList();
         Assert.That(calls, Has.Count.EqualTo(2));
-        Assert.That(calls[0].ReceiverType!.Name, Is.EqualTo("*example.test/semantic/library.Service"));
-        Assert.That(calls[0].ReferencedCallable!.Namespace, Is.EqualTo("example.test/semantic/library"));
-        Assert.That(calls[0].ReferencedCallable!.Parameters.Select(t => t.Name), Is.EqualTo(new[] { "string" }));
-        Assert.That(calls[0].ReferencedCallable!.Signature,
+        Assert.That((await AsyncSourceFacts.SemanticAsync(calls[0], CancellationToken.None)).ReceiverType!.Name, Is.EqualTo("*example.test/semantic/library.Service"));
+        Assert.That((await AsyncSourceFacts.SemanticAsync(calls[0], CancellationToken.None)).ReferencedCallable!.Namespace, Is.EqualTo("example.test/semantic/library"));
+        Assert.That((await AsyncSourceFacts.SemanticAsync(calls[0], CancellationToken.None)).ReferencedCallable!.Parameters.Select(t => t.Name), Is.EqualTo(new[] { "string" }));
+        Assert.That((await AsyncSourceFacts.SemanticAsync(calls[0], CancellationToken.None)).ReferencedCallable!.Signature,
             Is.EqualTo("(*example.test/semantic/library.Service).Selectfunc(value string) string"));
-        Assert.That(calls[0].ValueType!.Name, Is.EqualTo("string"));
-        Assert.That(calls[0].ReferencedCallable!.SourceFile, Is.EqualTo(Path.Combine(_root, "library", "methods.go")));
-        Assert.That(calls[0].ReferencedCallable!.Line, Is.EqualTo(2));
-        Assert.That(calls[1].ReferencedCallable!.Namespace, Is.EqualTo("example.test/semantic/control"));
-        Assert.That(calls[1].ValueType!.Name, Is.EqualTo("bool"));
+        Assert.That((await AsyncSourceFacts.SemanticAsync(calls[0], CancellationToken.None)).ValueType!.Name, Is.EqualTo("string"));
+        Assert.That((await AsyncSourceFacts.SemanticAsync(calls[0], CancellationToken.None)).ReferencedCallable!.SourceFile, Is.EqualTo(Path.Combine(_root, "library", "methods.go")));
+        Assert.That((await AsyncSourceFacts.SemanticAsync(calls[0], CancellationToken.None)).ReferencedCallable!.Line, Is.EqualTo(2));
+        Assert.That((await AsyncSourceFacts.SemanticAsync(calls[1], CancellationToken.None)).ReferencedCallable!.Namespace, Is.EqualTo("example.test/semantic/control"));
+        Assert.That((await AsyncSourceFacts.SemanticAsync(calls[1], CancellationToken.None)).ValueType!.Name, Is.EqualTo("bool"));
         Assert.That(ProviderErrors.Drain(), Is.Empty);
     }
 
     [Test]
-    public void Go_WorkspaceAndBuildContextResolveLocalModuleWithoutDownloads()
+    public async Task Go_WorkspaceAndBuildContextResolveLocalModuleWithoutDownloads()
     {
         Native("go");
         Write("go.work", "go 1.18\nuse (\n ./app\n ./dependency\n)\n");
@@ -237,33 +236,33 @@ public class GoJavaSemanticTests
         Write("dependency\\excluded.go", "//go:build cop_never_enabled\n\npackage dependency\nfunc Value() int { return 1 }\n");
         string source = "package app\nimport \"fixture.test/dependency\"\nfunc Run() { _ = dependency.Value() }\n";
         string path = Write("app\\caller.go", source);
-        var file = new GoSourceParser().Parse(path, source)!;
+        var file = (await new GoSourceParser().ParseAsync(path, source, cancellationToken: CancellationToken.None))!;
         var call = file.Statements.Single(s => s.Kind == "call");
-        Assert.That(call.ReferencedCallable!.Namespace, Is.EqualTo("fixture.test/dependency"));
-        Assert.That(call.ValueType!.Name, Is.EqualTo("string"));
+        Assert.That((await AsyncSourceFacts.SemanticAsync(call, CancellationToken.None)).ReferencedCallable!.Namespace, Is.EqualTo("fixture.test/dependency"));
+        Assert.That((await AsyncSourceFacts.SemanticAsync(call, CancellationToken.None)).ValueType!.Name, Is.EqualTo("string"));
         Assert.That(ProviderErrors.Drain(), Is.Empty);
         Assert.That(File.Exists(Path.Combine(_root, "go.work.sum")), Is.False);
         Assert.That(File.Exists(Path.Combine(_root, "app", "go.sum")), Is.False);
     }
 
     [Test]
-    public void Go_StandardLibraryIsCheckedFromInstalledSources()
+    public async Task Go_StandardLibraryIsCheckedFromInstalledSources()
     {
         Native("go");
         Write("go.mod", "module fixture.test/stdlib\n\ngo 1.18\n");
         string source = "package fixture\nimport \"strings\"\nfunc Run() { _ = strings.TrimSpace(\"value\") }\n";
         string path = Write("caller.go", source);
-        var file = new GoSourceParser().Parse(path, source)!;
+        var file = (await new GoSourceParser().ParseAsync(path, source, cancellationToken: CancellationToken.None))!;
         var call = file.Statements.Single(s => s.Kind == "call");
-        Assert.That(call.ReferencedCallable!.Namespace, Is.EqualTo("strings"));
-        Assert.That(call.ReferencedCallable!.Parameters.Select(t => t.Name), Is.EqualTo(new[] { "string" }));
-        Assert.That(call.ValueType!.Name, Is.EqualTo("string"));
+        Assert.That((await AsyncSourceFacts.SemanticAsync(call, CancellationToken.None)).ReferencedCallable!.Namespace, Is.EqualTo("strings"));
+        Assert.That((await AsyncSourceFacts.SemanticAsync(call, CancellationToken.None)).ReferencedCallable!.Parameters.Select(t => t.Name), Is.EqualTo(new[] { "string" }));
+        Assert.That((await AsyncSourceFacts.SemanticAsync(call, CancellationToken.None)).ValueType!.Name, Is.EqualTo("string"));
         Assert.That(ProviderErrors.Drain(), Is.Empty);
     }
 
     [TestCase(false)]
     [TestCase(true)]
-    public void Go_LocalReplacementAndVendorDependenciesAreResolvedOffline(bool vendor)
+    public async Task Go_LocalReplacementAndVendorDependenciesAreResolvedOffline(bool vendor)
     {
         Native("go");
         Write("app\\go.mod", "module fixture.test/app\n\ngo 1.18\nrequire fixture.test/dependency v1.0.0\n"
@@ -274,15 +273,15 @@ public class GoJavaSemanticTests
         if (vendor) Write("app\\vendor\\modules.txt", "# fixture.test/dependency v1.0.0\n## explicit; go 1.18\nfixture.test/dependency\n");
         string source = "package app\nimport \"fixture.test/dependency\"\nfunc Run() { _ = dependency.Value() }\n";
         string path = Write("app\\caller.go", source);
-        var call = new GoSourceParser().Parse(path, source)!.Statements.Single(s => s.Kind == "call");
-        Assert.That(call.ReferencedCallable!.Namespace, Is.EqualTo("fixture.test/dependency"));
-        Assert.That(call.ValueType!.Name, Is.EqualTo("int"));
+        var call = (await new GoSourceParser().ParseAsync(path, source, cancellationToken: CancellationToken.None))!.Statements.Single(s => s.Kind == "call");
+        Assert.That((await AsyncSourceFacts.SemanticAsync(call, CancellationToken.None)).ReferencedCallable!.Namespace, Is.EqualTo("fixture.test/dependency"));
+        Assert.That((await AsyncSourceFacts.SemanticAsync(call, CancellationToken.None)).ValueType!.Name, Is.EqualTo("int"));
         Assert.That(ProviderErrors.Drain(), Is.Empty);
     }
 
     [TestCase(false)]
     [TestCase(true)]
-    public void Go_InternalAndExternalTestPackagesUseTheirOwnImportContext(bool external)
+    public async Task Go_InternalAndExternalTestPackagesUseTheirOwnImportContext(bool external)
     {
         Native("go");
         Write("go.mod", "module fixture.test/testing\n\ngo 1.18\n");
@@ -291,15 +290,15 @@ public class GoJavaSemanticTests
             ? "package fixture_test\nimport \"fixture.test/testing\"\nfunc Run() { _ = fixture.Value() }\n"
             : "package fixture\nfunc Run() { _ = Value() }\n";
         string path = Write("caller_test.go", source);
-        var call = new GoSourceParser().Parse(path, source)!.Statements.Single(s => s.Kind == "call");
-        Assert.That(call.ReferencedCallable!.Name, Is.EqualTo("Value"));
-        Assert.That(call.ValueType!.Name, Is.EqualTo("int"));
+        var call = (await new GoSourceParser().ParseAsync(path, source, cancellationToken: CancellationToken.None))!.Statements.Single(s => s.Kind == "call");
+        Assert.That((await AsyncSourceFacts.SemanticAsync(call, CancellationToken.None)).ReferencedCallable!.Name, Is.EqualTo("Value"));
+        Assert.That((await AsyncSourceFacts.SemanticAsync(call, CancellationToken.None)).ValueType!.Name, Is.EqualTo("int"));
         Assert.That(ProviderErrors.Drain(), Is.Empty);
     }
 
     [TestCase("go")]
     [TestCase("java")]
-    public void Native_GenericCallsExposeInstantiatedParameterAndResultArguments(string language)
+    public async Task Native_GenericCallsExposeInstantiatedParameterAndResultArguments(string language)
     {
         Native(language);
         if (language == "go") Write("go.mod", "module fixture.test/generic\n\ngo 1.18\n");
@@ -317,18 +316,25 @@ public class GoJavaSemanticTests
             """;
         string path = Write(language == "go" ? "caller.go" : "Caller.java", source);
         ISourceParser parser = language == "go" ? new GoSourceParser() : new JavaSourceParser();
-        var call = parser.Parse(path, source)!.Statements.Single(s => s.MemberName == (language == "go" ? "Make" : "make"));
+        var call = (await parser.ParseAsync(path, source, cancellationToken: CancellationToken.None))!.Statements.Single(s => s.MemberName == (language == "go" ? "Make" : "make"));
         string argument = language == "go" ? "string" : "java.lang.String";
-        Assert.That(call.ReferencedCallable!.Parameters.Select(t => t.Name), Is.EqualTo(new[] { argument }));
-        Assert.That(call.ValueType!.Name, Is.EqualTo(language == "go" ? "fixture.test/generic.Box[string]" : "Box<java.lang.String>"));
-        Assert.That(call.ValueType.GenericArguments.Select(t => t.Name), Is.EqualTo(new[] { argument }));
-        Assert.That(call.ReferencedCallable.ReturnType!.GenericArguments.Select(t => t.Name), Is.EqualTo(new[] { argument }));
+        await call.EnsureSemanticAnalysisAsync();
+        var callable = call.ReferencedCallable
+            ?? throw new AssertionException("Expected the generic call to resolve its declaration.");
+        var valueType = call.ValueType
+            ?? throw new AssertionException("Expected the generic call to have a result type.");
+        var returnType = callable.ReturnType
+            ?? throw new AssertionException("Expected the generic declaration to have a return type.");
+        Assert.That(callable.Parameters.Select(t => t.Name), Is.EqualTo(new[] { argument }));
+        Assert.That(valueType.Name, Is.EqualTo(language == "go" ? "fixture.test/generic.Box[string]" : "Box<java.lang.String>"));
+        Assert.That(valueType.GenericArguments.Select(t => t.Name), Is.EqualTo(new[] { argument }));
+        Assert.That(returnType.GenericArguments.Select(t => t.Name), Is.EqualTo(new[] { argument }));
         Assert.That(ProviderErrors.Drain(), Is.Empty);
     }
 
     [TestCase("go")]
     [TestCase("java")]
-    public void Native_DependencyEditChangesCallerFactsWithoutCallerEdit(string language)
+    public async System.Threading.Tasks.Task Native_DependencyEditChangesCallerFactsWithoutCallerEdit(string language)
     {
         Native(language);
         string dependency = language == "go" ? "dependency.go" : "Dependency.java";
@@ -337,7 +343,7 @@ public class GoJavaSemanticTests
             : "class Caller { void run() { var value = Dependency.value(); } }";
         if (language == "go") Write("go.mod", "module fixture.test/edit\n\ngo 1.18\n");
         string path = Write(caller, source);
-        using var scope = new ToolchainExecutionScope();
+        await using var scope = new ToolchainExecutionScope();
         ISourceParser parser = language == "go" ? new GoSourceParser() : new JavaSourceParser();
         for (int version = 0; version < 2; version++)
         {
@@ -346,16 +352,16 @@ public class GoJavaSemanticTests
                 : "package fixture\nfunc Value() int { return 42 }\n"
                 : version == 0 ? "class Dependency { static String value() { return \"first\"; } }"
                 : "class Dependency { static int value() { return 42; } }");
-            var file = parser.Parse(path, source)!;
+            var file = (await parser.ParseAsync(path, source, cancellationToken: CancellationToken.None))!;
             var call = file.Statements.Single(s => s.Kind == "call");
-            Assert.That(call.ValueType!.Name, Is.EqualTo(version == 1 ? "int" : language == "go" ? "string" : "java.lang.String"));
+            Assert.That((await AsyncSourceFacts.SemanticAsync(call, CancellationToken.None)).ValueType!.Name, Is.EqualTo(version == 1 ? "int" : language == "go" ? "string" : "java.lang.String"));
             Assert.That(ProviderErrors.Drain(), Is.Empty);
         }
     }
 
     [TestCase("go")]
     [TestCase("java")]
-    public void Native_MissingSymbolsAreDiagnosedOnlyOnSemanticDemand(string language)
+    public async Task Native_MissingSymbolsAreDiagnosedOnlyOnSemanticDemand(string language)
     {
         Native(language);
         string source = language == "go" ? "package fixture\nfunc Run() { missing() }\n"
@@ -363,11 +369,11 @@ public class GoJavaSemanticTests
         if (language == "go") Write("go.mod", "module fixture.test/missing\n\ngo 1.18\n");
         string path = Write(language == "go" ? "caller.go" : "Caller.java", source);
         ISourceParser parser = language == "go" ? new GoSourceParser() : new JavaSourceParser();
-        var file = parser.Parse(path, source)!;
+        var file = (await parser.ParseAsync(path, source, cancellationToken: CancellationToken.None))!;
         Assert.That(file.ParseErrors, Is.Empty);
         Assert.That(file.Statements.Single(s => s.Kind == "call").CallTarget!.Name, Is.EqualTo("missing"));
         Assert.That(ProviderErrors.Drain(), Is.Empty);
-        Assert.That(file.Statements.Single(s => s.Kind == "call").ReferencedCallable, Is.Null);
+        Assert.That((await AsyncSourceFacts.SemanticAsync(file.Statements.Single(s => s.Kind == "call"), CancellationToken.None)).ReferencedCallable, Is.Null);
         var errors = ProviderErrors.Drain();
         Assert.That(errors, Has.Count.EqualTo(1));
         Assert.That(errors.Single(), Does.Contain("missing"));
@@ -375,16 +381,16 @@ public class GoJavaSemanticTests
 
     [TestCase("go")]
     [TestCase("java")]
-    public void MissingToolchain_LeavesSemanticFactsUnknownWithVisibleFallback(string language)
+    public async Task MissingToolchain_LeavesSemanticFactsUnknownWithVisibleFallback(string language)
     {
         ISourceParser parser = language == "go" ? new GoSourceParser(toolchainSearchPath: "")
             : new JavaSourceParser(toolchainSearchPath: "");
-        var file = parser.Parse("fixture", language == "go" ? "package fixture\nfunc Run(){ call() }"
-            : "class Fixture { void run(){ call(); } }")!;
+        var file = (await parser.ParseAsync("fixture", language == "go" ? "package fixture\nfunc Run(){ call() }"
+            : "class Fixture { void run(){ call(); } }", cancellationToken: CancellationToken.None))!;
         var call = file.Statements.Single(s => s.Kind == "call");
-        Assert.That(call.ReceiverType, Is.Null);
-        Assert.That(call.ValueType, Is.Null);
-        Assert.That(call.ReferencedCallable, Is.Null);
+        Assert.That((await AsyncSourceFacts.SemanticAsync(call, CancellationToken.None)).ReceiverType, Is.Null);
+        Assert.That((await AsyncSourceFacts.SemanticAsync(call, CancellationToken.None)).ValueType, Is.Null);
+        Assert.That((await AsyncSourceFacts.SemanticAsync(call, CancellationToken.None)).ReferencedCallable, Is.Null);
         Assert.That(ProviderWarnings.Drain(), Has.Count.EqualTo(1));
     }
 
@@ -418,12 +424,9 @@ public class GoJavaSemanticTests
                 : "class Caller { void run() { var result = Dependency.value(); } }");
         string dependency = language == "go" ? "target\\dependency.go" : "target\\Dependency.java";
         var environment = new Dictionary<string, string?> { ["PATH"] = Path.GetDirectoryName(tool) };
-        var verify = await ToolchainProcess.RunAsync(dotnet, [cli, "verify", Path.GetDirectoryName(script)!], root.FullName,
-            timeout: TimeSpan.FromSeconds(30), environment: environment);
+        var verify = await ToolchainProcess.RunAsync(new Cop.Core.ToolchainCommand(dotnet, [cli, "verify", Path.GetDirectoryName(script)!], root.FullName, environment), new Cop.Core.ToolchainRunOptions { Timeout = TimeSpan.FromSeconds(30) });
         Assert.That(verify.ExitCode, Is.EqualTo(0), verify.StandardOutput + verify.StandardError);
-        async Task<ToolchainResult> Run() => await ToolchainProcess.RunAsync(dotnet,
-            [cli, script, "-t", target, "-c", "MAIN,COUNTS"], root.FullName,
-            timeout: TimeSpan.FromMinutes(2), environment: environment);
+        async Task<ToolchainResult> Run() => await ToolchainProcess.RunAsync(new Cop.Core.ToolchainCommand(dotnet,             [cli, script, "-t", target, "-c", "MAIN,COUNTS"], root.FullName, environment), new Cop.Core.ToolchainRunOptions { Timeout = TimeSpan.FromMinutes(2) });
         for (int version = 0; version < 2; version++)
         {
             Write(dependency, language == "go" ? version == 0

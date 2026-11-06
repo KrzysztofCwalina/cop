@@ -1,3 +1,5 @@
+// Extends the common code schema with C# declaration and control-flow facts.
+
 using Cop.Core;
 
 namespace Cop.Providers;
@@ -10,15 +12,18 @@ namespace Cop.Providers;
 /// </summary>
 public static class CSharpSchema
 {
-    private static readonly ProviderSchema _schema = Build();
+    private static readonly ProviderSchema s_schema = Build();
 
-    public static ReadOnlyMemory<byte> GetJson() => _schema.ToJson();
+    /// <summary>
+    /// Serializes the provider schema for C#-specific source facts.
+    /// </summary>
+    public static ReadOnlyMemory<byte> GetJson() => s_schema.ToJson();
 
     private static ProviderSchema Build()
     {
-        var baseSchema = CodeSchema.Get();
+        ProviderSchema baseSchema = CodeSchema.Get();
 
-        var types = new List<ProviderTypeSchema>(baseSchema.Types)
+        List<ProviderTypeSchema> types = new List<ProviderTypeSchema>(baseSchema.Types)
         {
             new()
             {
@@ -65,6 +70,21 @@ public static class CSharpSchema
                     new ProviderPropertySchema { Name = "IsGoto", Type = "bool" },
                     new ProviderPropertySchema { Name = "IsAwaitForeach", Type = "bool" },
                     new ProviderPropertySchema { Name = "HasCatchFilter", Type = "bool" },
+                    new ProviderPropertySchema { Name = "IsCancellationHandler", Type = "bool" },
+                    new ProviderPropertySchema
+                    {
+                        Name = "IsCallerCancellationPreserved", Type = "bool"
+                    },
+                    new ProviderPropertySchema
+                    {
+                        Name = "IsOriginalExceptionAlwaysRethrown", Type = "bool"
+                    },
+                    new ProviderPropertySchema
+                    {
+                        Name = "HasTypeRestrictedCatchFilter", Type = "bool"
+                    },
+                    new ProviderPropertySchema { Name = "IsOwnershipTransferred", Type = "bool" },
+                    new ProviderPropertySchema { Name = "IsUsingResource", Type = "bool" },
                 ],
             },
         };

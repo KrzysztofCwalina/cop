@@ -70,7 +70,7 @@ public class GenericInferenceTests
     // ========================================================================
 
     [Test]
-    public void InferBindings_ReduceIntegers()
+    public async Task InferBindings_ReduceIntegers()
     {
         var decl = MakeDecl("reduce", [
             new Parameter("items", new TypeRef("T", true)),
@@ -87,14 +87,14 @@ public class GenericInferenceTests
             new CopInt(0)
         };
 
-        var bindings = GenericInference.InferBindings(decl, args);
+        var bindings = (await GenericInference.InferBindingsAsync(decl, args, cancellationToken: CancellationToken.None));
 
         Assert.That(bindings["T"], Is.EqualTo("int"));
         Assert.That(bindings["R"], Is.EqualTo("int"));
     }
 
     [Test]
-    public void InferBindings_ReduceStrings()
+    public async Task InferBindings_ReduceStrings()
     {
         var decl = MakeDecl("reduce", [
             new Parameter("items", new TypeRef("T", true)),
@@ -111,14 +111,14 @@ public class GenericInferenceTests
             new CopString("")
         };
 
-        var bindings = GenericInference.InferBindings(decl, args);
+        var bindings = (await GenericInference.InferBindingsAsync(decl, args, cancellationToken: CancellationToken.None));
 
         Assert.That(bindings["T"], Is.EqualTo("string"));
         Assert.That(bindings["R"], Is.EqualTo("string"));
     }
 
     [Test]
-    public void InferBindings_MixedTypes_TandR_Different()
+    public async Task InferBindings_MixedTypes_TandR_Different()
     {
         // reduce([int], (string, int) => string, string) → T=int, R=string
         var decl = MakeDecl("reduce", [
@@ -136,14 +136,14 @@ public class GenericInferenceTests
             new CopString("start:")
         };
 
-        var bindings = GenericInference.InferBindings(decl, args);
+        var bindings = (await GenericInference.InferBindingsAsync(decl, args, cancellationToken: CancellationToken.None));
 
         Assert.That(bindings["T"], Is.EqualTo("int"));
         Assert.That(bindings["R"], Is.EqualTo("string"));
     }
 
     [Test]
-    public void InferBindings_EmptyCollection_FallsBackToObject()
+    public async Task InferBindings_EmptyCollection_FallsBackToObject()
     {
         var decl = MakeDecl("reduce", [
             new Parameter("items", new TypeRef("T", true)),
@@ -160,14 +160,14 @@ public class GenericInferenceTests
             new CopInt(42)
         };
 
-        var bindings = GenericInference.InferBindings(decl, args);
+        var bindings = (await GenericInference.InferBindingsAsync(decl, args, cancellationToken: CancellationToken.None));
 
         Assert.That(bindings["T"], Is.EqualTo("object")); // empty list → can't infer
         Assert.That(bindings["R"], Is.EqualTo("int"));
     }
 
     [Test]
-    public void InferBindings_WhereFunction()
+    public async Task InferBindings_WhereFunction()
     {
         var decl = MakeDecl("where", [
             new Parameter("items", new TypeRef("T", true)),
@@ -182,7 +182,7 @@ public class GenericInferenceTests
                 new Cop.Lang.Interpreter.Environment())
         };
 
-        var bindings = GenericInference.InferBindings(decl, args);
+        var bindings = (await GenericInference.InferBindingsAsync(decl, args, cancellationToken: CancellationToken.None));
 
         Assert.That(bindings["T"], Is.EqualTo("int"));
     }
@@ -274,19 +274,19 @@ public class GenericInferenceTests
     // End-to-end: reduce via evaluator
     // ========================================================================
 
-    private CopValue EvalExpr(string exprSource)
+    private async Task<CopValue> EvalExprAsync(string exprSource, CancellationToken cancellationToken = default)
     {
         var ffi = new ForeignFunctionRegistry();
         StandardLibrary.Register(ffi);
         var source = $"command main = {exprSource}";
         var module = CopParser.Parse(source, "test.cop");
         var evaluator = new Evaluator(ffi, "test.cop");
-        evaluator.EvalModule(module);
-        return evaluator.RunCommand("main");
+        await evaluator.EvalModuleAsync(module, cancellationToken: cancellationToken);
+        return (await evaluator.RunCommandAsync("main", cancellationToken: cancellationToken));
     }
 
     [Test]
-    public void ReduceIntSum_WithGenericDeclaration()
+    public async Task ReduceIntSum_WithGenericDeclaration()
     {
         // Declare reduce with generic types, then use it
         var source = @"
@@ -297,15 +297,15 @@ command main = [1, 2, 3, 4].reduce((acc, item) => acc + item, 0)
         StandardLibrary.Register(ffi);
         var module = CopParser.Parse(source, "test.cop");
         var evaluator = new Evaluator(ffi, "test.cop");
-        evaluator.EvalModule(module);
-        var result = evaluator.RunCommand("main");
+        await evaluator.EvalModuleAsync(module, cancellationToken: CancellationToken.None);
+        var result = (await evaluator.RunCommandAsync("main", cancellationToken: CancellationToken.None));
 
         Assert.That(result, Is.InstanceOf<CopInt>());
         Assert.That(((CopInt)result).Value, Is.EqualTo(10));
     }
 
     [Test]
-    public void ReduceStringConcat_WithGenericDeclaration()
+    public async Task ReduceStringConcat_WithGenericDeclaration()
     {
         var source = @"
 export function reduce(items: [T], accumulator: (R, T) => R, initial: R) : R => intrinsic
@@ -315,15 +315,15 @@ command main = ['a', 'b', 'c'].reduce((acc, item) => acc + item, '')
         StandardLibrary.Register(ffi);
         var module = CopParser.Parse(source, "test.cop");
         var evaluator = new Evaluator(ffi, "test.cop");
-        evaluator.EvalModule(module);
-        var result = evaluator.RunCommand("main");
+        await evaluator.EvalModuleAsync(module, cancellationToken: CancellationToken.None);
+        var result = (await evaluator.RunCommandAsync("main", cancellationToken: CancellationToken.None));
 
         Assert.That(result, Is.InstanceOf<CopString>());
         Assert.That(((CopString)result).Value, Is.EqualTo("abc"));
     }
 
     [Test]
-    public void WhereWithGenericType_FiltersCorrectly()
+    public async Task WhereWithGenericType_FiltersCorrectly()
     {
         var source = @"
 export function reduce(items: [T], accumulator: (R, T) => R, initial: R) : R => intrinsic
@@ -336,8 +336,8 @@ command main = [1, 2, 3, 4, 5].where((x) => x > 3)
         StandardLibrary.Register(ffi);
         var module = CopParser.Parse(source, "test.cop");
         var evaluator = new Evaluator(ffi, "test.cop");
-        evaluator.EvalModule(module);
-        var result = evaluator.RunCommand("main");
+        await evaluator.EvalModuleAsync(module, cancellationToken: CancellationToken.None);
+        var result = (await evaluator.RunCommandAsync("main", cancellationToken: CancellationToken.None));
 
         Assert.That(result, Is.InstanceOf<CopList>());
         var list = (CopList)result;
@@ -347,7 +347,7 @@ command main = [1, 2, 3, 4, 5].where((x) => x > 3)
     }
 
     [Test]
-    public void GenericPush_AppendsItem()
+    public async Task GenericPush_AppendsItem()
     {
         var source = @"
 export function concat(items: [T], other: [T]) : [T] => intrinsic
@@ -358,8 +358,8 @@ command main = [1, 2, 3].push(4)
         StandardLibrary.Register(ffi);
         var module = CopParser.Parse(source, "test.cop");
         var evaluator = new Evaluator(ffi, "test.cop");
-        evaluator.EvalModule(module);
-        var result = evaluator.RunCommand("main");
+        await evaluator.EvalModuleAsync(module, cancellationToken: CancellationToken.None);
+        var result = (await evaluator.RunCommandAsync("main", cancellationToken: CancellationToken.None));
 
         Assert.That(result, Is.InstanceOf<CopList>());
         var list = (CopList)result;
@@ -368,7 +368,7 @@ command main = [1, 2, 3].push(4)
     }
 
     [Test]
-    public void GenericReturnType_Propagates()
+    public async Task GenericReturnType_Propagates()
     {
         // The result of reduce should naturally be typed correctly
         var source = @"
@@ -380,8 +380,8 @@ command main = total + 10
         StandardLibrary.Register(ffi);
         var module = CopParser.Parse(source, "test.cop");
         var evaluator = new Evaluator(ffi, "test.cop");
-        evaluator.EvalModule(module);
-        var result = evaluator.RunCommand("main");
+        await evaluator.EvalModuleAsync(module, cancellationToken: CancellationToken.None);
+        var result = (await evaluator.RunCommandAsync("main", cancellationToken: CancellationToken.None));
 
         Assert.That(result, Is.InstanceOf<CopInt>());
         Assert.That(((CopInt)result).Value, Is.EqualTo(16));

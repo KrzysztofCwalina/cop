@@ -49,11 +49,9 @@ public class WalkthroughTests
         };
 
         using var process = Process.Start(psi)!;
-        var stdout = process.StandardOutput.ReadToEnd();
-        var stderr = process.StandardError.ReadToEnd();
-        process.WaitForExit(120_000);
+        var (stdout, stderr, exitCode) = TestProcessOutput.Read(process, 120_000);
 
-        Assert.That(process.ExitCode, Is.EqualTo(0),
+        Assert.That(exitCode, Is.EqualTo(0),
             $"{language} walkthrough rule failed.\nSTDOUT:\n{stdout}\nSTDERR:\n{stderr}");
         Assert.That(stdout, Does.Contain("0 failed"),
             $"{language}: expected '0 failed'.\nSTDOUT:\n{stdout}");

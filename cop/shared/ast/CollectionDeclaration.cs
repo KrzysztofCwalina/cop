@@ -1,3 +1,5 @@
+// Records a collection declaration and its item type.
+
 namespace Cop.Lang;
 
 /// <summary>

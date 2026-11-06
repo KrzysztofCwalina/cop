@@ -1,3 +1,5 @@
+// Renders diagnostics with source excerpts, carets, and suggested corrections.
+
 using System.Text;
 
 namespace Cop.Lang;
@@ -18,7 +20,7 @@ public static class DiagnosticFormatter
     /// </summary>
     public static string Format(CopDiagnostic diagnostic)
     {
-        var sb = new StringBuilder();
+        StringBuilder sb = new StringBuilder();
 
         // Header line: location: severity: message
         sb.Append(diagnostic.Location);
@@ -30,8 +32,8 @@ public static class DiagnosticFormatter
         // Source line with line number gutter
         if (diagnostic.SourceLine is not null)
         {
-            var lineNum = diagnostic.Line.ToString();
-            var gutter = $"  {lineNum} | ";
+            string lineNum = diagnostic.Line.ToString();
+            string gutter = $"  {lineNum} | ";
             sb.Append(gutter);
             sb.AppendLine(diagnostic.SourceLine);
 
@@ -60,11 +62,15 @@ public static class DiagnosticFormatter
     /// </summary>
     public static string FormatAll(IEnumerable<CopDiagnostic> diagnostics)
     {
-        var sb = new StringBuilder();
+        StringBuilder sb = new StringBuilder();
         bool first = true;
-        foreach (var d in diagnostics)
+        foreach (CopDiagnostic d in diagnostics)
         {
-            if (!first) sb.AppendLine();
+            if (!first)
+            {
+                sb.AppendLine();
+            }
+
             sb.AppendLine(Format(d));
             first = false;
         }
@@ -84,7 +90,7 @@ public static class DiagnosticFormatter
     /// </summary>
     public static void WriteAllToStdErr(IEnumerable<CopDiagnostic> diagnostics)
     {
-        foreach (var d in diagnostics)
+        foreach (CopDiagnostic d in diagnostics)
         {
             Console.Error.WriteLine(Format(d));
             Console.Error.WriteLine();

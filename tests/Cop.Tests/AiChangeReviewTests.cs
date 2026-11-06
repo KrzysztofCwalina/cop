@@ -200,7 +200,7 @@ public class AiChangeReviewTests
         var context = new AnalysisContext(_repo, new ReviewOptions { Scope = scope, AiConfigPath = _config }, _logs.Add);
         foreach (var input in new object[] { "source", new[] { new DataObject("File") } })
         {
-            var result = await new AiProvider().GetFunctions(context)!["judge"](["Policy", input]);
+            var result = await new AiProvider().GetFunctions(context)!["judge"](["Policy", input],CancellationToken.None);
             AssertFailure(((IEnumerable<object?>)result!).Cast<DataObject>().ToList(),
                 "strings and individual collections are not supported");
         }
@@ -232,7 +232,7 @@ public class AiChangeReviewTests
     [TestCase("target")]
     [TestCase("subdir")]
     [TestCase("combined")]
-    public void Engine_DeletionOnlyCodebasesRetainExactParserRootsAndFullModeStillRejectsEmpty(string selection)
+    public async Task Engine_DeletionOnlyCodebasesRetainExactParserRootsAndFullModeStillRejectsEmpty(string selection)
     {
         var first = selection == "target" ? "Example.cs" : "first/Example.cs";
         var second = selection switch
@@ -274,8 +274,11 @@ public class AiChangeReviewTests
             """);
         var root = _root;
         while (!File.Exists(Path.Combine(root, "cop.sln"))) root = Path.GetDirectoryName(root)!;
-        var result = Engine.Run(scripts, _repo, additionalFeedPaths: [Path.Combine(root, "packages")],
-            reviewOptions: new ReviewOptions { Scope = "branch", Base = "HEAD", AiConfigPath = _config });
+        var result = (await Engine.RunAsync(scripts, _repo, new EngineRunOptions
+        {
+            AdditionalFeedPaths = [Path.Combine(root, "packages")],
+            ReviewOptions = new ReviewOptions { Scope = "branch", Base = "HEAD", AiConfigPath = _config },
+        }));
 
         Assert.That(result.ParseErrors, Is.Empty);
         Assert.That(result.Errors, Is.Empty, string.Join("\n", result.Errors));
@@ -292,8 +295,11 @@ public class AiChangeReviewTests
             Is.EqualTo(new[] { first, second }.OrderBy(path => path)));
         Assert.That(model.Requests[1], Does.Contain("int Total"));
 
-        var full = Engine.Run(scripts, _repo, additionalFeedPaths: [Path.Combine(root, "packages")],
-            reviewOptions: new ReviewOptions { Scope = "full", AiConfigPath = _config });
+        var full = (await Engine.RunAsync(scripts, _repo, new EngineRunOptions
+        {
+            AdditionalFeedPaths = [Path.Combine(root, "packages")],
+            ReviewOptions = new ReviewOptions { Scope = "full", AiConfigPath = _config },
+        }));
         Assert.That(full.Errors, Is.Empty);
         Assert.That(full.Outputs.Select(output => output.Message), Is.EqualTo(new[]
         {
@@ -340,7 +346,9 @@ public class AiChangeReviewTests
         if (!File.Exists(exe)) Assert.Ignore("Publish win-x64 before running CLI integration tests.");
         var start = new ProcessStartInfo(exe)
         {
-            WorkingDirectory = root, RedirectStandardOutput = true, RedirectStandardError = true,
+            WorkingDirectory = root,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
             UseShellExecute = false
         };
         foreach (var arg in new[] { script, "-t", _repo, "--scope", "branch", "--base", "HEAD",
@@ -390,7 +398,7 @@ public class AiChangeReviewTests
         using var model = Configure((turn, _) => turn == 0 ? ReadExample()
             : Final("""[{"file":"Example.cs","line":2,"message":"Keep the core independent: wrong responsibility."}]"""));
         var context = new AnalysisContext(_repo, new ReviewOptions { Scope = "branch", Base = "HEAD", AiConfigPath = _config });
-        var output = await new AiProvider().GetFunctions(context)!["judge"]([document, Codebase("Example.cs"), 2]);
+        var output = await new AiProvider().GetFunctions(context)!["judge"]([document, Codebase("Example.cs"), 2],CancellationToken.None);
         Assert.That(((IEnumerable<object?>)output!).Cast<DataObject>().Single().GetField("Message"),
             Is.EqualTo("Keep the core independent: wrong responsibility."));
         Assert.That(model.Requests, Has.Count.EqualTo(2), "Rules must share the diff and source-tool conversation.");
@@ -416,7 +424,7 @@ public class AiChangeReviewTests
     public async Task Markdown_InvalidLevelOrNoRulesFailsBeforeModelConfiguration(int level)
     {
         var document = await MarkdownInput("# Group\n## Rule\nRequired behavior.\n");
-        var result = await new AiProvider().GetFunctions()!["judge"]([document, Codebase("Example.cs"), level]);
+        var result = await new AiProvider().GetFunctions()!["judge"]([document, Codebase("Example.cs"), level],CancellationToken.None);
         AssertFailure(((IEnumerable<object?>)result!).Cast<DataObject>().ToList(),
             level == 3 ? "no Markdown rule sections" : "integer from 1 to 6");
     }
@@ -426,7 +434,7 @@ public class AiChangeReviewTests
     {
         var document = await MarkdownInput("# Group\n## Empty rule\n");
         var context = new AnalysisContext(_repo, new ReviewOptions { Scope = "branch", Base = "HEAD" });
-        var result = await new AiProvider().GetFunctions(context)!["judge"]([document, Codebase("Example.cs"), 2]);
+        var result = await new AiProvider().GetFunctions(context)!["judge"]([document, Codebase("Example.cs"), 2],CancellationToken.None);
         AssertFailure(((IEnumerable<object?>)result!).Cast<DataObject>().ToList(), "has no section body");
     }
 
@@ -435,7 +443,7 @@ public class AiChangeReviewTests
     {
         var document = await MarkdownInput(
             "# Group\n```md\n## Example\nNot a rule.\n```\n\n> ## Quote\n> Context.\n\n\t## Tabbed example\n\tNot a rule.\n\n    - Example list\n    ## Indented example\n");
-        var result = await new AiProvider().GetFunctions()!["judge"]([document, Codebase("Example.cs"), 2]);
+        var result = await new AiProvider().GetFunctions()!["judge"]([document, Codebase("Example.cs"), 2],CancellationToken.None);
         AssertFailure(((IEnumerable<object?>)result!).Cast<DataObject>().ToList(), "no Markdown rule sections");
     }
 
@@ -446,7 +454,7 @@ public class AiChangeReviewTests
         using var model = Configure((_, _) =>
             Final("""[{"file":"Example.cs","line":2,"message":"One rule: incorrect total."}]"""));
         var context = new AnalysisContext(_repo, new ReviewOptions { Scope = "full", AiConfigPath = _config });
-        var result = await new AiProvider().GetFunctions(context)!["judge"]([document, Codebase("Example.cs"), 2]);
+        var result = await new AiProvider().GetFunctions(context)!["judge"]([document, Codebase("Example.cs"), 2],CancellationToken.None);
         Assert.That(((IEnumerable<object?>)result!).Cast<DataObject>().Single().GetField("Message"),
             Is.EqualTo("One rule: incorrect total."));
         Assert.That(model.Requests, Has.Count.EqualTo(1));
@@ -460,7 +468,7 @@ public class AiChangeReviewTests
     {
         var document = await MarkdownInput("# Group\n## One rule\nRequired behavior.\n");
         var context = new AnalysisContext(_repo, new ReviewOptions { Scope = "branch", Base = "HEAD" }, _logs.Add);
-        var result = await new AiProvider().GetFunctions(context)!["judge"]([document, Codebase("Example.cs"), 2]);
+        var result = await new AiProvider().GetFunctions(context)!["judge"]([document, Codebase("Example.cs"), 2],CancellationToken.None);
         Assert.That((IEnumerable<object?>)result!, Is.Empty);
         Assert.That(_logs.Last(), Does.Contain("0 model requests"));
     }
@@ -489,15 +497,21 @@ public class AiChangeReviewTests
         while (!File.Exists(Path.Combine(root, "cop.sln"))) root = Path.GetDirectoryName(root)!;
         if (!publishedCli)
         {
-            var normal = Engine.Run(scripts, _repo, commandName: "MAIN",
-                additionalFeedPaths: [Path.Combine(root, "packages")]);
+            var normal = (await Engine.RunAsync(scripts, _repo, new EngineRunOptions
+            {
+                CommandName = "MAIN",
+                AdditionalFeedPaths = [Path.Combine(root, "packages")],
+            }));
             Assert.That(normal.Errors, Is.Empty, string.Join("\n", normal.Errors));
             Assert.That(normal.Outputs, Is.Empty);
             Assert.That(normal.ExitCode, Is.EqualTo(0));
             Assert.That(model.Requests, Is.Empty, "The default command must not execute AI checks.");
-            var result = Engine.Run(scripts, _repo, commandName: "AI",
-                additionalFeedPaths: [Path.Combine(root, "packages")],
-                reviewOptions: new ReviewOptions { Scope = "branch", Base = "HEAD", AiConfigPath = _config });
+            var result = (await Engine.RunAsync(scripts, _repo, new EngineRunOptions
+            {
+                CommandName = "AI",
+                AdditionalFeedPaths = [Path.Combine(root, "packages")],
+                ReviewOptions = new ReviewOptions { Scope = "branch", Base = "HEAD", AiConfigPath = _config },
+            }));
             Assert.That(result.ParseErrors, Is.Empty);
             Assert.That(result.Errors, Is.Empty, string.Join("\n", result.Errors));
             Assert.That(result.ExitCode, Is.EqualTo(1));
@@ -510,7 +524,9 @@ public class AiChangeReviewTests
             Assert.That(File.Exists(exe), Is.True, "Publish win-x64 before running this functional test.");
             var start = new ProcessStartInfo(exe)
             {
-                WorkingDirectory = root, RedirectStandardOutput = true, RedirectStandardError = true,
+                WorkingDirectory = root,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
                 UseShellExecute = false
             };
             foreach (var arg in new[] { script, "-t", _repo, "-c", "ai", "--scope", "branch", "--base", "HEAD",
@@ -534,9 +550,10 @@ public class AiChangeReviewTests
         var path = Path.Combine(_repo, "architecture.md");
         File.WriteAllText(path, text);
         var provider = new MarkdownProvider();
-        var collections = (Dictionary<string, List<object>>)provider.Query(new ProviderQuery { RootPath = path })!;
+        var collections = (Dictionary<string, List<object>>)
+            (await provider.QueryAsync(new ProviderQuery { RootPath = path }))!;
         var raw = new DataObject("Object", collections.ToDictionary(pair => pair.Key, pair => (object?)pair.Value));
-        return (DataObject)(await provider.GetFunctions()!["toContent"]([new List<object?> { raw }]))!;
+        return (DataObject)(await provider.GetFunctions()!["toContent"]([new List<object?> { raw }],CancellationToken.None))!;
     }
 
     private Task<List<DataObject>> Judge() => Judge(Codebase("Example.cs"));
@@ -544,7 +561,7 @@ public class AiChangeReviewTests
     private async Task<List<DataObject>> Judge(DataObject codebase)
     {
         var context = new AnalysisContext(_repo, new ReviewOptions { Scope = "branch", Base = "HEAD", AiConfigPath = _config }, _logs.Add);
-        var result = await new AiProvider().GetFunctions(context)!["judge"](["Totals must reflect input.", codebase]);
+        var result = await new AiProvider().GetFunctions(context)!["judge"](["Totals must reflect input.", codebase],CancellationToken.None);
         return ((IEnumerable<object?>)result!).Cast<DataObject>().ToList();
     }
 
@@ -583,7 +600,9 @@ public class AiChangeReviewTests
     {
         var start = new ProcessStartInfo("git")
         {
-            WorkingDirectory = _repo, RedirectStandardOutput = true, RedirectStandardError = true,
+            WorkingDirectory = _repo,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
             UseShellExecute = false
         };
         foreach (var argument in args) start.ArgumentList.Add(argument);
@@ -676,9 +695,15 @@ public class AiChangeReviewTests
         public void Dispose()
         {
             _stop.Cancel();
-            _listener.Stop();
-            _server.GetAwaiter().GetResult();
-            _stop.Dispose();
+            try
+            {
+                _server.GetAwaiter().GetResult();
+            }
+            finally
+            {
+                _listener.Stop();
+                _stop.Dispose();
+            }
         }
     }
 }

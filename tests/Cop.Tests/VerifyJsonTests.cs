@@ -13,6 +13,61 @@ namespace Cop.Tests;
 public class VerifyJsonTests
 {
     [Test]
+    public void VerificationPreservesCallerCancellation()
+    {
+        using CancellationTokenSource cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+        OperationCanceledException failure = new OperationCanceledException(cancellation.Token);
+
+        OperationCanceledException? actual = Assert.Throws<OperationCanceledException>(() =>
+            VerifyCommand.CollectDiagnostics(
+                ["input.cop"], TestContext.CurrentContext.WorkDirectory, _ => throw failure));
+
+        Assert.That(actual, Is.SameAs(failure));
+    }
+
+    [Test]
+    public void VerificationDoesNotDisguiseUnexpectedReaderFailuresAsSourceErrors()
+    {
+        InvalidOperationException failure = new InvalidOperationException("reader defect");
+
+        InvalidOperationException? actual = Assert.Throws<InvalidOperationException>(() =>
+            VerifyCommand.CollectDiagnostics(
+                ["input.cop"], TestContext.CurrentContext.WorkDirectory, _ => throw failure));
+
+        Assert.That(actual, Is.SameAs(failure));
+    }
+
+    [Test]
+    public void VerificationReportsFileReadFailures()
+    {
+        List<Cop.Lang.CopDiagnostic> diagnostics = VerifyCommand.CollectDiagnostics(
+            ["input.cop"], TestContext.CurrentContext.WorkDirectory,
+            _ => throw new IOException("source is unavailable"));
+
+        Assert.That(diagnostics.Select(diagnostic =>
+                (diagnostic.Severity, diagnostic.FilePath, diagnostic.Message)),
+            Is.EqualTo(new[]
+            {
+                (Cop.Lang.CopDiagnosticSeverity.Error, "input.cop", "source is unavailable")
+            }));
+    }
+
+    [Test]
+    public void EditorModelLoadingPreservesCallerCancellation()
+    {
+        using CancellationTokenSource cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+        OperationCanceledException failure = new OperationCanceledException(cancellation.Token);
+
+        OperationCanceledException? actual = Assert.Throws<OperationCanceledException>(() =>
+            VerifyCommand.LoadProgramModules(
+                ["input.cop"], TestContext.CurrentContext.WorkDirectory, _ => throw failure));
+
+        Assert.That(actual, Is.SameAs(failure));
+    }
+
+    [Test]
     public void Verify_Json_EmitsStructuredDiagnostics_ForAnError()
     {
         var dir = Path.Combine(Path.GetTempPath(), "cop-verifyjson-" + Guid.NewGuid().ToString("N")[..8]);
@@ -25,7 +80,11 @@ public class VerifyJsonTests
             var sw = new StringWriter();
             Console.SetOut(sw);
             int exit;
-            try { exit = VerifyCommand.Execute(file, json: true); }
+            try
+            {
+                exit = VerifyCommand.Execute(
+                    file, new VerificationOptions { IsJsonOutputEnabled = true });
+            }
             finally { Console.SetOut(original); }
 
             Assert.That(exit, Is.EqualTo(1), "an error must yield exit code 1");
@@ -60,7 +119,11 @@ public class VerifyJsonTests
             var sw = new StringWriter();
             Console.SetOut(sw);
             int exit;
-            try { exit = VerifyCommand.Execute(dir, json: true); }
+            try
+            {
+                exit = VerifyCommand.Execute(
+                    dir, new VerificationOptions { IsJsonOutputEnabled = true });
+            }
             finally { Console.SetOut(original); }
 
             Assert.That(exit, Is.EqualTo(0));

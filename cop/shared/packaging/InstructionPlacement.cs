@@ -1,3 +1,5 @@
+// Chooses project locations for generated agent instruction files.
+
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -22,7 +24,7 @@ namespace Cop.Core;
 /// </summary>
 public static class InstructionPlacement
 {
-    private static readonly UTF8Encoding Utf8NoBom = new(encoderShouldEmitUTF8Identifier: false);
+    private static readonly UTF8Encoding s_utf8NoBom = new(encoderShouldEmitUTF8Identifier: false);
 
     /// <summary>
     /// Builds the combined instruction content (front-matter + bodies) for the given files.
@@ -31,14 +33,14 @@ public static class InstructionPlacement
     /// </summary>
     public static string BuildContent(string applyTo, IReadOnlyList<(string FileName, string Content)> files)
     {
-        var glob = string.IsNullOrWhiteSpace(applyTo) ? "**" : applyTo.Trim();
+        string glob = string.IsNullOrWhiteSpace(applyTo) ? "**" : applyTo.Trim();
 
-        var sb = new StringBuilder();
+        StringBuilder sb = new StringBuilder();
         sb.Append("---\n");
         sb.Append("applyTo: '").Append(glob.Replace("'", "''")).Append("'\n");
         sb.Append("---\n\n");
 
-        var bodies = files
+        List<string> bodies = files
             .OrderBy(f => f.FileName, StringComparer.OrdinalIgnoreCase)
             .Select(f => StripFrontmatter(f.Content))
             .Where(b => b.Length > 0)
@@ -55,34 +57,38 @@ public static class InstructionPlacement
     /// Returns the target path (whether or not a write occurred), or <c>null</c> when there are no
     /// instruction files. The write is skipped when the existing file is byte-identical.
     /// </summary>
-    /// <param name="wrote">True when the file was created or its content changed.</param>
+    /// <param name="wasWritten">True when the file was created or its content changed.</param>
     public static string? Place(
         string repoRoot,
         string packageName,
         string applyTo,
         IReadOnlyList<(string FileName, string Content)> files,
-        out bool wrote)
+        out bool wasWritten)
     {
-        wrote = false;
+        wasWritten = false;
         if (files == null || files.Count == 0)
+        {
             return null;
+        }
 
-        var instructionsDir = Path.Combine(repoRoot, ".github", "instructions");
-        var targetPath = Path.Combine(instructionsDir, $"{packageName}.instructions.md");
+        string instructionsDir = Path.Combine(repoRoot, ".github", "instructions");
+        string targetPath = Path.Combine(instructionsDir, $"{packageName}.instructions.md");
 
-        var content = BuildContent(applyTo, files);
-        var bytes = Utf8NoBom.GetBytes(content);
+        string content = BuildContent(applyTo, files);
+        byte[] bytes = s_utf8NoBom.GetBytes(content);
 
         if (File.Exists(targetPath))
         {
-            var existing = File.ReadAllBytes(targetPath);
+            byte[] existing = File.ReadAllBytes(targetPath);
             if (existing.AsSpan().SequenceEqual(bytes))
+            {
                 return targetPath; // unchanged — leave the working tree alone
+            }
         }
 
         Directory.CreateDirectory(instructionsDir);
         File.WriteAllBytes(targetPath, bytes);
-        wrote = true;
+        wasWritten = true;
         return targetPath;
     }
 
@@ -91,28 +97,35 @@ public static class InstructionPlacement
     /// and <c>cop.json</c> from disk and places them. Returns the target path or <c>null</c> when the
     /// package has no instructions.
     /// </summary>
-    public static string? PlaceFromPackageDir(string repoRoot, string packageDir, out bool wrote)
+    public static string? PlaceFromPackageDir(string repoRoot, string packageDir, out bool wasWritten)
     {
-        wrote = false;
-        var instrDir = Path.Combine(packageDir, "instructions");
+        wasWritten = false;
+        string instrDir = Path.Combine(packageDir, "instructions");
         if (!Directory.Exists(instrDir))
+        {
             return null;
+        }
 
-        var mdFiles = Directory.GetFiles(instrDir, "*.md", SearchOption.TopDirectoryOnly);
+        string[] mdFiles = Directory.GetFiles(instrDir, "*.md", SearchOption.TopDirectoryOnly);
         if (mdFiles.Length == 0)
+        {
             return null;
+        }
 
-        var meta = PackageMetadata.TryLoadFromDirectory(packageDir);
-        var name = meta?.Name;
+        PackageMetadata? meta = PackageMetadata.LoadFromDirectoryOrDefault(packageDir);
+        string? name = meta?.Name;
         if (string.IsNullOrEmpty(name))
+        {
             name = Path.GetFileName(packageDir.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
-        var applyTo = meta?.ApplyTo ?? string.Empty;
+        }
 
-        var files = mdFiles
+        string applyTo = meta?.ApplyTo ?? string.Empty;
+
+        List<(string, string)> files = mdFiles
             .Select(f => (Path.GetFileName(f), File.ReadAllText(f)))
             .ToList();
 
-        return Place(repoRoot, name!, applyTo, files, out wrote);
+        return Place(repoRoot, name!, applyTo, files, out wasWritten);
     }
 
     /// <summary>
@@ -123,20 +136,28 @@ public static class InstructionPlacement
     public static string StripFrontmatter(string raw)
     {
         if (string.IsNullOrEmpty(raw))
+        {
             return string.Empty;
+        }
 
-        var text = raw.Replace("\r\n", "\n").Replace("\r", "\n").TrimStart('\uFEFF');
+        string text = raw.Replace("\r\n", "\n").Replace("\r", "\n").TrimStart('\uFEFF');
         if (!text.StartsWith("---\n", StringComparison.Ordinal))
+        {
             return text.Trim();
+        }
 
         // Find the closing '---' delimiter line.
         int close = text.IndexOf("\n---", 4, StringComparison.Ordinal);
         if (close < 0)
+        {
             return text.Trim();
+        }
 
         int bodyStart = text.IndexOf('\n', close + 1);
         if (bodyStart < 0)
+        {
             return string.Empty; // closing delimiter at EOF, no body
+        }
 
         return text.Substring(bodyStart + 1).Trim();
     }

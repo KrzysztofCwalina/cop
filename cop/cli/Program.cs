@@ -1,8 +1,12 @@
+// Dispatches CLI entry points, resolves run targets, and coordinates command execution.
+
 using System.CommandLine;
 using System.CommandLine.Help;
+using System.CommandLine.Parsing;
 using System.Diagnostics;
 using System.Linq;
 using Cop.Cli.Commands;
+using Cop.Lang.Ast;
 using Cop.Repl;
 
 // Diagnostic verbosity from -d / -dd / -ddd (replaces the former COP_*_DIAG / COP_TRACE / COP_PARSE_DIAG env vars).
@@ -13,18 +17,24 @@ bool diag = diagLevel >= 1;
 // --ai-log <path> replaces the former COP_AI_LOG env var.
 int aiLogIdx = Array.IndexOf(args, "--ai-log");
 if (aiLogIdx >= 0 && aiLogIdx + 1 < args.Length)
+{
     Cop.Core.CopDiagnostics.AiLogPath = args[aiLogIdx + 1];
+}
 
 // --no-color replaces the former NO_COLOR env var (color is also auto-disabled for non-terminal output).
 if (args.Contains("--no-color"))
+{
     ConsoleMarkdown.NoColor = true;
+}
 
 // --no-user-checks replaces the former COP_NO_USER_CHECKS env var.
 if (args.Contains("--no-user-checks"))
-    RunCommand.NoUserChecks = true;
+{
+    RunCommand.ShouldSkipUserChecks = true;
+}
 
 // Known verbs (subcommands) — anything else is treated as a program to run
-var knownVerbs = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+HashSet<string> knownVerbs = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
 {
     "run", "test", "syntax", "verify", "langserver", "lock", "unlock", "help", "package", "repl", "init", "update", "vscode"
 };
@@ -34,12 +44,14 @@ var knownVerbs = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
 // suppressed for help/version/update and for an unknown/misspelled command, so a typo prints
 // only the "unknown command" error instead of a stale post-update summary.
 if (!Console.IsErrorRedirected && StartupNotices.ShouldShow(args, knownVerbs, ResolvesToRunnable))
-    VersionNotifier.Notify();
+{
+    await VersionNotifier.NotifyAsync();
+}
 
 long clrStartupMs = 0;
 if (diag)
 {
-    var process = Process.GetCurrentProcess();
+    Process process = Process.GetCurrentProcess();
     clrStartupMs = (long)(DateTime.UtcNow - process.StartTime.ToUniversalTime()).TotalMilliseconds;
     Console.Error.WriteLine($"[diag] Process startup: {clrStartupMs}ms");
 }
@@ -69,21 +81,21 @@ if (args.Length >= 2 && knownVerbs.Contains(args[0]) &&
 if (args[0] == "help")
 {
     string? helpArg = args.Length >= 2 ? args[1] : null;
-    return HelpCommand.Execute(helpArg);
+    return await HelpCommand.ExecuteAsync(helpArg);
 }
 
 // cop init — generate agent instruction files
 if (args[0] == "init")
 {
-    var knownInitOptions = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "--claude", "--al", "--ag", "--ch", "--checks", "--cop-cmd" };
+    HashSet<string> knownInitOptions = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "--claude", "--al", "--ag", "--ch", "--checks", "--cop-cmd" };
 
     // Extract the --cop-cmd value (supports "--cop-cmd <value>" and "--cop-cmd=<value>")
     // before the unknown-option scan, so its value is never mistaken for an option.
     string? copCmd = null;
-    var initArgs = args.Skip(1).ToArray();
+    string[] initArgs = args.Skip(1).ToArray();
     for (int i = 0; i < initArgs.Length; i++)
     {
-        var arg = initArgs[i];
+        string arg = initArgs[i];
         if (arg.Equals("--cop-cmd", StringComparison.OrdinalIgnoreCase))
         {
             if (i + 1 >= initArgs.Length)
@@ -108,33 +120,46 @@ if (args[0] == "init")
     // cop init --checks — shell out to a coding agent to convert existing instructions into cop rules
     if (args.Contains("--checks"))
     {
-        return ChecksCommand.Execute(args.Contains("--claude"));
+        return await ChecksCommand.ExecuteAsync(
+            args.Contains("--claude") ? InstructionAgent.Claude : InstructionAgent.Copilot);
     }
     bool localHook = args.Contains("--al");
     bool globalHook = args.Contains("--ag");
     bool copilotHook = args.Contains("--ch");
     // Default generates GitHub Copilot instructions; --claude (or a Claude hook flag) switches to Claude Code.
     bool claude = args.Contains("--claude") || localHook || globalHook;
-    return InitCommand.Execute(claude, localHook, globalHook, copilotHook, copCmd);
+    return InitCommand.Execute(new InitializationOptions
+    {
+        Agent = claude ? InstructionAgent.Claude : InstructionAgent.Copilot,
+        IsLocalHookEnabled = localHook,
+        IsGlobalHookEnabled = globalHook,
+        IsCopilotHookEnabled = copilotHook,
+        CopCommand = copCmd
+    });
 }
 
 // cop update — self-update from GitHub releases
 if (args[0] == "update")
 {
-    return UpdateCommand.Execute(args.Contains("--force") || args.Contains("-f"), args.Contains("--local"));
+    return await UpdateCommand.ExecuteAsync(new UpdateOptions
+    {
+        IsForced = args.Contains("--force") || args.Contains("-f"),
+        IsLocal = args.Contains("--local")
+    });
 }
 
 // cop vscode — install VS Code extension
 if (args[0] == "vscode")
 {
-    return VscodeCommand.Execute();
+    return await VscodeCommand.ExecuteAsync();
 }
 
 // Explicit run: `cop run <package|file.cop|url|command>` resolves and runs anything,
 // including auto-restoring a package from a feed.
 if (args[0].Equals("run", StringComparison.OrdinalIgnoreCase))
 {
-    return ResolveAndRun(args.Length > 1 ? args[1..] : Array.Empty<string>(), diag, allowPackages: true);
+    return await ResolveAndRunAsync(
+        args.Length > 1 ? args[1..] : Array.Empty<string>(), diag, allowPackages: true);
 }
 
 // Bare `cop <name>` for a non-verb, non-switch token: run a local .cop file, URL, or a
@@ -143,23 +168,31 @@ if (args[0].Equals("run", StringComparison.OrdinalIgnoreCase))
 // a confusing "package not found" feed restore.
 if (!knownVerbs.Contains(args[0]) && !args[0].StartsWith('-') && !args[0].StartsWith('/'))
 {
-    return ResolveAndRun(args, diag, allowPackages: false);
+    return await ResolveAndRunAsync(args, diag, allowPackages: false);
 }
 
-var rootCommand = new RootCommand
+RootCommand rootCommand = new RootCommand
 {
     Description = HelpCommand.Banner
 };
 
 // Keep parser help aliases consistent with the manually dispatched commands.
-var defaultHelp = rootCommand.Options.FirstOrDefault(o => o is HelpOption);
-if (defaultHelp != null) rootCommand.Options.Remove(defaultHelp);
+Option? defaultHelp = rootCommand.Options.FirstOrDefault(o => o is HelpOption);
+if (defaultHelp != null)
+{
+    rootCommand.Options.Remove(defaultHelp);
+}
+
 rootCommand.Options.Add(new HelpOption("-h", "--help", "-help", "-?", "/?"));
 
 // Replace built-in --version with -v/--version
-var defaultVersion = rootCommand.Options.FirstOrDefault(o => o is VersionOption);
-if (defaultVersion != null) rootCommand.Options.Remove(defaultVersion);
-var versionOption = new VersionOption("-v", "--version");
+Option? defaultVersion = rootCommand.Options.FirstOrDefault(o => o is VersionOption);
+if (defaultVersion != null)
+{
+    rootCommand.Options.Remove(defaultVersion);
+}
+
+VersionOption versionOption = new VersionOption("-v", "--version");
 rootCommand.Options.Add(versionOption);
 
 rootCommand.Add(TestCommand.Create());
@@ -170,16 +203,16 @@ rootCommand.Add(LockCommand.Create());
 rootCommand.Add(UnlockCommand.Create());
 
 // cop repl — launch interactive REPL
-var replCommand = new Command("repl", "Launch interactive REPL");
-replCommand.SetAction(_ =>
+Command replCommand = new Command("repl", "Launch interactive REPL");
+replCommand.SetAction(async (_, cancellationToken) =>
 {
-    var scriptsDir = Directory.GetCurrentDirectory();
-    var session = new ReplSession(scriptsDir, scriptsDir);
-    return session.Run();
+    string scriptsDir = Directory.GetCurrentDirectory();
+    await using ReplSession session = new ReplSession(scriptsDir, scriptsDir);
+    return await session.RunAsync(cancellationToken);
 });
 rootCommand.Add(replCommand);
 
-var packageCommand = new Command("package", "Manage cop packages");
+Command packageCommand = new Command("package", "Manage cop packages");
 packageCommand.Add(PackageListCommand.Create());
 packageCommand.Add(ListCommand.Create());
 packageCommand.Add(RestoreCommand.Create());
@@ -190,19 +223,24 @@ packageCommand.Add(SearchCommand.Create());
 packageCommand.Add(FeedCommand.Create());
 rootCommand.Add(packageCommand);
 
-var parseResult = rootCommand.Parse(args);
+ParseResult parseResult = rootCommand.Parse(args);
 // The parser's command tree excludes manually dispatched verbs, so its root help is incomplete.
 if (parseResult.CommandResult.Command == rootCommand && parseResult.Action != versionOption.Action &&
     (args.Any(IsHelpFlag) || parseResult.Errors.Count > 0))
 {
     bool helpRequested = args.Any(IsHelpFlag);
     if (!helpRequested)
-        foreach (var error in parseResult.Errors)
+    {
+        foreach (ParseError error in parseResult.Errors)
+        {
             WriteError(error.Message);
+        }
+    }
+
     CliHelp.PrintMainHelp();
     return helpRequested ? 0 : 1;
 }
-return parseResult.Invoke();
+return await parseResult.InvokeAsync();
 
 /// <summary>
 /// Resolves and runs a target: a local .cop file, an HTTPS URL, a local UPPERCASE command,
@@ -210,7 +248,7 @@ return parseResult.Invoke();
 /// auto-restored from a feed. When packages aren't allowed and nothing else matches, prints a
 /// clear "Unknown command" error instead of attempting a package restore.
 /// </summary>
-static int ResolveAndRun(string[] runArgs, bool diag, bool allowPackages)
+static async Task<int> ResolveAndRunAsync(string[] runArgs, bool diag, bool allowPackages)
 {
     Cop.Core.ReviewOptions reviewOptions;
     try
@@ -232,7 +270,7 @@ static int ResolveAndRun(string[] runArgs, bool diag, bool allowPackages)
         return 2;
     }
 
-    var firstArg = runArgs[0];
+    string firstArg = runArgs[0];
 
     // Local programs and remote scripts share option parsing.
     if (firstArg.EndsWith(".cop", StringComparison.OrdinalIgnoreCase) ||
@@ -247,27 +285,66 @@ static int ResolveAndRun(string[] runArgs, bool diag, bool allowPackages)
         bool copDiag = diag;
         bool copOnlyIfModified = false;
         bool copProfile = false;
-        var copProviders = new List<string>();
-        var programArgs = new List<string>();
-        var remaining = runArgs.Length > 1 ? runArgs[1..] : Array.Empty<string>();
+        List<string> copProviders = new List<string>();
+        List<string> programArgs = new List<string>();
+        string[] remaining = runArgs.Length > 1 ? runArgs[1..] : Array.Empty<string>();
         for (int i = 0; i < remaining.Length; i++)
         {
-            if (remaining[i] == "-t" && i + 1 < remaining.Length) copTarget = remaining[++i];
-            else if (remaining[i] == "-f" && i + 1 < remaining.Length) copFormat = remaining[++i];
-            else if (remaining[i] == "-c" && i + 1 < remaining.Length) copCommands = remaining[++i];
-            else if (remaining[i] == "-p" && i + 1 < remaining.Length) copProviders.Add(remaining[++i]);
-            else if (remaining[i] == "-d" || remaining[i] == "-dd" || remaining[i] == "-ddd") copDiag = true;
-            else if (remaining[i] == "-om") copOnlyIfModified = true;
-            else if (remaining[i] == "-rp") copProfile = true;
+            if (remaining[i] == "-t" && i + 1 < remaining.Length)
+            {
+                copTarget = remaining[++i];
+            }
+            else if (remaining[i] == "-f" && i + 1 < remaining.Length)
+            {
+                copFormat = remaining[++i];
+            }
+            else if (remaining[i] == "-c" && i + 1 < remaining.Length)
+            {
+                copCommands = remaining[++i];
+            }
+            else if (remaining[i] == "-p" && i + 1 < remaining.Length)
+            {
+                copProviders.Add(remaining[++i]);
+            }
+            else if (remaining[i] == "-d" || remaining[i] == "-dd" || remaining[i] == "-ddd")
+            {
+                copDiag = true;
+            }
+            else if (remaining[i] == "-om")
+            {
+                copOnlyIfModified = true;
+            }
+            else if (remaining[i] == "-rp")
+            {
+                copProfile = true;
+            }
             else if (remaining[i] == "--no-color" || remaining[i] == "--no-user-checks") { /* handled globally */ }
-            else if (remaining[i] == "--ai-log" && i + 1 < remaining.Length) i++; // value consumed globally
-            else programArgs.Add(remaining[i]);
+            else if (remaining[i] == "--ai-log" && i + 1 < remaining.Length)
+            {
+                i++; // value consumed globally
+            }
+            else
+            {
+                programArgs.Add(remaining[i]);
+            }
         }
-        return RunCommand.Execute(firstArg, programArgs.Count > 0 ? programArgs.ToArray() : null, copTarget, copFormat, copCommands, copDiag, copOnlyIfModified, copProviders.Count > 0 ? copProviders.ToArray() : null, copProfile, reviewOptions);
+        return await RunCommand.ExecuteAsync(firstArg, new RunOptions
+        {
+            Arguments = programArgs.Count > 0 ? programArgs : null,
+            Target = copTarget,
+            OutputFormat = copFormat,
+            CommandNames = string.IsNullOrEmpty(copCommands) ? null : copCommands.Split(
+                ',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries),
+            IsDiagnosticEnabled = copDiag,
+            ShouldSkipUnmodifiedTargets = copOnlyIfModified,
+            ProviderNames = copProviders.Count > 0 ? copProviders : null,
+            IsRuleProfilingEnabled = copProfile,
+            ReviewOptions = reviewOptions
+        });
     }
 
     // 4. Otherwise → treat all leading non-switch args as package names
-    var packages = runArgs.TakeWhile(a => !a.StartsWith('-') && !a.StartsWith('/')).ToArray();
+    string[] packages = runArgs.TakeWhile(a => !a.StartsWith('-') && !a.StartsWith('/')).ToArray();
 
     if (packages.Length == 0)
     {
@@ -282,7 +359,7 @@ static int ResolveAndRun(string[] runArgs, bool diag, bool allowPackages)
         return UnknownCommandError(packages);
     }
 
-    var remainingArgs = runArgs.Skip(packages.Length).ToArray();
+    string[] remainingArgs = runArgs.Skip(packages.Length).ToArray();
 
     // Parse common options from remaining args
     string? target = null;
@@ -290,23 +367,52 @@ static int ResolveAndRun(string[] runArgs, bool diag, bool allowPackages)
     string? format = "text";
     bool isDiag = diag;
     bool isOnlyIfModified = false;
-    var pkgProviders = new List<string>();
+    List<string> pkgProviders = new List<string>();
     for (int i = 0; i < remainingArgs.Length; i++)
     {
-        if (remainingArgs[i] == "-t" && i + 1 < remainingArgs.Length) target = remainingArgs[++i];
-        else if (remainingArgs[i] == "-c" && i + 1 < remainingArgs.Length) rules = remainingArgs[++i];
-        else if (remainingArgs[i] == "-f" && i + 1 < remainingArgs.Length) format = remainingArgs[++i];
-        else if (remainingArgs[i] == "-p" && i + 1 < remainingArgs.Length) pkgProviders.Add(remainingArgs[++i]);
-        else if (remainingArgs[i] == "-d" || remainingArgs[i] == "-dd" || remainingArgs[i] == "-ddd") isDiag = true;
-        else if (remainingArgs[i] == "-om") isOnlyIfModified = true;
+        if (remainingArgs[i] == "-t" && i + 1 < remainingArgs.Length)
+        {
+            target = remainingArgs[++i];
+        }
+        else if (remainingArgs[i] == "-c" && i + 1 < remainingArgs.Length)
+        {
+            rules = remainingArgs[++i];
+        }
+        else if (remainingArgs[i] == "-f" && i + 1 < remainingArgs.Length)
+        {
+            format = remainingArgs[++i];
+        }
+        else if (remainingArgs[i] == "-p" && i + 1 < remainingArgs.Length)
+        {
+            pkgProviders.Add(remainingArgs[++i]);
+        }
+        else if (remainingArgs[i] == "-d" || remainingArgs[i] == "-dd" || remainingArgs[i] == "-ddd")
+        {
+            isDiag = true;
+        }
+        else if (remainingArgs[i] == "-om")
+        {
+            isOnlyIfModified = true;
+        }
     }
 
     string rootPath = target != null ? Path.GetFullPath(target) : Directory.GetCurrentDirectory();
     string[]? rulesFilter = null;
     if (!string.IsNullOrEmpty(rules))
+    {
         rulesFilter = rules.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+    }
 
-    return RunCommand.ExecutePackages(packages, rootPath, rulesFilter, format, isDiag, isOnlyIfModified, pkgProviders.Count > 0 ? pkgProviders.ToArray() : null, reviewOptions);
+    return await RunCommand.ExecutePackagesAsync(packages, new RunOptions
+    {
+        Target = rootPath,
+        CommandNames = rulesFilter,
+        OutputFormat = format,
+        IsDiagnosticEnabled = isDiag,
+        ShouldSkipUnmodifiedTargets = isOnlyIfModified,
+        ProviderNames = pkgProviders.Count > 0 ? pkgProviders : null,
+        ReviewOptions = reviewOptions
+    });
 }
 
 static bool IsHelpFlag(string arg) => arg is "-h" or "--help" or "-help" or "-?" or "/?";
@@ -314,13 +420,20 @@ static bool IsHelpFlag(string arg) => arg is "-h" or "--help" or "-help" or "-?"
 static bool RequestsManualHelp(string[] commandArgs)
 {
     if (commandArgs[0] is not ("init" or "update" or "vscode"))
+    {
         return false;
+    }
+
     for (int i = 1; i < commandArgs.Length; i++)
     {
         if (commandArgs[0] == "init" && commandArgs[i].Equals("--cop-cmd", StringComparison.OrdinalIgnoreCase))
+        {
             i++;
+        }
         else if (IsHelpFlag(commandArgs[i]))
+        {
             return true;
+        }
     }
     return false;
 }
@@ -331,12 +444,14 @@ static bool RequestsManualHelp(string[] commandArgs)
 /// </summary>
 static int UnknownCommandError(string[] tokens)
 {
-    var name = tokens.Length > 0 ? tokens[0] : "";
+    string name = tokens.Length > 0 ? tokens[0] : "";
     WriteError($"unknown command '{name}'.");
 
-    var suggestion = SuggestVerb(name);
+    string? suggestion = SuggestVerb(name);
     if (suggestion != null)
+    {
         Console.Error.WriteLine($"did you mean 'cop {suggestion}'?");
+    }
 
     Console.Error.WriteLine($"to run a package, use: cop run {string.Join(' ', tokens)}");
     Console.Error.WriteLine("run 'cop -h' to see available commands.");
@@ -354,7 +469,7 @@ static void WriteError(string message)
 {
     if (!Console.IsErrorRedirected && !ConsoleMarkdown.NoColor)
     {
-        var prev = Console.ForegroundColor;
+        ConsoleColor prev = Console.ForegroundColor;
         Console.ForegroundColor = ConsoleColor.Red;
         Console.Error.Write("error: ");
         Console.ForegroundColor = prev;
@@ -375,8 +490,8 @@ static string? SuggestVerb(string input)
     string[] verbs = { "run", "test", "syntax", "verify", "langserver", "lock", "unlock", "help", "package", "repl", "init", "update", "vscode" };
     string? best = null;
     int bestDist = int.MaxValue;
-    var lower = input.ToLowerInvariant();
-    foreach (var v in verbs)
+    string lower = input.ToLowerInvariant();
+    foreach (string v in verbs)
     {
         int d = Levenshtein(lower, v);
         if (d < bestDist) { bestDist = d; best = v; }
@@ -387,15 +502,26 @@ static string? SuggestVerb(string input)
 
 static int Levenshtein(string a, string b)
 {
-    var d = new int[a.Length + 1, b.Length + 1];
-    for (int i = 0; i <= a.Length; i++) d[i, 0] = i;
-    for (int j = 0; j <= b.Length; j++) d[0, j] = j;
+    int[,] d = new int[a.Length + 1, b.Length + 1];
+    for (int i = 0; i <= a.Length; i++)
+    {
+        d[i, 0] = i;
+    }
+
+    for (int j = 0; j <= b.Length; j++)
+    {
+        d[0, j] = j;
+    }
+
     for (int i = 1; i <= a.Length; i++)
+    {
         for (int j = 1; j <= b.Length; j++)
         {
             int cost = a[i - 1] == b[j - 1] ? 0 : 1;
             d[i, j] = Math.Min(Math.Min(d[i - 1, j] + 1, d[i, j - 1] + 1), d[i - 1, j - 1] + cost);
         }
+    }
+
     return d[a.Length, b.Length];
 }
 
@@ -407,13 +533,21 @@ static int Levenshtein(string a, string b)
 /// </summary>
 static bool ResolvesToRunnable(string token)
 {
-    if (token.EndsWith(".cop", StringComparison.OrdinalIgnoreCase)) return true;
+    if (token.EndsWith(".cop", StringComparison.OrdinalIgnoreCase))
+    {
+        return true;
+    }
+
     if (token.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
-        token.StartsWith("https://", StringComparison.OrdinalIgnoreCase)) return true;
+        token.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+    {
+        return true;
+    }
+
     try
     {
-        var cwd = Directory.GetCurrentDirectory();
-        var localCopFiles = Directory.GetFiles(cwd, "*.cop", SearchOption.TopDirectoryOnly);
+        string cwd = Directory.GetCurrentDirectory();
+        string[] localCopFiles = Directory.GetFiles(cwd, "*.cop", SearchOption.TopDirectoryOnly);
         return localCopFiles.Length > 0 && IsLocalCommand(token, localCopFiles);
     }
     catch
@@ -427,19 +561,24 @@ static bool ResolvesToRunnable(string token)
 /// </summary>
 static bool IsLocalCommand(string name, string[] copFiles)
 {
-    foreach (var file in copFiles)
+    foreach (string file in copFiles)
     {
         try
         {
-            var source = File.ReadAllText(file);
-            var module = Cop.Lang.Parser.CopParser.Parse(source, file);
-            foreach (var decl in module.Declarations)
+            string source = File.ReadAllText(file);
+            ModuleNode module = Cop.Lang.Parser.CopParser.Parse(source, file);
+            foreach (Declaration decl in module.Declarations)
             {
                 if (decl is Cop.Lang.Ast.CommandDecl cmd && cmd.Name.Equals(name, StringComparison.OrdinalIgnoreCase))
+                {
                     return true;
+                }
+
                 if (decl is Cop.Lang.Ast.FunctionDecl func && func.IsCommand
                     && func.Name.Equals(name, StringComparison.OrdinalIgnoreCase))
+                {
                     return true;
+                }
             }
         }
         catch { }

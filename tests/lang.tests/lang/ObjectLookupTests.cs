@@ -9,14 +9,14 @@ namespace Cop.Tests.Lang;
 [TestFixture]
 public class ObjectLookupTests
 {
-    private static CopValue Evaluate(string expression, CopValue value)
+    private static async Task<CopValue> EvaluateAsync(string expression, CopValue value, CancellationToken cancellationToken = default)
     {
         var ffi = new ForeignFunctionRegistry();
         StandardLibrary.Register(ffi);
         var evaluator = new Evaluator(ffi);
         evaluator.GlobalEnvironment.Define("value", value);
-        evaluator.EvalModule(CopParser.Parse($"command MAIN = {expression}", "test.cop"));
-        return evaluator.RunCommand("MAIN");
+        await evaluator.EvalModuleAsync(CopParser.Parse($"command MAIN = {expression}", "test.cop"), cancellationToken: cancellationToken);
+        return (await evaluator.RunCommandAsync("MAIN", cancellationToken: cancellationToken));
     }
 
     private static CopValue CreateObject(string kind) => kind switch
@@ -53,30 +53,30 @@ public class ObjectLookupTests
     [TestCase("data")]
     [TestCase("record")]
     [TestCase("clr")]
-    public void Get_RespectsExplicitCaseSensitivity(string kind)
+    public async Task Get_RespectsExplicitCaseSensitivity(string kind)
     {
         var value = CreateObject(kind);
-        Assert.That(Evaluate("value.Get('name')", value).Display(), Is.EqualTo("Ada"));
-        Assert.That(Evaluate("value.Get('name', false)", value).Display(), Is.EqualTo("Ada"));
-        Assert.That(Evaluate("value.Get('Name', true)", value).Display(), Is.EqualTo("Ada"));
-        Assert.That(Evaluate("value.Get('name', true)", value), Is.SameAs(CopNull.Instance));
-        Assert.That(Evaluate("value.Get('Missing', false)", value), Is.SameAs(CopNull.Instance));
+        Assert.That((await (await EvaluateAsync("value.Get('name')", value, cancellationToken: CancellationToken.None)).DisplayAsync(cancellationToken: CancellationToken.None)), Is.EqualTo("Ada"));
+        Assert.That((await (await EvaluateAsync("value.Get('name', false)", value, cancellationToken: CancellationToken.None)).DisplayAsync(cancellationToken: CancellationToken.None)), Is.EqualTo("Ada"));
+        Assert.That((await (await EvaluateAsync("value.Get('Name', true)", value, cancellationToken: CancellationToken.None)).DisplayAsync(cancellationToken: CancellationToken.None)), Is.EqualTo("Ada"));
+        Assert.That((await EvaluateAsync("value.Get('name', true)", value, cancellationToken: CancellationToken.None)), Is.SameAs(CopNull.Instance));
+        Assert.That((await EvaluateAsync("value.Get('Missing', false)", value, cancellationToken: CancellationToken.None)), Is.SameAs(CopNull.Instance));
     }
 
     [TestCase("literal")]
     [TestCase("data")]
     [TestCase("record")]
     [TestCase("clr")]
-    public void ContainsKey_UsesExistenceRegardlessOfValue(string kind)
+    public async Task ContainsKey_UsesExistenceRegardlessOfValue(string kind)
     {
         var value = CreateObject(kind);
         foreach (var key in new[] { "Name", "Empty", "Count", "Enabled", "empty" })
-            Assert.That(Evaluate($"value:containsKey('{key}')", value), Is.EqualTo(CopBool.True), key);
-        Assert.That(Evaluate("value:containsKey('Missing')", value), Is.EqualTo(CopBool.False));
+            Assert.That((await EvaluateAsync($"value:containsKey('{key}')", value, cancellationToken: CancellationToken.None)), Is.EqualTo(CopBool.True), key);
+        Assert.That((await EvaluateAsync("value:containsKey('Missing')", value, cancellationToken: CancellationToken.None)), Is.EqualTo(CopBool.False));
     }
 
     [Test]
-    public void ContainsKey_DoesNotEvaluatePropertyGetter()
+    public async Task ContainsKey_DoesNotEvaluatePropertyGetter()
     {
         var value = new CopDynamicObject(new object(), new ClrObjectAdapter(
             new Dictionary<string, Func<object, object?>>
@@ -84,13 +84,13 @@ public class ObjectLookupTests
                 ["Value"] = _ => throw new InvalidOperationException("Getter must not run.")
             }));
 
-        Assert.That(Evaluate("value:containsKey('Value')", value), Is.EqualTo(CopBool.True));
+        Assert.That((await EvaluateAsync("value:containsKey('Value')", value, cancellationToken: CancellationToken.None)), Is.EqualTo(CopBool.True));
     }
 
     [Test]
     public void Get_RejectsNonBooleanCaseSensitivity()
     {
-        Assert.Throws<CopEvaluationException>(() =>
-            Evaluate("value.Get('Name', 'true')", CreateObject("literal")));
+        Assert.ThrowsAsync<CopEvaluationException>(async () =>
+            await EvaluateAsync("value.Get('Name', 'true')", CreateObject("literal"), cancellationToken: CancellationToken.None));
     }
 }

@@ -41,7 +41,7 @@ public class DocumentedOperationsExecutionTests
         }
         """;
 
-    private static IReadOnlyList<string> Run(string program, bool withCSharpFixture = false)
+    private static async Task<IReadOnlyList<string>> Run(string program, bool withCSharpFixture = false)
     {
         var root = Path.Combine(TestContext.CurrentContext.WorkDirectory,
             "documented-operations", Guid.NewGuid().ToString("N"));
@@ -55,7 +55,10 @@ public class DocumentedOperationsExecutionTests
             if (withCSharpFixture)
                 File.WriteAllText(Path.Combine(target, "Fixture.cs"), FixtureCSharp);
 
-            var result = Engine.Run(scripts, target, additionalFeedPaths: [PackagesDir]);
+            var result = (await Engine.RunAsync(scripts, target, new EngineRunOptions
+            {
+                AdditionalFeedPaths = [PackagesDir],
+            }));
 
             Assert.That(result.HasParseErrors, Is.False, string.Join(Environment.NewLine, result.ParseErrors));
             Assert.That(result.HasFatalErrors, Is.False, string.Join(Environment.NewLine, result.Errors));
@@ -70,9 +73,9 @@ public class DocumentedOperationsExecutionTests
     // ---- Collection aggregates ------------------------------------------------------------------
 
     [Test]
-    public void Aggregates_SumMinMaxAverage_OverMethodParameterCounts()
+    public async Task Aggregates_SumMinMaxAverage_OverMethodParameterCounts()
     {
-        var outputs = Run("""
+        var outputs = (await Run("""
             import code
             import csharp
             let cb = csharp.parse()
@@ -81,64 +84,64 @@ public class DocumentedOperationsExecutionTests
                 print(cb.Methods.Min(item.Parameters.Count)) &
                 print(cb.Methods.Max(item.Parameters.Count)) &
                 print(cb.Methods.Average(item.Parameters.Count))
-            """, withCSharpFixture: true);
+            """, withCSharpFixture: true));
 
         Assert.That(outputs, Is.EqualTo(new[] { "4", "0", "2", "1" }));
     }
 
     [Test]
-    public void Distinct_ByKeyExpression_DeduplicatesParameterCounts()
+    public async Task Distinct_ByKeyExpression_DeduplicatesParameterCounts()
     {
-        var outputs = Run("""
+        var outputs = (await Run("""
             import code
             import csharp
             let cb = csharp.parse()
             command main = print(cb.Methods.Distinct(item.Parameters.Count).Count)
-            """, withCSharpFixture: true);
+            """, withCSharpFixture: true));
 
         // Distinct param counts present are {0, 1, 2}.
         Assert.That(outputs, Is.EqualTo(new[] { "3" }));
     }
 
     [Test]
-    public void GroupBy_GroupsItemsWithKeyAndCount()
+    public async Task GroupBy_GroupsItemsWithKeyAndCount()
     {
-        var outputs = Run("""
+        var outputs = (await Run("""
             import code
             import csharp
             let cb = csharp.parse()
             command main = foreach cb.Methods.GroupBy(item.Parameters.Count).OrderBy(item.Key)
                 => '{item.Key}:{item.Count}'
-            """, withCSharpFixture: true);
+            """, withCSharpFixture: true));
 
         // 0 params: N1 (1); 1 param: M1,M3 (2); 2 params: M2 (1).
         Assert.That(outputs, Is.EqualTo(new[] { "0:1", "1:2", "2:1" }));
     }
 
     [Test]
-    public void Reduce_StringOperator_SumsNumbersAndJoinsStrings()
+    public async Task Reduce_StringOperator_SumsNumbersAndJoinsStrings()
     {
-        var outputs = Run("""
+        var outputs = (await Run("""
             import code
             import csharp
             let cb = csharp.parse()
             command main =
                 print(cb.Methods.Reduce('+', item.Parameters.Count)) &
                 print(cb.Types.OrderBy(item.Name).Reduce('+', item.Name, ', '))
-            """, withCSharpFixture: true);
+            """, withCSharpFixture: true));
 
         Assert.That(outputs, Is.EqualTo(new[] { "4", "Alpha, Beta" }));
     }
 
     [Test]
-    public void CollectionText_RendersTemplatePerItemAndJoins()
+    public async Task CollectionText_RendersTemplatePerItemAndJoins()
     {
-        var outputs = Run("""
+        var outputs = (await Run("""
             import code
             import csharp
             let cb = csharp.parse()
             command main = print(cb.Types.OrderBy(item.Name).Text('{item.Name}'))
-            """, withCSharpFixture: true);
+            """, withCSharpFixture: true));
 
         Assert.That(outputs, Has.Count.EqualTo(1));
         Assert.That(outputs[0], Does.Contain("Alpha"));
@@ -146,12 +149,12 @@ public class DocumentedOperationsExecutionTests
     }
 
     [Test]
-    public void ScalarText_ConvertsValueToText()
+    public async Task ScalarText_ConvertsValueToText()
     {
-        var outputs = Run("""
+        var outputs = (await Run("""
             let n = 42
             command main = print(Text(n)) & print(n:Text)
-            """);
+            """));
 
         Assert.That(outputs, Is.EqualTo(new[] { "42", "42" }));
     }
@@ -159,9 +162,9 @@ public class DocumentedOperationsExecutionTests
     // ---- Collection transforms / queries --------------------------------------------------------
 
     [Test]
-    public void SelectWhereOrderByElementAtFirstLast_ProduceExactResults()
+    public async Task SelectWhereOrderByElementAtFirstLast_ProduceExactResults()
     {
-        var outputs = Run("""
+        var outputs = (await Run("""
             import code
             import csharp
             let cb = csharp.parse()
@@ -171,7 +174,7 @@ public class DocumentedOperationsExecutionTests
                 print(cb.Types.OrderBy(item.Name).ElementAt(1).Name) &
                 print(cb.Types.OrderByDescending(item.Name).First.Name) &
                 print(cb.Types.Where(item.Name == 'Alpha').Count)
-            """, withCSharpFixture: true);
+            """, withCSharpFixture: true));
 
         Assert.That(outputs, Is.EqualTo(new[] { "Alpha", "Beta", "Beta", "Beta", "1" }));
     }
@@ -179,13 +182,13 @@ public class DocumentedOperationsExecutionTests
     // ---- String transforms ----------------------------------------------------------------------
 
     [Test]
-    public void StringTransforms_TrimSuffixAndReplaceSubstring()
+    public async Task StringTransforms_TrimSuffixAndReplaceSubstring()
     {
-        var outputs = Run("""
+        var outputs = (await Run("""
             command main =
                 print('GetItemAsync'.Trim('Async')) &
                 print('GetItem'.Replace('Get', 'Set'))
-            """);
+            """));
 
         Assert.That(outputs, Is.EqualTo(new[] { "GetItem", "SetItem" }));
     }
@@ -193,9 +196,9 @@ public class DocumentedOperationsExecutionTests
     // ---- Numeric / string predicates ------------------------------------------------------------
 
     [Test]
-    public void NumericPredicates_AndAliases_MatchLanguageOperators()
+    public async Task NumericPredicates_AndAliases_MatchLanguageOperators()
     {
-        var outputs = Run("""
+        var outputs = (await Run("""
             let nums = [5 10 20 30]
             command main =
                 print(nums.Where(item:greaterThan(15)).Count) &
@@ -216,7 +219,7 @@ public class DocumentedOperationsExecutionTests
                 print(le(2, 1)) &
                 print(greaterThan('20', 3)) &
                 print(gt(true, 0))
-            """);
+            """));
 
         Assert.That(outputs, Is.EqualTo(new[]
         {
@@ -226,9 +229,9 @@ public class DocumentedOperationsExecutionTests
     }
 
     [Test]
-    public void CorePackage_ExplicitImportUsesTheSameImplementations()
+    public async Task CorePackage_ExplicitImportUsesTheSameImplementations()
     {
-        var outputs = Run("""
+        var outputs = (await Run("""
             import core
             command main =
                 print(Path('a.cs', '**/*.cs')) &
@@ -238,15 +241,15 @@ public class DocumentedOperationsExecutionTests
                 print({ Name = 'Ada' }.Get('name', false)) &
                 print({ Value = nic }:containsKey('Value')) &
                 print('BlobClient':sameAs('blob_client'))
-            """);
+            """));
 
         Assert.That(outputs, Is.EqualTo(new[] { "true", "true", "true", "true", "Ada", "true", "true" }));
     }
 
     [Test]
-    public void NumericPredicates_FilterMethodsByParameterCount()
+    public async Task NumericPredicates_FilterMethodsByParameterCount()
     {
-        var outputs = Run("""
+        var outputs = (await Run("""
             import code
             import csharp
             let cb = csharp.parse()
@@ -256,32 +259,32 @@ public class DocumentedOperationsExecutionTests
                 print(cb.Methods.Where(item.Parameters.Count:lessThan(1)).Count) &
                 print(cb.Methods.Where(item.Parameters.Count:lessOrEqual(1)).Count) &
                 print(cb.Methods.Where(item.Parameters.Count:notEquals(0)).Count)
-            """, withCSharpFixture: true);
+            """, withCSharpFixture: true));
 
         // counts: >=2 → M2 (1); >1 → M2 (1); <1 → N1 (1); <=1 → M1,M3,N1 (3); !=0 → M1,M2,M3 (3).
         Assert.That(outputs, Is.EqualTo(new[] { "1", "1", "1", "3", "3" }));
     }
 
     [Test]
-    public void StringPredicates_SameAsAndNotEquals()
+    public async Task StringPredicates_SameAsAndNotEquals()
     {
-        var outputs = Run("""
+        var outputs = (await Run("""
             import code
             import csharp
             let cb = csharp.parse()
             command main =
                 print(cb.Types.Where(item.Name:sameAs('alpha')).Count) &
                 print(cb.Types.Where(item.Name:notEquals('Alpha')).Count)
-            """, withCSharpFixture: true);
+            """, withCSharpFixture: true));
 
         // sameAs is convention-insensitive → 'alpha' matches 'Alpha' (1); notEquals 'Alpha' → Beta (1).
         Assert.That(outputs, Is.EqualTo(new[] { "1", "1" }));
     }
 
     [Test]
-    public void SameAs_UsesNormalizedForms()
+    public async Task SameAs_UsesNormalizedForms()
     {
-        var outputs = Run("""
+        var outputs = (await Run("""
             command main =
                 print(sameAs('BlobClient', 'blob_client')) &
                 print('BlobClient':sameAs('blob-client')) &
@@ -289,7 +292,7 @@ public class DocumentedOperationsExecutionTests
                 print('BlobClient'.sameAs('QueueClient')) &
                 print(sameAs('', '_- ')) &
                 print('BlobClient'.sameAs('Blob.Client'))
-            """);
+            """));
 
         Assert.That(outputs, Is.EqualTo(new[] { "true", "true", "true", "false", "true", "false" }));
     }
@@ -297,9 +300,9 @@ public class DocumentedOperationsExecutionTests
     // ---- Object operations ----------------------------------------------------------------------
 
     [Test]
-    public void ObjectOperations_GetContainsKeyKeysValuesCount()
+    public async Task ObjectOperations_GetContainsKeyKeysValuesCount()
     {
-        var outputs = Run("""
+        var outputs = (await Run("""
             let p = { Name = 'Alice' Age = 42 }
             command main =
                 print(p.Get('Name')) &
@@ -308,15 +311,15 @@ public class DocumentedOperationsExecutionTests
                 print(p.Keys.Count) &
                 print(p.Values.Count) &
                 print(p.Count)
-            """);
+            """));
 
         Assert.That(outputs, Is.EqualTo(new[] { "Alice", "true", "false", "2", "2", "2" }));
     }
 
     [Test]
-    public void ObjectOperations_GetCaseSensitivityAndNullValuedKey()
+    public async Task ObjectOperations_GetCaseSensitivityAndNullValuedKey()
     {
-        var outputs = Run("""
+        var outputs = (await Run("""
             let p = { Name = 'Alice' Value = nic Enabled = false Count = 0 }
             let key = 'name'
             command main =
@@ -329,7 +332,7 @@ public class DocumentedOperationsExecutionTests
                 print(p:containsKey('Enabled')) &
                 print(p:containsKey('Count')) &
                 print(p:containsKey('Missing'))
-            """);
+            """));
 
         Assert.That(outputs, Is.EqualTo(new[]
         {
@@ -338,9 +341,9 @@ public class DocumentedOperationsExecutionTests
     }
 
     [Test]
-    public void ProviderObject_GetRespectsCaseSensitivity()
+    public async Task ProviderObject_GetRespectsCaseSensitivity()
     {
-        var outputs = Run("""
+        var outputs = (await Run("""
             import code
             import csharp
             let cb = csharp.parse()
@@ -351,52 +354,52 @@ public class DocumentedOperationsExecutionTests
                 print(first.Get('name', true) == nic) &
                 print(first:containsKey('name')) &
                 print(cb.Types.Where(item.Name:sameAs('AL_PHA')).Count)
-            """, withCSharpFixture: true);
+            """, withCSharpFixture: true));
 
         Assert.That(outputs, Is.EqualTo(new[] { "Alpha", "Alpha", "true", "true", "1" }));
     }
     // ---- Glob / regex built-ins -----------------------------------------------------------------
 
     [Test]
-    public void PathMatches_HandlesStarDoubleStarAndQuestionGlobs()
+    public async Task PathMatches_HandlesStarDoubleStarAndQuestionGlobs()
     {
-        var outputs = Run("""
+        var outputs = (await Run("""
             command main =
                 print(pathMatches('a/b/c.cs', '**/*.cs')) &
                 print(pathMatches('c.cs', '*.cs')) &
                 print(pathMatches('c.cs', '?.cs')) &
                 print(pathMatches('a/b.txt', '**/*.cs'))
-            """);
+            """));
 
         Assert.That(outputs, Is.EqualTo(new[] { "true", "true", "true", "false" }));
     }
 
     [Test]
-    public void PathWrapper_MatchesExistingGlobFunction()
+    public async Task PathWrapper_MatchesExistingGlobFunction()
     {
-        var outputs = Run("""
+        var outputs = (await Run("""
             command main =
                 print(Path('a/b/c.cs', '**/*.cs')) &
                 print('c.cs':Path('?.cs')) &
                 print('a/b.txt':Path('**/*.cs')) &
                 print(Path('a/b/c.cs', '**/*.cs') == pathMatches('a/b/c.cs', '**/*.cs')) &
                 print(Path('A/B.CS', '**/*.cs') == pathMatches('A/B.CS', '**/*.cs'))
-            """);
+            """));
 
         Assert.That(outputs, Is.EqualTo(new[] { "true", "true", "false", "true", "true" }));
     }
 
     [Test]
-    public void PathAndMatchesBuiltins_FilterFilesAndMethods()
+    public async Task PathAndMatchesBuiltins_FilterFilesAndMethods()
     {
-        var outputs = Run("""
+        var outputs = (await Run("""
             import code
             import csharp
             let cb = csharp.parse()
             command main =
                 print(cb.Methods.Where(item.Name:Matches('M.')).Count) &
                 print(cb.Files.Where(item.Path:Path('**/*.cs')).Count)
-            """, withCSharpFixture: true);
+            """, withCSharpFixture: true));
 
         // Matches('M.') → M1,M2,M3 (3); Path('**/*.cs') → the single Fixture.cs (1).
         Assert.That(outputs, Is.EqualTo(new[] { "3", "1" }));
@@ -405,16 +408,16 @@ public class DocumentedOperationsExecutionTests
     // ---- Collection combinators -----------------------------------------------------------------
 
     [Test]
-    public void Concat_PipeAndFunctionFormsCombineCollections()
+    public async Task Concat_PipeAndFunctionFormsCombineCollections()
     {
-        var outputs = Run("""
+        var outputs = (await Run("""
             import code
             import csharp
             let cb = csharp.parse()
             command main =
                 print(cb.Types:concat(cb.Types).Count) &
                 print(concat(cb.Types, cb.Types).Count)
-            """, withCSharpFixture: true);
+            """, withCSharpFixture: true));
 
         Assert.That(outputs, Is.EqualTo(new[] { "4", "4" }));
     }
@@ -422,9 +425,9 @@ public class DocumentedOperationsExecutionTests
     // ---- Error handling -------------------------------------------------------------------------
 
     [Test]
-    public void IsError_DetectsErrorValuesAsFilterAndFunction()
+    public async Task IsError_DetectsErrorValuesAsFilterAndFunction()
     {
-        var outputs = Run("""
+        var outputs = (await Run("""
             command main =
                 print([error('boom')]:isError.Count) &
                 print(['ok' error('x')]:isError.Count) &
@@ -434,13 +437,13 @@ public class DocumentedOperationsExecutionTests
                 print(isError({ Type = 'Result' Message = 'ok' })) &
                 print(isError(42)) &
                 print(isError(nic))
-            """);
+            """));
 
         Assert.That(outputs, Is.EqualTo(new[] { "1", "1", "true", "false", "true", "false", "false", "false" }));
     }
 
     [Test]
-    public void Fail_TerminatesWithFatalDiagnostic()
+    public async Task Fail_TerminatesWithFatalDiagnostic()
     {
         var root = Path.Combine(TestContext.CurrentContext.WorkDirectory,
             "documented-operations", Guid.NewGuid().ToString("N"));
@@ -452,7 +455,10 @@ public class DocumentedOperationsExecutionTests
         {
             File.WriteAllText(Path.Combine(scripts, "program.cop"), "command main = fail('boom')");
 
-            var result = Engine.Run(scripts, target, additionalFeedPaths: [PackagesDir]);
+            var result = (await Engine.RunAsync(scripts, target, new EngineRunOptions
+            {
+                AdditionalFeedPaths = [PackagesDir],
+            }));
 
             Assert.That(result.HasFatalErrors, Is.True, "fail() must terminate with a fatal error");
             Assert.That(string.Join(" ", result.Errors), Does.Contain("boom"));

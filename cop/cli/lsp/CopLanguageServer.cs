@@ -1,7 +1,10 @@
+// Handles language-server protocol requests for Cop documents.
+
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Cop.Lang;
+using Cop.Lang.Interpreter;
 
 namespace Cop.Cli.Lsp;
 
@@ -24,7 +27,7 @@ internal sealed class CopLanguageServer
     private readonly Dictionary<string, string> _documents = new(StringComparer.Ordinal);
     private bool _shutdownRequested;
 
-    private static readonly JsonSerializerOptions JsonOpts = new()
+    private static readonly JsonSerializerOptions s_jsonOptions = new()
     {
         Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping
     };
@@ -45,21 +48,47 @@ internal sealed class CopLanguageServer
             {
                 msg = ReadMessage();
             }
-            catch (Exception ex)
+            catch (JsonException ex)
             {
                 Log($"failed to read message: {ex.Message}");
+                RespondError(null, -32700, $"Invalid JSON: {ex.Message}");
                 continue;
             }
-            if (msg is null) break; // stream closed
+            catch (IOException ex)
+            {
+                Log($"failed to read message: {ex.Message}");
+                return 1;
+            }
+            if (msg is null)
+            {
+                break; // stream closed
+            }
 
             try
             {
-                var exitCode = Dispatch(msg);
-                if (exitCode.HasValue) return exitCode.Value;
+                int? exitCode = Dispatch(msg);
+                if (exitCode.HasValue)
+                {
+                    return exitCode.Value;
+                }
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or
+                FormatException or JsonException)
             {
-                Log($"error handling '{msg["method"]?.GetValue<string>()}': {ex.Message}");
+                Log($"invalid request: {ex.Message}");
+                if (msg["id"] is JsonNode id)
+                {
+                    RespondError(id, -32602, $"Invalid parameters: {ex.Message}");
+                }
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or
+                System.Security.SecurityException or ParseException or CopEvaluationException)
+            {
+                Log($"request failed: {ex.Message}");
+                if (msg["id"] is JsonNode id)
+                {
+                    RespondError(id, -32603, ex.Message);
+                }
             }
         }
         // Stream closed without an explicit exit: 0 if shutdown was requested, else 1 per LSP.
@@ -68,8 +97,8 @@ internal sealed class CopLanguageServer
 
     private int? Dispatch(JsonObject msg)
     {
-        var method = msg["method"]?.GetValue<string>();
-        var id = msg["id"];
+        string? method = msg["method"]?.GetValue<string>();
+        JsonNode? id = msg["id"];
 
         switch (method)
         {
@@ -109,7 +138,10 @@ internal sealed class CopLanguageServer
                 // Unknown request must get a response so the client does not hang; ignore unknown
                 // notifications (those have no id).
                 if (id is not null)
+                {
                     RespondError(id, -32601, $"method not found: {method}");
+                }
+
                 break;
         }
         return null;
@@ -117,7 +149,7 @@ internal sealed class CopLanguageServer
 
     private static JsonObject BuildInitializeResult()
     {
-        var version = typeof(CopLanguageServer).Assembly.GetName().Version?.ToString() ?? "0";
+        string version = typeof(CopLanguageServer).Assembly.GetName().Version?.ToString() ?? "0";
         return new JsonObject
         {
             ["capabilities"] = new JsonObject
@@ -147,38 +179,59 @@ internal sealed class CopLanguageServer
 
     private void OnDidOpen(JsonObject? p)
     {
-        var td = p?["textDocument"] as JsonObject;
-        var uri = td?["uri"]?.GetValue<string>();
-        var text = td?["text"]?.GetValue<string>();
-        if (uri is null || text is null) return;
+        JsonObject? td = p?["textDocument"] as JsonObject;
+        string? uri = td?["uri"]?.GetValue<string>();
+        string? text = td?["text"]?.GetValue<string>();
+        if (uri is null || text is null)
+        {
+            return;
+        }
+
         _documents[uri] = text;
         PublishDiagnostics(uri, text);
     }
 
     private void OnDidChange(JsonObject? p)
     {
-        var uri = (p?["textDocument"] as JsonObject)?["uri"]?.GetValue<string>();
-        var changes = p?["contentChanges"] as JsonArray;
-        if (uri is null || changes is null || changes.Count == 0) return;
+        string? uri = (p?["textDocument"] as JsonObject)?["uri"]?.GetValue<string>();
+        JsonArray? changes = p?["contentChanges"] as JsonArray;
+        if (uri is null || changes is null || changes.Count == 0)
+        {
+            return;
+        }
         // Full-sync: the last change carries the whole document text.
-        var text = (changes[^1] as JsonObject)?["text"]?.GetValue<string>();
-        if (text is null) return;
+        string? text = (changes[^1] as JsonObject)?["text"]?.GetValue<string>();
+        if (text is null)
+        {
+            return;
+        }
+
         _documents[uri] = text;
         PublishDiagnostics(uri, text);
     }
 
     private void OnDidSave(JsonObject? p)
     {
-        var uri = (p?["textDocument"] as JsonObject)?["uri"]?.GetValue<string>();
-        if (uri is null) return;
-        if (_documents.TryGetValue(uri, out var text))
+        string? uri = (p?["textDocument"] as JsonObject)?["uri"]?.GetValue<string>();
+        if (uri is null)
+        {
+            return;
+        }
+
+        if (_documents.TryGetValue(uri, out string? text))
+        {
             PublishDiagnostics(uri, text);
+        }
     }
 
     private void OnDidClose(JsonObject? p)
     {
-        var uri = (p?["textDocument"] as JsonObject)?["uri"]?.GetValue<string>();
-        if (uri is null) return;
+        string? uri = (p?["textDocument"] as JsonObject)?["uri"]?.GetValue<string>();
+        if (uri is null)
+        {
+            return;
+        }
+
         _documents.Remove(uri);
         // Clear diagnostics for the closed document.
         PublishDiagnosticsRaw(uri, new JsonArray());
@@ -188,8 +241,8 @@ internal sealed class CopLanguageServer
 
     private void PublishDiagnostics(string uri, string text)
     {
-        var path = UriToPath(uri);
-        var arr = new JsonArray();
+        string? path = UriToPath(uri);
+        JsonArray arr = new JsonArray();
         if (path is not null)
         {
             List<CopDiagnostic> diags;
@@ -197,20 +250,24 @@ internal sealed class CopLanguageServer
             {
                 diags = CopLanguageService.Analyze(path, text);
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or
+                System.Security.SecurityException or ParseException or CopEvaluationException)
             {
                 Log($"analyze failed for {uri}: {ex.Message}");
-                diags = [];
+                diags = [new CopDiagnostic(
+                    CopDiagnosticSeverity.Error, $"Analysis failed: {ex.Message}", path)];
             }
-            foreach (var d in diags)
+            foreach (CopDiagnostic d in diags)
+            {
                 arr.Add(ToLspDiagnostic(d, text));
+            }
         }
         PublishDiagnosticsRaw(uri, arr);
     }
 
     private void PublishDiagnosticsRaw(string uri, JsonArray diagnostics)
     {
-        var notif = new JsonObject
+        JsonObject notif = new JsonObject
         {
             ["jsonrpc"] = "2.0",
             ["method"] = "textDocument/publishDiagnostics",
@@ -229,9 +286,13 @@ internal sealed class CopLanguageServer
         int startChar = d.Column is > 0 ? d.Column.Value - 1 : 0;
         int endChar;
         if (d.Length is > 0)
+        {
             endChar = startChar + d.Length.Value;
+        }
         else
+        {
             endChar = Math.Max(startChar + 1, LineLength(documentText, line));
+        }
 
         int severity = d.Severity switch
         {
@@ -241,7 +302,7 @@ internal sealed class CopLanguageServer
             _ => 1
         };
 
-        var message = d.Suggestion is { Length: > 0 }
+        string message = d.Suggestion is { Length: > 0 }
             ? $"{d.Message}\n{d.Suggestion}"
             : d.Message;
 
@@ -260,7 +321,11 @@ internal sealed class CopLanguageServer
 
     private static int LineLength(string text, int lineIndex)
     {
-        if (lineIndex < 0) return 1;
+        if (lineIndex < 0)
+        {
+            return 1;
+        }
+
         int current = 0;
         int start = 0;
         for (int i = 0; i <= text.Length; i++)
@@ -271,7 +336,11 @@ internal sealed class CopLanguageServer
                 {
                     int len = i - start;
                     // Trim a trailing \r from CRLF line endings.
-                    if (len > 0 && i > 0 && text[i - 1] == '\r') len--;
+                    if (len > 0 && i > 0 && text[i - 1] == '\r')
+                    {
+                        len--;
+                    }
+
                     return Math.Max(1, len);
                 }
                 current++;
@@ -285,30 +354,34 @@ internal sealed class CopLanguageServer
 
     private JsonNode? BuildHover(JsonObject? p)
     {
-        var uri = (p?["textDocument"] as JsonObject)?["uri"]?.GetValue<string>();
-        var pos = p?["position"] as JsonObject;
-        if (uri is null || pos is null) return null;
+        string? uri = (p?["textDocument"] as JsonObject)?["uri"]?.GetValue<string>();
+        JsonObject? pos = p?["position"] as JsonObject;
+        if (uri is null || pos is null)
+        {
+            return null;
+        }
+
         int line = pos["line"]?.GetValue<int>() ?? 0;
         int character = pos["character"]?.GetValue<int>() ?? 0;
 
-        var path = UriToPath(uri);
-        if (path is null) return null;
-        // Prefer the in-memory buffer; fall back to disk if the document isn't open.
-        var text = _documents.TryGetValue(uri, out var t) ? t
-                 : (File.Exists(path) ? File.ReadAllText(path) : null);
-        if (text is null) return null;
-
-        string? markdown;
-        try
+        string? path = UriToPath(uri);
+        if (path is null)
         {
-            markdown = CopLanguageService.Hover(path, text, line, character);
-        }
-        catch (Exception ex)
-        {
-            Log($"hover failed for {uri}: {ex.Message}");
             return null;
         }
-        if (markdown is null) return null;
+        // Prefer the in-memory buffer; fall back to disk if the document isn't open.
+        string? text = _documents.TryGetValue(uri, out string? t) ? t
+                 : (File.Exists(path) ? File.ReadAllText(path) : null);
+        if (text is null)
+        {
+            return null;
+        }
+
+        string? markdown = CopLanguageService.Hover(path, text, line, character);
+        if (markdown is null)
+        {
+            return null;
+        }
 
         return new JsonObject
         {
@@ -322,65 +395,76 @@ internal sealed class CopLanguageServer
 
     private JsonNode? BuildCompletion(JsonObject? p)
     {
-        var uri = (p?["textDocument"] as JsonObject)?["uri"]?.GetValue<string>();
-        var pos = p?["position"] as JsonObject;
-        if (uri is null || pos is null) return new JsonArray();
-        int line = pos["line"]?.GetValue<int>() ?? 0;
-        int character = pos["character"]?.GetValue<int>() ?? 0;
-
-        var path = UriToPath(uri);
-        if (path is null) return new JsonArray();
-        var text = _documents.TryGetValue(uri, out var t) ? t
-                 : (File.Exists(path) ? File.ReadAllText(path) : null);
-        if (text is null) return new JsonArray();
-
-        IReadOnlyList<CompletionEntry> entries;
-        try
+        string? uri = (p?["textDocument"] as JsonObject)?["uri"]?.GetValue<string>();
+        JsonObject? pos = p?["position"] as JsonObject;
+        if (uri is null || pos is null)
         {
-            entries = CopLanguageService.Complete(path, text, line, character);
-        }
-        catch (Exception ex)
-        {
-            Log($"completion failed for {uri}: {ex.Message}");
             return new JsonArray();
         }
 
-        var items = new JsonArray();
-        foreach (var e in entries)
+        int line = pos["line"]?.GetValue<int>() ?? 0;
+        int character = pos["character"]?.GetValue<int>() ?? 0;
+
+        string? path = UriToPath(uri);
+        if (path is null)
+        {
+            return new JsonArray();
+        }
+
+        string? text = _documents.TryGetValue(uri, out string? t) ? t
+                 : (File.Exists(path) ? File.ReadAllText(path) : null);
+        if (text is null)
+        {
+            return new JsonArray();
+        }
+
+        IReadOnlyList<CompletionEntry> entries =
+            CopLanguageService.Complete(path, text, line, character);
+
+        JsonArray items = new JsonArray();
+        foreach (CompletionEntry e in entries)
+        {
             items.Add(new JsonObject
             {
                 ["label"] = e.Label,
                 ["detail"] = e.Detail,
                 ["kind"] = e.Kind
             });
+        }
+
         return items;
     }
 
     private JsonNode? BuildDefinition(JsonObject? p)
     {
-        var uri = (p?["textDocument"] as JsonObject)?["uri"]?.GetValue<string>();
-        var pos = p?["position"] as JsonObject;
-        if (uri is null || pos is null) return null;
+        string? uri = (p?["textDocument"] as JsonObject)?["uri"]?.GetValue<string>();
+        JsonObject? pos = p?["position"] as JsonObject;
+        if (uri is null || pos is null)
+        {
+            return null;
+        }
+
         int line = pos["line"]?.GetValue<int>() ?? 0;
         int character = pos["character"]?.GetValue<int>() ?? 0;
 
-        var path = UriToPath(uri);
-        if (path is null) return null;
-        var text = _documents.TryGetValue(uri, out var t) ? t
-                 : (File.Exists(path) ? File.ReadAllText(path) : null);
-        if (text is null) return null;
-
-        DefinitionLocation? loc;
-        try
+        string? path = UriToPath(uri);
+        if (path is null)
         {
-            loc = CopLanguageService.Definition(path, text, line, character);
-        }
-        catch (Exception ex)
-        {
-            Log($"definition failed for {uri}: {ex.Message}");
             return null;
         }
-        if (loc is null) return null;
+
+        string? text = _documents.TryGetValue(uri, out string? t) ? t
+                 : (File.Exists(path) ? File.ReadAllText(path) : null);
+        if (text is null)
+        {
+            return null;
+        }
+
+        DefinitionLocation? loc = CopLanguageService.Definition(path, text, line, character);
+        if (loc is null)
+        {
+            return null;
+        }
 
         return new JsonObject
         {
@@ -400,43 +484,68 @@ internal sealed class CopLanguageServer
         int contentLength = -1;
         while (true)
         {
-            var headerLine = ReadHeaderLine();
-            if (headerLine is null) return null;     // EOF
-            if (headerLine.Length == 0) break;        // blank line ends the headers
+            string? headerLine = ReadHeaderLine();
+            if (headerLine is null)
+            {
+                return null;     // EOF
+            }
+
+            if (headerLine.Length == 0)
+            {
+                break;        // blank line ends the headers
+            }
+
             int colon = headerLine.IndexOf(':');
             if (colon > 0)
             {
-                var name = headerLine[..colon].Trim();
-                var value = headerLine[(colon + 1)..].Trim();
+                string name = headerLine[..colon].Trim();
+                string value = headerLine[(colon + 1)..].Trim();
                 if (string.Equals(name, "Content-Length", StringComparison.OrdinalIgnoreCase))
+                {
                     int.TryParse(value, out contentLength);
+                }
             }
         }
-        if (contentLength < 0) return null;
+        if (contentLength < 0)
+        {
+            return null;
+        }
 
-        var buffer = new byte[contentLength];
+        byte[] buffer = new byte[contentLength];
         int read = 0;
         while (read < contentLength)
         {
             int n = _input.Read(buffer, read, contentLength - read);
-            if (n <= 0) return null; // stream closed mid-message
+            if (n <= 0)
+            {
+                return null; // stream closed mid-message
+            }
+
             read += n;
         }
-        var json = Encoding.UTF8.GetString(buffer);
-        return JsonNode.Parse(json) as JsonObject;
+        string json = Encoding.UTF8.GetString(buffer);
+        return JsonNode.Parse(json) as JsonObject
+            ?? throw new JsonException("A JSON-RPC message must be an object.");
     }
 
     private string? ReadHeaderLine()
     {
-        var bytes = new List<byte>(64);
+        List<byte> bytes = new List<byte>(64);
         while (true)
         {
             int b = _input.ReadByte();
-            if (b == -1) return bytes.Count == 0 ? null : Encoding.ASCII.GetString([.. bytes]);
+            if (b == -1)
+            {
+                return bytes.Count == 0 ? null : Encoding.ASCII.GetString([.. bytes]);
+            }
+
             if (b == '\n')
             {
                 if (bytes.Count > 0 && bytes[^1] == (byte)'\r')
+                {
                     bytes.RemoveAt(bytes.Count - 1);
+                }
+
                 return Encoding.ASCII.GetString([.. bytes]);
             }
             bytes.Add((byte)b);
@@ -445,9 +554,9 @@ internal sealed class CopLanguageServer
 
     private void WriteMessage(JsonObject message)
     {
-        var json = message.ToJsonString(JsonOpts);
-        var body = Encoding.UTF8.GetBytes(json);
-        var header = Encoding.ASCII.GetBytes($"Content-Length: {body.Length}\r\n\r\n");
+        string json = message.ToJsonString(s_jsonOptions);
+        byte[] body = Encoding.UTF8.GetBytes(json);
+        byte[] header = Encoding.ASCII.GetBytes($"Content-Length: {body.Length}\r\n\r\n");
         lock (_writeLock)
         {
             _output.Write(header, 0, header.Length);
@@ -478,8 +587,16 @@ internal sealed class CopLanguageServer
 
     private static string? UriToPath(string uri)
     {
-        if (!Uri.TryCreate(uri, UriKind.Absolute, out var parsed)) return null;
-        if (!parsed.IsFile) return null;
+        if (!Uri.TryCreate(uri, UriKind.Absolute, out Uri? parsed))
+        {
+            return null;
+        }
+
+        if (!parsed.IsFile)
+        {
+            return null;
+        }
+
         return parsed.LocalPath;
     }
 

@@ -61,7 +61,8 @@ public class CSharpProjectDiscoveryTests
     [TestCase("Top.cs.extra", "*.cs", true, false)]
     public void SourcePathGlobsPreserveSegmentAndRecursiveMatching(string path, string pattern, bool ignoreCase, bool expected)
     {
-        Assert.That(Cop.Core.PathGlob.IsMatch(path, pattern, ignoreCase), Is.EqualTo(expected));
+        Assert.That(Cop.Core.PathGlob.IsMatch(path, pattern,
+            ignoreCase ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal), Is.EqualTo(expected));
     }
 
     [Test]

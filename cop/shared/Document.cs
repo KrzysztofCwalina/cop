@@ -1,3 +1,5 @@
+// Wraps a provider-owned document with its path and language identity.
+
 namespace Cop.Lang;
 
 /// <summary>
@@ -7,5 +9,8 @@ namespace Cop.Lang;
 /// </summary>
 public record Document(string Path, string Language, object Inner)
 {
+    /// <summary>Returns the provider-owned document as the requested CLR type.</summary>
+    /// <typeparam name="T">Expected CLR type of the wrapped document.</typeparam>
+    /// <returns>The wrapped document, cast to the requested type.</returns>
     public T As<T>() => (T)Inner;
 }

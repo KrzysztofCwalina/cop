@@ -1,3 +1,5 @@
+// Parses XML documents into source-linked element and attribute collections.
+
 using System.Collections.Concurrent;
 using System.Xml;
 using System.Xml.Linq;
@@ -12,11 +14,12 @@ namespace Cop.Providers.Xml;
 /// </summary>
 public sealed class XmlProvider : DataProvider
 {
-    public override ReadOnlyMemory<byte> GetSchema() => _schema.ToJson();
+    /// <inheritdoc />
+    public override ReadOnlyMemory<byte> GetSchema() => s_schema.ToJson();
 
-    private static readonly ProviderSchema _schema = BuildSchema();
+    private static readonly ProviderSchema s_schema = BuildSchema();
 
-    private static readonly HashSet<string> XmlExtensions = new(StringComparer.OrdinalIgnoreCase)
+    private static readonly HashSet<string> s_xmlExtensions = new(StringComparer.OrdinalIgnoreCase)
         { ".xml", ".csproj", ".props", ".targets", ".config", ".nuspec" };
 
     private static ProviderSchema BuildSchema()
@@ -46,8 +49,9 @@ public sealed class XmlProvider : DataProvider
     private static ProviderPropertySchema Prop(string name, string type = "string")
         => new() { Name = name, Type = type };
     private static ProviderPropertySchema Opt(string name, string type = "string")
-        => new() { Name = name, Type = type, Optional = true };
+        => new() { Name = name, Type = type, IsOptional = true };
 
+    /// <inheritdoc />
     public override RuntimeBindings GetRuntimeBindings()
     {
         return new RuntimeBindings
@@ -66,99 +70,135 @@ public sealed class XmlProvider : DataProvider
         };
     }
 
-    public override object? Query(ProviderQuery query)
+    /// <inheritdoc />
+    public override async ValueTask<object?> QueryAsync(
+        ProviderQuery query, CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         if (query.RootPath is null)
+        {
             return new Dictionary<string, List<object>>();
+        }
 
-        var rootPath = query.RootPath;
-        var excluded = query.ExcludedDirectories;
-        var filePaths = new List<string>();
-        var relativeRoot = rootPath;
+        string rootPath = query.RootPath;
+        IReadOnlySet<string>? excluded = query.ExcludedDirectories;
+        List<string> filePaths = new List<string>();
+        string relativeRoot = rootPath;
 
         if (Directory.Exists(rootPath))
         {
             CollectXmlFiles(rootPath, excluded, filePaths);
         }
-        else if (File.Exists(rootPath) && XmlExtensions.Contains(Path.GetExtension(rootPath)))
+        else if (File.Exists(rootPath) && s_xmlExtensions.Contains(Path.GetExtension(rootPath)))
         {
             filePaths.Add(rootPath);
             relativeRoot = Path.GetDirectoryName(rootPath) ?? Environment.CurrentDirectory;
         }
+        else if (!File.Exists(rootPath))
+        {
+            throw new DirectoryNotFoundException($"XML target '{rootPath}' does not exist.");
+        }
 
-        var parsed = new ConcurrentBag<(SourceFile File, List<XmlElementInfo> Elements, List<XmlAttributeInfo> Attributes)>();
-        Parallel.ForEach(filePaths,
-            new ParallelOptions { MaxDegreeOfParallelism = Environment.ProcessorCount },
-            filePath =>
+        ConcurrentBag<(SourceFile File, List<XmlElementInfo> Elements, List<XmlAttributeInfo> Attributes)> parsed = new ConcurrentBag<(SourceFile File, List<XmlElementInfo> Elements, List<XmlAttributeInfo> Attributes)>();
+        await Parallel.ForEachAsync(filePaths,
+            new ParallelOptions
+            {
+                MaxDegreeOfParallelism = Environment.ProcessorCount,
+                CancellationToken = cancellationToken
+            }, async (filePath, token) =>
             {
                 try
                 {
-                    var text = File.ReadAllText(filePath);
-                    var relativePath = Path.GetRelativePath(relativeRoot, filePath).Replace('\\', '/');
-                    var sourceFile = new SourceFile(relativePath, "xml", [], [], text);
-                    var (elements, attributes) = ParseDocument(text);
+                    string text = await File.ReadAllTextAsync(filePath, token).ConfigureAwait(false);
+                    string relativePath = Path.GetRelativePath(relativeRoot, filePath).Replace('\\', '/');
+                    SourceFile sourceFile = new SourceFile(relativePath, "xml", [], [], text);
+                    (List<XmlElementInfo>? elements, List<XmlAttributeInfo>? attributes) = ParseDocument(text);
                     ExecutionStatistics.RecordInputFile(filePath);
                     parsed.Add((sourceFile, elements, attributes));
                 }
-                catch { }
-            });
+                catch (System.Xml.XmlException ex)
+                {
+                    throw new InvalidDataException(
+                        $"Cannot parse XML file '{filePath}': {ex.Message}", ex);
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                    throw new IOException(
+                        $"Cannot read XML file '{filePath}': {ex.Message}", ex);
+                }
+            }).ConfigureAwait(false);
 
-        var sorted = parsed.OrderBy(p => p.File.Path, StringComparer.Ordinal).ToList();
+        List<(SourceFile File, List<XmlElementInfo> Elements, List<XmlAttributeInfo> Attributes)> sorted = parsed.OrderBy(p => p.File.Path, StringComparer.Ordinal).ToList();
 
-        var elements = new List<object>();
-        var attributes = new List<object>();
-        foreach (var (file, fileElements, fileAttributes) in sorted)
+        List<object> elements = new List<object>();
+        List<object> attributes = new List<object>();
+        foreach ((SourceFile? file, List<XmlElementInfo>? fileElements, List<XmlAttributeInfo>? fileAttributes) in sorted)
         {
             elements.AddRange(fileElements.Select(e => (object)(e with { File = file })));
             attributes.AddRange(fileAttributes.Select(a => (object)(a with { File = file })));
         }
 
-        var collections = new Dictionary<string, List<object>>(StringComparer.Ordinal);
-        var requested = query.Collection;
-        if (requested is null || requested == "Elements") collections["Elements"] = elements;
-        if (requested is null || requested == "Attributes") collections["Attributes"] = attributes;
+        Dictionary<string, List<object>> collections = new Dictionary<string, List<object>>(StringComparer.Ordinal);
+        string? requested = query.Collection;
+        if (requested is null || requested == "Elements")
+        {
+            collections["Elements"] = elements;
+        }
+
+        if (requested is null || requested == "Attributes")
+        {
+            collections["Attributes"] = attributes;
+        }
+
         return ApplyQueryFilters(query, collections);
     }
 
     private static (List<XmlElementInfo> Elements, List<XmlAttributeInfo> Attributes) ParseDocument(string text)
     {
-        var settings = new XmlReaderSettings
+        XmlReaderSettings settings = new XmlReaderSettings
         {
             DtdProcessing = DtdProcessing.Ignore,
             XmlResolver = null,
         };
 
-        using var reader = XmlReader.Create(new StringReader(text), settings);
-        var document = XDocument.Load(reader, LoadOptions.SetLineInfo);
-        var elements = new List<XmlElementInfo>();
-        var attributes = new List<XmlAttributeInfo>();
+        using StringReader input = new StringReader(text);
+        using XmlReader reader = XmlReader.Create(input, settings);
+        XDocument document = XDocument.Load(reader, LoadOptions.SetLineInfo);
+        List<XmlElementInfo> elements = new List<XmlElementInfo>();
+        List<XmlAttributeInfo> attributes = new List<XmlAttributeInfo>();
 
         if (document.Root is not null)
+        {
             WalkElement(document.Root, null, elements, attributes);
+        }
 
         return (elements, attributes);
     }
 
     private static void WalkElement(XElement element, string? parentPath, List<XmlElementInfo> elements, List<XmlAttributeInfo> attributes)
     {
-        var name = element.Name.LocalName;
-        var path = parentPath is null ? name : $"{parentPath}.{name}";
-        var line = GetLine(element);
-        var value = GetDirectText(element);
+        string name = element.Name.LocalName;
+        string path = parentPath is null ? name : $"{parentPath}.{name}";
+        int line = GetLine(element);
+        string value = GetDirectText(element);
 
         elements.Add(new XmlElementInfo(name, path, value, line));
 
-        foreach (var attribute in element.Attributes())
+        foreach (XAttribute attribute in element.Attributes())
         {
-            var attributeLine = GetLine(attribute);
+            int attributeLine = GetLine(attribute);
             if (attributeLine == 0)
+            {
                 attributeLine = line;
+            }
 
             attributes.Add(new XmlAttributeInfo(attribute.Name.LocalName, attribute.Value, name, path, attributeLine));
         }
 
-        foreach (var child in element.Elements())
+        foreach (XElement child in element.Elements())
+        {
             WalkElement(child, path, elements, attributes);
+        }
     }
 
     private static string GetDirectText(XElement element)
@@ -171,20 +211,29 @@ public sealed class XmlProvider : DataProvider
     {
         try
         {
-            foreach (var file in Directory.GetFiles(dir))
+            foreach (string file in Directory.GetFiles(dir))
             {
-                if (XmlExtensions.Contains(Path.GetExtension(file)))
+                if (s_xmlExtensions.Contains(Path.GetExtension(file)))
+                {
                     result.Add(file);
+                }
             }
-            foreach (var subDir in Directory.GetDirectories(dir))
+            foreach (string subDir in Directory.GetDirectories(dir))
             {
-                var dirName = Path.GetFileName(subDir);
-                if (excluded is not null && excluded.Contains(dirName)) continue;
+                string dirName = Path.GetFileName(subDir);
+                if (excluded is not null && excluded.Contains(dirName))
+                {
+                    continue;
+                }
+
                 CollectXmlFiles(subDir, excluded, result);
             }
         }
-        catch (UnauthorizedAccessException) { }
-        catch (IOException) { }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            throw new IOException(
+                $"Cannot enumerate XML files in '{dir}': {ex.Message}", ex);
+        }
     }
 
     private static Dictionary<string, Dictionary<string, Func<object, object?>>> BuildAccessors()

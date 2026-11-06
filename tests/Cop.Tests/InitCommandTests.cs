@@ -21,7 +21,11 @@ public class InitCommandTests
             Directory.CreateDirectory(testDir);
             Directory.SetCurrentDirectory(testDir);
 
-            var exitCode = InitCommand.Execute(claude: true, localHook: true);
+            var exitCode = InitCommand.Execute(new InitializationOptions
+            {
+                Agent = InstructionAgent.Claude,
+                IsLocalHookEnabled = true
+            });
 
             Assert.That(exitCode, Is.EqualTo(0));
 
@@ -61,7 +65,12 @@ public class InitCommandTests
     public void CustomCopCmd_ClaudeBranch_RewritesCommandHooksAndInstructions()
     {
         RunInit(
-            () => InitCommand.Execute(claude: true, localHook: true, copCmd: "mise exec -- cop"),
+            () => InitCommand.Execute(new InitializationOptions
+            {
+                Agent = InstructionAgent.Claude,
+                IsLocalHookEnabled = true,
+                CopCommand = "mise exec -- cop"
+            }),
             (dir, _) =>
             {
                 var settings = File.ReadAllText(Path.Combine(dir, ".claude", "settings.local.json"));
@@ -88,7 +97,11 @@ public class InitCommandTests
     public void CustomCopCmd_CopilotBranch_RewritesInstructionsSkillAndHookScript()
     {
         RunInit(
-            () => InitCommand.Execute(copilotHook: true, copCmd: "mise exec -- cop"),
+            () => InitCommand.Execute(new InitializationOptions
+            {
+                IsCopilotHookEnabled = true,
+                CopCommand = "mise exec -- cop"
+            }),
             (dir, _) =>
             {
                 var instr = File.ReadAllText(Path.Combine(dir, ".github", "copilot-instructions.md"));
@@ -110,7 +123,7 @@ public class InitCommandTests
     public void DefaultCopCmd_ProducesBareCopWithNoPlaceholderOrCallout()
     {
         RunInit(
-            () => InitCommand.Execute(copilotHook: true),
+            () => InitCommand.Execute(new InitializationOptions { IsCopilotHookEnabled = true }),
             (dir, _) =>
             {
                 var instr = File.ReadAllText(Path.Combine(dir, ".github", "copilot-instructions.md"));
@@ -145,12 +158,53 @@ public class InitCommandTests
             (_, stdout) => Assert.That(stdout, Does.Not.Contain("mise config detected")));
     }
 
+    [TestCase("[]")]
+    [TestCase("null")]
+    [TestCase("42")]
+    [TestCase("\"text\"")]
+    public void NonObjectHookSettingsAreRejectedWithoutOverwriting(string original)
+    {
+        int? exitCode = null;
+        using var errors = new StringWriter();
+        var previousError = Console.Error;
+        try
+        {
+            Console.SetError(errors);
+            RunInit(
+                () =>
+                {
+                    exitCode = InitCommand.Execute(new InitializationOptions
+                    {
+                        Agent = InstructionAgent.Claude,
+                        IsLocalHookEnabled = true
+                    });
+                    return exitCode.Value;
+                },
+                (dir, _) => Assert.That(
+                    File.ReadAllText(Path.Combine(dir, ".claude", "settings.local.json")),
+                    Is.EqualTo(original)),
+                seed: dir =>
+                {
+                    Directory.CreateDirectory(Path.Combine(dir, ".claude"));
+                    File.WriteAllText(
+                        Path.Combine(dir, ".claude", "settings.local.json"), original);
+                });
+        }
+        finally
+        {
+            Console.SetError(previousError);
+        }
+        Assert.That(exitCode, Is.EqualTo(1));
+        Assert.That(errors.ToString(), Does.Contain("contains invalid JSON"));
+    }
+
     [Test]
     public void CustomCopCmd_WithMiseConfig_DoesNotPrintHint()
     {
         // The hint only nudges users who haven't supplied an invocation yet.
         RunInit(
-            () => InitCommand.Execute(copCmd: "mise exec -- cop"),
+            () => InitCommand.Execute(
+                new InitializationOptions { CopCommand = "mise exec -- cop" }),
             (_, stdout) => Assert.That(stdout, Does.Not.Contain("mise config detected")),
             seed: dir => File.WriteAllText(Path.Combine(dir, "mise.toml"), "[tools]\n"));
     }

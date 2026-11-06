@@ -1,3 +1,5 @@
+// Collects values written to a sink by appending them to a destination list.
+
 using System.Collections;
 
 namespace Cop.Core;
@@ -18,8 +20,10 @@ public class ListAppendSink : SinkProvider
         _target = target ?? throw new ArgumentNullException(nameof(target));
     }
 
+    /// <inheritdoc/>
     public override string Name => "ListAppend";
 
+    /// <inheritdoc/>
     public override Task WriteAsync(object? originalItem, object result)
     {
         lock (_lock)

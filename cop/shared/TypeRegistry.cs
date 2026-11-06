@@ -1,17 +1,8 @@
+// Registers provider types and resolves qualified or ambiguous collection references.
+
 using Cop.Core;
 
 namespace Cop.Lang;
-
-/// <summary>
-/// Result of resolving a collection name. Handles bare names (may be ambiguous)
-/// and qualified names (e.g., csharp.Types).
-/// </summary>
-public abstract record CollectionResolution
-{
-    public sealed record Found(List<object> Items) : CollectionResolution;
-    public sealed record NotFound() : CollectionResolution;
-    public sealed record Ambiguous(List<string> Namespaces, string CollectionName) : CollectionResolution;
-}
 
 /// <summary>
 /// Central registry for all cop type definitions. Pre-registers core primitives
@@ -19,6 +10,17 @@ public abstract record CollectionResolution
 /// </summary>
 public class TypeRegistry
 {
+    private readonly Dictionary<string, Dictionary<string,
+        Func<object, CancellationToken, ValueTask<object?>>>> _asyncAccessors = new();
+
+    /// <summary>Registers demand-driven asynchronous members for a provider type.</summary>
+    public void RegisterAsyncAccessors(string typeName, Dictionary<string,
+        Func<object, CancellationToken, ValueTask<object?>>> accessors) =>
+        _asyncAccessors[typeName] = accessors;
+
+    /// <summary>Returns asynchronous member accessors without preparing provider data.</summary>
+    public Dictionary<string, Func<object, CancellationToken, ValueTask<object?>>>?
+        GetAsyncAccessors(string typeName) => _asyncAccessors.GetValueOrDefault(typeName);
     private readonly Dictionary<string, TypeDescriptor> _types = new();
     private readonly Dictionary<string, CollectionDeclaration> _collections = new();
     private readonly Dictionary<string, FlagsDefinition> _flagsTypes = new();
@@ -39,6 +41,9 @@ public class TypeRegistry
     private readonly Dictionary<(string TypeName, string PropName), Ast.Expression> _computedProperties = new();
     private Func<string, List<Document>>? _documentLoader;
 
+    /// <summary>
+    /// Creates a registry populated with the core runtime primitive types.
+    /// </summary>
     public TypeRegistry()
     {
         RegisterCorePrimitives();
@@ -73,11 +78,15 @@ public class TypeRegistry
         });
     }
 
+    /// <summary>
+    /// Registers a runtime type, replacing any descriptor with the same name.
+    /// </summary>
     public void Register(TypeDescriptor descriptor)
     {
         _types[descriptor.Name] = descriptor;
     }
 
+    /// <summary>Registers a collection declaration under its declared name.</summary>
     public void RegisterCollection(CollectionDeclaration decl)
     {
         _collections[decl.Name] = decl;
@@ -89,8 +98,8 @@ public class TypeRegistry
     /// </summary>
     public List<string> LoadFlagsDefinitions(IEnumerable<FlagsDefinition> flagsDefs)
     {
-        var errors = new List<string>();
-        foreach (var fd in flagsDefs)
+        List<string> errors = new List<string>();
+        foreach (FlagsDefinition fd in flagsDefs)
         {
             if (_flagsTypes.ContainsKey(fd.Name))
             {
@@ -106,14 +115,14 @@ public class TypeRegistry
     /// Tries to resolve a bare identifier as a flags constant.
     /// Returns the integer bit value, or null if not a known flags member.
     /// </summary>
-    public int? TryResolveFlagsConstant(string name) =>
-        _flagsConstants.TryGetValue(name, out var value) ? value : null;
+    public int? FindFlagsConstant(string name) =>
+        _flagsConstants.TryGetValue(name, out int value) ? value : null;
 
     /// <summary>
     /// Returns the FlagsDefinition for a named flags type, or null if not found.
     /// </summary>
     public FlagsDefinition? GetFlagsType(string name) =>
-        _flagsTypes.TryGetValue(name, out var fd) ? fd : null;
+        _flagsTypes.TryGetValue(name, out FlagsDefinition? fd) ? fd : null;
 
     /// <summary>
     /// Returns true if the given type name is a registered flags type.
@@ -124,13 +133,21 @@ public class TypeRegistry
     /// Resolves a qualified flags constant (e.g., "Modifier", "Public" → 1).
     /// Returns the bit value, or null if the type or member is not found.
     /// </summary>
-    public int? TryResolveQualifiedFlagsConstant(string typeName, string memberName)
+    public int? FindQualifiedFlagsConstant(string typeName, string memberName)
     {
-        if (!_flagsTypes.TryGetValue(typeName, out var fd)) return null;
-        int bit = 1;
-        foreach (var member in fd.Members)
+        if (!_flagsTypes.TryGetValue(typeName, out FlagsDefinition? fd))
         {
-            if (member == memberName) return bit;
+            return null;
+        }
+
+        int bit = 1;
+        foreach (string member in fd.Members)
+        {
+            if (member == memberName)
+            {
+                return bit;
+            }
+
             bit <<= 1;
         }
         return null;
@@ -141,15 +158,15 @@ public class TypeRegistry
     /// Returns null if the member is not known.
     /// </summary>
     public List<string>? GetFlagsMemberOwners(string memberName) =>
-        _flagsMemberOwners.TryGetValue(memberName, out var owners) ? owners : null;
+        _flagsMemberOwners.TryGetValue(memberName, out List<string>? owners) ? owners : null;
 
     /// <summary>
     /// Loads extensible enum definitions. Members resolve to their string name.
     /// </summary>
     public List<string> LoadEnumDefinitions(IEnumerable<EnumDefinition> enumDefs)
     {
-        var errors = new List<string>();
-        foreach (var ed in enumDefs)
+        List<string> errors = new List<string>();
+        foreach (EnumDefinition ed in enumDefs)
         {
             if (_enumTypes.ContainsKey(ed.Name))
             {
@@ -168,15 +185,15 @@ public class TypeRegistry
     /// </summary>
     public List<string> LoadTypeImports(IEnumerable<TypeImportDeclaration> typeImports)
     {
-        var errors = new List<string>();
-        foreach (var ti in typeImports)
+        List<string> errors = new List<string>();
+        foreach (TypeImportDeclaration ti in typeImports)
         {
-            if (_flagsTypes.TryGetValue(ti.TypeName, out var fd))
+            if (_flagsTypes.TryGetValue(ti.TypeName, out FlagsDefinition? fd))
             {
                 int bit = 1;
-                foreach (var member in fd.Members)
+                foreach (string member in fd.Members)
                 {
-                    if (!_flagsMemberOwners.TryGetValue(member, out var owners))
+                    if (!_flagsMemberOwners.TryGetValue(member, out List<string>? owners))
                     {
                         owners = [];
                         _flagsMemberOwners[member] = owners;
@@ -184,16 +201,20 @@ public class TypeRegistry
                     owners.Add(fd.Name);
 
                     if (owners.Count == 1)
+                    {
                         _flagsConstants[member] = bit;
+                    }
                     else
+                    {
                         _flagsConstants.Remove(member); // ambiguous
+                    }
 
                     bit <<= 1;
                 }
             }
-            else if (_enumTypes.TryGetValue(ti.TypeName, out var ed))
+            else if (_enumTypes.TryGetValue(ti.TypeName, out EnumDefinition? ed))
             {
-                foreach (var member in ed.Members)
+                foreach (string member in ed.Members)
                 {
                     // Cross-kind collision: enum member conflicts with a flags constant
                     if (_flagsMemberOwners.ContainsKey(member))
@@ -202,7 +223,7 @@ public class TypeRegistry
                         continue;
                     }
 
-                    if (!_enumMemberOwners.TryGetValue(member, out var owners))
+                    if (!_enumMemberOwners.TryGetValue(member, out List<string>? owners))
                     {
                         owners = [];
                         _enumMemberOwners[member] = owners;
@@ -210,9 +231,13 @@ public class TypeRegistry
                     owners.Add(ed.Name);
 
                     if (owners.Count == 1)
+                    {
                         _enumConstants[member] = member;
+                    }
                     else
+                    {
                         _enumConstants.Remove(member); // ambiguous
+                    }
                 }
             }
             else
@@ -227,14 +252,14 @@ public class TypeRegistry
     /// Tries to resolve a bare identifier as an enum constant.
     /// Returns the string value (member name), or null if not a known enum member.
     /// </summary>
-    public string? TryResolveEnumConstant(string name) =>
-        _enumConstants.TryGetValue(name, out var value) ? value : null;
+    public string? FindEnumConstant(string name) =>
+        _enumConstants.TryGetValue(name, out string? value) ? value : null;
 
     /// <summary>
     /// Returns the EnumDefinition for a named enum type, or null if not found.
     /// </summary>
     public EnumDefinition? GetEnumType(string name) =>
-        _enumTypes.TryGetValue(name, out var ed) ? ed : null;
+        _enumTypes.TryGetValue(name, out EnumDefinition? ed) ? ed : null;
 
     /// <summary>
     /// Returns true if the given type name is a registered enum type.
@@ -245,9 +270,13 @@ public class TypeRegistry
     /// Resolves a qualified enum constant (e.g., "TypeKind", "Class" → "Class").
     /// Returns the member string, or null if the type or member is not found.
     /// </summary>
-    public string? TryResolveQualifiedEnumConstant(string typeName, string memberName)
+    public string? FindQualifiedEnumConstant(string typeName, string memberName)
     {
-        if (!_enumTypes.TryGetValue(typeName, out var ed)) return null;
+        if (!_enumTypes.TryGetValue(typeName, out EnumDefinition? ed))
+        {
+            return null;
+        }
+
         return ed.Members.Contains(memberName) ? memberName : null;
     }
 
@@ -256,7 +285,7 @@ public class TypeRegistry
     /// Returns null if the member is not known.
     /// </summary>
     public List<string>? GetEnumMemberOwners(string memberName) =>
-        _enumMemberOwners.TryGetValue(memberName, out var owners) ? owners : null;
+        _enumMemberOwners.TryGetValue(memberName, out List<string>? owners) ? owners : null;
 
     /// <summary>
     /// Maps a CLR type to an cop type name for runtime type inference.
@@ -279,11 +308,15 @@ public class TypeRegistry
     /// </summary>
     public IEnumerable<string> GetDocumentCollectionNames() => _collectionExtractors.Keys;
 
+    /// <summary>Finds a registered runtime type by name, or returns null.</summary>
     public TypeDescriptor? GetType(string name) =>
-        _types.TryGetValue(name, out var desc) ? desc : null;
+        _types.TryGetValue(name, out TypeDescriptor? desc) ? desc : null;
 
+    /// <summary>
+    /// Finds a registered collection declaration by name, or returns null.
+    /// </summary>
     public CollectionDeclaration? GetCollection(string name) =>
-        _collections.TryGetValue(name, out var decl) ? decl : null;
+        _collections.TryGetValue(name, out CollectionDeclaration? decl) ? decl : null;
 
     /// <summary>
     /// Gets collection items from a document using a registered extractor.
@@ -293,14 +326,18 @@ public class TypeRegistry
     /// </summary>
     public List<object>? GetCollectionItems(string collectionName, Document document)
     {
-        if (!_collectionExtractors.TryGetValue(collectionName, out var extractor))
+        if (!_collectionExtractors.TryGetValue(collectionName, out Func<Document, List<object>>? extractor))
+        {
             return null;
+        }
 
-        var cacheKey = (collectionName, document.Path);
-        if (_extractorCache.TryGetValue(cacheKey, out var cached))
+        (string collectionName, string Path) cacheKey = (collectionName, document.Path);
+        if (_extractorCache.TryGetValue(cacheKey, out List<object>? cached))
+        {
             return cached;
+        }
 
-        var result = extractor(document);
+        List<object> result = extractor(document);
         _extractorCache[cacheKey] = result;
         return result;
     }
@@ -312,10 +349,13 @@ public class TypeRegistry
     /// </summary>
     public List<object>? GetCollectionItems(string collectionName, Document document, Core.FilterExpression? filter)
     {
-        var items = GetCollectionItems(collectionName, document);
-        if (items is null || filter is null) return items;
+        List<object>? items = GetCollectionItems(collectionName, document);
+        if (items is null || filter is null)
+        {
+            return items;
+        }
 
-        var itemTypeName = GetCollectionItemType(collectionName);
+        string? itemTypeName = GetCollectionItemType(collectionName);
         return itemTypeName is not null ? ApplyPushdownFilter(itemTypeName, items, filter) : items;
     }
 
@@ -324,10 +364,13 @@ public class TypeRegistry
     /// </summary>
     public List<object>? GetGlobalCollectionItems(string name, Core.FilterExpression? filter)
     {
-        var items = GetGlobalCollectionItems(name);
-        if (items is null || filter is null) return items;
+        List<object>? items = GetGlobalCollectionItems(name);
+        if (items is null || filter is null)
+        {
+            return items;
+        }
 
-        var itemTypeName = GetCollectionItemType(name);
+        string? itemTypeName = GetCollectionItemType(name);
         return itemTypeName is not null ? ApplyPushdownFilter(itemTypeName, items, filter) : items;
     }
 
@@ -338,10 +381,13 @@ public class TypeRegistry
     /// </summary>
     public List<object> ApplyPushdownFilter(string itemTypeName, List<object> items, Core.FilterExpression filter)
     {
-        var accessors = GetAccessors(itemTypeName);
-        if (accessors is null || accessors.Count == 0) return items;
+        Dictionary<string, Func<object, object?>>? accessors = GetAccessors(itemTypeName);
+        if (accessors is null || accessors.Count == 0)
+        {
+            return items;
+        }
 
-        var predicate = FilterCompiler.Compile(filter, accessors);
+        Func<object, bool> predicate = FilterCompiler.Compile(filter, accessors);
         return items.Where(predicate).ToList();
     }
 
@@ -351,13 +397,18 @@ public class TypeRegistry
     /// </summary>
     public Dictionary<string, Func<object, object?>>? GetAccessors(string typeName)
     {
-        if (!_types.TryGetValue(typeName, out var descriptor)) return null;
+        if (!_types.TryGetValue(typeName, out TypeDescriptor? descriptor))
+        {
+            return null;
+        }
 
-        var accessors = new Dictionary<string, Func<object, object?>>();
-        foreach (var (name, prop) in descriptor.Properties)
+        Dictionary<string, Func<object, object?>> accessors = new Dictionary<string, Func<object, object?>>();
+        foreach ((string? name, PropertyDescriptor? prop) in descriptor.Properties)
         {
             if (prop.Accessor is not null)
+            {
                 accessors[name] = prop.Accessor;
+            }
         }
 
         return accessors.Count > 0 ? accessors : null;
@@ -379,15 +430,19 @@ public class TypeRegistry
     /// </summary>
     public void AppendNamespacedCollection(string ns, string collName, List<object> items)
     {
-        if (!_nsCollections.TryGetValue(ns, out var nsDict))
+        if (!_nsCollections.TryGetValue(ns, out Dictionary<string, List<object>>? nsDict))
         {
             nsDict = new(StringComparer.Ordinal);
             _nsCollections[ns] = nsDict;
         }
-        if (nsDict.TryGetValue(collName, out var existing))
+        if (nsDict.TryGetValue(collName, out List<object>? existing))
+        {
             existing.AddRange(items);
+        }
         else
+        {
             nsDict[collName] = new List<object>(items);
+        }
     }
 
     /// <summary>
@@ -398,18 +453,22 @@ public class TypeRegistry
     public CollectionResolution ResolveCollection(string name)
     {
         // Flat globals (runtime-computed) always win — they are local scope
-        if (_globalCollections.TryGetValue(name, out var flatItems))
+        if (_globalCollections.TryGetValue(name, out List<object>? flatItems))
+        {
             return new CollectionResolution.Found(flatItems);
+        }
 
         // Qualified name: "csharp.Types"
-        var dotIndex = name.IndexOf('.');
+        int dotIndex = name.IndexOf('.');
         if (dotIndex > 0)
         {
-            var ns = name[..dotIndex];
-            var collName = name[(dotIndex + 1)..];
-            if (_nsCollections.TryGetValue(ns, out var nsDict)
-                && nsDict.TryGetValue(collName, out var nsItems))
+            string ns = name[..dotIndex];
+            string collName = name[(dotIndex + 1)..];
+            if (_nsCollections.TryGetValue(ns, out Dictionary<string, List<object>>? nsDict)
+                && nsDict.TryGetValue(collName, out List<object>? nsItems))
+            {
                 return new CollectionResolution.Found(nsItems);
+            }
 
             return new CollectionResolution.NotFound();
         }
@@ -426,7 +485,7 @@ public class TypeRegistry
     /// </summary>
     public List<object>? GetGlobalCollectionItems(string name)
     {
-        var resolution = ResolveCollection(name);
+        CollectionResolution resolution = ResolveCollection(name);
         return resolution switch
         {
             CollectionResolution.Found f => f.Items,
@@ -442,14 +501,16 @@ public class TypeRegistry
     public bool IsGlobalCollection(string name)
     {
         if (_globalCollections.ContainsKey(name))
+        {
             return true;
+        }
 
-        var dotIndex = name.IndexOf('.');
+        int dotIndex = name.IndexOf('.');
         if (dotIndex > 0)
         {
-            var ns = name[..dotIndex];
-            var collName = name[(dotIndex + 1)..];
-            return _nsCollections.TryGetValue(ns, out var nsDict) && nsDict.ContainsKey(collName);
+            string ns = name[..dotIndex];
+            string collName = name[(dotIndex + 1)..];
+            return _nsCollections.TryGetValue(ns, out Dictionary<string, List<object>>? nsDict) && nsDict.ContainsKey(collName);
         }
 
         // No bare-name fallback — must be qualified or in flat globals
@@ -476,7 +537,7 @@ public class TypeRegistry
     /// </summary>
     public void RegisterSink(string ns, SinkProvider sink)
     {
-        if (!_nsSinks.TryGetValue(ns, out var nsDict))
+        if (!_nsSinks.TryGetValue(ns, out Dictionary<string, SinkProvider>? nsDict))
         {
             nsDict = new(StringComparer.Ordinal);
             _nsSinks[ns] = nsDict;
@@ -491,23 +552,30 @@ public class TypeRegistry
     /// </summary>
     public SinkProvider? ResolveSink(string name)
     {
-        var dotIndex = name.IndexOf('.');
+        int dotIndex = name.IndexOf('.');
         if (dotIndex > 0)
         {
-            var ns = name[..dotIndex];
-            var sinkName = name[(dotIndex + 1)..];
-            if (_nsSinks.TryGetValue(ns, out var nsDict) && nsDict.TryGetValue(sinkName, out var sink))
+            string ns = name[..dotIndex];
+            string sinkName = name[(dotIndex + 1)..];
+            if (_nsSinks.TryGetValue(ns, out Dictionary<string, SinkProvider>? nsDict) && nsDict.TryGetValue(sinkName, out SinkProvider? sink))
+            {
                 return sink;
+            }
+
             return null;
         }
 
         // Bare name: search all namespaces
         SinkProvider? found = null;
-        foreach (var nsDict in _nsSinks.Values)
+        foreach (Dictionary<string, SinkProvider> nsDict in _nsSinks.Values)
         {
-            if (nsDict.TryGetValue(name, out var sink))
+            if (nsDict.TryGetValue(name, out SinkProvider? sink))
             {
-                if (found != null) return null; // ambiguous
+                if (found != null)
+                {
+                    return null; // ambiguous
+                }
+
                 found = sink;
             }
         }
@@ -519,7 +587,7 @@ public class TypeRegistry
     /// </summary>
     public Dictionary<string, SinkProvider>? GetNamespaceSinks(string ns)
     {
-        return _nsSinks.TryGetValue(ns, out var nsDict) ? nsDict : null;
+        return _nsSinks.TryGetValue(ns, out Dictionary<string, SinkProvider>? nsDict) ? nsDict : null;
     }
 
     /// <summary>
@@ -536,15 +604,19 @@ public class TypeRegistry
     /// </summary>
     public StreamProvider? ResolveStreamingSource(string name)
     {
-        if (_streamingSources.TryGetValue(name, out var source))
+        if (_streamingSources.TryGetValue(name, out StreamProvider? source))
+        {
             return source;
+        }
 
         // Try bare name match
-        foreach (var (key, src) in _streamingSources)
+        foreach ((string? key, StreamProvider? src) in _streamingSources)
         {
-            var dot = key.LastIndexOf('.');
+            int dot = key.LastIndexOf('.');
             if (dot >= 0 && string.Equals(key[(dot + 1)..], name, StringComparison.Ordinal))
+            {
                 return src;
+            }
         }
         return null;
     }
@@ -567,19 +639,21 @@ public class TypeRegistry
     public IEnumerable<string> GetGlobalCollectionNames()
     {
         // Flat globals
-        foreach (var name in _globalCollections.Keys)
+        foreach (string name in _globalCollections.Keys)
+        {
             yield return name;
+        }
 
         // Track bare name → namespaces for ambiguity detection
-        var bareNames = new Dictionary<string, List<string>>(StringComparer.Ordinal);
-        foreach (var (ns, nsDict) in _nsCollections)
+        Dictionary<string, List<string>> bareNames = new Dictionary<string, List<string>>(StringComparer.Ordinal);
+        foreach ((string? ns, Dictionary<string, List<object>>? nsDict) in _nsCollections)
         {
-            foreach (var collName in nsDict.Keys)
+            foreach (string collName in nsDict.Keys)
             {
                 // Always yield qualified name
                 yield return $"{ns}.{collName}";
 
-                if (!bareNames.TryGetValue(collName, out var nsList))
+                if (!bareNames.TryGetValue(collName, out List<string>? nsList))
                 {
                     nsList = [];
                     bareNames[collName] = nsList;
@@ -589,10 +663,12 @@ public class TypeRegistry
         }
 
         // Yield bare names only when unambiguous and not already in flat globals
-        foreach (var (collName, nsList) in bareNames)
+        foreach ((string? collName, List<string>? nsList) in bareNames)
         {
             if (nsList.Count == 1 && !_globalCollections.ContainsKey(collName))
+            {
                 yield return collName;
+            }
         }
     }
 
@@ -602,11 +678,17 @@ public class TypeRegistry
     /// </summary>
     public List<string> GetAllCollectionNames()
     {
-        var names = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var n in GetGlobalCollectionNames())
+        HashSet<string> names = new HashSet<string>(StringComparer.Ordinal);
+        foreach (string n in GetGlobalCollectionNames())
+        {
             names.Add(n);
-        foreach (var c in _collections.Keys)
+        }
+
+        foreach (string c in _collections.Keys)
+        {
             names.Add(c);
+        }
+
         return [.. names.OrderBy(n => n)];
     }
 
@@ -624,8 +706,11 @@ public class TypeRegistry
     /// </summary>
     public List<string> GetNamespaceCollections(string ns)
     {
-        if (_nsCollections.TryGetValue(ns, out var nsDict))
+        if (_nsCollections.TryGetValue(ns, out Dictionary<string, List<object>>? nsDict))
+        {
             return [.. nsDict.Keys.OrderBy(n => n)];
+        }
+
         return [];
     }
 
@@ -651,11 +736,14 @@ public class TypeRegistry
     /// Attempts to parse a file using a registered parser for its extension.
     /// Returns null if no parser is registered for the file's extension.
     /// </summary>
-    public List<object>? TryParseFile(string filePath, string typeName)
+    public List<object>? ParseFileOrDefault(string filePath, string typeName)
     {
-        var ext = Path.GetExtension(filePath).TrimStart('.');
-        if (_fileParsers.TryGetValue(ext, out var parser))
+        string ext = Path.GetExtension(filePath).TrimStart('.');
+        if (_fileParsers.TryGetValue(ext, out Func<string, string, List<object>>? parser))
+        {
             return parser(filePath, typeName);
+        }
+
         return null;
     }
 
@@ -664,20 +752,20 @@ public class TypeRegistry
     /// </summary>
     public ProviderSchema ExportTypeAsSchema(string typeName)
     {
-        var typeDesc = GetType(typeName)
+        TypeDescriptor typeDesc = GetType(typeName)
             ?? throw new InvalidOperationException($"Type '{typeName}' is not defined. Add: type {typeName} = {{ ... }}");
 
-        var schema = new ProviderSchema();
-        var typeSchema = new ProviderTypeSchema { Name = typeName };
+        ProviderSchema schema = new ProviderSchema();
+        ProviderTypeSchema typeSchema = new ProviderTypeSchema { Name = typeName };
 
-        foreach (var (propName, prop) in typeDesc.Properties)
+        foreach ((string? propName, PropertyDescriptor? prop) in typeDesc.Properties)
         {
             typeSchema.Properties.Add(new ProviderPropertySchema
             {
                 Name = propName,
                 Type = prop.TypeName ?? "string",
-                Optional = prop.IsOptional,
-                Collection = prop.IsCollection
+                IsOptional = prop.IsOptional,
+                IsCollection = prop.IsCollection
             });
         }
 
@@ -685,14 +773,24 @@ public class TypeRegistry
         return schema;
     }
 
+    /// <summary>Whether the registry contains a type with the specified name.</summary>
     public bool HasType(string name) => _types.ContainsKey(name);
 
+    /// <summary>
+    /// Whether the registry contains a collection with the specified name.
+    /// </summary>
     public bool HasCollection(string name) => _collections.ContainsKey(name);
 
+    /// <summary>
+    /// Whether a type name identifies a core primitive handled by this registry.
+    /// </summary>
     public static bool IsCorePrimitive(string name) =>
         name is "Object" or "string" or "int" or "float" or "bool" or "byte";
 
+    /// <summary>The runtime type descriptors currently registered by name.</summary>
     public IEnumerable<TypeDescriptor> AllTypes => _types.Values;
+
+    /// <summary>The collection declarations currently registered by name.</summary>
     public IEnumerable<CollectionDeclaration> AllCollections => _collections.Values;
 
     /// <summary>
@@ -701,28 +799,32 @@ public class TypeRegistry
     /// </summary>
     public List<string> LoadTypeDefinitions(IEnumerable<TypeDefinition> typeDefs)
     {
-        var errors = new List<string>();
+        List<string> errors = new List<string>();
 
         // First pass: create all descriptors
-        foreach (var td in typeDefs)
+        foreach (TypeDefinition td in typeDefs)
         {
             // Conformance-only declaration: type existing : Trait = {}
             // Don't overwrite existing type descriptor; handled in third pass
             if (td.BaseType is not null && td.Properties.Count == 0 && _types.ContainsKey(td.Name))
+            {
                 continue;
+            }
 
             if (_types.ContainsKey(td.Name) && !IsCorePrimitive(td.Name))
             {
                 // If the existing type was registered by a provider schema,
                 // merge new properties from the .cop definition rather than erroring.
-                var existing = _types[td.Name];
+                TypeDescriptor existing = _types[td.Name];
                 if (existing.IsProviderType)
                 {
-                    foreach (var prop in td.Properties)
+                    foreach (PropertyDefinition prop in td.Properties)
                     {
                         if (!existing.Properties.ContainsKey(prop.Name))
+                        {
                             existing.Properties[prop.Name] = new PropertyDescriptor(
                                 prop.Name, prop.TypeName, prop.IsOptional, prop.IsCollection);
+                        }
                     }
                     continue;
                 }
@@ -731,13 +833,16 @@ public class TypeRegistry
                 continue;
             }
 
-            var descriptor = new TypeDescriptor(td.Name);
-            foreach (var prop in td.Properties)
+            TypeDescriptor descriptor = new TypeDescriptor(td.Name);
+            foreach (PropertyDefinition prop in td.Properties)
             {
                 // Trait members (function-typed signatures) use camelCase — skip casing validation
                 // Computed properties (conformance declarations) also use camelCase — skip
                 if (!prop.TypeName.Contains("=>") && prop.ComputedExpr is null)
+                {
                     ValidatePropertyCasing(td.Name, prop.Name);
+                }
+
                 descriptor.Properties[prop.Name] = new PropertyDescriptor(
                     prop.Name, prop.TypeName, prop.IsOptional, prop.IsCollection);
             }
@@ -746,19 +851,29 @@ public class TypeRegistry
 
         // Second pass: resolve base types and check for duplicate properties
         // Skip conformance-only declarations (handled in third pass)
-        foreach (var td in typeDefs)
+        foreach (TypeDefinition td in typeDefs)
         {
-            if (td.BaseType is null) continue;
-            if (!_types.TryGetValue(td.Name, out var descriptor)) continue;
+            if (td.BaseType is null)
+            {
+                continue;
+            }
 
-            if (!_types.TryGetValue(td.BaseType, out var baseDescriptor))
+            if (!_types.TryGetValue(td.Name, out TypeDescriptor? descriptor))
+            {
+                continue;
+            }
+
+            if (!_types.TryGetValue(td.BaseType, out TypeDescriptor? baseDescriptor))
             {
                 errors.Add($"line {td.Line}: base type '{td.BaseType}' not found for '{td.Name}'");
                 continue;
             }
 
             // Trait conformance declarations don't create inheritance relationships
-            if (IsTrait(baseDescriptor)) continue;
+            if (IsTrait(baseDescriptor))
+            {
+                continue;
+            }
 
             // Check for inheritance cycles
             if (HasCycle(td.Name, td.BaseType))
@@ -768,7 +883,7 @@ public class TypeRegistry
             }
 
             // Check for duplicate properties (subtypes cannot override parent properties)
-            foreach (var prop in td.Properties)
+            foreach (PropertyDefinition prop in td.Properties)
             {
                 if (baseDescriptor.GetProperty(prop.Name) is not null)
                 {
@@ -782,10 +897,10 @@ public class TypeRegistry
         // Third pass: register trait conformances and computed properties
         // type int : Comparable = {} means "int conforms to Comparable"
         // type Statement : TextFilePosition = { filePath => item.File.Path } means conformance + computed property
-        foreach (var td in typeDefs)
+        foreach (TypeDefinition td in typeDefs)
         {
             // Handle BaseType that is a trait
-            if (td.BaseType is not null && _types.TryGetValue(td.BaseType, out var baseDescriptor))
+            if (td.BaseType is not null && _types.TryGetValue(td.BaseType, out TypeDescriptor? baseDescriptor))
             {
                 if (IsTrait(baseDescriptor))
                 {
@@ -796,9 +911,9 @@ public class TypeRegistry
             // Handle explicit Traits list
             if (td.Traits is not null)
             {
-                foreach (var traitName in td.Traits)
+                foreach (string traitName in td.Traits)
                 {
-                    if (_types.TryGetValue(traitName, out var traitDescriptor) && IsTrait(traitDescriptor))
+                    if (_types.TryGetValue(traitName, out TypeDescriptor? traitDescriptor) && IsTrait(traitDescriptor))
                     {
                         RegisterConformance(td.Name, traitName);
                     }
@@ -806,7 +921,7 @@ public class TypeRegistry
             }
 
             // Register computed properties from conformance declarations
-            foreach (var prop in td.Properties)
+            foreach (PropertyDefinition prop in td.Properties)
             {
                 if (prop.ComputedExpr is not null)
                 {
@@ -824,7 +939,11 @@ public class TypeRegistry
     /// </summary>
     public static bool IsTrait(TypeDescriptor descriptor)
     {
-        if (descriptor.Properties.Count == 0) return false;
+        if (descriptor.Properties.Count == 0)
+        {
+            return false;
+        }
+
         return descriptor.Properties.Values.Any(p => p.TypeName.Contains("=>"));
     }
 
@@ -833,7 +952,7 @@ public class TypeRegistry
     /// </summary>
     public void RegisterConformance(string typeName, string traitName)
     {
-        if (!_traitConformance.TryGetValue(traitName, out var conformers))
+        if (!_traitConformance.TryGetValue(traitName, out HashSet<string>? conformers))
         {
             conformers = new HashSet<string>();
             _traitConformance[traitName] = conformers;
@@ -848,18 +967,29 @@ public class TypeRegistry
     /// </summary>
     public bool ConformsTo(string typeName, string traitName)
     {
-        if (typeName == "object") return true;
-        if (!_traitConformance.TryGetValue(traitName, out var conformers))
-            return false;
+        if (typeName == "object")
+        {
+            return true;
+        }
 
-        var desc = GetType(typeName);
+        if (!_traitConformance.TryGetValue(traitName, out HashSet<string>? conformers))
+        {
+            return false;
+        }
+
+        TypeDescriptor? desc = GetType(typeName);
         if (desc is null)
+        {
             return conformers.Contains(typeName);
+        }
 
         while (desc is not null)
         {
             if (conformers.Contains(desc.Name))
+            {
                 return true;
+            }
+
             desc = desc.BaseType;
         }
         return false;
@@ -873,11 +1003,14 @@ public class TypeRegistry
     /// </summary>
     public bool IsSubtypeOf(string typeName, string baseName)
     {
-        var desc = GetType(typeName);
+        TypeDescriptor? desc = GetType(typeName);
         while (desc is not null)
         {
             if (string.Equals(desc.Name, baseName, StringComparison.OrdinalIgnoreCase))
+            {
                 return true;
+            }
+
             desc = desc.BaseType;
         }
         return false;
@@ -888,7 +1021,7 @@ public class TypeRegistry
     /// </summary>
     public bool IsTraitName(string name)
     {
-        return _types.TryGetValue(name, out var desc) && IsTrait(desc);
+        return _types.TryGetValue(name, out TypeDescriptor? desc) && IsTrait(desc);
     }
 
     /// <summary>
@@ -906,14 +1039,19 @@ public class TypeRegistry
     /// </summary>
     public Ast.Expression? GetComputedProperty(string typeName, string propName)
     {
-        var desc = GetType(typeName);
+        TypeDescriptor? desc = GetType(typeName);
         if (desc is null)
-            return _computedProperties.TryGetValue((typeName, propName), out var direct) ? direct : null;
+        {
+            return _computedProperties.TryGetValue((typeName, propName), out Ast.Expression? direct) ? direct : null;
+        }
 
         while (desc is not null)
         {
-            if (_computedProperties.TryGetValue((desc.Name, propName), out var expr))
+            if (_computedProperties.TryGetValue((desc.Name, propName), out Ast.Expression? expr))
+            {
                 return expr;
+            }
+
             desc = desc.BaseType;
         }
         return null;
@@ -925,7 +1063,7 @@ public class TypeRegistry
     /// </summary>
     public bool ConformsToAny(string typeName, out string? matchedTrait)
     {
-        foreach (var (traitName, conformers) in _traitConformance)
+        foreach ((string? traitName, HashSet<string>? conformers) in _traitConformance)
         {
             if (conformers.Contains(typeName))
             {
@@ -942,11 +1080,14 @@ public class TypeRegistry
     /// </summary>
     public void RegisterAccessors(string typeName, Dictionary<string, Func<object, object?>> accessors)
     {
-        if (!_types.TryGetValue(typeName, out var descriptor)) return;
-
-        foreach (var (propName, accessor) in accessors)
+        if (!_types.TryGetValue(typeName, out TypeDescriptor? descriptor))
         {
-            if (descriptor.Properties.TryGetValue(propName, out var prop))
+            return;
+        }
+
+        foreach ((string? propName, Func<object, object?>? accessor) in accessors)
+        {
+            if (descriptor.Properties.TryGetValue(propName, out PropertyDescriptor? prop))
             {
                 prop.Accessor = accessor;
             }
@@ -958,24 +1099,32 @@ public class TypeRegistry
     /// </summary>
     public void RegisterMethodEvaluator(string typeName, string methodName, Func<object, List<object?>, object?> evaluator)
     {
-        if (_types.TryGetValue(typeName, out var descriptor))
+        if (_types.TryGetValue(typeName, out TypeDescriptor? descriptor))
+        {
             descriptor.MethodEvaluators[methodName] = evaluator;
+        }
     }
 
     /// <summary>
     /// Tries to evaluate a registered method on a value. Returns null if no evaluator found.
     /// Walks up the type hierarchy to find inherited method evaluators.
     /// </summary>
-    public object? TryEvaluateMethod(object target, string methodName, List<object?> args)
+    public object? EvaluateMethodOrDefault(object target, string methodName, List<object?> args)
     {
-        var typeName = InferTypeName(target);
-        if (typeName is null) return null;
+        string? typeName = InferTypeName(target);
+        if (typeName is null)
+        {
+            return null;
+        }
 
-        var desc = GetType(typeName);
+        TypeDescriptor? desc = GetType(typeName);
         while (desc is not null)
         {
-            if (desc.MethodEvaluators.TryGetValue(methodName, out var evaluator))
+            if (desc.MethodEvaluators.TryGetValue(methodName, out Func<object, List<object?>, object?>? evaluator))
+            {
                 return evaluator(target, args);
+            }
+
             desc = desc.BaseType;
         }
         return null;
@@ -988,7 +1137,7 @@ public class TypeRegistry
     {
         if (!HasType("Program"))
         {
-            var desc = new TypeDescriptor("Program");
+            TypeDescriptor desc = new TypeDescriptor("Program");
             desc.Properties["Args"] = new PropertyDescriptor("Args", "string", false, true);
             Register(desc);
         }
@@ -1004,17 +1153,42 @@ public class TypeRegistry
     /// </summary>
     public string ConvertToText(object? value)
     {
-        if (value is null) return "null";
-        if (value is string s) return s;
-        if (value is bool b) return b ? "true" : "false";
-        if (value is int i) return i.ToString();
-        if (value is double d) return d.ToString(System.Globalization.CultureInfo.InvariantCulture);
-        if (value is byte by) return by.ToString();
+        if (value is null)
+        {
+            return "null";
+        }
+
+        if (value is string s)
+        {
+            return s;
+        }
+
+        if (value is bool b)
+        {
+            return b ? "true" : "false";
+        }
+
+        if (value is int i)
+        {
+            return i.ToString();
+        }
+
+        if (value is double d)
+        {
+            return d.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        }
+
+        if (value is byte by)
+        {
+            return by.ToString();
+        }
 
         // Try to find a type descriptor for this CLR type
-        var typeName = InferTypeName(value);
-        if (typeName is not null && _types.TryGetValue(typeName, out var desc) && desc.TextConverter is not null)
+        string? typeName = InferTypeName(value);
+        if (typeName is not null && _types.TryGetValue(typeName, out TypeDescriptor? desc) && desc.TextConverter is not null)
+        {
             return desc.TextConverter(value);
+        }
 
         return value.ToString() ?? "";
     }
@@ -1024,10 +1198,17 @@ public class TypeRegistry
     /// </summary>
     public string? ConvertToTextIfRegistered(object? value)
     {
-        if (value is null || value is string) return null;
-        var typeName = InferTypeName(value);
-        if (typeName is not null && _types.TryGetValue(typeName, out var desc) && desc.TextConverter is not null)
+        if (value is null || value is string)
+        {
+            return null;
+        }
+
+        string? typeName = InferTypeName(value);
+        if (typeName is not null && _types.TryGetValue(typeName, out TypeDescriptor? desc) && desc.TextConverter is not null)
+        {
             return desc.TextConverter(value);
+        }
+
         return null;
     }
 
@@ -1036,12 +1217,22 @@ public class TypeRegistry
     /// </summary>
     internal string? InferTypeName(object? value)
     {
-        if (value is null) return null;
+        if (value is null)
+        {
+            return null;
+        }
+
         if (value is DataObject ao)
+        {
             return ao.TypeName;
+        }
+
         if (value is RecordView v)
+        {
             return v.Table.TypeName;
-        return _clrTypeMappings.TryGetValue(value.GetType(), out var name) ? name : null;
+        }
+
+        return _clrTypeMappings.TryGetValue(value.GetType(), out string? name) ? name : null;
     }
 
     /// <summary>
@@ -1050,16 +1241,20 @@ public class TypeRegistry
     /// </summary>
     public string? GetCollectionItemType(string collectionName)
     {
-        if (_collections.TryGetValue(collectionName, out var decl))
+        if (_collections.TryGetValue(collectionName, out CollectionDeclaration? decl))
+        {
             return decl.ItemType;
+        }
 
         // Qualified name: "csharp.Types" → look up "Types"
-        var dotIndex = collectionName.IndexOf('.');
+        int dotIndex = collectionName.IndexOf('.');
         if (dotIndex > 0)
         {
-            var bareName = collectionName[(dotIndex + 1)..];
+            string bareName = collectionName[(dotIndex + 1)..];
             if (_collections.TryGetValue(bareName, out decl))
+            {
                 return decl.ItemType;
+            }
         }
 
         return null;
@@ -1067,12 +1262,16 @@ public class TypeRegistry
 
     private bool HasCycle(string typeName, string baseTypeName)
     {
-        var visited = new HashSet<string> { typeName };
-        var current = baseTypeName;
+        HashSet<string> visited = new HashSet<string> { typeName };
+        string? current = baseTypeName;
         while (current is not null)
         {
-            if (!visited.Add(current)) return true;
-            current = _types.TryGetValue(current, out var desc) ? desc.BaseType?.Name : null;
+            if (!visited.Add(current))
+            {
+                return true;
+            }
+
+            current = _types.TryGetValue(current, out TypeDescriptor? desc) ? desc.BaseType?.Name : null;
         }
         return false;
     }
@@ -1085,42 +1284,56 @@ public class TypeRegistry
     /// </summary>
     public void RegisterProviderSchema(ProviderSchema schema)
     {
-        foreach (var ts in schema.Types)
+        foreach (ProviderTypeSchema ts in schema.Types)
         {
-            if (HasType(ts.Name)) continue;
-            var desc = new TypeDescriptor(ts.Name) { IsProviderType = true };
-            foreach (var ps in ts.Properties)
+            if (HasType(ts.Name))
+            {
+                continue;
+            }
+
+            TypeDescriptor desc = new TypeDescriptor(ts.Name) { IsProviderType = true };
+            foreach (ProviderPropertySchema ps in ts.Properties)
             {
                 ValidatePropertyCasing(ts.Name, ps.Name);
-                desc.Properties[ps.Name] = new PropertyDescriptor(ps.Name, ps.Type, ps.Optional, ps.Collection);
+                desc.Properties[ps.Name] = new PropertyDescriptor(ps.Name, ps.Type, ps.IsOptional, ps.IsCollection);
             }
             Register(desc);
         }
 
         // Resolve base types
-        foreach (var ts in schema.Types)
+        foreach (ProviderTypeSchema ts in schema.Types)
         {
-            if (ts.Base is null) continue;
-            var desc = GetType(ts.Name);
-            var baseDesc = GetType(ts.Base);
+            if (ts.Base is null)
+            {
+                continue;
+            }
+
+            TypeDescriptor? desc = GetType(ts.Name);
+            TypeDescriptor? baseDesc = GetType(ts.Base);
             if (desc is not null && baseDesc is not null && desc.BaseType is null)
+            {
                 desc.BaseType = baseDesc;
+            }
         }
 
         // Register collections
-        foreach (var cs in schema.Collections)
+        foreach (ProviderCollectionSchema cs in schema.Collections)
         {
             if (!HasCollection(cs.Name))
+            {
                 RegisterCollection(new CollectionDeclaration(cs.Name, cs.ItemType, 0));
+            }
         }
     }
 
     private static void ValidatePropertyCasing(string typeName, string propName)
     {
         if (propName.Length > 0 && char.IsLower(propName[0]))
+        {
             throw new InvalidOperationException(
                 $"Property '{propName}' on type '{typeName}' must be PascalCase. " +
                 $"Use a predicate for boolean queries (e.g., predicate {propName}({typeName}) => ...).");
+        }
     }
 
     /// <summary>
@@ -1130,33 +1343,33 @@ public class TypeRegistry
     /// </summary>
     public void RegisterDataTableAccessors(ProviderSchema schema)
     {
-        foreach (var ts in schema.Types)
+        foreach (ProviderTypeSchema ts in schema.Types)
         {
-            var accessors = new Dictionary<string, Func<object, object?>>();
+            Dictionary<string, Func<object, object?>> accessors = new Dictionary<string, Func<object, object?>>();
             for (int slot = 0; slot < ts.Properties.Count; slot++)
             {
-                var prop = ts.Properties[slot];
+                ProviderPropertySchema prop = ts.Properties[slot];
                 int capturedSlot = slot; // capture for closure
                 bool isPrimitive = prop.Type is "string" or "int" or "bool";
 
-                if (!prop.Collection && isPrimitive)
+                if (!prop.IsCollection && isPrimitive)
                 {
                     // Scalar primitive — works for both required and optional
                     accessors[prop.Name] = prop.Type switch
                     {
                         "string" => obj =>
                         {
-                            var v = (RecordView)obj;
+                            RecordView v = (RecordView)obj;
                             return v.Table.GetString(v.Index, capturedSlot);
                         },
                         "int" => obj =>
                         {
-                            var v = (RecordView)obj;
+                            RecordView v = (RecordView)obj;
                             return (object)v.Table.GetInt32(v.Index, capturedSlot);
                         },
                         "bool" => obj =>
                         {
-                            var v = (RecordView)obj;
+                            RecordView v = (RecordView)obj;
                             return (object)v.Table.GetBool(v.Index, capturedSlot);
                         },
                         _ => throw new InvalidOperationException()
@@ -1167,7 +1380,7 @@ public class TypeRegistry
                     // Collection or object-reference — raw long placeholder, wired later
                     accessors[prop.Name] = obj =>
                     {
-                        var v = (RecordView)obj;
+                        RecordView v = (RecordView)obj;
                         return (object)v.Table.GetInt64(v.Index, capturedSlot);
                     };
                 }
@@ -1185,61 +1398,73 @@ public class TypeRegistry
     public void WireDataStoreAccessors(ProviderSchema schema, DataStore store)
     {
         // Build lookups: by type name (for object refs) and by table name (for string collections)
-        var tableByType = new Dictionary<string, DataTable>();
-        var tableByName = new Dictionary<string, DataTable>();
-        foreach (var (name, table) in store.Tables)
+        Dictionary<string, DataTable> tableByType = new Dictionary<string, DataTable>();
+        Dictionary<string, DataTable> tableByName = new Dictionary<string, DataTable>();
+        foreach ((string? name, DataTable? table) in store.Tables)
         {
             tableByName[name] = table;
             tableByType[table.TypeName] = table;
         }
 
-        foreach (var ts in schema.Types)
+        foreach (ProviderTypeSchema ts in schema.Types)
         {
-            var desc = GetType(ts.Name);
-            if (desc is null) continue;
+            TypeDescriptor? desc = GetType(ts.Name);
+            if (desc is null)
+            {
+                continue;
+            }
 
             for (int slot = 0; slot < ts.Properties.Count; slot++)
             {
-                var prop = ts.Properties[slot];
+                ProviderPropertySchema prop = ts.Properties[slot];
                 int capturedSlot = slot;
                 bool isPrimitive = prop.Type is "string" or "int" or "bool";
 
-                if (prop.Collection)
+                if (prop.IsCollection)
                 {
                     if (isPrimitive)
                     {
                         // String/int/bool collection: range into a child table named "{Type}.{Prop}"
                         string childTableName = $"{ts.Name}.{prop.Name}";
-                        if (tableByName.TryGetValue(childTableName, out var strTable))
+                        if (tableByName.TryGetValue(childTableName, out DataTable? strTable))
                         {
-                            var capturedChild = strTable;
+                            DataTable capturedChild = strTable;
                             desc.Properties[prop.Name].Accessor = prop.Type switch
                             {
                                 "string" => obj =>
                                 {
-                                    var v = (RecordView)obj;
-                                    var (start, count) = v.Table.GetRange(v.Index, capturedSlot);
-                                    var items = new List<object>(count);
+                                    RecordView v = (RecordView)obj;
+                                    (int start, int count) = v.Table.GetRange(v.Index, capturedSlot);
+                                    List<object> items = new List<object>(count);
                                     for (int i = 0; i < count; i++)
+                                    {
                                         items.Add(capturedChild.GetString(start + i, 0));
+                                    }
+
                                     return items;
                                 },
                                 "int" => obj =>
                                 {
-                                    var v = (RecordView)obj;
-                                    var (start, count) = v.Table.GetRange(v.Index, capturedSlot);
-                                    var items = new List<object>(count);
+                                    RecordView v = (RecordView)obj;
+                                    (int start, int count) = v.Table.GetRange(v.Index, capturedSlot);
+                                    List<object> items = new List<object>(count);
                                     for (int i = 0; i < count; i++)
+                                    {
                                         items.Add(capturedChild.GetInt32(start + i, 0));
+                                    }
+
                                     return items;
                                 },
                                 "bool" => obj =>
                                 {
-                                    var v = (RecordView)obj;
-                                    var (start, count) = v.Table.GetRange(v.Index, capturedSlot);
-                                    var items = new List<object>(count);
+                                    RecordView v = (RecordView)obj;
+                                    (int start, int count) = v.Table.GetRange(v.Index, capturedSlot);
+                                    List<object> items = new List<object>(count);
                                     for (int i = 0; i < count; i++)
+                                    {
                                         items.Add(capturedChild.GetBool(start + i, 0));
+                                    }
+
                                     return items;
                                 },
                                 _ => throw new InvalidOperationException()
@@ -1249,16 +1474,19 @@ public class TypeRegistry
                     else
                     {
                         // Object collection: range reference into a child table by type name
-                        if (tableByType.TryGetValue(prop.Type, out var childTable))
+                        if (tableByType.TryGetValue(prop.Type, out DataTable? childTable))
                         {
-                            var capturedChild = childTable;
+                            DataTable capturedChild = childTable;
                             desc.Properties[prop.Name].Accessor = obj =>
                             {
-                                var v = (RecordView)obj;
-                                var (start, count) = v.Table.GetRange(v.Index, capturedSlot);
-                                var items = new List<object>(count);
+                                RecordView v = (RecordView)obj;
+                                (int start, int count) = v.Table.GetRange(v.Index, capturedSlot);
+                                List<object> items = new List<object>(count);
                                 for (int i = 0; i < count; i++)
+                                {
                                     items.Add(new RecordView(capturedChild, start + i));
+                                }
+
                                 return items;
                             };
                         }
@@ -1267,12 +1495,12 @@ public class TypeRegistry
                 else if (!isPrimitive)
                 {
                     // Optional object reference: index into a child table (-1 = null)
-                    if (tableByType.TryGetValue(prop.Type, out var refTable))
+                    if (tableByType.TryGetValue(prop.Type, out DataTable? refTable))
                     {
-                        var capturedRef = refTable;
+                        DataTable capturedRef = refTable;
                         desc.Properties[prop.Name].Accessor = obj =>
                         {
-                            var v = (RecordView)obj;
+                            RecordView v = (RecordView)obj;
                             int idx = v.Table.GetRef(v.Index, capturedSlot);
                             return idx < 0 ? null : new RecordView(capturedRef, idx);
                         };

@@ -1,3 +1,5 @@
+// Extracts SQL statement categories while masking quoted text and comments.
+
 using System.Text;
 
 namespace Cop.Providers.Sql;
@@ -5,30 +7,45 @@ namespace Cop.Providers.Sql;
 /// <summary>Dependency-free SQL statement analysis, not a dialect-specific SQL compiler.</summary>
 public static class SqlParser
 {
+    /// <summary>Contains SQL statements collected from a source document.</summary>
     public record SqlParseResult(List<SqlStatementInfo> Statements);
 
-    private static readonly HashSet<string> KnownKinds = new(StringComparer.OrdinalIgnoreCase)
+    private static readonly HashSet<string> s_knownKinds = new(StringComparer.OrdinalIgnoreCase)
         { "SELECT", "INSERT", "UPDATE", "DELETE", "CREATE", "ALTER", "DROP", "MERGE" };
 
+    /// <summary>
+    /// Extracts SQL statements and source locations without a dialect compiler.
+    /// </summary>
     public static SqlParseResult Parse(string text)
     {
-        var analysis = MaskQuotedTextAndComments(text);
-        var statements = new List<SqlStatementInfo>();
+        string analysis = MaskQuotedTextAndComments(text);
+        List<SqlStatementInfo> statements = new List<SqlStatementInfo>();
         int start = 0, line = 1, startLine = 1;
         for (int i = 0; i <= text.Length; i++)
         {
             bool batchSeparator = i == 0 || text[i - 1] == '\n';
             int endOfLine = batchSeparator ? analysis.IndexOf('\n', i) : -1;
-            if (endOfLine < 0) endOfLine = text.Length;
+            if (endOfLine < 0)
+            {
+                endOfLine = text.Length;
+            }
+
             batchSeparator = batchSeparator && analysis.AsSpan(i, endOfLine - i).Trim().Equals("GO", StringComparison.OrdinalIgnoreCase);
             if (i == text.Length || analysis[i] == ';' || batchSeparator)
             {
                 AddStatement(statements, text[start..i], analysis[start..i], startLine);
-                if (batchSeparator) i = endOfLine;
+                if (batchSeparator)
+                {
+                    i = endOfLine;
+                }
+
                 start = i + 1;
                 startLine = line + (i < text.Length && text[i] == '\n' ? 1 : 0);
             }
-            if (i < text.Length && text[i] == '\n') line++;
+            if (i < text.Length && text[i] == '\n')
+            {
+                line++;
+            }
         }
         return new(statements);
     }
@@ -38,20 +55,32 @@ public static class SqlParser
         int first = 0;
         while (first < analysis.Length && char.IsWhiteSpace(analysis[first]))
         {
-            if (analysis[first] == '\n') line++;
+            if (analysis[first] == '\n')
+            {
+                line++;
+            }
+
             first++;
         }
-        if (first == analysis.Length) return;
-        var tokens = TopLevelWords(analysis).ToList();
+        if (first == analysis.Length)
+        {
+            return;
+        }
+
+        List<(string Word, int Start)> tokens = TopLevelWords(analysis).ToList();
         string kind = tokens.FirstOrDefault().Word ?? "OTHER";
         int operation = tokens.FirstOrDefault().Start;
         if (kind == "WITH")
         {
-            var main = tokens.FirstOrDefault(t => t.Word is "SELECT" or "INSERT" or "UPDATE" or "DELETE" or "MERGE");
+            (string Word, int Start) main = tokens.FirstOrDefault(t => t.Word is "SELECT" or "INSERT" or "UPDATE" or "DELETE" or "MERGE");
             kind = main.Word ?? "OTHER";
             operation = main.Start;
         }
-        if (!KnownKinds.Contains(kind)) kind = "OTHER";
+        if (!s_knownKinds.Contains(kind))
+        {
+            kind = "OTHER";
+        }
+
         int from = tokens.Where(t => t.Start > operation && t.Word == "FROM").Select(t => t.Start).DefaultIfEmpty(analysis.Length).First();
         bool star = kind == "SELECT" && ProjectionHasWildcard(analysis[(operation + 6)..from]);
         bool where = tokens.Any(t => t.Word == "WHERE" && t.Start > operation);
@@ -64,18 +93,35 @@ public static class SqlParser
         for (int i = 0; i <= projection.Length; i++)
         {
             char c = i == projection.Length ? ',' : projection[i];
-            if (c == '(') depth++;
-            else if (c == ')') depth--;
+            if (c == '(')
+            {
+                depth++;
+            }
+            else if (c == ')')
+            {
+                depth--;
+            }
             else if (c == ',' && depth == 0)
             {
-                var item = projection[start..i].Trim();
+                string item = projection[start..i].Trim();
                 int wordEnd = 0;
-                while (wordEnd < item.Length && !char.IsWhiteSpace(item[wordEnd])) wordEnd++;
+                while (wordEnd < item.Length && !char.IsWhiteSpace(item[wordEnd]))
+                {
+                    wordEnd++;
+                }
+
                 if (wordEnd < item.Length
                     && (item.AsSpan(0, wordEnd).Equals("DISTINCT", StringComparison.OrdinalIgnoreCase)
                         || item.AsSpan(0, wordEnd).Equals("ALL", StringComparison.OrdinalIgnoreCase)))
+                {
                     item = item[wordEnd..].TrimStart();
-                if (item == "*" || item.EndsWith(".*", StringComparison.Ordinal)) return true;
+                }
+
+                if (item == "*" || item.EndsWith(".*", StringComparison.Ordinal))
+                {
+                    return true;
+                }
+
                 start = i + 1;
             }
         }
@@ -84,14 +130,21 @@ public static class SqlParser
 
     private static string NormalizeWhitespace(string text)
     {
-        var result = new StringBuilder(text.Length);
+        StringBuilder result = new StringBuilder(text.Length);
         bool whitespace = false;
         foreach (char value in text.AsSpan().Trim())
         {
-            if (char.IsWhiteSpace(value)) whitespace = true;
+            if (char.IsWhiteSpace(value))
+            {
+                whitespace = true;
+            }
             else
             {
-                if (whitespace && result.Length > 0) result.Append(' ');
+                if (whitespace && result.Length > 0)
+                {
+                    result.Append(' ');
+                }
+
                 result.Append(value);
                 whitespace = false;
             }
@@ -104,12 +157,22 @@ public static class SqlParser
         int depth = 0;
         for (int i = 0; i < text.Length; i++)
         {
-            if (text[i] == '(') depth++;
-            else if (text[i] == ')') depth--;
+            if (text[i] == '(')
+            {
+                depth++;
+            }
+            else if (text[i] == ')')
+            {
+                depth--;
+            }
             else if (depth == 0 && (char.IsLetter(text[i]) || text[i] == '_'))
             {
                 int start = i;
-                while (i + 1 < text.Length && (char.IsLetterOrDigit(text[i + 1]) || text[i + 1] == '_')) i++;
+                while (i + 1 < text.Length && (char.IsLetterOrDigit(text[i + 1]) || text[i + 1] == '_'))
+                {
+                    i++;
+                }
+
                 yield return (text[start..(i + 1)].ToUpperInvariant(), start);
             }
         }
@@ -117,11 +180,16 @@ public static class SqlParser
 
     private static string MaskQuotedTextAndComments(string text)
     {
-        var masked = text.ToCharArray();
+        char[] masked = text.ToCharArray();
         void Mask(int start, int end)
         {
             for (int j = start; j < end; j++)
-                if (masked[j] != '\n' && masked[j] != '\r') masked[j] = ' ';
+            {
+                if (masked[j] != '\n' && masked[j] != '\r')
+                {
+                    masked[j] = ' ';
+                }
+            }
         }
         for (int i = 0; i < text.Length; i++)
         {
@@ -129,7 +197,10 @@ public static class SqlParser
             char c = text[i];
             if (c == '-' && i + 1 < text.Length && text[i + 1] == '-')
             {
-                while (i < text.Length && text[i] != '\n') i++;
+                while (i < text.Length && text[i] != '\n')
+                {
+                    i++;
+                }
             }
             else if (c == '/' && i + 1 < text.Length && text[i + 1] == '*')
             {
@@ -139,7 +210,10 @@ public static class SqlParser
                 {
                     if (i + 1 < text.Length && text[i] == '/' && text[i + 1] == '*') { depth++; i += 2; }
                     else if (i + 1 < text.Length && text[i] == '*' && text[i + 1] == '/') { depth--; i += 2; }
-                    else i++;
+                    else
+                    {
+                        i++;
+                    }
                 }
             }
             else if (c is '\'' or '"' or '`' or '[')
@@ -148,7 +222,11 @@ public static class SqlParser
                 i++;
                 while (i < text.Length)
                 {
-                    if (text[i++] != closing) continue;
+                    if (text[i++] != closing)
+                    {
+                        continue;
+                    }
+
                     if (i < text.Length && text[i] == closing) { i++; continue; }
                     break;
                 }
@@ -156,13 +234,25 @@ public static class SqlParser
             else if (c == '$')
             {
                 int tagEnd = i + 1;
-                while (tagEnd < text.Length && (char.IsLetterOrDigit(text[tagEnd]) || text[tagEnd] == '_')) tagEnd++;
-                if (tagEnd == text.Length || text[tagEnd] != '$') continue;
-                var tag = text[i..(tagEnd + 1)];
+                while (tagEnd < text.Length && (char.IsLetterOrDigit(text[tagEnd]) || text[tagEnd] == '_'))
+                {
+                    tagEnd++;
+                }
+
+                if (tagEnd == text.Length || text[tagEnd] != '$')
+                {
+                    continue;
+                }
+
+                string tag = text[i..(tagEnd + 1)];
                 int closing = text.IndexOf(tag, tagEnd + 1, StringComparison.Ordinal);
                 i = closing < 0 ? text.Length : closing + tag.Length;
             }
-            else continue;
+            else
+            {
+                continue;
+            }
+
             Mask(start, i);
             i--;
         }

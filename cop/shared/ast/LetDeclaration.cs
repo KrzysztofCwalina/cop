@@ -1,3 +1,5 @@
+// Describes named value bindings and filtered collection declarations.
+
 namespace Cop.Lang;
 
 /// <summary>
@@ -19,6 +21,9 @@ public record LetDeclaration(
     string? PackageName = null,
     string? TypeAnnotation = null)
 {
+    /// <summary>
+    /// Indicates that this declaration binds a value rather than a query chain.
+    /// </summary>
     public bool IsValueBinding => ValueExpression is not null;
 
     /// <summary>

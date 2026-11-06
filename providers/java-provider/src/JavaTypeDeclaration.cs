@@ -1,3 +1,5 @@
+// Carries Java type-category and modifier facts through the shared source cache.
+
 namespace Cop.Providers.SourceModel;
 
 /// <summary>
@@ -9,22 +11,12 @@ namespace Cop.Providers.SourceModel;
 /// </summary>
 public sealed record JavaTypeDeclaration : TypeDeclaration
 {
-    public JavaTypeDeclaration(
-        TypeDeclaration source,
-        bool isRecord,
-        bool isEnum,
-        bool isSealed = false,
-        bool isNonSealed = false,
-        bool isFinal = false,
-        bool isGeneric = false)
+    /// <summary>
+    /// Copies a shared type before Java-specific facts are initialized.
+    /// </summary>
+    public JavaTypeDeclaration(TypeDeclaration source)
         : base(source)
     {
-        IsRecord = isRecord;
-        IsEnum = isEnum;
-        IsSealed = isSealed;
-        IsNonSealed = isNonSealed;
-        IsFinal = isFinal;
-        IsGeneric = isGeneric;
     }
 
     /// <summary>True for Java <c>record</c> declarations.</summary>
@@ -33,8 +25,10 @@ public sealed record JavaTypeDeclaration : TypeDeclaration
     /// <summary>True for Java <c>enum</c> declarations.</summary>
     public bool IsEnum { get; init; }
 
-    /// <summary>True for Java <c>sealed</c> declarations.</summary>
-    public bool IsSealed { get; init; }
+    /// <summary>
+    /// True for the Java sealed keyword, distinct from the common final-type fact.
+    /// </summary>
+    public bool HasSealedModifier { get; init; }
 
     /// <summary>True for Java <c>non-sealed</c> declarations.</summary>
     public bool IsNonSealed { get; init; }
@@ -45,39 +39,31 @@ public sealed record JavaTypeDeclaration : TypeDeclaration
     /// <summary>True for Java generic type declarations.</summary>
     public bool IsGeneric { get; init; }
 
+    /// <inheritdoc />
     public override string? LanguageTag => "java";
 
+    /// <inheritdoc />
     public override IReadOnlyList<KeyValuePair<string, bool>>? LanguageFlags =>
     [
         new("IsRecord", IsRecord),
         new("IsEnum", IsEnum),
-        new("IsSealed", IsSealed),
+        new("IsSealed", HasSealedModifier),
         new("IsNonSealed", IsNonSealed),
         new("IsFinal", IsFinal),
         new("IsGeneric", IsGeneric),
     ];
 
+    /// <summary>
+    /// Registers reconstruction of Java type flags from cached declarations.
+    /// </summary>
     public static void RegisterCacheFactory() =>
-        LanguageTypeRegistry.Register("java", (baseDecl, flags) => new JavaTypeDeclaration(
-            baseDecl,
-            isRecord: flags.TryGetValue("IsRecord", out var r) && r,
-            isEnum: flags.TryGetValue("IsEnum", out var e) && e,
-            isSealed: flags.TryGetValue("IsSealed", out var s) && s,
-            isNonSealed: flags.TryGetValue("IsNonSealed", out var ns) && ns,
-            isFinal: flags.TryGetValue("IsFinal", out var f) && f,
-            isGeneric: flags.TryGetValue("IsGeneric", out var g) && g));
-}
-
-public static class JavaTypeDeclarationExtensions
-{
-    /// <summary>Wraps a common <see cref="TypeDeclaration"/> as a Java-specific one.</summary>
-    public static JavaTypeDeclaration AsJava(
-        this TypeDeclaration source,
-        bool isRecord = false,
-        bool isEnum = false,
-        bool isSealed = false,
-        bool isNonSealed = false,
-        bool isFinal = false,
-        bool isGeneric = false)
-        => new(source, isRecord, isEnum, isSealed, isNonSealed, isFinal, isGeneric);
+        LanguageTypeRegistry.Register("java", (baseDecl, flags) => new JavaTypeDeclaration(baseDecl)
+        {
+            IsRecord = flags.TryGetValue("IsRecord", out bool r) && r,
+            IsEnum = flags.TryGetValue("IsEnum", out bool e) && e,
+            HasSealedModifier = flags.TryGetValue("IsSealed", out bool s) && s,
+            IsNonSealed = flags.TryGetValue("IsNonSealed", out bool ns) && ns,
+            IsFinal = flags.TryGetValue("IsFinal", out bool f) && f,
+            IsGeneric = flags.TryGetValue("IsGeneric", out bool g) && g
+        });
 }

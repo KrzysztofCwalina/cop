@@ -1,3 +1,5 @@
+// Bridges the syntax-tree pipeline and the public source-model representation.
+
 namespace Cop.Lang.Interpreter;
 
 using Cop.Lang.Ast;
@@ -59,19 +61,19 @@ public sealed class LanguageBridge
     /// <summary>
     /// Parse and load a .cop source file into the evaluator.
     /// </summary>
-    public void LoadSource(string source, string filePath = "<unknown>")
+    public async ValueTask LoadSourceAsync(string source, string filePath = "<unknown>", CancellationToken cancellationToken = default)
     {
-        var module = CopParser.Parse(source, filePath);
-        _evaluator.EvalModule(module);
+        ModuleNode module = CopParser.Parse(source, filePath);
+        await _evaluator.EvalModuleAsync(module, cancellationToken: cancellationToken);
     }
 
     /// <summary>
     /// Parse and load a .cop source file from disk.
     /// </summary>
-    public void LoadFile(string path)
+    public async ValueTask LoadFileAsync(string path, CancellationToken cancellationToken = default)
     {
-        var source = File.ReadAllText(path);
-        LoadSource(source, path);
+        string source = await File.ReadAllTextAsync(path, cancellationToken);
+        await LoadSourceAsync(source, path, cancellationToken: cancellationToken);
     }
 
     // ========================================================================
@@ -84,7 +86,7 @@ public sealed class LanguageBridge
     /// </summary>
     public void RegisterCollection(string name, IReadOnlyList<DataObject> items)
     {
-        var copItems = items.Select(item =>
+        List<CopValue> copItems = items.Select(item =>
             (CopValue)new CopDynamicObject(item, DataObjectAdapter.Instance)).ToList();
         _evaluator.GlobalEnvironment.Define(name, new CopList(copItems));
     }
@@ -94,7 +96,7 @@ public sealed class LanguageBridge
     /// </summary>
     public void RegisterLazyCollection(string name, Func<IEnumerable<DataObject>> factory)
     {
-        var lazy = new CopLazyCollection(() =>
+        CopLazyCollection lazy = new CopLazyCollection((deferredCancellationToken) =>
             factory().Select(item =>
                 (CopValue)new CopDynamicObject(item, DataObjectAdapter.Instance)));
         _evaluator.GlobalEnvironment.Define(name, lazy);
@@ -122,8 +124,16 @@ public sealed class LanguageBridge
     /// </summary>
     public void RegisterFunction(string name, ForeignFunction impl, int arity = -1)
     {
-        _ffi.Register(name, impl, arity);
+        _ffi.RegisterAsync(name, impl, arity);
         // Also define in the evaluator's current global env
+        _evaluator.GlobalEnvironment.Define(name, _ffi.Resolve(name)!);
+    }
+
+    /// <summary>Registers a synchronous function without introducing asynchronous work.</summary>
+    public void RegisterFunction(string name,
+        Func<IReadOnlyList<CopValue>, Environment, CopValue> impl, int arity = -1)
+    {
+        _ffi.Register(name, impl, arity);
         _evaluator.GlobalEnvironment.Define(name, _ffi.Resolve(name)!);
     }
 
@@ -135,11 +145,11 @@ public sealed class LanguageBridge
     /// Run a named command and return its result.
     /// Catches CopEvaluationException and stores in Errors (caller must check bridge.Errors).
     /// </summary>
-    public CopValue RunCommand(string name = "main")
+    public async ValueTask<CopValue> RunCommandAsync(string name = "main", CancellationToken cancellationToken = default)
     {
         try
         {
-            return _evaluator.RunCommand(name);
+            return (await _evaluator.RunCommandAsync(name, cancellationToken: cancellationToken));
         }
         catch (CopEvaluationException ex)
         {
@@ -151,12 +161,12 @@ public sealed class LanguageBridge
     /// <summary>
     /// Evaluate a single expression and return its result.
     /// </summary>
-    public CopValue EvalExpression(string exprSource)
+    public async ValueTask<CopValue> EvalExpressionAsync(string exprSource, CancellationToken cancellationToken = default)
     {
-        var source = $"command __eval__ = {exprSource}";
-        var module = CopParser.Parse(source, "<eval>");
-        _evaluator.EvalModule(module);
-        return _evaluator.RunCommand("__eval__");
+        string source = $"command __eval__ = {exprSource}";
+        ModuleNode module = CopParser.Parse(source, "<eval>");
+        await _evaluator.EvalModuleAsync(module, cancellationToken: cancellationToken);
+        return (await _evaluator.RunCommandAsync("__eval__", cancellationToken: cancellationToken));
     }
 
     // ========================================================================

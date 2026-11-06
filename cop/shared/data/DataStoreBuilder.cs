@@ -1,3 +1,5 @@
+// Assembles provider tables and string data into a completed data store.
+
 namespace Cop.Core;
 
 /// <summary>
@@ -18,7 +20,7 @@ public class DataStoreBuilder
     /// <param name="stride">Number of properties (slots per record).</param>
     public DataTableBuilder AddTable(string collectionName, string typeName, int stride)
     {
-        var builder = new DataTableBuilder(collectionName, typeName, stride, _heap);
+        DataTableBuilder builder = new DataTableBuilder(collectionName, typeName, stride, _heap);
         _tables.Add(builder);
         return builder;
     }
@@ -28,10 +30,13 @@ public class DataStoreBuilder
     /// </summary>
     public DataStore Build()
     {
-        var heap = _heap.Build();
-        var tables = new Dictionary<string, DataTable>(_tables.Count);
-        foreach (var tb in _tables)
+        byte[] heap = _heap.Build();
+        Dictionary<string, DataTable> tables = new Dictionary<string, DataTable>(_tables.Count);
+        foreach (DataTableBuilder tb in _tables)
+        {
             tables[tb.CollectionName] = tb.Build(heap);
+        }
+
         return new DataStore(tables, heap);
     }
 }

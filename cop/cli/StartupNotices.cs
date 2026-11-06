@@ -1,3 +1,5 @@
+// Selects startup notices for interactive sessions without changing scripted output.
+
 namespace Cop.Cli.Commands;
 
 /// <summary>
@@ -14,7 +16,7 @@ namespace Cop.Cli.Commands;
 internal static class StartupNotices
 {
     // Commands that print their own output and should never carry the version notices.
-    private static readonly HashSet<string> SelfDescribing = new(StringComparer.OrdinalIgnoreCase)
+    private static readonly HashSet<string> s_selfDescribing = new(StringComparer.OrdinalIgnoreCase)
     {
         "update", "-v", "--version", "-h", "-help", "--help", "help"
     };
@@ -30,13 +32,31 @@ internal static class StartupNotices
     /// </param>
     public static bool ShouldShow(string[] args, IReadOnlySet<string> knownVerbs, Func<string, bool> resolvesToRunnable)
     {
-        if (args.Length == 0) return true;                          // bare `cop` shows the main help; still surface the update reminder
-        var first = args[0];
-        if (SelfDescribing.Contains(first)) return false;           // help/version/update print their own output
+        if (args.Length == 0)
+        {
+            return true;                          // bare `cop` shows the main help; still surface the update reminder
+        }
+
+        string first = args[0];
+        if (s_selfDescribing.Contains(first))
+        {
+            return false;           // help/version/update print their own output
+        }
         // `cop run` with no target is a usage error — show only that error, not the notices.
-        if (first.Equals("run", StringComparison.OrdinalIgnoreCase) && args.Length == 1) return false;
-        if (knownVerbs.Contains(first)) return true;                // a recognized verb will run
-        if (first.StartsWith('-') || first.StartsWith('/')) return true; // option-led (root-command options)
+        if (first.Equals("run", StringComparison.OrdinalIgnoreCase) && args.Length == 1)
+        {
+            return false;
+        }
+
+        if (knownVerbs.Contains(first))
+        {
+            return true;                // a recognized verb will run
+        }
+
+        if (first.StartsWith('-') || first.StartsWith('/'))
+        {
+            return true; // option-led (root-command options)
+        }
         // A bare token only runs if it names something runnable; an unknown/misspelled command
         // must show just the "unknown command" error, never the version notices.
         return resolvesToRunnable(first);

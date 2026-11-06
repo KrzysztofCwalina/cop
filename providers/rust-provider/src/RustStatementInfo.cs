@@ -1,3 +1,5 @@
+// Preserves Rust-specific statement identities through the shared source cache.
+
 namespace Cop.Providers.SourceModel;
 
 /// <summary>
@@ -9,35 +11,10 @@ namespace Cop.Providers.SourceModel;
 /// </summary>
 public sealed class RustStatementInfo : StatementInfo
 {
-    /// <summary>Parser constructor — matches the base 7-arg constructor.</summary>
-    public RustStatementInfo(
-        string kind, List<string> keywords, string? typeName, string? memberName,
-        List<string> arguments, int line, bool isInMethod)
-        : base(kind, keywords, typeName, memberName, arguments, line, isInMethod) { }
-
-    /// <summary>Cache reconstruction constructor — copies fields from a deserialized base.</summary>
+    /// <summary>Copies neutral statement facts and their shared graph references.</summary>
     public RustStatementInfo(StatementInfo source)
-        : base(source.Kind, source.Keywords, source.TypeName, source.MemberName,
-               source.Arguments, source.Line, source.IsInMethod)
+        : base(source)
     {
-        HasRethrow = source.HasRethrow;
-        IsErrorHandler = source.IsErrorHandler;
-        IsGenericErrorHandler = source.IsGenericErrorHandler;
-        IsBraced = source.IsBraced;
-        Method = source.Method;
-        Condition = source.Condition;
-        Expression = source.Expression;
-        CallTarget = source.CallTarget;
-        ValueExpression = source.ValueExpression;
-        ArgumentExpressions = source.ArgumentExpressions;
-        Column = source.Column;
-        EndLine = source.EndLine;
-        EndColumn = source.EndColumn;
-        File = source.File;
-        Parent = source.Parent;
-        CopIgnore = source.CopIgnore;
-        ConstructedTypeInterfaces = source.ConstructedTypeInterfaces;
-        _children = source._children;
     }
 
     /// <summary>True for a Rust macro invocation (e.g. <c>println!</c>, <c>vec!</c>).</summary>
@@ -46,8 +23,10 @@ public sealed class RustStatementInfo : StatementInfo
     /// <summary>True for a panic-like macro (<c>panic!</c> / <c>todo!</c> / <c>unimplemented!</c> / <c>unreachable!</c>).</summary>
     public bool IsPanic => Kind == "throw";
 
+    /// <inheritdoc />
     public override string? LanguageTag => "rust";
 
+    /// <inheritdoc />
     public override IReadOnlyList<KeyValuePair<string, bool>>? LanguageFlags => [];
 
     /// <summary>Registers the cache reconstruction factory so cached Rust statements load back as

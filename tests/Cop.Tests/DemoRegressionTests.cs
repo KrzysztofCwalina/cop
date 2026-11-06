@@ -84,7 +84,7 @@ public class DemoRegressionTests
     // --- Bug 2: export is not required for cross-file references within one program ---
 
     [Test]
-    public void Bug2_CrossFileLetReference_DoesNotRequireExport()
+    public async Task Bug2_CrossFileLetReference_DoesNotRequireExport()
     {
         var scriptsDir = Path.Combine(_tempDir, "checks");
         var codebaseDir = Path.Combine(_tempDir, "codebase");
@@ -100,7 +100,7 @@ public class DemoRegressionTests
         File.WriteAllText(Path.Combine(scriptsDir, "main.cop"),
             "command main = foreach shared-empty => 'Empty: {item.Path}'\n");
 
-        var result = Engine.Run(scriptsDir, codebaseDir);
+        var result = (await Engine.RunAsync(scriptsDir, codebaseDir));
 
         Assert.That(result.HasParseErrors, Is.False, string.Join("; ", result.ParseErrors));
         Assert.That(result.HasFatalErrors, Is.False, string.Join("; ", result.Errors));

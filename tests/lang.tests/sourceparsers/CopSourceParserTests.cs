@@ -85,7 +85,7 @@ public class CopSourceParserTests
         {
             var source = new CopSourceParser().Parse("sample.cop", Source)!;
             SourceCacheSerializer.Save(path, [1, 2, 3], [source]);
-            var loaded = SourceCacheSerializer.TryLoad(path, [1, 2, 3])!;
+            var loaded = SourceCacheSerializer.LoadOrDefault(path, [1, 2, 3])!;
 
             Assert.That(loaded, Has.Count.EqualTo(1));
             Assert.That(loaded[0].Methods, Has.Count.EqualTo(5));
@@ -114,7 +114,7 @@ public class CopSourceParserTests
     }
 
     [Test]
-    public void Provider_LinksFunctionAndCallLocations_OnColdAndCachedQueries()
+    public async Task Provider_LinksFunctionAndCallLocations_OnColdAndCachedQueries()
     {
         var directory = Path.Combine(Path.GetTempPath(), "cop-ast-query-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(directory);
@@ -124,8 +124,8 @@ public class CopSourceParserTests
             var provider = new CopProvider();
             for (int run = 0; run < 2; run++)
             {
-                var collections = (Dictionary<string, List<object>>)provider.Query(
-                    new ProviderQuery { RootPath = directory })!;
+                var collections = (Dictionary<string, List<object>>)(await provider.QueryAsync(
+                    new ProviderQuery { RootPath = directory }, cancellationToken: CancellationToken.None))!;
                 var functions = collections["Methods"].Cast<CopFunctionDeclaration>().ToArray();
                 Assert.That(functions, Has.Length.EqualTo(5));
                 Assert.That(functions.Select(f => f.File?.Path),

@@ -10,7 +10,7 @@ public class JavaScriptCacheParityTests
 {
     [TestCase(false)]
     [TestCase(true)]
-    public void CompilerBackedQueries_DoNotWriteSourceOnlyDiskCaches(bool deferred)
+    public async System.Threading.Tasks.Task CompilerBackedQueries_DoNotWriteSourceOnlyDiskCaches(bool deferred)
     {
         var root = Path.Combine(Path.GetTempPath(), $"cop-js-native-cache-{Guid.NewGuid():N}");
         Directory.CreateDirectory(root);
@@ -31,12 +31,12 @@ public class JavaScriptCacheParityTests
                 .Invoke(null, [scopeKey])!;
             for (int run = 0; run < 2; run++)
             {
-                using var scope = new Cop.Core.ToolchainExecutionScope();
+                await using var scope = new Cop.Core.ToolchainExecutionScope();
                 var files = deferred
                     ? new DeferredSourceSnapshot(registry, new() { RootPath = root })
                         .Query(new() { Collection = "Files" }).Collections["Files"].Cast<SourceFile>()
-                    : CodeCollectionBuilder.CollectAndParse(registry, new() { RootPath = root })["Files"].Cast<SourceFile>();
-                var file = files.Single();
+                    : (await CodeCollectionBuilder.CollectAndParseAsync(registry, new() { RootPath = root }, cancellationToken: CancellationToken.None))["Files"].Cast<SourceFile>().ToAsyncEnumerable();
+                var file = await files.SingleAsync();
                 Assert.That(file.Methods.Select(m => m.Name), Is.EqualTo(new[] { "run" }));
                 Assert.That(file.Statements.Where(s => s.Kind == "call").Select(s => s.MemberName),
                     Is.EqualTo(new[] { "log" }));
@@ -51,7 +51,7 @@ public class JavaScriptCacheParityTests
     public void JavaScriptSubtypeCacheRoundTrip_RetainsParsedCallAndValueExpressionsAndSpans()
     {
         JavaScriptStatementInfo.RegisterCacheFactory();
-        var call = new JavaScriptStatementInfo("call", [], null, "log", ["'ab'"], 2, false)
+        var call = new JavaScriptStatementInfo(new StatementInfo("call", [], null, "log", ["'ab'"], 2, false))
         {
             CallTarget = new("memberAccess")
             {
@@ -68,7 +68,7 @@ public class JavaScriptCacheParityTests
         {
             serializer.GetMethod("Save", [typeof(string), typeof(byte[]), typeof(List<SourceFile>)])!
                 .Invoke(null, [path, new byte[] { 1, 2 }, new List<SourceFile> { file }]);
-            var files = (List<SourceFile>?)serializer.GetMethod("TryLoad", [typeof(string), typeof(byte[])])!
+            var files = (List<SourceFile>?)serializer.GetMethod("LoadOrDefault", [typeof(string), typeof(byte[])])!
                 .Invoke(null, [path, new byte[] { 1, 2 }]);
             Assert.That(files, Has.Count.EqualTo(1));
             var restored = files!.Single().Statements.Single();

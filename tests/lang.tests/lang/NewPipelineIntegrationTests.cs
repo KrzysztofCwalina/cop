@@ -16,11 +16,11 @@ public class NewPipelineIntegrationTests
     // ========================================================================
 
     [Test]
-    public void TypeDeclarationAndFieldAccess()
+    public async Task TypeDeclarationAndFieldAccess()
     {
         // Pattern from packages/code/src/code.cop
         var runner = new NewPipelineRunner();
-        runner.LoadSource(@"
+        await runner.LoadSourceAsync(@"
 type LineKind = code | comment | blank
 
 type Line = {
@@ -31,14 +31,14 @@ type Line = {
 
 command main = {
     print('type defined')
-}");
-        runner.Run();
+}", cancellationToken: CancellationToken.None);
+        await runner.RunAsync(cancellationToken: CancellationToken.None);
         Assert.That(runner.Outputs[0], Is.EqualTo("type defined"));
         Assert.That(runner.ParseErrors, Is.Empty);
     }
 
     [Test]
-    public void PredicateDeclarationAndFilter()
+    public async Task PredicateDeclarationAndFilter()
     {
         // Pattern: predicate isPublic(Type) => Type.Visibility:equals('public')
         var runner = new NewPipelineRunner();
@@ -51,16 +51,16 @@ command main = {
         };
         runner.RegisterCollection("Types", types);
 
-        runner.LoadSource(@"
+        await runner.LoadSourceAsync(@"
 predicate isPublic(t) => t.Visibility == 'public'
-command main = foreach Types:isPublic => print(item.Name)");
-        runner.Run();
+command main = foreach Types:isPublic => print(item.Name)", cancellationToken: CancellationToken.None);
+        await runner.RunAsync(cancellationToken: CancellationToken.None);
 
         Assert.That(runner.Outputs, Is.EqualTo(new[] { "Foo", "Baz" }));
     }
 
     [Test]
-    public void FunctionWithExpressionBody()
+    public async Task FunctionWithExpressionBody()
     {
         // Pattern: function fullName(Type) = Type.Namespace + '.' + Type.Name
         var runner = new NewPipelineRunner();
@@ -71,16 +71,16 @@ command main = foreach Types:isPublic => print(item.Name)");
         };
         runner.RegisterCollection("Types", types);
 
-        runner.LoadSource(@"
+        await runner.LoadSourceAsync(@"
 function fullName(t) = t.Namespace + '.' + t.Name
-command main = foreach Types => print(fullName(item))");
-        runner.Run();
+command main = foreach Types => print(fullName(item))", cancellationToken: CancellationToken.None);
+        await runner.RunAsync(cancellationToken: CancellationToken.None);
 
         Assert.That(runner.Outputs[0], Is.EqualTo("Acme.Widget"));
     }
 
     [Test]
-    public void LetBindingWithCollectionCount()
+    public async Task LetBindingWithCollectionCount()
     {
         var runner = new NewPipelineRunner();
 
@@ -92,18 +92,18 @@ command main = foreach Types => print(fullName(item))");
         };
         runner.RegisterCollection("Files", items);
 
-        runner.LoadSource(@"
+        await runner.LoadSourceAsync(@"
 command main = {
     let count = Files.Count
     print('Found ' + count + ' files')
-}");
-        runner.Run();
+}", cancellationToken: CancellationToken.None);
+        await runner.RunAsync(cancellationToken: CancellationToken.None);
 
         Assert.That(runner.Outputs[0], Is.EqualTo("Found 3 files"));
     }
 
     [Test]
-    public void InterpolatedStringTemplate()
+    public async Task InterpolatedStringTemplate()
     {
         // Pattern: print('{item.Name} ({item.Kind})')
         var runner = new NewPipelineRunner();
@@ -115,15 +115,15 @@ command main = {
         };
         runner.RegisterCollection("Types", items);
 
-        runner.LoadSource(@"
-command main = foreach Types => print('{item.Name} ({item.Kind})')");
-        runner.Run();
+        await runner.LoadSourceAsync(@"
+command main = foreach Types => print('{item.Name} ({item.Kind})')", cancellationToken: CancellationToken.None);
+        await runner.RunAsync(cancellationToken: CancellationToken.None);
 
         Assert.That(runner.Outputs, Is.EqualTo(new[] { "Widget (Class)", "IService (Interface)" }));
     }
 
     [Test]
-    public void MultiplePredicatesComposed()
+    public async Task MultiplePredicatesComposed()
     {
         // Pattern: predicate isPublicClass(Type:isPublic:isClass) => ...
         var runner = new NewPipelineRunner();
@@ -136,55 +136,55 @@ command main = foreach Types => print('{item.Name} ({item.Kind})')");
         };
         runner.RegisterCollection("Types", types);
 
-        runner.LoadSource(@"
+        await runner.LoadSourceAsync(@"
 predicate isPublic(t) => t.Visibility == 'public'
 predicate isClass(t) => t.Kind == 'Class'
 predicate isPublicClass(t) => isPublic(t) && isClass(t)
-command main = foreach Types:isPublicClass => print(item.Name)");
-        runner.Run();
+command main = foreach Types:isPublicClass => print(item.Name)", cancellationToken: CancellationToken.None);
+        await runner.RunAsync(cancellationToken: CancellationToken.None);
 
         Assert.That(runner.Outputs, Is.EqualTo(new[] { "Foo" }));
     }
 
     [Test]
-    public void ConditionalExpression()
+    public async Task ConditionalExpression()
     {
         var runner = new NewPipelineRunner();
-        runner.LoadSource(@"
+        await runner.LoadSourceAsync(@"
 function label(n : int) : string = n > 10 ? 'big' : 'small'
 command main = {
     print(label(5))
     print(label(15))
-}");
-        runner.Run();
+}", cancellationToken: CancellationToken.None);
+        await runner.RunAsync(cancellationToken: CancellationToken.None);
         Assert.That(runner.Outputs, Is.EqualTo(new[] { "small", "big" }));
     }
 
     [Test]
-    public void ListLiteralAndForEach()
+    public async Task ListLiteralAndForEach()
     {
         var runner = new NewPipelineRunner();
-        runner.LoadSource(@"
+        await runner.LoadSourceAsync(@"
 let items = ['alpha', 'beta', 'gamma']
-command main = foreach items => print(item)");
-        runner.Run();
+command main = foreach items => print(item)", cancellationToken: CancellationToken.None);
+        await runner.RunAsync(cancellationToken: CancellationToken.None);
         Assert.That(runner.Outputs, Is.EqualTo(new[] { "alpha", "beta", "gamma" }));
     }
 
     [Test]
-    public void NestedFunctionCalls()
+    public async Task NestedFunctionCalls()
     {
         var runner = new NewPipelineRunner();
-        runner.LoadSource(@"
+        await runner.LoadSourceAsync(@"
 function add(a : int, b : int) : int = a + b
 function double(n : int) : int = n + n
-command main = print(double(add(3, 4)))");
-        runner.Run();
+command main = print(double(add(3, 4)))", cancellationToken: CancellationToken.None);
+        await runner.RunAsync(cancellationToken: CancellationToken.None);
         Assert.That(runner.Outputs[0], Is.EqualTo("14"));
     }
 
     [Test]
-    public void FilterWithNegation()
+    public async Task FilterWithNegation()
     {
         var runner = new NewPipelineRunner();
 
@@ -196,102 +196,102 @@ command main = print(double(add(3, 4)))");
         };
         runner.RegisterCollection("items", items);
 
-        runner.LoadSource(@"
+        await runner.LoadSourceAsync(@"
 predicate isActive(x) => x.Active == true
-command main = foreach items:!isActive => print(item.Name)");
-        runner.Run();
+command main = foreach items:!isActive => print(item.Name)", cancellationToken: CancellationToken.None);
+        await runner.RunAsync(cancellationToken: CancellationToken.None);
 
         Assert.That(runner.Outputs, Is.EqualTo(new[] { "B" }));
     }
 
     [Test]
-    public void RecursiveFunction()
+    public async Task RecursiveFunction()
     {
         var runner = new NewPipelineRunner();
-        runner.LoadSource(@"
+        await runner.LoadSourceAsync(@"
 function factorial(n : int) : int = n <= 1 ? 1 : n * factorial(n - 1)
-command main = print(factorial(5))");
-        runner.Run();
+command main = print(factorial(5))", cancellationToken: CancellationToken.None);
+        await runner.RunAsync(cancellationToken: CancellationToken.None);
         Assert.That(runner.Outputs[0], Is.EqualTo("120"));
     }
 
     [Test]
-    public void MultipleFiles()
+    public async Task MultipleFiles()
     {
         // Simulates loading multiple .cop files from a package (like core + checks)
         var runner = new NewPipelineRunner();
-        runner.LoadSource(@"
+        await runner.LoadSourceAsync(@"
 function prefix(s : string) : string = '[INFO] ' + s
-", "utils.cop");
-        runner.LoadSource(@"
+", "utils.cop", cancellationToken: CancellationToken.None);
+        await runner.LoadSourceAsync(@"
 command main = print(prefix('hello'))
-", "main.cop");
-        runner.Run();
+", "main.cop", cancellationToken: CancellationToken.None);
+        await runner.RunAsync(cancellationToken: CancellationToken.None);
         Assert.That(runner.Outputs[0], Is.EqualTo("[INFO] hello"));
     }
 
     [Test]
-    public void EnumDeclaration()
+    public async Task EnumDeclaration()
     {
         var runner = new NewPipelineRunner();
-        runner.LoadSource(@"
+        await runner.LoadSourceAsync(@"
 enum Severity = Error | Warning | Info
-command main = print('enum loaded')");
-        runner.Run();
+command main = print('enum loaded')", cancellationToken: CancellationToken.None);
+        await runner.RunAsync(cancellationToken: CancellationToken.None);
         Assert.That(runner.Outputs[0], Is.EqualTo("enum loaded"));
     }
 
     [Test]
-    public void LambdaExpression()
+    public async Task LambdaExpression()
     {
         var runner = new NewPipelineRunner();
-        runner.LoadSource(@"
+        await runner.LoadSourceAsync(@"
 let double = (n) => n + n
-command main = print(double(21))");
-        runner.Run();
+command main = print(double(21))", cancellationToken: CancellationToken.None);
+        await runner.RunAsync(cancellationToken: CancellationToken.None);
         Assert.That(runner.Outputs[0], Is.EqualTo("42"));
     }
 
     [Test]
-    public void ObjectLiteral()
+    public async Task ObjectLiteral()
     {
         var runner = new NewPipelineRunner();
-        runner.LoadSource(@"
+        await runner.LoadSourceAsync(@"
 command main = {
     let obj = { Name = 'test', Value = 42 }
     print(obj.Name + ' = ' + obj.Value)
-}");
-        runner.Run();
+}", cancellationToken: CancellationToken.None);
+        await runner.RunAsync(cancellationToken: CancellationToken.None);
         Assert.That(runner.Outputs[0], Is.EqualTo("test = 42"));
     }
 
     [Test]
-    public void CommandWithBlockBody()
+    public async Task CommandWithBlockBody()
     {
         var runner = new NewPipelineRunner();
-        runner.LoadSource(@"
+        await runner.LoadSourceAsync(@"
 command main = {
     let x = 10
     let y = 20
     print(x + y)
-}");
-        runner.Run();
+}", cancellationToken: CancellationToken.None);
+        await runner.RunAsync(cancellationToken: CancellationToken.None);
         Assert.That(runner.Outputs[0], Is.EqualTo("30"));
     }
 
     [Test]
-    public void ExportedFunctionsAreAccessible()
+    public async Task ExportedFunctionsAreAccessible()
     {
         var runner = new NewPipelineRunner();
-        runner.LoadSource(@"
+        await runner.LoadSourceAsync(@"
 export function greet(name : string) : string = 'Hello ' + name
-command main = print(greet('World'))");
-        runner.Run();
+command main = print(greet('World'))", cancellationToken: CancellationToken.None);
+        await runner.RunAsync(cancellationToken: CancellationToken.None);
         Assert.That(runner.Outputs[0], Is.EqualTo("Hello World"));
     }
 
     [Test]
-    public void CollectionDotCount()
+    public async Task CollectionDotCount()
     {
         var runner = new NewPipelineRunner();
 
@@ -302,17 +302,17 @@ command main = print(greet('World'))");
         };
         runner.RegisterCollection("items", items);
 
-        runner.LoadSource(@"
+        await runner.LoadSourceAsync(@"
 command main = {
     let n = items.Count
     print(n)
-}");
-        runner.Run();
+}", cancellationToken: CancellationToken.None);
+        await runner.RunAsync(cancellationToken: CancellationToken.None);
         Assert.That(runner.Outputs[0], Is.EqualTo("2"));
     }
 
     [Test]
-    public void FilterThenCount()
+    public async Task FilterThenCount()
     {
         var runner = new NewPipelineRunner();
 
@@ -324,18 +324,18 @@ command main = {
         };
         runner.RegisterCollection("items", items);
 
-        runner.LoadSource(@"
+        await runner.LoadSourceAsync(@"
 predicate highScore(i) => i.Score > 10
 command main = {
     let filtered = items:highScore
     print(filtered.Count)
-}");
-        runner.Run();
+}", cancellationToken: CancellationToken.None);
+        await runner.RunAsync(cancellationToken: CancellationToken.None);
         Assert.That(runner.Outputs[0], Is.EqualTo("2"));
     }
 
     [Test]
-    public void MemberAccessOnFilteredCollectionItems()
+    public async Task MemberAccessOnFilteredCollectionItems()
     {
         var runner = new NewPipelineRunner();
 
@@ -347,16 +347,16 @@ command main = {
         };
         runner.RegisterCollection("people", items);
 
-        runner.LoadSource(@"
+        await runner.LoadSourceAsync(@"
 predicate isAdult(p) => p.Age >= 18
-command main = foreach people:isAdult => print(item.Name + ' is ' + item.Age)");
-        runner.Run();
+command main = foreach people:isAdult => print(item.Name + ' is ' + item.Age)", cancellationToken: CancellationToken.None);
+        await runner.RunAsync(cancellationToken: CancellationToken.None);
 
         Assert.That(runner.Outputs, Is.EqualTo(new[] { "Alice is 30", "Carol is 25" }));
     }
 
     [Test]
-    public void BooleanFieldFilterDirect()
+    public async Task BooleanFieldFilterDirect()
     {
         var runner = new NewPipelineRunner();
 
@@ -367,10 +367,10 @@ command main = foreach people:isAdult => print(item.Name + ' is ' + item.Age)");
         };
         runner.RegisterCollection("Types", items);
 
-        runner.LoadSource(@"
+        await runner.LoadSourceAsync(@"
 predicate isPublic(t) => t.IsPublic == true
-command main = foreach Types:isPublic => print(item.Name)");
-        runner.Run();
+command main = foreach Types:isPublic => print(item.Name)", cancellationToken: CancellationToken.None);
+        await runner.RunAsync(cancellationToken: CancellationToken.None);
 
         Assert.That(runner.Outputs, Is.EqualTo(new[] { "PublicWidget" }));
     }

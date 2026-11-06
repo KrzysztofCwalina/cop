@@ -1,3 +1,7 @@
+// Renders Markdown help content for terminal output.
+
+using System.Text;
+
 namespace Cop.Cli.Commands;
 
 /// <summary>
@@ -39,12 +43,12 @@ internal static class ConsoleMarkdown
         writer ??= Console.Out;
         bool color = UseColor && writer == Console.Out;
 
-        var lines = markdown.Split('\n');
+        string[] lines = markdown.Split('\n');
         bool inCodeBlock = false;
 
-        foreach (var rawLine in lines)
+        foreach (string rawLine in lines)
         {
-            var line = rawLine.TrimEnd('\r');
+            string line = rawLine.TrimEnd('\r');
 
             if (line.StartsWith("```"))
             {
@@ -64,17 +68,30 @@ internal static class ConsoleMarkdown
             {
                 // Strip markdown syntax even in plain text
                 if (line.StartsWith("#### "))
+                {
                     writer.WriteLine(line[5..]);
+                }
                 else if (line.StartsWith("### "))
+                {
                     writer.WriteLine(line[4..]);
+                }
                 else if (line.StartsWith("## "))
+                {
                     writer.WriteLine(line[3..]);
+                }
                 else if (line.StartsWith("# "))
+                {
                     writer.WriteLine(line[2..]);
+                }
                 else if (line.StartsWith("> "))
+                {
                     writer.WriteLine(StripInlineMarkdown(line[2..]));
+                }
                 else
+                {
                     writer.WriteLine(StripInlineMarkdown(line));
+                }
+
                 continue;
             }
 
@@ -133,7 +150,7 @@ internal static class ConsoleMarkdown
     /// </summary>
     private static string RenderInlineFormatting(string line)
     {
-        var sb = new System.Text.StringBuilder(line.Length + 64);
+        StringBuilder sb = new System.Text.StringBuilder(line.Length + 64);
         int i = 0;
 
         while (i < line.Length)
@@ -144,7 +161,7 @@ internal static class ConsoleMarkdown
                 int end = line.IndexOf('`', i + 1);
                 if (end > i)
                 {
-                    var code = line.Substring(i + 1, end - i - 1);
+                    string code = line.Substring(i + 1, end - i - 1);
                     sb.Append(Cyan).Append(code).Append(Reset);
                     i = end + 1;
                     continue;
@@ -157,7 +174,7 @@ internal static class ConsoleMarkdown
                 int end = line.IndexOf("**", i + 2, StringComparison.Ordinal);
                 if (end > i)
                 {
-                    var text = line.Substring(i + 2, end - i - 2);
+                    string text = line.Substring(i + 2, end - i - 2);
                     sb.Append(Bold).Append(text).Append(Reset);
                     i = end + 2;
                     continue;
@@ -173,11 +190,18 @@ internal static class ConsoleMarkdown
 
     private static bool IsTableSeparator(string line)
     {
-        if (!line.StartsWith('|') || !line.EndsWith('|')) return false;
+        if (!line.StartsWith('|') || !line.EndsWith('|'))
+        {
+            return false;
+        }
+
         for (int i = 1; i < line.Length - 1; i++)
         {
             char c = line[i];
-            if (c != '-' && c != '|' && c != ':' && c != ' ') return false;
+            if (c != '-' && c != '|' && c != ':' && c != ' ')
+            {
+                return false;
+            }
         }
         return true;
     }
@@ -196,14 +220,18 @@ internal static class ConsoleMarkdown
         while ((linkStart = line.IndexOf('[')) >= 0)
         {
             int linkEnd = line.IndexOf(']', linkStart);
-            if (linkEnd < 0) break;
+            if (linkEnd < 0)
+            {
+                break;
+            }
+
             int parenStart = linkEnd + 1;
             if (parenStart < line.Length && line[parenStart] == '(')
             {
                 int parenEnd = line.IndexOf(')', parenStart);
                 if (parenEnd >= 0)
                 {
-                    var text = line[(linkStart + 1)..linkEnd];
+                    string text = line[(linkStart + 1)..linkEnd];
                     line = line[..linkStart] + text + line[(parenEnd + 1)..];
                     continue;
                 }
@@ -220,9 +248,13 @@ internal static class ConsoleMarkdown
     {
         writer ??= Console.Out;
         if (UseColor && writer == Console.Out)
+        {
             writer.WriteLine($"{Bold}{Cyan}{title}{Reset}");
+        }
         else
+        {
             writer.WriteLine(title);
+        }
     }
 
     /// <summary>
@@ -232,9 +264,13 @@ internal static class ConsoleMarkdown
     {
         writer ??= Console.Out;
         if (UseColor && writer == Console.Out)
+        {
             writer.Write($"{Cyan}{keyword}{Reset} {Bold}{name}{Reset}");
+        }
         else
+        {
             writer.Write($"{keyword} {name}");
+        }
     }
 
     /// <summary>
@@ -244,9 +280,13 @@ internal static class ConsoleMarkdown
     {
         writer ??= Console.Out;
         if (UseColor && writer == Console.Out)
+        {
             writer.Write($"{Gray}# {comment}{Reset}");
+        }
         else
+        {
             writer.Write($"# {comment}");
+        }
     }
 
     /// <summary>
@@ -256,9 +296,13 @@ internal static class ConsoleMarkdown
     {
         writer ??= Console.Out;
         if (UseColor && writer == Console.Out)
+        {
             writer.Write($" : {Yellow}{type}{Reset}");
+        }
         else
+        {
             writer.Write($" : {type}");
+        }
     }
 
     /// <summary>
@@ -268,8 +312,12 @@ internal static class ConsoleMarkdown
     {
         writer ??= Console.Out;
         if (UseColor && writer == Console.Out)
+        {
             writer.Write($"{Gray}{text}{Reset}");
+        }
         else
+        {
             writer.Write(text);
+        }
     }
 }

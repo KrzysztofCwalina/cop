@@ -1,3 +1,5 @@
+// Exposes typed columns and rows backed by the provider data format.
+
 using System.Text;
 
 namespace Cop.Core;
@@ -46,7 +48,11 @@ public class DataTable
     public string GetString(int record, int slot)
     {
         long packed = Data[record * Stride + slot];
-        if (packed == 0) return "";
+        if (packed == 0)
+        {
+            return "";
+        }
+
         int offset = (int)(packed >> 32);
         int length = (int)(packed & 0xFFFFFFFF);
         return Encoding.UTF8.GetString(StringHeap, offset, length);
@@ -58,7 +64,11 @@ public class DataTable
     public ReadOnlySpan<byte> GetStringBytes(int record, int slot)
     {
         long packed = Data[record * Stride + slot];
-        if (packed == 0) return [];
+        if (packed == 0)
+        {
+            return [];
+        }
+
         int offset = (int)(packed >> 32);
         int length = (int)(packed & 0xFFFFFFFF);
         return StringHeap.AsSpan(offset, length);

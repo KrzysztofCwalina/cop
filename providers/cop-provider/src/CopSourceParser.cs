@@ -1,3 +1,5 @@
+// Projects the Cop parser's syntax and semantic facts into the shared code model.
+
 using Cop.Lang;
 using Cop.Lang.Ast;
 using Cop.Providers.SourceModel;
@@ -11,13 +13,26 @@ public class CopSourceParser : ISourceParser
 {
     static CopSourceParser() => CopFunctionDeclaration.RegisterCacheFactory();
 
+    /// <inheritdoc />
     public override IReadOnlyList<string> Extensions => [".cop"];
+    /// <inheritdoc />
     public override string Language => "cop";
 
-    public override SourceFile? Parse(string filePath, string sourceText)
+    /// <inheritdoc />
+    public override ValueTask<SourceFile?> ParseAsync(
+        string filePath, string sourceText, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return ValueTask.FromResult(Parse(filePath, sourceText));
+    }
+
+    /// <summary>Parses in-memory Cop syntax without starting asynchronous provider work.</summary>
+    public SourceFile? Parse(string filePath, string sourceText)
     {
         if (IsNegativeParserFixture(filePath, sourceText))
+        {
             return null;
+        }
 
         ModuleNode module;
         try
@@ -38,15 +53,30 @@ public class CopSourceParser : ISourceParser
 
     internal static bool IsNegativeParserFixture(string filePath, string sourceText)
     {
-        using var reader = new StringReader(sourceText);
+        using StringReader reader = new StringReader(sourceText);
         while (reader.ReadLine() is { } line)
         {
-            var header = line.Trim();
-            if (header.Length == 0) continue;
-            if (!header.StartsWith('#')) break;
-            if (header != "# @expect parse-error") continue;
-            if (Cop.Core.CopDiagnostics.Summaries)
+            string header = line.Trim();
+            if (header.Length == 0)
+            {
+                continue;
+            }
+
+            if (!header.StartsWith('#'))
+            {
+                break;
+            }
+
+            if (header != "# @expect parse-error")
+            {
+                continue;
+            }
+
+            if (Cop.Core.CopDiagnostics.IsSummaryEnabled)
+            {
                 Console.Error.WriteLine($"[diag] Excluded '{filePath}': explicitly marked '# @expect parse-error' parser test input.");
+            }
+
             return true;
         }
         return false;
@@ -55,19 +85,19 @@ public class CopSourceParser : ISourceParser
     internal SourceFile ParseModule(string filePath, string sourceText, ModuleNode module,
         Dictionary<StatementInfo, Cop.Lang.Ast.Expression>? expressions = null)
     {
-        var types = new List<TypeDeclaration>();
-        var statements = new List<StatementInfo>();
-        var functions = new Dictionary<FunctionDecl, CopFunctionDeclaration>();
-        var usings = module.Declarations.OfType<ImportDecl>().Select(i => i.ModuleName).ToList();
+        List<TypeDeclaration> types = new List<TypeDeclaration>();
+        List<StatementInfo> statements = new List<StatementInfo>();
+        Dictionary<FunctionDecl, CopFunctionDeclaration> functions = new Dictionary<FunctionDecl, CopFunctionDeclaration>();
+        List<string> usings = module.Declarations.OfType<ImportDecl>().Select(i => i.ModuleName).ToList();
 
         // Map type definitions → TypeDeclaration
-        foreach (var td in module.Declarations.OfType<TypeDecl>())
+        foreach (TypeDecl td in module.Declarations.OfType<TypeDecl>())
         {
-            var modifiers = td.IsExported ? Modifier.Public : Modifier.None;
-            var fields = td.Properties.Select(p =>
+            Modifier modifiers = td.IsExported ? Modifier.Public : Modifier.None;
+            List<FieldDeclaration> fields = td.Properties.Select(p =>
                 new FieldDeclaration(p.Name, MakeTypeRef(p.Type.Name, p.Type.IsCollection), Modifier.Public, p.Line))
                 .ToList();
-            var baseTypes = td.BaseType is not null ? new List<string> { td.BaseType } : [];
+            List<string> baseTypes = td.BaseType is not null ? new List<string> { td.BaseType } : [];
 
             types.Add(new TypeDeclaration(td.Name, TypeKind.Class, modifiers,
                 baseTypes, [], [], [], [], [], td.Line)
@@ -79,24 +109,24 @@ public class CopSourceParser : ISourceParser
         }
 
         // Map flags definitions → TypeDeclaration (Enum)
-        foreach (var fd in module.Declarations.OfType<FlagsDecl>())
+        foreach (FlagsDecl fd in module.Declarations.OfType<FlagsDecl>())
         {
-            var modifiers = fd.IsExported ? Modifier.Public : Modifier.None;
+            Modifier modifiers = fd.IsExported ? Modifier.Public : Modifier.None;
             types.Add(new TypeDeclaration(fd.Name, TypeKind.Enum, modifiers,
                 [], [], [], [], [], fd.Members, fd.Line));
         }
 
         // Map enum definitions → TypeDeclaration (Enum)
-        foreach (var ed in module.Declarations.OfType<EnumDecl>())
+        foreach (EnumDecl ed in module.Declarations.OfType<EnumDecl>())
         {
-            var modifiers = ed.IsExported ? Modifier.Public : Modifier.None;
+            Modifier modifiers = ed.IsExported ? Modifier.Public : Modifier.None;
             types.Add(new TypeDeclaration(ed.Name, TypeKind.Enum, modifiers,
                 [], [], [], [], [], ed.Members, ed.Line));
         }
 
-        foreach (var fn in module.Declarations.OfType<FunctionDecl>())
+        foreach (FunctionDecl fn in module.Declarations.OfType<FunctionDecl>())
         {
-            var method = new MethodDeclaration(fn.Name, fn.IsExported ? Modifier.Public : Modifier.None,
+            MethodDeclaration method = new MethodDeclaration(fn.Name, fn.IsExported ? Modifier.Public : Modifier.None,
                 [], fn.ReturnType is { } returnType ? MakeTypeRef(returnType.Name, returnType.IsCollection)
                     : fn.IsPredicate ? MakeTypeRef("bool") : null,
                 fn.Params.Select(p => new ParameterDeclaration(p.Name,
@@ -109,32 +139,40 @@ public class CopSourceParser : ISourceParser
             functions.Add(fn, new CopFunctionDeclaration(method,
                 fn.Body is IntrinsicBody, fn.IsPredicate, fn.IsCommand, fn.Guard is not null));
 
-            var keywords = new List<string> { fn.IsPredicate ? "predicate" : "function" };
-            if (fn.Body is IntrinsicBody) keywords.Add("intrinsic");
+            List<string> keywords = new List<string> { fn.IsPredicate ? "predicate" : "function" };
+            if (fn.Body is IntrinsicBody)
+            {
+                keywords.Add("intrinsic");
+            }
+
             statements.Add(new StatementInfo(fn.IsCommand ? "command" : "declaration", keywords,
                 fn.IsPredicate ? fn.Params.FirstOrDefault()?.Type?.Name : fn.ReturnType?.Name,
                 fn.Name, [], fn.Line, false));
         }
 
         // Map import statements
-        foreach (var imp in module.Declarations.OfType<ImportDecl>())
+        foreach (ImportDecl imp in module.Declarations.OfType<ImportDecl>())
         {
             statements.Add(new StatementInfo("import", [], null, imp.ModuleName, [], imp.Line, false));
         }
 
         // Map let declarations
-        foreach (var let in module.Declarations.OfType<LetDecl>())
+        foreach (LetDecl let in module.Declarations.OfType<LetDecl>())
         {
-            var keywords = new List<string> { "let" };
-            if (let.IsExported) keywords.Add("export");
-            var statement = new StatementInfo("declaration", keywords,
+            List<string> keywords = new List<string> { "let" };
+            if (let.IsExported)
+            {
+                keywords.Add("export");
+            }
+
+            StatementInfo statement = new StatementInfo("declaration", keywords,
                 null, let.Name, [], let.Line, false) { ValueExpression = ConvertExpression(let.Value) };
             statements.Add(statement);
             expressions?.Add(statement, let.Value);
         }
 
         // Map commands → statements
-        foreach (var cmd in module.Declarations.OfType<CommandDecl>())
+        foreach (CommandDecl cmd in module.Declarations.OfType<CommandDecl>())
         {
             statements.Add(new StatementInfo("command", [],
                 null, cmd.Name, [], cmd.Line, false));
@@ -163,23 +201,30 @@ public class CopSourceParser : ISourceParser
             statement.Method = _function;
             statement.Parent = _parent;
             statements.Add(statement);
-            if (_parent is not null) _parent._children.Add(statement);
-            else _function?.Statements.Add(statement);
+            if (_parent is not null)
+            {
+                _parent.MutableChildren.Add(statement);
+            }
+            else
+            {
+                _function?.Statements.Add(statement);
+            }
         }
 
         private object? Within(StatementInfo statement, Func<object?> visit)
         {
             Add(statement);
-            var previous = _parent;
+            StatementInfo? previous = _parent;
             _parent = statement;
             try { return visit(); }
             finally { _parent = previous; }
         }
 
+        /// <inheritdoc />
         public override object? VisitCallExpr(Cop.Lang.Ast.CallExpr node)
         {
-            var target = ConvertExpression(node.Callee);
-            var statement = new StatementInfo("call", [],
+            ExpressionInfo target = ConvertExpression(node.Callee);
+            StatementInfo statement = new StatementInfo("call", [],
                 target.Target?.Name, target.Name, [], node.Line, _function is not null)
             {
                 CallTarget = target,
@@ -190,46 +235,60 @@ public class CopSourceParser : ISourceParser
             return Within(statement, () => base.VisitCallExpr(node));
         }
 
+        /// <inheritdoc />
         public override object? VisitLetStatement(LetStatement node)
         {
-            var statement = new StatementInfo("declaration", ["let"], node.TypeAnnotation?.Name, node.Name, [],
+            StatementInfo statement = new StatementInfo("declaration", ["let"], node.TypeAnnotation?.Name, node.Name, [],
                 node.Line, _function is not null) { ValueExpression = ConvertExpression(node.Value) };
             expressions?.Add(statement, node.Value);
             return Within(statement, () => base.VisitLetStatement(node));
         }
 
+        /// <inheritdoc />
         public override object? VisitForEachStatement(ForEachStatement node) =>
             Within(new StatementInfo("foreach", node.IsAsync ? ["async"] : [], null, node.Variable, [],
                 node.Line, _function is not null), () => base.VisitForEachStatement(node));
 
+        /// <inheritdoc />
         public override object? VisitPipelineStatement(PipelineStatement node) =>
             Within(new StatementInfo("pipeline", [], null, null, [], node.Line, _function is not null),
                 () => base.VisitPipelineStatement(node));
 
+        /// <inheritdoc />
         public override object? VisitLetDecl(LetDecl node)
         {
-            var declaration = statements.Single(s => s.Kind == "declaration" && s.MemberName == node.Name && s.Line == node.Line);
-            var previous = _parent;
+            StatementInfo declaration = statements.Single(s => s.Kind == "declaration" && s.MemberName == node.Name && s.Line == node.Line);
+            StatementInfo? previous = _parent;
             _parent = declaration;
             base.VisitLetDecl(node);
             _parent = previous;
             return null;
         }
 
+        /// <summary>
+        /// Finds comment line numbers while respecting Cop string literals.
+        /// </summary>
         public static HashSet<int> CollectCommentLines(string text)
         {
-            var result = new HashSet<int>();
+            HashSet<int> result = new HashSet<int>();
             int line = 1;
             bool quoted = false, verbatim = false, triple = false;
             for (int i = 0; i < text.Length; i++)
             {
                 char c = text[i];
-                if (c == '\n') line++;
+                if (c == '\n')
+                {
+                    line++;
+                }
+
                 if (quoted)
                 {
                     if (!verbatim && !triple && c == '\\' && i + 1 < text.Length)
                     {
-                        if (text[++i] == '\n') line++;
+                        if (text[++i] == '\n')
+                        {
+                            line++;
+                        }
                     }
                     else if (c == '\'')
                     {
@@ -238,33 +297,52 @@ public class CopSourceParser : ISourceParser
                             if (i + 2 < text.Length && text[i + 1] == '\'' && text[i + 2] == '\'')
                             { quoted = false; i += 2; }
                         }
-                        else if (verbatim && i + 1 < text.Length && text[i + 1] == '\'') i++;
-                        else quoted = false;
+                        else if (verbatim && i + 1 < text.Length && text[i + 1] == '\'')
+                        {
+                            i++;
+                        }
+                        else
+                        {
+                            quoted = false;
+                        }
                     }
                     continue;
                 }
                 if (c == '#')
                 {
                     result.Add(line);
-                    while (i + 1 < text.Length && text[i + 1] != '\n') i++;
+                    while (i + 1 < text.Length && text[i + 1] != '\n')
+                    {
+                        i++;
+                    }
                 }
                 else if (c == '\'')
                 {
                     quoted = true;
                     verbatim = i > 0 && text[i - 1] == '@';
                     triple = !verbatim && i + 2 < text.Length && text[i + 1] == '\'' && text[i + 2] == '\'';
-                    if (triple) i += 2;
+                    if (triple)
+                    {
+                        i += 2;
+                    }
                 }
             }
             return result;
         }
 
+        /// <inheritdoc />
         public override object? VisitFunctionDecl(FunctionDecl node)
         {
-            var previous = _function;
+            CopFunctionDeclaration? previous = _function;
             _function = functions[node];
             if (node.Body is BlockBody block)
-                foreach (var statement in block.Statements) Visit(statement);
+            {
+                foreach (Statement statement in block.Statements)
+                {
+                    Visit(statement);
+                }
+            }
+
             base.VisitFunctionDecl(node);
             _function = previous;
             return null;
@@ -273,9 +351,14 @@ public class CopSourceParser : ISourceParser
         protected override object? DefaultVisit(AstNode node)
         {
             if (node is PropertyDecl { ComputedExpr: not null } property)
+            {
                 Visit(property.ComputedExpr);
+            }
             else if (node is ForEachExpr loop)
+            {
                 Visit(loop.Loop);
+            }
+
             return null;
         }
     }
@@ -313,7 +396,7 @@ public class CopSourceParser : ISourceParser
     {
         if (isCollection)
         {
-            var inner = new TypeReference(typeName, null, [], typeName);
+            TypeReference inner = new TypeReference(typeName, null, [], typeName);
             return new TypeReference("List", null, [inner], $"[{typeName}]");
         }
         return new TypeReference(typeName, null, [], typeName);

@@ -23,7 +23,7 @@ public class FalseGreenRegressionTests
     }
 
     [Test]
-    public void FilterByNonCallableEnumValue_FailsLoudly_NotSilentEmpty()
+    public async Task FilterByNonCallableEnumValue_FailsLoudly_NotSilentEmpty()
     {
         // 'green' is an enum member value, NOT a predicate. Filtering a collection by it used to
         // bypass the typo guard (any env binding counted as "resolvable") and then silently return
@@ -34,7 +34,7 @@ public class FalseGreenRegressionTests
             "command MAIN = v\n");
         try
         {
-            var result = Engine.Run(scripts, code);
+            var result = (await Engine.RunAsync(scripts, code));
 
             Assert.That(result.HasFatalErrors, Is.True,
                 "filtering by a non-callable binding (an enum value) must error, not silently return empty");
@@ -44,7 +44,7 @@ public class FalseGreenRegressionTests
     }
 
     [Test]
-    public void FilterByRealPredicate_StillWorks()
+    public async Task FilterByRealPredicate_StillWorks()
     {
         // The guard must not over-fire: a genuinely-defined predicate still filters normally.
         var (scripts, code) = NewProgram(
@@ -53,7 +53,7 @@ public class FalseGreenRegressionTests
             "command MAIN = foreach v => 'folder:{item.Path}'\n");
         try
         {
-            var result = Engine.Run(scripts, code);
+            var result = (await Engine.RunAsync(scripts, code));
 
             Assert.That(result.HasFatalErrors, Is.False, string.Join(" | ", result.Errors));
             Assert.That(result.Outputs, Is.Not.Empty, "a real predicate must still filter and produce output");

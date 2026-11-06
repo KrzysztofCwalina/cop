@@ -1,3 +1,5 @@
+// Exposes Go type, method, and statement facts to the Cop runtime.
+
 using Cop.Core;
 using Cop.Providers.SourceModel;
 
@@ -9,13 +11,16 @@ namespace Cop.Providers;
 /// </summary>
 public static class GoBindings
 {
+    /// <summary>
+    /// Extends shared bindings with Go declaration and statement accessors.
+    /// </summary>
     public static RuntimeBindings Build()
     {
-        var bindings = CodeBindings.Build();
+        RuntimeBindings bindings = CodeBindings.Build();
 
         bindings.ClrTypeMappings[typeof(GoTypeDeclaration)] = "GoType";
 
-        var goAccessors = new Dictionary<string, Func<object, object?>>(bindings.Accessors["Type"])
+        Dictionary<string, Func<object, object?>> goAccessors = new Dictionary<string, Func<object, object?>>(bindings.Accessors["Type"])
         {
             ["IsInterface"] = o => (object)((GoTypeDeclaration)o).IsInterface,
             ["IsStruct"] = o => (object)((GoTypeDeclaration)o).IsStruct,
@@ -28,7 +33,7 @@ public static class GoBindings
 
         bindings.ClrTypeMappings[typeof(GoMethodDeclaration)] = "GoMethod";
 
-        var goMethodAccessors = new Dictionary<string, Func<object, object?>>(bindings.Accessors["Method"])
+        Dictionary<string, Func<object, object?>> goMethodAccessors = new Dictionary<string, Func<object, object?>>(bindings.Accessors["Method"])
         {
             ["IsPointerReceiver"] = o => (object)((GoMethodDeclaration)o).IsPointerReceiver,
             ["HasNamedReturns"] = o => (object)((GoMethodDeclaration)o).HasNamedReturns,
@@ -39,7 +44,7 @@ public static class GoBindings
 
         bindings.ClrTypeMappings[typeof(GoStatementInfo)] = "GoStatement";
 
-        var goStatementAccessors = new Dictionary<string, Func<object, object?>>(bindings.Accessors["Statement"])
+        Dictionary<string, Func<object, object?>> goStatementAccessors = new Dictionary<string, Func<object, object?>>(bindings.Accessors["Statement"])
         {
             ["IsDefer"] = o => (object)((GoStatementInfo)o).IsDefer,
             ["IsGoroutine"] = o => (object)((GoStatementInfo)o).IsGoroutine,
@@ -49,6 +54,7 @@ public static class GoBindings
         };
         bindings.Accessors["GoStatement"] = goStatementAccessors;
 
+        CodeBindings.AddDerivedAsyncAccessors(bindings);
         return bindings;
     }
 }

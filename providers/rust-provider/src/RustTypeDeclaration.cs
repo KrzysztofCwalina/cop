@@ -1,3 +1,5 @@
+// Preserves Rust type-category facts through shared types and source caching.
+
 namespace Cop.Providers.SourceModel;
 
 /// <summary>
@@ -13,24 +15,12 @@ namespace Cop.Providers.SourceModel;
 /// </summary>
 public sealed record RustTypeDeclaration : TypeDeclaration
 {
-    public RustTypeDeclaration(
-        TypeDeclaration source,
-        bool isTrait = false,
-        bool isImpl = false,
-        bool isUnsafe = false,
-        bool isUnion = false,
-        bool isTupleStruct = false,
-        bool isUnitStruct = false,
-        bool isNegativeImpl = false)
+    /// <summary>
+    /// Copies a shared type before Rust-specific facts are initialized.
+    /// </summary>
+    public RustTypeDeclaration(TypeDeclaration source)
         : base(source)
     {
-        IsTrait = isTrait;
-        IsImpl = isImpl;
-        IsUnsafe = isUnsafe;
-        IsUnion = isUnion;
-        IsTupleStruct = isTupleStruct;
-        IsUnitStruct = isUnitStruct;
-        IsNegativeImpl = isNegativeImpl;
     }
 
     /// <summary>True for Rust <c>trait</c> declarations.</summary>
@@ -54,8 +44,10 @@ public sealed record RustTypeDeclaration : TypeDeclaration
     /// <summary>True for negative impls, e.g. <c>impl !Send for T</c>.</summary>
     public bool IsNegativeImpl { get; init; }
 
+    /// <inheritdoc />
     public override string? LanguageTag => "rust";
 
+    /// <inheritdoc />
     public override IReadOnlyList<KeyValuePair<string, bool>>? LanguageFlags =>
     [
         new("IsTrait", IsTrait),
@@ -72,28 +64,14 @@ public sealed record RustTypeDeclaration : TypeDeclaration
     /// <see cref="RustTypeDeclaration"/> (not the plain base) on cache hits. Idempotent.
     /// </summary>
     public static void RegisterCacheFactory() =>
-        LanguageTypeRegistry.Register("rust", (baseDecl, flags) => new RustTypeDeclaration(
-            baseDecl,
-            isTrait: flags.TryGetValue("IsTrait", out var t) && t,
-            isImpl: flags.TryGetValue("IsImpl", out var i) && i,
-            isUnsafe: flags.TryGetValue("IsUnsafe", out var u) && u,
-            isUnion: flags.TryGetValue("IsUnion", out var union) && union,
-            isTupleStruct: flags.TryGetValue("IsTupleStruct", out var tupleStruct) && tupleStruct,
-            isUnitStruct: flags.TryGetValue("IsUnitStruct", out var unitStruct) && unitStruct,
-            isNegativeImpl: flags.TryGetValue("IsNegativeImpl", out var negativeImpl) && negativeImpl));
-}
-
-public static class RustTypeDeclarationExtensions
-{
-    /// <summary>Wraps a common <see cref="TypeDeclaration"/> as a Rust-specific one.</summary>
-    public static RustTypeDeclaration AsRust(
-        this TypeDeclaration source,
-        bool isTrait = false,
-        bool isImpl = false,
-        bool isUnsafe = false,
-        bool isUnion = false,
-        bool isTupleStruct = false,
-        bool isUnitStruct = false,
-        bool isNegativeImpl = false)
-        => new(source, isTrait, isImpl, isUnsafe, isUnion, isTupleStruct, isUnitStruct, isNegativeImpl);
+        LanguageTypeRegistry.Register("rust", (baseDecl, flags) => new RustTypeDeclaration(baseDecl)
+        {
+            IsTrait = flags.TryGetValue("IsTrait", out bool t) && t,
+            IsImpl = flags.TryGetValue("IsImpl", out bool i) && i,
+            IsUnsafe = flags.TryGetValue("IsUnsafe", out bool u) && u,
+            IsUnion = flags.TryGetValue("IsUnion", out bool union) && union,
+            IsTupleStruct = flags.TryGetValue("IsTupleStruct", out bool tupleStruct) && tupleStruct,
+            IsUnitStruct = flags.TryGetValue("IsUnitStruct", out bool unitStruct) && unitStruct,
+            IsNegativeImpl = flags.TryGetValue("IsNegativeImpl", out bool negativeImpl) && negativeImpl
+        });
 }

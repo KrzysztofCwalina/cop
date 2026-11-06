@@ -7,7 +7,7 @@ namespace Cop.Tests;
 public class RustParityIntegrationTests
 {
     [Test]
-    public void RustChecks_PanicMacrosAndOrdinaryFunctionsRemainDistinctColdAndWarm()
+    public async Task RustChecks_PanicMacrosAndOrdinaryFunctionsRemainDistinctColdAndWarm()
     {
         string? repository = TestContext.CurrentContext.TestDirectory;
         while (repository is not null && !File.Exists(Path.Combine(repository, "cop.sln")))
@@ -28,7 +28,7 @@ public class RustParityIntegrationTests
                 """);
             for (int run = 0; run < 2; run++)
             {
-                var result = Engine.RunProject([Path.Combine(repository!, "packages")], ["rust-checks"], root, []);
+                var result = (await Engine.RunProjectAsync([Path.Combine(repository!, "packages")], ["rust-checks"], root, []));
                 Assert.That(result.HasFatalErrors, Is.False, string.Join("; ", result.Errors));
                 Assert.That(result.Outputs.Count(o => o.Message.Contains("Avoid panic!/unreachable!", StringComparison.Ordinal)),
                     Is.EqualTo(2), $"run {run}: both panic macros must retain their checks after the ! migration");

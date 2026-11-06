@@ -1,3 +1,5 @@
+// Installs package contents into the local package cache.
+
 using System.IO;
 
 namespace Cop.Core;
@@ -24,18 +26,26 @@ public static class PackageInstaller
     /// </summary>
     public static void PlaceRestoredPackage(string tempDir, string pkgDir)
     {
-        var existingIsValidPackage = Directory.Exists(pkgDir) &&
+        bool existingIsValidPackage = Directory.Exists(pkgDir) &&
             File.Exists(Path.Combine(pkgDir, PackageMetadata.MetadataFileName));
 
         if (existingIsValidPackage)
         {
             // Another process already placed a complete package — keep theirs.
-            try { Directory.Delete(tempDir, recursive: true); } catch { }
+            try { Directory.Delete(tempDir, recursive: true); }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+            {
+                ProviderWarnings.ReportOnce("package", tempDir,
+                    $"Cannot remove redundant package staging directory: {exception.Message}");
+            }
             return;
         }
 
         if (Directory.Exists(pkgDir))
+        {
             Directory.Delete(pkgDir, recursive: true);
+        }
+
         Directory.Move(tempDir, pkgDir);
     }
 }

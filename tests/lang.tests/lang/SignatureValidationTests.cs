@@ -8,12 +8,12 @@ namespace Cop.Tests.Lang;
 [TestFixture]
 public class SignatureValidationTests
 {
-    private CopValue Eval(string source, ForeignFunctionRegistry? ffi = null)
+    private async Task<CopValue> EvalAsync(string source, ForeignFunctionRegistry? ffi = null, CancellationToken cancellationToken = default)
     {
         var module = CopParser.Parse(source, "test.cop");
         var evaluator = new Evaluator(ffi, "test.cop");
-        evaluator.EvalModule(module);
-        return evaluator.RunCommand("main");
+        await evaluator.EvalModuleAsync(module, cancellationToken: cancellationToken);
+        return (await evaluator.RunCommandAsync("main", cancellationToken: cancellationToken));
     }
 
     // ========================================================================
@@ -21,12 +21,12 @@ public class SignatureValidationTests
     // ========================================================================
 
     [Test]
-    public void FunctionReturningCorrectType_Passes()
+    public async Task FunctionReturningCorrectType_Passes()
     {
         // String function returning a string
-        var result = Eval(@"
+        var result = (await EvalAsync(@"
 function greet(name : string) : string => 'hello ' + name
-command main = greet('world')");
+command main = greet('world')", cancellationToken: CancellationToken.None));
         Assert.That(result, Is.InstanceOf<CopString>());
         Assert.That(((CopString)result).Value, Is.EqualTo("hello world"));
     }
@@ -35,49 +35,49 @@ command main = greet('world')");
     public void FunctionReturningWrongType_Throws()
     {
         // Declares : string but body returns an int
-        var ex = Assert.Throws<CopEvaluationException>(() => Eval(@"
+        var ex = Assert.ThrowsAsync<CopEvaluationException>(async () => await EvalAsync(@"
 function bad() : string => 42
-command main = bad()"));
+command main = bad()", cancellationToken: CancellationToken.None));
         Assert.That(ex!.Message, Does.Contain("declares return type string"));
         Assert.That(ex.Message, Does.Contain("returned int"));
     }
 
     [Test]
-    public void FunctionReturningBool_Passes()
+    public async Task FunctionReturningBool_Passes()
     {
-        var result = Eval(@"
+        var result = (await EvalAsync(@"
 function isPositive(n : int) : bool => n > 0
-command main = isPositive(5)");
+command main = isPositive(5)", cancellationToken: CancellationToken.None));
         Assert.That(result, Is.InstanceOf<CopBool>());
-        Assert.That(((CopBool)result).Value, Is.True);
+        Assert.That(((CopBool)result).IsTrue, Is.True);
     }
 
     [Test]
     public void FunctionReturningWrongBool_Throws()
     {
-        var ex = Assert.Throws<CopEvaluationException>(() => Eval(@"
+        var ex = Assert.ThrowsAsync<CopEvaluationException>(async () => await EvalAsync(@"
 function bad() : bool => 'not a bool'
-command main = bad()"));
+command main = bad()", cancellationToken: CancellationToken.None));
         Assert.That(ex!.Message, Does.Contain("declares return type bool"));
         Assert.That(ex.Message, Does.Contain("returned string"));
     }
 
     [Test]
-    public void FunctionReturningInt_Passes()
+    public async Task FunctionReturningInt_Passes()
     {
-        var result = Eval(@"
+        var result = (await EvalAsync(@"
 function double(n : int) : int => n * 2
-command main = double(21)");
+command main = double(21)", cancellationToken: CancellationToken.None));
         Assert.That(result, Is.InstanceOf<CopInt>());
         Assert.That(((CopInt)result).Value, Is.EqualTo(42));
     }
 
     [Test]
-    public void FunctionReturningCollection_Passes()
+    public async Task FunctionReturningCollection_Passes()
     {
-        var result = Eval(@"
+        var result = (await EvalAsync(@"
 function items() : [object] => [1, 2, 3]
-command main = items()");
+command main = items()", cancellationToken: CancellationToken.None));
         Assert.That(result, Is.InstanceOf<CopList>());
     }
 
@@ -85,30 +85,30 @@ command main = items()");
     public void FunctionReturningNullWhenTypeDeclared_Throws()
     {
         // Declares : string but the body evaluates to null (undefined variable)
-        var ex = Assert.Throws<CopEvaluationException>(() => Eval(@"
+        var ex = Assert.ThrowsAsync<CopEvaluationException>(async () => await EvalAsync(@"
 function bad() : string => nic
-command main = bad()"));
+command main = bad()", cancellationToken: CancellationToken.None));
         Assert.That(ex!.Message, Does.Contain("declares return type string"));
         Assert.That(ex.Message, Does.Contain("returned null"));
     }
 
     [Test]
-    public void FunctionWithNoReturnType_AcceptsAnything()
+    public async Task FunctionWithNoReturnType_AcceptsAnything()
     {
         // No return type declared — should accept any value including null
-        var result = Eval(@"
+        var result = (await EvalAsync(@"
 function anything() => 42
-command main = anything()");
+command main = anything()", cancellationToken: CancellationToken.None));
         Assert.That(result, Is.InstanceOf<CopInt>());
     }
 
     [Test]
-    public void FunctionReturningObject_AcceptsAnything()
+    public async Task FunctionReturningObject_AcceptsAnything()
     {
         // 'object' is the top type — anything passes
-        var result = Eval(@"
+        var result = (await EvalAsync(@"
 function flex() : object => 42
-command main = flex()");
+command main = flex()", cancellationToken: CancellationToken.None));
         Assert.That(result, Is.InstanceOf<CopInt>());
     }
 
@@ -117,20 +117,20 @@ command main = flex()");
     // ========================================================================
 
     [Test]
-    public void CorrectParameterTypes_Passes()
+    public async Task CorrectParameterTypes_Passes()
     {
-        var result = Eval(@"
+        var result = (await EvalAsync(@"
 function add(a : int, b : int) : int => a + b
-command main = add(3, 4)");
+command main = add(3, 4)", cancellationToken: CancellationToken.None));
         Assert.That(((CopInt)result).Value, Is.EqualTo(7));
     }
 
     [Test]
     public void WrongParameterType_Throws()
     {
-        var ex = Assert.Throws<CopEvaluationException>(() => Eval(@"
+        var ex = Assert.ThrowsAsync<CopEvaluationException>(async () => await EvalAsync(@"
 function double(n : int) : int => n * 2
-command main = double('not an int')"));
+command main = double('not an int')", cancellationToken: CancellationToken.None));
         Assert.That(ex!.Message, Does.Contain("parameter 'n'"));
         Assert.That(ex.Message, Does.Contain("expects int"));
         Assert.That(ex.Message, Does.Contain("got string"));
@@ -139,31 +139,31 @@ command main = double('not an int')"));
     [Test]
     public void NullForTypedParameter_Throws()
     {
-        var ex = Assert.Throws<CopEvaluationException>(() => Eval(@"
+        var ex = Assert.ThrowsAsync<CopEvaluationException>(async () => await EvalAsync(@"
 function greet(name : string) : string => 'hi ' + name
-command main = greet(nic)"));
+command main = greet(nic)", cancellationToken: CancellationToken.None));
         Assert.That(ex!.Message, Does.Contain("parameter 'name'"));
         Assert.That(ex.Message, Does.Contain("expects string"));
         Assert.That(ex.Message, Does.Contain("got null"));
     }
 
     [Test]
-    public void ObjectParameter_AcceptsAnything()
+    public async Task ObjectParameter_AcceptsAnything()
     {
         // 'object' typed parameter accepts anything including null
-        var result = Eval(@"
+        var result = (await EvalAsync(@"
 function wrap(value : object) : object => value
-command main = wrap(42)");
+command main = wrap(42)", cancellationToken: CancellationToken.None));
         Assert.That(((CopInt)result).Value, Is.EqualTo(42));
     }
 
     [Test]
-    public void UntypedParameter_AcceptsAnything()
+    public async Task UntypedParameter_AcceptsAnything()
     {
         // No type on parameter — no validation
-        var result = Eval(@"
+        var result = (await EvalAsync(@"
 function echo(x) => x
-command main = echo('hello')");
+command main = echo('hello')", cancellationToken: CancellationToken.None));
         Assert.That(((CopString)result).Value, Is.EqualTo("hello"));
     }
 
@@ -174,19 +174,19 @@ command main = echo('hello')");
     [Test]
     public void TooManyArguments_Throws()
     {
-        var ex = Assert.Throws<CopEvaluationException>(() => Eval(@"
+        var ex = Assert.ThrowsAsync<CopEvaluationException>(async () => await EvalAsync(@"
 function single(x : int) : int => x
-command main = single(1, 2, 3)"));
+command main = single(1, 2, 3)", cancellationToken: CancellationToken.None));
         Assert.That(ex!.Message, Does.Contain("expects 1 argument(s)"));
         Assert.That(ex.Message, Does.Contain("got 3"));
     }
 
     [Test]
-    public void CorrectArity_Passes()
+    public async Task CorrectArity_Passes()
     {
-        var result = Eval(@"
+        var result = (await EvalAsync(@"
 function pair(a : int, b : int) : int => a + b
-command main = pair(10, 20)");
+command main = pair(10, 20)", cancellationToken: CancellationToken.None));
         Assert.That(((CopInt)result).Value, Is.EqualTo(30));
     }
 
@@ -195,7 +195,7 @@ command main = pair(10, 20)");
     // ========================================================================
 
     [Test]
-    public void IntrinsicPrint_AcceptsAnyType()
+    public async Task IntrinsicPrint_AcceptsAnyType()
     {
         var outputs = new List<string>();
         var ffi = new ForeignFunctionRegistry();
@@ -206,15 +206,15 @@ export function print(message : object) => intrinsic
 command main = print('hello')", "test.cop");
 
         var evaluator = new Evaluator(ffi, "test.cop");
-        evaluator.EvalModule(module);
-        evaluator.RunCommand("main");
+        await evaluator.EvalModuleAsync(module, cancellationToken: CancellationToken.None);
+        await evaluator.RunCommandAsync("main", cancellationToken: CancellationToken.None);
 
         Assert.That(outputs, Has.Count.EqualTo(1));
         Assert.That(outputs[0], Is.EqualTo("hello"));
     }
 
     [Test]
-    public void IntrinsicPrint_AcceptsInt()
+    public async Task IntrinsicPrint_AcceptsInt()
     {
         var outputs = new List<string>();
         var ffi = new ForeignFunctionRegistry();
@@ -225,8 +225,8 @@ export function print(message : object) => intrinsic
 command main = print(42)", "test.cop");
 
         var evaluator = new Evaluator(ffi, "test.cop");
-        evaluator.EvalModule(module);
-        evaluator.RunCommand("main");
+        await evaluator.EvalModuleAsync(module, cancellationToken: CancellationToken.None);
+        await evaluator.RunCommandAsync("main", cancellationToken: CancellationToken.None);
 
         Assert.That(outputs, Has.Count.EqualTo(1));
         Assert.That(outputs[0], Is.EqualTo("42"));
@@ -239,21 +239,21 @@ command main = print(42)", "test.cop");
         StandardLibrary.Register(ffi);
 
         // read() with wrong type should throw parameter error
-        var ex = Assert.Throws<CopEvaluationException>(() =>
+        var ex = Assert.ThrowsAsync<CopEvaluationException>(async () =>
         {
             var module = CopParser.Parse(@"
 export function read(path : string) : string => intrinsic
 command main = read(42)", "test.cop");
             var evaluator = new Evaluator(ffi, "test.cop");
-            evaluator.EvalModule(module);
-            evaluator.RunCommand("main");
+            await evaluator.EvalModuleAsync(module, cancellationToken: CancellationToken.None);
+            await evaluator.RunCommandAsync("main", cancellationToken: CancellationToken.None);
         });
         Assert.That(ex!.Message, Does.Contain("parameter 'path'"));
         Assert.That(ex.Message, Does.Contain("expects string"));
     }
 
     [Test]
-    public void IntrinsicPathMatches_ReturnsBool()
+    public async Task IntrinsicPathMatches_ReturnsBool()
     {
         var ffi = new ForeignFunctionRegistry();
         StandardLibrary.Register(ffi);
@@ -263,15 +263,15 @@ export function pathMatches(path : string, pattern : string) : bool => intrinsic
 command main = pathMatches('foo.cs', '*.cs')", "test.cop");
 
         var evaluator = new Evaluator(ffi, "test.cop");
-        evaluator.EvalModule(module);
-        var result = evaluator.RunCommand("main");
+        await evaluator.EvalModuleAsync(module, cancellationToken: CancellationToken.None);
+        var result = (await evaluator.RunCommandAsync("main", cancellationToken: CancellationToken.None));
 
         Assert.That(result, Is.InstanceOf<CopBool>());
-        Assert.That(((CopBool)result).Value, Is.True);
+        Assert.That(((CopBool)result).IsTrue, Is.True);
     }
 
     [Test]
-    public void IntrinsicText_ReturnsString()
+    public async Task IntrinsicText_ReturnsString()
     {
         var ffi = new ForeignFunctionRegistry();
         StandardLibrary.Register(ffi);
@@ -281,8 +281,8 @@ export function text(value : object) : string => intrinsic
 command main = text(42)", "test.cop");
 
         var evaluator = new Evaluator(ffi, "test.cop");
-        evaluator.EvalModule(module);
-        var result = evaluator.RunCommand("main");
+        await evaluator.EvalModuleAsync(module, cancellationToken: CancellationToken.None);
+        var result = (await evaluator.RunCommandAsync("main", cancellationToken: CancellationToken.None));
 
         Assert.That(result, Is.InstanceOf<CopString>());
         Assert.That(((CopString)result).Value, Is.EqualTo("42"));

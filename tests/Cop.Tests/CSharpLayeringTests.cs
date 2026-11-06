@@ -66,14 +66,15 @@ public class CSharpLayeringTests
         return root;
     }
 
-    private static EngineResult RunLayering(string workspaceRoot)
+    private static async Task<EngineResult> RunLayering(string workspaceRoot)
     {
         var feedPaths = new List<string> { Path.Combine(RepoRoot, "packages") };
         var scriptPath = Path.Combine(Path.GetTempPath(), "cop-csharplayer-check-" + Guid.NewGuid().ToString("N")[..8] + ".cop");
         File.WriteAllText(scriptPath, LayeringCheck);
         try
         {
-            return Engine.RunProject(feedPaths, ["csharp"], workspaceRoot, ["LAYERING"], additionalScriptFiles: [scriptPath]);
+            return (await Engine.RunProjectAsync(feedPaths, ["csharp"], workspaceRoot, ["LAYERING"],
+                new EngineRunOptions { ScriptFiles = [scriptPath] }));
         }
         finally
         {
@@ -82,12 +83,12 @@ public class CSharpLayeringTests
     }
 
     [Test]
-    public void Layering_DetectsForbiddenProjectDependency()
+    public async Task Layering_DetectsForbiddenProjectDependency()
     {
         var workspace = MakeWorkspace(foundationDependsOnService: true);
         try
         {
-            var result = RunLayering(workspace);
+            var result = (await RunLayering(workspace));
 
             Assert.That(result.HasFatalErrors, Is.False,
                 "Layering check should run cleanly. Errors: " + string.Join("; ", result.Errors));
@@ -103,12 +104,12 @@ public class CSharpLayeringTests
     }
 
     [Test]
-    public void Layering_CleanArchitecture_NoViolations()
+    public async Task Layering_CleanArchitecture_NoViolations()
     {
         var workspace = MakeWorkspace(foundationDependsOnService: false);
         try
         {
-            var result = RunLayering(workspace);
+            var result = (await RunLayering(workspace));
 
             Assert.That(result.HasFatalErrors, Is.False,
                 "Layering check should run cleanly. Errors: " + string.Join("; ", result.Errors));
@@ -123,4 +124,3 @@ public class CSharpLayeringTests
         }
     }
 }
-

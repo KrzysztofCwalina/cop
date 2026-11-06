@@ -38,7 +38,7 @@ public class MultiProviderIntegrationTests
     /// exported function should resolve to its own provider's collection.
     /// </summary>
     [Test]
-    public void ProviderProxiesResolveToCorrectCollections()
+    public async Task ProviderProxiesResolveToCorrectCollections()
     {
         // Package alpha: let cb = provider('alpha', nic); export function alphaItems() => cb.Items
         CreatePackage("alpha", @"
@@ -77,15 +77,15 @@ export function betaItems() = cb.Items
         Assert.That(errors, Is.Empty);
 
         // alphaItems() should return alpha's 3 items
-        bridge.LoadSource("command testAlpha = count(alphaItems())", "<test>");
-        var alphaResult = bridge.RunCommand("testAlpha");
+        await bridge.LoadSourceAsync("command testAlpha = count(alphaItems())", "<test>", cancellationToken: CancellationToken.None);
+        var alphaResult = (await bridge.RunCommandAsync("testAlpha", cancellationToken: CancellationToken.None));
         Assert.That(alphaResult, Is.InstanceOf<CopInt>());
         Assert.That(((CopInt)alphaResult).Value, Is.EqualTo(3),
             "alphaItems() should see alpha's 3 items, not beta's 1 item");
 
         // betaItems() should return beta's 1 item
-        bridge.LoadSource("command testBeta = count(betaItems())", "<test2>");
-        var betaResult = bridge.RunCommand("testBeta");
+        await bridge.LoadSourceAsync("command testBeta = count(betaItems())", "<test2>", cancellationToken: CancellationToken.None);
+        var betaResult = (await bridge.RunCommandAsync("testBeta", cancellationToken: CancellationToken.None));
         Assert.That(betaResult, Is.InstanceOf<CopInt>());
         Assert.That(((CopInt)betaResult).Value, Is.EqualTo(1),
             "betaItems() should see beta's 1 item, not alpha's 3 items");
@@ -96,7 +96,7 @@ export function betaItems() = cb.Items
     /// and export a 'statements()' function. Each should return the correct provider's Statements.
     /// </summary>
     [Test]
-    public void ThreeProvidersWithSameExportedFunctionName()
+    public async Task ThreeProvidersWithSameExportedFunctionName()
     {
         CreatePackage("lang-cs", @"
 let cb = provider('csharp', nic)
@@ -145,8 +145,8 @@ export function statements() = cb.Statements
             // but each function's body should access its own module's 'cb'.
             // Let's verify by calling each overload and checking the count.
             // The group falls back to last overload (lang-js) which should see 'javascript.Statements'
-            bridge.LoadSource("command testStatements = count(statements())", "<test>");
-            var result = bridge.RunCommand("testStatements");
+            await bridge.LoadSourceAsync("command testStatements = count(statements())", "<test>", cancellationToken: CancellationToken.None);
+            var result = (await bridge.RunCommandAsync("testStatements", cancellationToken: CancellationToken.None));
             Assert.That(result, Is.InstanceOf<CopInt>());
             // Last registered is lang-js with 1 item
             Assert.That(((CopInt)result).Value, Is.EqualTo(1),
@@ -165,7 +165,7 @@ export function statements() = cb.Statements
     /// a function returning the collection, user applies predicate filter.
     /// </summary>
     [Test]
-    public void PredicateFilterOnProviderCollection()
+    public async Task PredicateFilterOnProviderCollection()
     {
         CreatePackage("test-provider", @"
 let cb = provider('test', nic)
@@ -194,12 +194,12 @@ export function items() = cb.Items
         loader.EvalDeferredLetBindings(bridge.Evaluator, errors);
         Assert.That(errors, Is.Empty);
 
-        bridge.LoadSource(@"
+        await bridge.LoadSourceAsync(@"
 predicate isPublic(item) => item.IsPublic == true
 let publicItems = items():isPublic
 command main = count(publicItems)
-", "<test>");
-        var result = bridge.RunCommand("main");
+", "<test>", cancellationToken: CancellationToken.None);
+        var result = (await bridge.RunCommandAsync("main", cancellationToken: CancellationToken.None));
 
         Assert.That(result, Is.InstanceOf<CopInt>());
         // Items at index 0,3,6,...,48 → 17 items
@@ -213,7 +213,7 @@ command main = count(publicItems)
     /// Regression test for issue #16.
     /// </summary>
     [Test]
-    public void Issue16Regression_WrongProviderDataResolution()
+    public async Task Issue16Regression_WrongProviderDataResolution()
     {
         // csharp has many statements
         CreatePackage("fake-csharp", @"
@@ -262,34 +262,34 @@ export function pythonStatements() = cb.Statements
         Assert.That(errors, Is.Empty);
 
         // csharpStatements() should return 1000 items
-        bridge.LoadSource("command testCs = count(csharpStatements())", "<test1>");
-        var csResult = bridge.RunCommand("testCs");
+        await bridge.LoadSourceAsync("command testCs = count(csharpStatements())", "<test1>", cancellationToken: CancellationToken.None);
+        var csResult = (await bridge.RunCommandAsync("testCs", cancellationToken: CancellationToken.None));
         Assert.That(((CopInt)csResult).Value, Is.EqualTo(1000),
             "csharpStatements() must see csharp's 1000 items, not python's 30");
 
         // pythonStatements() should return 30 items
-        bridge.LoadSource("command testPy = count(pythonStatements())", "<test2>");
-        var pyResult = bridge.RunCommand("testPy");
+        await bridge.LoadSourceAsync("command testPy = count(pythonStatements())", "<test2>", cancellationToken: CancellationToken.None);
+        var pyResult = (await bridge.RunCommandAsync("testPy", cancellationToken: CancellationToken.None));
         Assert.That(((CopInt)pyResult).Value, Is.EqualTo(30),
             "pythonStatements() must see python's 30 items, not csharp's 1000");
 
         // Predicate on csharp data should find matches
-        bridge.LoadSource(@"
+        await bridge.LoadSourceAsync(@"
 predicate isDecl(s) => s.Kind == 'declaration'
 let decls = csharpStatements():isDecl
 command testPred = count(decls)
-", "<test3>");
-        var predResult = bridge.RunCommand("testPred");
+", "<test3>", cancellationToken: CancellationToken.None);
+        var predResult = (await bridge.RunCommandAsync("testPred", cancellationToken: CancellationToken.None));
         Assert.That(((CopInt)predResult).Value, Is.EqualTo(500),
             "Predicate on csharp data should find 500 declarations (every other of 1000)");
 
         // Same predicate on python data should find 0 (all are 'expression')
-        bridge.LoadSource(@"
+        await bridge.LoadSourceAsync(@"
 predicate isDecl2(s) => s.Kind == 'declaration'
 let pyDecls = pythonStatements():isDecl2
 command testPyPred = count(pyDecls)
-", "<test4>");
-        var pyPredResult = bridge.RunCommand("testPyPred");
+", "<test4>", cancellationToken: CancellationToken.None);
+        var pyPredResult = (await bridge.RunCommandAsync("testPyPred", cancellationToken: CancellationToken.None));
         Assert.That(((CopInt)pyPredResult).Value, Is.EqualTo(0),
             "Predicate on python data should find 0 declarations");
     }

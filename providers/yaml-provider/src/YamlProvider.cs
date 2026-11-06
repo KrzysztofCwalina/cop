@@ -1,3 +1,5 @@
+// Exposes YAML documents and entries as source-linked provider collections.
+
 using System.Collections.Concurrent;
 using Cop.Core;
 using Cop.Providers.SourceModel;
@@ -11,11 +13,12 @@ namespace Cop.Providers.Yaml;
 /// </summary>
 public sealed class YamlProvider : DataProvider
 {
-    public override ReadOnlyMemory<byte> GetSchema() => _schema.ToJson();
+    /// <inheritdoc />
+    public override ReadOnlyMemory<byte> GetSchema() => s_schema.ToJson();
 
-    private static readonly ProviderSchema _schema = BuildSchema();
+    private static readonly ProviderSchema s_schema = BuildSchema();
 
-    private static readonly HashSet<string> YamlExtensions = new(StringComparer.OrdinalIgnoreCase)
+    private static readonly HashSet<string> s_yamlExtensions = new(StringComparer.OrdinalIgnoreCase)
         { ".yaml", ".yml" };
 
     private static ProviderSchema BuildSchema()
@@ -46,8 +49,9 @@ public sealed class YamlProvider : DataProvider
     private static ProviderPropertySchema Prop(string name, string type = "string")
         => new() { Name = name, Type = type };
     private static ProviderPropertySchema Opt(string name, string type = "string")
-        => new() { Name = name, Type = type, Optional = true };
+        => new() { Name = name, Type = type, IsOptional = true };
 
+    /// <inheritdoc />
     public override RuntimeBindings GetRuntimeBindings()
     {
         return new RuntimeBindings
@@ -66,48 +70,68 @@ public sealed class YamlProvider : DataProvider
         };
     }
 
-    public override object? Query(ProviderQuery query)
+    /// <inheritdoc />
+    public override async ValueTask<object?> QueryAsync(
+        ProviderQuery query, CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         if (query.RootPath is null)
+        {
             return new Dictionary<string, List<object>>();
+        }
 
-        var rootPath = query.RootPath;
-        var excluded = query.ExcludedDirectories;
+        string rootPath = query.RootPath;
+        IReadOnlySet<string>? excluded = query.ExcludedDirectories;
 
-        var filePaths = new List<string>();
+        List<string> filePaths = new List<string>();
         CollectYamlFiles(rootPath, excluded, filePaths);
 
-        var parsed = new ConcurrentBag<(SourceFile File, YamlParser.YamlParseResult Doc)>();
-        Parallel.ForEach(filePaths,
-            new ParallelOptions { MaxDegreeOfParallelism = Environment.ProcessorCount },
-            filePath =>
+        ConcurrentBag<(SourceFile File, YamlParser.YamlParseResult Doc)> parsed = new ConcurrentBag<(SourceFile File, YamlParser.YamlParseResult Doc)>();
+        await Parallel.ForEachAsync(filePaths,
+            new ParallelOptions
+            {
+                MaxDegreeOfParallelism = Environment.ProcessorCount,
+                CancellationToken = cancellationToken
+            }, async (filePath, token) =>
             {
                 try
                 {
-                    var text = File.ReadAllText(filePath);
-                    var relativePath = Path.GetRelativePath(rootPath, filePath).Replace('\\', '/');
-                    var sourceFile = new SourceFile(relativePath, "yaml", [], [], text);
-                    var doc = YamlParser.Parse(text);
+                    string text = await File.ReadAllTextAsync(filePath, token).ConfigureAwait(false);
+                    string relativePath = Path.GetRelativePath(rootPath, filePath).Replace('\\', '/');
+                    SourceFile sourceFile = new SourceFile(relativePath, "yaml", [], [], text);
+                    YamlParser.YamlParseResult doc = YamlParser.Parse(text);
                     ExecutionStatistics.RecordInputFile(filePath);
                     parsed.Add((sourceFile, doc));
                 }
-                catch { }
-            });
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                    throw new IOException(
+                        $"Cannot read YAML file '{filePath}': {ex.Message}", ex);
+                }
+            }).ConfigureAwait(false);
 
-        var sorted = parsed.OrderBy(p => p.File.Path, StringComparer.Ordinal).ToList();
+        List<(SourceFile File, YamlParser.YamlParseResult Doc)> sorted = parsed.OrderBy(p => p.File.Path, StringComparer.Ordinal).ToList();
 
-        var entries = new List<object>();
-        var documents = new List<object>();
-        foreach (var (file, doc) in sorted)
+        List<object> entries = new List<object>();
+        List<object> documents = new List<object>();
+        foreach ((SourceFile? file, YamlParser.YamlParseResult? doc) in sorted)
         {
             entries.AddRange(doc.Entries.Select(e => (object)(e with { File = file })));
             documents.AddRange(doc.Documents.Select(d => (object)(d with { File = file })));
         }
 
-        var collections = new Dictionary<string, List<object>>(StringComparer.Ordinal);
-        var requested = query.Collection;
-        if (requested is null || requested == "Entries") collections["Entries"] = entries;
-        if (requested is null || requested == "Documents") collections["Documents"] = documents;
+        Dictionary<string, List<object>> collections = new Dictionary<string, List<object>>(StringComparer.Ordinal);
+        string? requested = query.Collection;
+        if (requested is null || requested == "Entries")
+        {
+            collections["Entries"] = entries;
+        }
+
+        if (requested is null || requested == "Documents")
+        {
+            collections["Documents"] = documents;
+        }
+
         return ApplyQueryFilters(query, collections);
     }
 
@@ -115,20 +139,29 @@ public sealed class YamlProvider : DataProvider
     {
         try
         {
-            foreach (var file in Directory.GetFiles(dir))
+            foreach (string file in Directory.GetFiles(dir))
             {
-                if (YamlExtensions.Contains(Path.GetExtension(file)))
+                if (s_yamlExtensions.Contains(Path.GetExtension(file)))
+                {
                     result.Add(file);
+                }
             }
-            foreach (var subDir in Directory.GetDirectories(dir))
+            foreach (string subDir in Directory.GetDirectories(dir))
             {
-                var dirName = Path.GetFileName(subDir);
-                if (excluded is not null && excluded.Contains(dirName)) continue;
+                string dirName = Path.GetFileName(subDir);
+                if (excluded is not null && excluded.Contains(dirName))
+                {
+                    continue;
+                }
+
                 CollectYamlFiles(subDir, excluded, result);
             }
         }
-        catch (UnauthorizedAccessException) { }
-        catch (IOException) { }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            throw new IOException(
+                $"Cannot enumerate YAML files in '{dir}': {ex.Message}", ex);
+        }
     }
 
     private static Dictionary<string, Dictionary<string, Func<object, object?>>> BuildAccessors()

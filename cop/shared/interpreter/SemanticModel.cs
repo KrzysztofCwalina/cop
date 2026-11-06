@@ -1,25 +1,9 @@
+// Exposes symbol, type, and syntax relationships for language-tooling consumers.
+
 namespace Cop.Lang.Interpreter;
 
 using Cop.Lang.Ast;
 using Cop.Lang.Parser;
-
-/// <summary>An inferred type: a type name plus whether it is a collection. <c>[Name]</c> when a collection.</summary>
-public readonly record struct TypeInfo(string Name, bool IsCollection)
-{
-    /// <summary>Display form: <c>[Name]</c> for a collection, otherwise <c>Name</c>.</summary>
-    public string Display => IsCollection ? $"[{Name}]" : Name;
-}
-
-/// <summary>A property of a type: its name, type (display form), and the type that declares it.</summary>
-public sealed record PropertyInfo(string Name, string Type, string DeclaringType);
-
-/// <summary>A declared predicate or function: parameter types and return type (display forms).</summary>
-public sealed record CallableInfo(
-    string Name,
-    bool IsPredicate,
-    IReadOnlyList<string?> ParamTypes,
-    string? ReturnType,
-    bool IsNarrowing);
 
 /// <summary>
 /// A read-only semantic view of a parsed cop program, backing editor features (hover, completion)
@@ -45,17 +29,27 @@ public sealed class SemanticModel
         IEnumerable<ModuleNode> modules,
         IReadOnlyDictionary<string, List<ModuleNode>>? namespaces)
     {
-        var model = new SemanticModel(TypeChecker.ForModel(modules));
+        SemanticModel model = new SemanticModel(TypeChecker.ForModel(modules));
         if (namespaces is not null)
         {
-            foreach (var (ns, mods) in namespaces)
+            foreach ((string? ns, List<ModuleNode>? mods) in namespaces)
             {
-                var names = new List<string>();
-                foreach (var m in mods)
-                    foreach (var decl in m.Declarations)
+                List<string> names = new List<string>();
+                foreach (ModuleNode m in mods)
+                {
+                    foreach (Declaration decl in m.Declarations)
+                    {
                         if (decl is FunctionDecl { IsExported: true } fn && !names.Contains(fn.Name))
+                        {
                             names.Add(fn.Name);
-                if (names.Count > 0) model._namespaceFunctions[ns] = names;
+                        }
+                    }
+                }
+
+                if (names.Count > 0)
+                {
+                    model._namespaceFunctions[ns] = names;
+                }
             }
         }
         return model;
@@ -69,19 +63,27 @@ public sealed class SemanticModel
     /// </summary>
     public TypeInfo? InferExpressionType(string exprText, IReadOnlyDictionary<string, TypeInfo>? locals = null)
     {
-        if (string.IsNullOrWhiteSpace(exprText)) return null;
+        if (string.IsNullOrWhiteSpace(exprText))
+        {
+            return null;
+        }
+
         ModuleNode probe;
         try
         {
             // Reuse the REAL parser: wrap the chain as a let value so a single expression parses.
             probe = CopParser.Parse("let __semanticmodel_probe = " + exprText, "__semanticmodel_probe__");
         }
-        catch
+        catch (ParseException)
         {
             return null;
         }
-        var let = probe.Declarations.OfType<LetDecl>().FirstOrDefault(d => d.Name == "__semanticmodel_probe");
-        if (let?.Value is null) return null;
+        LetDecl? let = probe.Declarations.OfType<LetDecl>().FirstOrDefault(d => d.Name == "__semanticmodel_probe");
+        if (let?.Value is null)
+        {
+            return null;
+        }
+
         return _checker.InferWithLocals(let.Value, locals);
     }
 
@@ -90,7 +92,7 @@ public sealed class SemanticModel
         => _checker.InferWithLocals(expression, locals);
 
     /// <summary>True if <paramref name="name"/> is a top-level <c>let</c> binding in the program.</summary>
-    public bool IsLet(string name) { _checker.TopLevelLet(name, out var found); return found; }
+    public bool IsLet(string name) { _checker.TopLevelLet(name, out bool found); return found; }
 
     /// <summary>The type of a top-level <c>let</c> (null if unknown or not a let).</summary>
     public TypeInfo? LetType(string name) => _checker.TopLevelLet(name, out _);
@@ -119,21 +121,31 @@ public sealed class SemanticModel
     /// <summary>Every overload of every declared predicate and function (for general/colon completion).</summary>
     public IReadOnlyList<CallableInfo> Callables()
     {
-        var result = new List<CallableInfo>();
-        foreach (var name in _checker.CallableNames())
+        List<CallableInfo> result = new List<CallableInfo>();
+        foreach (string name in _checker.CallableNames())
+        {
             result.AddRange(_checker.AllCallables(name));
+        }
+
         return result;
     }
 
     /// <summary>Exported functions of an imported package namespace (e.g. <c>csharp</c>).</summary>
     public IReadOnlyList<CallableInfo> NamespaceFunctions(string ns)
     {
-        if (!_namespaceFunctions.TryGetValue(ns, out var names)) return [];
-        var result = new List<CallableInfo>();
-        foreach (var name in names)
+        if (!_namespaceFunctions.TryGetValue(ns, out List<string>? names))
         {
-            var c = _checker.Callable(name);
-            if (c is not null) result.Add(c);
+            return [];
+        }
+
+        List<CallableInfo> result = new List<CallableInfo>();
+        foreach (string name in names)
+        {
+            CallableInfo? c = _checker.Callable(name);
+            if (c is not null)
+            {
+                result.Add(c);
+            }
         }
         return result;
     }
@@ -145,20 +157,40 @@ public sealed class SemanticModel
     /// <paramref name="elementType"/> (same type, or element is a subtype/conformer).</summary>
     public bool PredicateApplies(string? paramType, string? elementType)
     {
-        if (paramType is null || elementType is null) return true; // unknown ⇒ offer it
-        if (string.Equals(paramType, elementType, StringComparison.OrdinalIgnoreCase)) return true;
+        if (paramType is null || elementType is null)
+        {
+            return true; // unknown ⇒ offer it
+        }
+
+        if (string.Equals(paramType, elementType, StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
         return _checker.IsSubtypeOf(elementType, paramType);
     }
 
     // ── String-level type helpers (operate on display forms) ──────────────────
 
+    /// <summary>
+    /// Whether a display-form type name starts with a collection marker.
+    /// </summary>
     public static bool IsCollectionType(string type) => type.StartsWith('[');
 
+    /// <summary>
+    /// Unwraps a bracketed collection type, leaving other type names unchanged.
+    /// </summary>
     public static string ElementType(string type) =>
         type.StartsWith('[') && type.EndsWith(']') ? type[1..^1] : type;
 
+    /// <summary>
+    /// Whether a type name denotes string, including its nullable form.
+    /// </summary>
     public static bool IsStringType(string type) => StripNullable(type) == "string";
 
+    /// <summary>
+    /// Whether a type name denotes int or float, including nullable forms.
+    /// </summary>
     public static bool IsNumericType(string type) => StripNullable(type) is "int" or "float";
 
     private static string StripNullable(string type) => type.EndsWith('?') ? type[..^1] : type;

@@ -12,7 +12,7 @@ namespace Cop.Tests.Lang.SourceParsers;
 public class AuditedSourceCorrectnessTests
 {
     [Test]
-    public void CSharp_ConditionalGenericAndNestedConstructors_HaveIndependentFacts()
+    public async Task CSharp_ConditionalGenericAndNestedConstructors_HaveIndependentFacts()
     {
         const string text = """
             interface IA {} interface IB {}
@@ -29,7 +29,7 @@ public class AuditedSourceCorrectnessTests
         Assert.That(calls.Select(s => s.MemberName), Is.EqualTo(new string?[] { "Ping", "Generic", "Outer", null, null }));
         Assert.That(calls[0].CallTarget?.Kind, Is.EqualTo("memberAccess"));
         Assert.That(calls[0].CallTarget?.Target?.Name, Is.EqualTo("client"));
-        Assert.That(calls.Select(s => s.ConstructedTypeInterfaces.ToArray()),
+        Assert.That((await calls.ToAsyncEnumerable().Select(async (Cop.Providers.SourceModel.StatementInfo s, CancellationToken cancellationToken) => (await AsyncSourceFacts.SemanticAsync(s, CancellationToken.None)).ConstructedTypeInterfaces.ToArray()).ToArrayAsync()),
             Is.EqualTo(new[] { Array.Empty<string>(), [], [], new[] { "IA" }, new[] { "IB" } }));
         Assert.That(calls.Select(s => s.Method?.Name), Is.EqualTo(Enumerable.Repeat("Run", 5)));
         Assert.That(calls[3].Parent, Is.SameAs(calls[2]));
@@ -37,7 +37,7 @@ public class AuditedSourceCorrectnessTests
     }
 
     [Test]
-    public void CSharp_SameLineMethodsAndNestedTypes_UseSpanIdentity()
+    public async Task CSharp_SameLineMethodsAndNestedTypes_UseSpanIdentity()
     {
         const string text = """
             interface IA {} interface IB {}
@@ -48,14 +48,14 @@ public class AuditedSourceCorrectnessTests
             [MetadataReference.CreateFromFile(typeof(object).Assembly.Location)]).GetSemanticModel(tree);
         var file = new CSharpSourceParser().ParseWithSemantics("sample.cs", text, tree, model)!;
         var type = file.Types.Single(t => t.Name == "Outer");
-        Assert.That(type.Interfaces, Is.EqualTo(new[] { "IA" }));
-        Assert.That(type.NestedTypes.Single().Interfaces, Is.EqualTo(new[] { "IB" }));
+        Assert.That((await AsyncSourceFacts.TypeSemanticAsync(type, CancellationToken.None)).Interfaces, Is.EqualTo(new[] { "IA" }));
+        Assert.That((await AsyncSourceFacts.TypeSemanticAsync(type.NestedTypes.Single(), CancellationToken.None)).Interfaces, Is.EqualTo(new[] { "IB" }));
         Assert.That(file.Statements.Where(s => s.Kind == "call").Select(s => (s.MemberName, s.Method?.Name)),
             Is.EqualTo(new[] { ("Outer", "First"), ("Inner", "First"), ("Other", "Second"), ("Nested", "Second") }));
     }
 
     [Test]
-    public void CSharp_FinallyLoopsLocalsAndAccessors_AreStructured()
+    public async Task CSharp_FinallyLoopsLocalsAndAccessors_AreStructured()
     {
         var file = new CSharpSourceParser().Parse("sample.cs", """
             class C {
@@ -76,11 +76,11 @@ public class AuditedSourceCorrectnessTests
         Assert.That(file.Statements.Single(s => s.MemberName == "Ping").Parent?.Kind, Is.EqualTo("label"));
         Assert.That(file.Statements.Single(s => s.MemberName == "found").Method?.Name, Is.EqualTo("get_Value"));
         Assert.That(file.Statements.Single(s => s.MemberName == "local").Method?.Name, Is.EqualTo("Local"));
-        Assert.That(file.Types.Single().Methods.Select(m => m.Name), Is.EqualTo(new[] { "get_Value", "Run", "Local" }));
+        Assert.That((await AsyncSourceFacts.MembersAsync(file.Types.Single(), CancellationToken.None)).Methods.Select(m => m.Name), Is.EqualTo(new[] { "get_Value", "Run", "Local" }));
     }
 
     [Test]
-    public void CSharp_GenericsOptionalNamespacesAndImports_AreNeutralFacts()
+    public async Task CSharp_GenericsOptionalNamespacesAndImports_AreNeutralFacts()
     {
         var file = new CSharpSourceParser().Parse("sample.cs", """
             namespace First { using Alias = System.String; class A<T> { void Run<U>(int value = 2) {} } }
@@ -88,7 +88,7 @@ public class AuditedSourceCorrectnessTests
             """)!;
         Assert.That(file.Types.Select(t => t.Namespace), Is.EqualTo(new[] { "First", "Second" }));
         Assert.That(file.Types[0].TypeParameters, Is.EqualTo(new[] { "T" }));
-        var method = file.Types[0].Methods.Single();
+        var method = (await AsyncSourceFacts.MembersAsync(file.Types[0], CancellationToken.None)).Methods.Single();
         Assert.That(method.TypeParameters, Is.EqualTo(new[] { "U" }));
         Assert.That(method.Parameters.Single().IsOptional, Is.True);
         Assert.That(file.Imports.Select(i => (i.Module, i.Alias, i.IsStatic)),
@@ -97,7 +97,7 @@ public class AuditedSourceCorrectnessTests
     }
 
     [Test]
-    public void CSharp_ProjectBoundariesPreventUnreferencedSymbolLeakage_OnBothQueryPaths()
+    public async Task CSharp_ProjectBoundariesPreventUnreferencedSymbolLeakage_OnBothQueryPaths()
     {
         var root = TemporaryDirectory();
         try
@@ -109,17 +109,18 @@ public class AuditedSourceCorrectnessTests
             File.WriteAllText(Path.Combine(root, "first", "First.cs"), "namespace Shared; public class OnlyFirst { public static void Make() {} }");
             File.WriteAllText(Path.Combine(root, "second", "Second.cs"), "class Second { void Run() { Shared.OnlyFirst.Make(); } }");
             var query = new ProviderQuery { RootPath = root };
-            var eager = (Dictionary<string, List<object>>)new CSharpProvider().Query(query)!;
-            var deferred = (DeferredProviderResult)new CSharpProvider().QueryDeferred(query);
-            foreach (var statements in new[] { eager["Statements"], deferred.Collections["Statements"].ToList() })
-                Assert.That(statements.Cast<StatementInfo>().Single(s => s.MemberName == "Make").TypeName, Is.EqualTo("Shared.OnlyFirst"),
+            var eager = (Dictionary<string, List<object>>)(await new CSharpProvider().QueryAsync(query, cancellationToken: CancellationToken.None))!;
+            var deferred = (DeferredProviderResult?)(await new CSharpProvider().QueryDeferredAsync(query, cancellationToken: CancellationToken.None))
+                ?? throw new AssertionException("Expected a deferred provider result.");
+            foreach (var statements in new[] { eager["Statements"], (await deferred.Collections["Statements"].ToListAsync()) })
+                Assert.That((await AsyncSourceFacts.TypeNameAsync(statements.Cast<StatementInfo>().Single(s => s.MemberName == "Make"), CancellationToken.None)).TypeName, Is.EqualTo("Shared.OnlyFirst"),
                     "Unresolved source target must not resolve against the unrelated project.");
         }
         finally { Directory.Delete(root, true); }
     }
 
     [Test]
-    public void CSharp_AssemblyApiIncludesProtectedMembersAndOperators_NotPrivateMembers()
+    public async Task CSharp_AssemblyApiIncludesProtectedMembersAndOperators_NotPrivateMembers()
     {
         var root = TemporaryDirectory();
         try
@@ -142,7 +143,7 @@ public class AuditedSourceCorrectnessTests
             Assert.That(compilation.Emit(path).Success, Is.True);
             var type = AssemblyApiReader.ReadAssembly(path).Types.Single();
             Assert.That(type.Constructors.Select(c => c.Modifiers), Is.EqualTo(new[] { Modifier.Protected }));
-            Assert.That(type.Methods.Select(m => m.Name), Is.EquivalentTo(new[] { "Family", "op_Addition" }));
+            Assert.That((await AsyncSourceFacts.MembersAsync(type, CancellationToken.None)).Methods.Select(m => m.Name), Is.EquivalentTo(new[] { "Family", "op_Addition" }));
             Assert.That(type.Properties.Select(p => p.Name), Is.EqualTo(new[] { "Value" }));
             Assert.That(type.Fields.Select(f => f.Name), Is.EqualTo(new[] { "Field" }));
             Assert.That(type.NestedTypes.Select(t => t.Name), Is.EqualTo(new[] { "Surface+Nested" }));
@@ -169,7 +170,7 @@ public class AuditedSourceCorrectnessTests
             var broken = new CopSourceParser().Parse("broken.cop", "function broken(")!;
             var path = Path.Combine(root, "cache.bin");
             SourceCacheSerializer.Save(path, [1, 2, 3], [source, broken]);
-            var loaded = SourceCacheSerializer.TryLoad(path, [1, 2, 3])!;
+            var loaded = SourceCacheSerializer.LoadOrDefault(path, [1, 2, 3])!;
             Assert.That(loaded[1].ParseErrors, Is.EqualTo(broken.ParseErrors));
             var loop = loaded[0].Statements.Single(s => s.Kind == "foreach");
             var print = loaded[0].Statements.Single(s => s.MemberName == "print");

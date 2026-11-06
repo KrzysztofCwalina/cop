@@ -12,41 +12,41 @@ public class LanguageBridgeTests
     // ========================================================================
 
     [Test]
-    public void RunsSimpleCommand()
+    public async Task RunsSimpleCommand()
     {
         var bridge = new LanguageBridge();
-        bridge.LoadSource(@"
+        await bridge.LoadSourceAsync(@"
 command main = {
     print('hello world')
-}");
-        bridge.RunCommand("main");
+}", cancellationToken: CancellationToken.None);
+        await bridge.RunCommandAsync("main", cancellationToken: CancellationToken.None);
         Assert.That(bridge.Outputs, Has.Count.EqualTo(1));
         Assert.That(bridge.Outputs[0], Is.EqualTo("hello world"));
     }
 
     [Test]
-    public void RunsCommandWithArithmetic()
+    public async Task RunsCommandWithArithmetic()
     {
         var bridge = new LanguageBridge();
-        bridge.LoadSource(@"
+        await bridge.LoadSourceAsync(@"
 command main = {
     let x = 3 + 4
     print(x)
-}");
-        bridge.RunCommand("main");
+}", cancellationToken: CancellationToken.None);
+        await bridge.RunCommandAsync("main", cancellationToken: CancellationToken.None);
         Assert.That(bridge.Outputs[0], Is.EqualTo("7"));
     }
 
     [Test]
-    public void RunsCommandWithFunction()
+    public async Task RunsCommandWithFunction()
     {
         var bridge = new LanguageBridge();
-        bridge.LoadSource(@"
+        await bridge.LoadSourceAsync(@"
 function greet(name : string) : string = 'Hello, ' + name + '!'
 command main = {
     print(greet('World'))
-}");
-        bridge.RunCommand("main");
+}", cancellationToken: CancellationToken.None);
+        await bridge.RunCommandAsync("main", cancellationToken: CancellationToken.None);
         Assert.That(bridge.Outputs[0], Is.EqualTo("Hello, World!"));
     }
 
@@ -55,7 +55,7 @@ command main = {
     // ========================================================================
 
     [Test]
-    public void RegisteredCollectionIsAccessible()
+    public async Task RegisteredCollectionIsAccessible()
     {
         var bridge = new LanguageBridge();
 
@@ -68,15 +68,15 @@ command main = {
         };
 
         bridge.RegisterCollection("people", items);
-        bridge.LoadSource(@"
-command main = foreach people => print(item.Name)");
-        bridge.RunCommand("main");
+        await bridge.LoadSourceAsync(@"
+command main = foreach people => print(item.Name)", cancellationToken: CancellationToken.None);
+        await bridge.RunCommandAsync("main", cancellationToken: CancellationToken.None);
 
         Assert.That(bridge.Outputs, Is.EqualTo(new[] { "Alice", "Bob", "Carol" }));
     }
 
     [Test]
-    public void FilterOnRegisteredCollection()
+    public async Task FilterOnRegisteredCollection()
     {
         var bridge = new LanguageBridge();
 
@@ -88,16 +88,16 @@ command main = foreach people => print(item.Name)");
         };
 
         bridge.RegisterCollection("items", items);
-        bridge.LoadSource(@"
+        await bridge.LoadSourceAsync(@"
 predicate isActive(item) => item.Active
-command main = foreach items:isActive => print(item.Name)");
-        bridge.RunCommand("main");
+command main = foreach items:isActive => print(item.Name)", cancellationToken: CancellationToken.None);
+        await bridge.RunCommandAsync("main", cancellationToken: CancellationToken.None);
 
         Assert.That(bridge.Outputs, Is.EqualTo(new[] { "Foo", "Baz" }));
     }
 
     [Test]
-    public void NestedFieldAccess()
+    public async Task NestedFieldAccess()
     {
         var bridge = new LanguageBridge();
 
@@ -109,9 +109,9 @@ command main = foreach items:isActive => print(item.Name)");
         });
 
         bridge.RegisterCollection("people", [person]);
-        bridge.LoadSource(@"
-command main = foreach people => print(item.Address.City)");
-        bridge.RunCommand("main");
+        await bridge.LoadSourceAsync(@"
+command main = foreach people => print(item.Address.City)", cancellationToken: CancellationToken.None);
+        await bridge.RunCommandAsync("main", cancellationToken: CancellationToken.None);
 
         Assert.That(bridge.Outputs[0], Is.EqualTo("Seattle"));
     }
@@ -121,64 +121,64 @@ command main = foreach people => print(item.Address.City)");
     // ========================================================================
 
     [Test]
-    public void AssertPassesOnTrue()
+    public async Task AssertPassesOnTrue()
     {
         var bridge = new LanguageBridge();
-        bridge.LoadSource(@"
+        await bridge.LoadSourceAsync(@"
 command main = {
     assert(true)
     print('passed')
-}");
-        bridge.RunCommand("main");
+}", cancellationToken: CancellationToken.None);
+        await bridge.RunCommandAsync("main", cancellationToken: CancellationToken.None);
         Assert.That(bridge.Outputs[0], Is.EqualTo("passed"));
         Assert.That(bridge.Errors, Is.Empty);
     }
 
     [Test]
-    public void AssertFailsOnFalse()
+    public async Task AssertFailsOnFalse()
     {
         var bridge = new LanguageBridge();
-        bridge.LoadSource(@"
+        await bridge.LoadSourceAsync(@"
 command main = {
     assert(false)
-}");
-        bridge.RunCommand("main");
+}", cancellationToken: CancellationToken.None);
+        await bridge.RunCommandAsync("main", cancellationToken: CancellationToken.None);
         Assert.That(bridge.Errors, Has.Count.EqualTo(1));
         Assert.That(bridge.Errors[0], Does.Contain("Assertion failed"));
     }
 
     [Test]
-    public void FailProducesError()
+    public async Task FailProducesError()
     {
         var bridge = new LanguageBridge();
-        bridge.LoadSource(@"
+        await bridge.LoadSourceAsync(@"
 command main = {
     fail('something went wrong')
-}");
-        bridge.RunCommand("main");
+}", cancellationToken: CancellationToken.None);
+        await bridge.RunCommandAsync("main", cancellationToken: CancellationToken.None);
         Assert.That(bridge.Errors, Has.Count.EqualTo(1));
         Assert.That(bridge.Errors[0], Does.Contain("something went wrong"));
     }
 
     [Test]
-    public void TextJoinsCollection()
+    public async Task TextJoinsCollection()
     {
         var bridge = new LanguageBridge();
-        bridge.LoadSource(@"
+        await bridge.LoadSourceAsync(@"
 let items = ['a', 'b', 'c']
-command main = print(text(items))");
-        bridge.RunCommand("main");
+command main = print(text(items))", cancellationToken: CancellationToken.None);
+        await bridge.RunCommandAsync("main", cancellationToken: CancellationToken.None);
         Assert.That(bridge.Outputs[0], Is.EqualTo("a, b, c"));
     }
 
     [Test]
-    public void TextWithCustomSeparator()
+    public async Task TextWithCustomSeparator()
     {
         var bridge = new LanguageBridge();
-        bridge.LoadSource(@"
+        await bridge.LoadSourceAsync(@"
 let items = ['x', 'y', 'z']
-command main = print(text(items, ' | '))");
-        bridge.RunCommand("main");
+command main = print(text(items, ' | '))", cancellationToken: CancellationToken.None);
+        await bridge.RunCommandAsync("main", cancellationToken: CancellationToken.None);
         Assert.That(bridge.Outputs[0], Is.EqualTo("x | y | z"));
     }
 
@@ -187,7 +187,7 @@ command main = print(text(items, ' | '))");
     // ========================================================================
 
     [Test]
-    public void RegisterCustomFunction()
+    public async Task RegisterCustomFunction()
     {
         var bridge = new LanguageBridge();
         bridge.RegisterFunction("multiply", (args, env) =>
@@ -197,8 +197,8 @@ command main = print(text(items, ' | '))");
             return new CopInt(a * b);
         });
 
-        bridge.LoadSource("command main = print(multiply(6, 7))");
-        bridge.RunCommand("main");
+        await bridge.LoadSourceAsync("command main = print(multiply(6, 7))", cancellationToken: CancellationToken.None);
+        await bridge.RunCommandAsync("main", cancellationToken: CancellationToken.None);
         Assert.That(bridge.Outputs[0], Is.EqualTo("42"));
     }
 
@@ -207,10 +207,10 @@ command main = print(text(items, ' | '))");
     // ========================================================================
 
     [Test]
-    public void EvalExpressionReturnsValue()
+    public async Task EvalExpressionReturnsValue()
     {
         var bridge = new LanguageBridge();
-        var result = bridge.EvalExpression("3 + 4");
+        var result = (await bridge.EvalExpressionAsync("3 + 4", cancellationToken: CancellationToken.None));
         Assert.That(result, Is.InstanceOf<CopInt>());
         Assert.That(((CopInt)result).Value, Is.EqualTo(7));
     }
@@ -220,7 +220,7 @@ command main = print(text(items, ' | '))");
     // ========================================================================
 
     [Test]
-    public void LazyCollectionIsOnlyEnumeratedOnDemand()
+    public async Task LazyCollectionIsOnlyEnumeratedOnDemand()
     {
         var bridge = new LanguageBridge();
         int callCount = 0;
@@ -236,11 +236,11 @@ command main = print(text(items, ' | '))");
         });
 
         // Just loading shouldn't enumerate
-        bridge.LoadSource("command main = foreach items => print(item.Name)");
+        await bridge.LoadSourceAsync("command main = foreach items => print(item.Name)", cancellationToken: CancellationToken.None);
         Assert.That(callCount, Is.EqualTo(0));
 
         // Running the command should enumerate
-        bridge.RunCommand("main");
+        await bridge.RunCommandAsync("main", cancellationToken: CancellationToken.None);
         Assert.That(callCount, Is.EqualTo(1));
         Assert.That(bridge.Outputs, Is.EqualTo(new[] { "One", "Two" }));
     }
@@ -250,12 +250,12 @@ command main = print(text(items, ' | '))");
     // ========================================================================
 
     [Test]
-    public void LoadsMultipleSources()
+    public async Task LoadsMultipleSources()
     {
         var bridge = new LanguageBridge();
-        bridge.LoadSource("function double(n : int) : int = n + n");
-        bridge.LoadSource("command main = print(double(21))");
-        bridge.RunCommand("main");
+        await bridge.LoadSourceAsync("function double(n : int) : int = n + n", cancellationToken: CancellationToken.None);
+        await bridge.LoadSourceAsync("command main = print(double(21))", cancellationToken: CancellationToken.None);
+        await bridge.RunCommandAsync("main", cancellationToken: CancellationToken.None);
         Assert.That(bridge.Outputs[0], Is.EqualTo("42"));
     }
 

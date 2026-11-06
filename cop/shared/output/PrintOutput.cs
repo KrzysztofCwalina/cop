@@ -1,3 +1,5 @@
+// Represents text emitted by a Cop print operation.
+
 namespace Cop.Lang;
 
 /// <summary>
@@ -17,5 +19,6 @@ public record PrintOutput(RichString Content)
     /// </summary>
     public string Message => Content.ToPlainText();
 
+    /// <summary>Returns the emitted text without style annotations.</summary>
     public override string ToString() => Message;
 }

@@ -1,3 +1,5 @@
+// Retrieves package metadata and content from GitHub repositories.
+
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -11,15 +13,6 @@ using System.Threading.Tasks;
 namespace Cop.Core;
 
 /// <summary>
-/// Exception thrown when a package is not found in the GitHub repository.
-/// </summary>
-public class PackageNotFoundException : Exception
-{
-    public PackageNotFoundException(string message) : base(message) { }
-    public PackageNotFoundException(string message, Exception innerException) : base(message, innerException) { }
-}
-
-/// <summary>
 /// GitHub REST API client for fetching package content from GitHub repositories.
 /// Packages are stored under the `packages/` folder and referenced by Go-style paths.
 /// </summary>
@@ -31,6 +24,9 @@ public class GitHubPackageSource
     private readonly HttpClient _httpClient;
     private readonly string? _githubToken;
 
+    /// <summary>
+    /// Creates a GitHub package client using the supplied transport and optional token.
+    /// </summary>
     public GitHubPackageSource(HttpClient httpClient, string? githubToken = null)
     {
         _httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
@@ -48,14 +44,16 @@ public class GitHubPackageSource
         PackageReference packageRef,
         CancellationToken ct = default)
     {
-        var packagePath = await FindPackagePathAsync(
+        string? packagePath = await FindPackagePathAsync(
             packageRef.Owner, packageRef.Repo, packageRef.PackageName, GetPackageRef(packageRef), ct);
 
         if (packagePath is null)
+        {
             throw new PackageNotFoundException(
                 $"Package '{packageRef.PackageName}' not found in {packageRef.Owner}/{packageRef.Repo}");
+        }
 
-        var url = BuildContentsUrl(
+        string url = BuildContentsUrl(
             packageRef.Owner,
             packageRef.Repo,
             $"{packagePath}/{PackageMetadata.MetadataFileName}",
@@ -63,35 +61,35 @@ public class GitHubPackageSource
 
         try
         {
-            using var request = CreateRequestWithAuth(HttpMethod.Get, url);
-            var response = await _httpClient.SendAsync(request, ct);
+            using HttpRequestMessage request = CreateRequestWithAuth(HttpMethod.Get, url);
+            using HttpResponseMessage response = await _httpClient.SendAsync(request, ct);
             if (response.IsSuccessStatusCode)
             {
-                var json = await response.Content.ReadAsStringAsync(ct);
-                var contentDto = JsonSerializer.Deserialize<GitHubContentResponse>(
+                string json = await response.Content.ReadAsStringAsync(ct);
+                GitHubContentResponse? contentDto = JsonSerializer.Deserialize<GitHubContentResponse>(
                     json,
                     new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
 
                 if (contentDto?.Content != null)
                 {
-                    var decodedContent = DecodeBase64(contentDto.Content);
+                    string decodedContent = DecodeBase64(contentDto.Content);
                     return PackageMetadata.ParseFromJson(decodedContent);
                 }
             }
 
             // Fallback to legacy {name}.md
-            var legacyUrl = BuildContentsUrl(
+            string legacyUrl = BuildContentsUrl(
                 packageRef.Owner,
                 packageRef.Repo,
                 $"{packagePath}/{packageRef.PackageName}.md",
                 GetPackageRef(packageRef));
 
-            using var legacyRequest = CreateRequestWithAuth(HttpMethod.Get, legacyUrl);
-            var legacyResponse = await _httpClient.SendAsync(legacyRequest, ct);
+            using HttpRequestMessage legacyRequest = CreateRequestWithAuth(HttpMethod.Get, legacyUrl);
+            using HttpResponseMessage legacyResponse = await _httpClient.SendAsync(legacyRequest, ct);
             legacyResponse.EnsureSuccessStatusCode();
 
-            var legacyJson = await legacyResponse.Content.ReadAsStringAsync(ct);
-            var legacyDto = JsonSerializer.Deserialize<GitHubContentResponse>(
+            string legacyJson = await legacyResponse.Content.ReadAsStringAsync(ct);
+            GitHubContentResponse? legacyDto = JsonSerializer.Deserialize<GitHubContentResponse>(
                 legacyJson,
                 new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
 
@@ -101,14 +99,15 @@ public class GitHubPackageSource
                     $"Failed to decode package metadata for '{packageRef.PackageName}'");
             }
 
-            var decodedLegacy = DecodeBase64(legacyDto.Content);
+            string decodedLegacy = DecodeBase64(legacyDto.Content);
             return PackageMetadata.ParseFromMarkdown(decodedLegacy);
         }
         catch (PackageNotFoundException)
         {
             throw;
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is HttpRequestException or JsonException
+            or FormatException or ArgumentException)
         {
             throw new PackageNotFoundException(
                 $"Failed to fetch package metadata for '{packageRef.PackageName}': {ex.Message}",
@@ -124,14 +123,16 @@ public class GitHubPackageSource
         PackageReference packageRef,
         CancellationToken ct = default)
     {
-        var packagePath = await FindPackagePathAsync(
+        string? packagePath = await FindPackagePathAsync(
             packageRef.Owner, packageRef.Repo, packageRef.PackageName, GetPackageRef(packageRef), ct);
 
         if (packagePath is null)
+        {
             throw new PackageNotFoundException(
                 $"Package '{packageRef.PackageName}' not found in {packageRef.Owner}/{packageRef.Repo}");
+        }
 
-        var files = new Dictionary<string, byte[]>();
+        Dictionary<string, byte[]> files = new Dictionary<string, byte[]>();
         await DownloadDirectoryRecursiveAsync(
             packageRef.Owner,
             packageRef.Repo,
@@ -159,7 +160,7 @@ public class GitHubPackageSource
         string repo,
         CancellationToken ct = default)
     {
-        var packages = new List<string>();
+        List<string> packages = new List<string>();
         await CollectPackagesAsync(owner, repo, "packages", packages, ct);
         return packages.OrderBy(name => name).ToList();
     }
@@ -170,29 +171,39 @@ public class GitHubPackageSource
     {
         try
         {
-            var url = $"{GitHubApiBaseUrl}/repos/{owner}/{repo}/contents/{dirPath}";
-            using var request = CreateRequestWithAuth(HttpMethod.Get, url);
-            var response = await _httpClient.SendAsync(request, ct);
-            if (!response.IsSuccessStatusCode) return;
+            string url = $"{GitHubApiBaseUrl}/repos/{owner}/{repo}/contents/{dirPath}";
+            using HttpRequestMessage request = CreateRequestWithAuth(HttpMethod.Get, url);
+            using HttpResponseMessage response = await _httpClient.SendAsync(request, ct);
+            if (!response.IsSuccessStatusCode)
+            {
+                return;
+            }
 
-            var json = await response.Content.ReadAsStringAsync(ct);
-            var items = JsonSerializer.Deserialize<List<GitHubContentItem>>(
+            string json = await response.Content.ReadAsStringAsync(ct);
+            List<GitHubContentItem>? items = JsonSerializer.Deserialize<List<GitHubContentItem>>(
                 json,
                 new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
 
-            if (items is null) return;
-
-            var dirs = items.Where(i => i.Type == "dir").ToList();
-            var files = items.Where(i => i.Type == "file").Select(i => i.Name).ToHashSet();
-
-            foreach (var dir in dirs)
+            if (items is null)
             {
-                if (dir.Name.StartsWith('.')) continue;
+                return;
+            }
+
+            List<GitHubContentItem> dirs = items.Where(i => i.Type == "dir").ToList();
+            HashSet<string> files = items.Where(i => i.Type == "file").Select(i => i.Name).ToHashSet();
+
+            foreach (GitHubContentItem? dir in dirs)
+            {
+                if (dir.Name.StartsWith('.'))
+                {
+                    continue;
+                }
 
                 // A directory is a package if it contains cop.json among its children.
-                var isPackage = await IsGitHubPackageAsync(owner, repo, dir.Path, dir.Name, ct);
+                bool isPackage = await IsGitHubPackageAsync(owner, repo, dir.Path, dir.Name, ct);
                 if (isPackage)
-                if (isPackage)
+                {
+                    if (isPackage)
                 {
                     packages.Add(dir.Name);
                 }
@@ -200,6 +211,7 @@ public class GitHubPackageSource
                 {
                     // Group folder — recurse
                     await CollectPackagesAsync(owner, repo, dir.Path, packages, ct);
+                }
                 }
             }
         }
@@ -212,24 +224,24 @@ public class GitHubPackageSource
     private async Task<bool> IsGitHubPackageAsync(
         string owner, string repo, string dirPath, string dirName, CancellationToken ct)
     {
-        try
-        {
-            // Check for cop.json first
-            var metadataUrl = $"{GitHubApiBaseUrl}/repos/{owner}/{repo}/contents/{dirPath}/{PackageMetadata.MetadataFileName}";
-            using var metadataRequest = CreateRequestWithAuth(HttpMethod.Get, metadataUrl);
-            var response = await _httpClient.SendAsync(metadataRequest, ct);
-            if (response.IsSuccessStatusCode) return true;
+        return await PackageFileExistsAsync(owner, repo,
+            $"{dirPath}/{PackageMetadata.MetadataFileName}", null, ct)
+            || await PackageFileExistsAsync(owner, repo, $"{dirPath}/{dirName}.md", null, ct);
+    }
 
-            // Fallback: check for legacy {name}.md
-            var legacyUrl = $"{GitHubApiBaseUrl}/repos/{owner}/{repo}/contents/{dirPath}/{dirName}.md";
-            using var legacyRequest = CreateRequestWithAuth(HttpMethod.Get, legacyUrl);
-            var legacyResponse = await _httpClient.SendAsync(legacyRequest, ct);
-            return legacyResponse.IsSuccessStatusCode;
-        }
-        catch
+    private async Task<bool> PackageFileExistsAsync(
+        string owner, string repo, string path, string? version, CancellationToken ct)
+    {
+        using HttpRequestMessage request =
+            CreateRequestWithAuth(HttpMethod.Get, BuildContentsUrl(owner, repo, path, version));
+        using HttpResponseMessage response = await _httpClient.SendAsync(request, ct);
+        if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
         {
             return false;
         }
+
+        EnsureSuccess(response);
+        return true;
     }
 
     /// <summary>
@@ -240,66 +252,40 @@ public class GitHubPackageSource
     private async Task<string?> FindPackagePathAsync(
         string owner, string repo, string packageName, string? version, CancellationToken ct)
     {
-        // Try direct path with cop.json first
-        var directPath = $"packages/{packageName}";
-        var directUrl = BuildContentsUrl(owner, repo, $"{directPath}/{PackageMetadata.MetadataFileName}", version);
-        try
+        string directPath = $"packages/{packageName}";
+        if (await PackageFileExistsAsync(owner, repo,
+            $"{directPath}/{PackageMetadata.MetadataFileName}", version, ct)
+            || await PackageFileExistsAsync(owner, repo,
+                $"{directPath}/{packageName}.md", version, ct))
         {
-            using var directRequest = CreateRequestWithAuth(HttpMethod.Get, directUrl);
-            var response = await _httpClient.SendAsync(directRequest, ct);
-            if (response.IsSuccessStatusCode) return directPath;
+            return directPath;
         }
-        catch { /* fall through */ }
 
-        // Try direct path with legacy {name}.md
-        var legacyDirectUrl = BuildContentsUrl(owner, repo, $"{directPath}/{packageName}.md", version);
-        try
+        string rootUrl = BuildContentsUrl(owner, repo, "packages", version);
+        using HttpRequestMessage rootRequest = CreateRequestWithAuth(HttpMethod.Get, rootUrl);
+        using HttpResponseMessage response = await _httpClient.SendAsync(rootRequest, ct);
+        if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
         {
-            using var legacyDirectRequest = CreateRequestWithAuth(HttpMethod.Get, legacyDirectUrl);
-            var response = await _httpClient.SendAsync(legacyDirectRequest, ct);
-            if (response.IsSuccessStatusCode) return directPath;
+            return null;
         }
-        catch { /* fall through to group search */ }
 
-        // List packages/ root and search group folders
-        var rootUrl = BuildContentsUrl(owner, repo, "packages", version);
-        try
+        EnsureSuccess(response);
+        string json = await response.Content.ReadAsStringAsync(ct);
+        List<GitHubContentItem> items = JsonSerializer.Deserialize<List<GitHubContentItem>>(
+            json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
+            ?? throw new InvalidDataException("The GitHub packages listing was null.");
+
+        foreach (GitHubContentItem item in items.Where(i => i.Type == "dir" && !i.Name.StartsWith('.')))
         {
-            using var rootRequest = CreateRequestWithAuth(HttpMethod.Get, rootUrl);
-            var response = await _httpClient.SendAsync(rootRequest, ct);
-            if (!response.IsSuccessStatusCode) return null;
-
-            var json = await response.Content.ReadAsStringAsync(ct);
-            var items = JsonSerializer.Deserialize<List<GitHubContentItem>>(
-                json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-
-            if (items is null) return null;
-
-            foreach (var item in items.Where(i => i.Type == "dir" && !i.Name.StartsWith('.')))
+            string nestedPath = $"packages/{item.Name}/{packageName}";
+            if (await PackageFileExistsAsync(owner, repo,
+                $"{nestedPath}/{PackageMetadata.MetadataFileName}", version, ct)
+                || await PackageFileExistsAsync(owner, repo,
+                    $"{nestedPath}/{packageName}.md", version, ct))
             {
-                // Try nested path: packages/{group}/{packageName}/cop.json
-                var nestedPath = $"packages/{item.Name}/{packageName}";
-                var nestedUrl = BuildContentsUrl(owner, repo, $"{nestedPath}/{PackageMetadata.MetadataFileName}", version);
-                try
-                {
-                    using var nestedRequest = CreateRequestWithAuth(HttpMethod.Get, nestedUrl);
-                    var nestedResponse = await _httpClient.SendAsync(nestedRequest, ct);
-                    if (nestedResponse.IsSuccessStatusCode) return nestedPath;
-                }
-                catch { /* continue */ }
-
-                // Fallback: try legacy {name}.md
-                var nestedLegacyUrl = BuildContentsUrl(owner, repo, $"{nestedPath}/{packageName}.md", version);
-                try
-                {
-                    using var nestedLegacyRequest = CreateRequestWithAuth(HttpMethod.Get, nestedLegacyUrl);
-                    var nestedLegacyResponse = await _httpClient.SendAsync(nestedLegacyRequest, ct);
-                    if (nestedLegacyResponse.IsSuccessStatusCode) return nestedPath;
-                }
-                catch { continue; }
+                return nestedPath;
             }
         }
-        catch { /* not found */ }
 
         return null;
     }
@@ -312,14 +298,16 @@ public class GitHubPackageSource
         CancellationToken ct = default)
     {
         if (packageRef.Version is null && GetPackageRef(packageRef) is { } releaseRef)
+        {
             return releaseRef;
+        }
 
-        var url = $"{GitHubApiBaseUrl}/repos/{packageRef.Owner}/{packageRef.Repo}/git/refs/tags/{packageRef.PackageName}/";
+        string url = $"{GitHubApiBaseUrl}/repos/{packageRef.Owner}/{packageRef.Repo}/git/refs/tags/{packageRef.PackageName}/";
 
         try
         {
-            using var request = CreateRequestWithAuth(HttpMethod.Get, url);
-            var response = await _httpClient.SendAsync(request, ct);
+            using HttpRequestMessage request = CreateRequestWithAuth(HttpMethod.Get, url);
+            using HttpResponseMessage response = await _httpClient.SendAsync(request, ct);
 
             if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
             {
@@ -328,8 +316,8 @@ public class GitHubPackageSource
 
             EnsureSuccess(response);
 
-            var json = await response.Content.ReadAsStringAsync(ct);
-            var refs = JsonSerializer.Deserialize<List<GitHubRefResponse>>(
+            string json = await response.Content.ReadAsStringAsync(ct);
+            List<GitHubRefResponse>? refs = JsonSerializer.Deserialize<List<GitHubRefResponse>>(
                 json,
                 new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
 
@@ -339,7 +327,7 @@ public class GitHubPackageSource
             }
 
             // Extract version from tag refs (format: refs/tags/{packageName}/{version})
-            var versions = refs
+            List<string> versions = refs
                 .Where(r => r.Ref.StartsWith($"refs/tags/{packageRef.PackageName}/", StringComparison.Ordinal))
                 .Select(r => r.Ref.Substring($"refs/tags/{packageRef.PackageName}/".Length))
                 .Where(v => !string.IsNullOrEmpty(v))
@@ -373,16 +361,16 @@ public class GitHubPackageSource
         Dictionary<string, byte[]> files,
         CancellationToken ct)
     {
-        var url = BuildContentsUrl(owner, repo, dirPath, version);
+        string url = BuildContentsUrl(owner, repo, dirPath, version);
 
         try
         {
-            using var request = CreateRequestWithAuth(HttpMethod.Get, url);
-            var response = await _httpClient.SendAsync(request, ct);
+            using HttpRequestMessage request = CreateRequestWithAuth(HttpMethod.Get, url);
+            using HttpResponseMessage response = await _httpClient.SendAsync(request, ct);
             EnsureSuccess(response);
 
-            var json = await response.Content.ReadAsStringAsync(ct);
-            var items = JsonSerializer.Deserialize<List<GitHubContentItem>>(
+            string json = await response.Content.ReadAsStringAsync(ct);
+            List<GitHubContentItem>? items = JsonSerializer.Deserialize<List<GitHubContentItem>>(
                 json,
                 new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
 
@@ -391,9 +379,9 @@ public class GitHubPackageSource
                 return;
             }
 
-            foreach (var item in items)
+            foreach (GitHubContentItem item in items)
             {
-                var itemRelativePath = string.IsNullOrEmpty(relativePath)
+                string itemRelativePath = string.IsNullOrEmpty(relativePath)
                     ? item.Name
                     : $"{relativePath}/{item.Name}";
 
@@ -417,8 +405,9 @@ public class GitHubPackageSource
                     else if (item.DownloadUrl != null)
                     {
                         // Directory listings don't include content; download each file individually
-                        using var fileRequest = CreateRequestWithAuth(HttpMethod.Get, item.DownloadUrl);
-                        var fileResponse = await _httpClient.SendAsync(fileRequest, ct);
+                        using HttpRequestMessage fileRequest = CreateRequestWithAuth(HttpMethod.Get, item.DownloadUrl);
+                        using HttpResponseMessage fileResponse =
+                            await _httpClient.SendAsync(fileRequest, ct);
                         EnsureSuccess(fileResponse);
                         files[itemRelativePath] = await fileResponse.Content.ReadAsByteArrayAsync(ct);
                     }
@@ -426,7 +415,7 @@ public class GitHubPackageSource
                     {
                         // Neither inline content nor a download URL — don't silently drop the file
                         // (it would produce a corrupt, incomplete package). Surface it loudly.
-                        throw new Exception(
+                        throw new InvalidDataException(
                             $"Cannot download '{itemRelativePath}': the GitHub API returned neither inline " +
                             "content nor a download URL (unsupported entry, e.g. a submodule or Git LFS pointer).");
                     }
@@ -435,7 +424,8 @@ public class GitHubPackageSource
         }
         catch (HttpRequestException ex)
         {
-            throw new Exception($"Failed to download directory '{dirPath}': {ex.Message}", ex);
+            throw new HttpRequestException(
+                $"Failed to download directory '{dirPath}': {ex.Message}", ex, ex.StatusCode);
         }
     }
 
@@ -448,7 +438,7 @@ public class GitHubPackageSource
         string path,
         string? version = null)
     {
-        var url = $"{GitHubApiBaseUrl}/repos/{owner}/{repo}/contents/{path}";
+        string url = $"{GitHubApiBaseUrl}/repos/{owner}/{repo}/contents/{path}";
         if (!string.IsNullOrEmpty(version))
         {
             url += $"?ref={version}";
@@ -463,7 +453,7 @@ public class GitHubPackageSource
     /// </summary>
     private HttpRequestMessage CreateRequestWithAuth(HttpMethod method, string url)
     {
-        var request = new HttpRequestMessage(method, url);
+        HttpRequestMessage request = new HttpRequestMessage(method, url);
         if (!string.IsNullOrEmpty(_githubToken))
         {
             request.Headers.Add("Authorization", $"Bearer {_githubToken}");
@@ -478,12 +468,12 @@ public class GitHubPackageSource
     {
         try
         {
-            var data = Convert.FromBase64String(encodedContent);
+            byte[] data = Convert.FromBase64String(encodedContent);
             return Encoding.UTF8.GetString(data);
         }
-        catch (Exception ex)
+        catch (FormatException ex)
         {
-            throw new Exception($"Failed to decode base64 content: {ex.Message}", ex);
+            throw new FormatException($"Failed to decode base64 content: {ex.Message}", ex);
         }
     }
 
@@ -495,16 +485,19 @@ public class GitHubPackageSource
     /// </summary>
     private static void EnsureSuccess(HttpResponseMessage response)
     {
-        if (response.IsSuccessStatusCode) return;
+        if (response.IsSuccessStatusCode)
+        {
+            return;
+        }
 
         if ((response.StatusCode == System.Net.HttpStatusCode.Forbidden
                 || response.StatusCode == System.Net.HttpStatusCode.TooManyRequests)
-            && response.Headers.TryGetValues("X-RateLimit-Remaining", out var values)
-            && int.TryParse(values.FirstOrDefault(), out var remaining) && remaining == 0)
+            && response.Headers.TryGetValues("X-RateLimit-Remaining", out IEnumerable<string>? values)
+            && int.TryParse(values.FirstOrDefault(), out int remaining) && remaining == 0)
         {
-            throw new Exception(
+            throw new HttpRequestException(
                 "GitHub API rate limit exceeded. Please try again later or set a GitHub token " +
-                "(GITHUB_TOKEN) for higher rate limits.");
+                "(GITHUB_TOKEN) for higher rate limits.", null, response.StatusCode);
         }
 
         response.EnsureSuccessStatusCode();
@@ -516,10 +509,10 @@ public class GitHubPackageSource
     /// </summary>
     private static (int, int, int) ParseSemanticVersion(string version)
     {
-        var parts = version.TrimStart('v').Split('.');
-        var major = parts.Length > 0 && int.TryParse(parts[0], out var m) ? m : 0;
-        var minor = parts.Length > 1 && int.TryParse(parts[1], out var n) ? n : 0;
-        var patch = parts.Length > 2 && int.TryParse(parts[2], out var p) ? p : 0;
+        string[] parts = version.TrimStart('v').Split('.');
+        int major = parts.Length > 0 && int.TryParse(parts[0], out int m) ? m : 0;
+        int minor = parts.Length > 1 && int.TryParse(parts[1], out int n) ? n : 0;
+        int patch = parts.Length > 2 && int.TryParse(parts[2], out int p) ? p : 0;
         return (major, minor, patch);
     }
 
@@ -528,39 +521,51 @@ public class GitHubPackageSource
     /// </summary>
     private class GitHubContentResponse
     {
+        /// <summary>The file or directory name returned by the Contents API.</summary>
         [JsonPropertyName("name")]
         public string? Name { get; set; }
 
+        /// <summary>The repository-relative path of the requested content.</summary>
         [JsonPropertyName("path")]
         public string? Path { get; set; }
 
+        /// <summary>The Git object identifier associated with this content.</summary>
         [JsonPropertyName("sha")]
         public string? Sha { get; set; }
 
+        /// <summary>The size of the content in bytes.</summary>
         [JsonPropertyName("size")]
         public int Size { get; set; }
 
+        /// <summary>The content kind reported by GitHub, such as file or dir.</summary>
         [JsonPropertyName("type")]
         public string? Type { get; set; }
 
+        /// <summary>The inline file payload in the encoding reported by GitHub.</summary>
         [JsonPropertyName("content")]
         public string? Content { get; set; }
 
+        /// <summary>The encoding applied to the inline content payload.</summary>
         [JsonPropertyName("encoding")]
         public string? Encoding { get; set; }
 
+        /// <summary>The REST API URL of this content resource.</summary>
         [JsonPropertyName("url")]
         public string? Url { get; set; }
 
+        /// <summary>The browser URL of the file or directory on GitHub.</summary>
         [JsonPropertyName("html_url")]
         public string? HtmlUrl { get; set; }
 
+        /// <summary>The Git data API URL of the underlying object.</summary>
         [JsonPropertyName("git_url")]
         public string? GitUrl { get; set; }
 
+        /// <summary>The direct download URL of the file, when available.</summary>
         [JsonPropertyName("download_url")]
         public string? DownloadUrl { get; set; }
 
+        /// <summary>Related REST, Git data, and browser resource links.</summary>
         [JsonPropertyName("_links")]
         public GitHubLinks? Links { get; set; }
     }
@@ -570,39 +575,51 @@ public class GitHubPackageSource
     /// </summary>
     private class GitHubContentItem
     {
+        /// <summary>The entry name in a Contents API directory listing.</summary>
         [JsonPropertyName("name")]
         public string Name { get; set; } = string.Empty;
 
+        /// <summary>The repository-relative path of the directory entry.</summary>
         [JsonPropertyName("path")]
         public string Path { get; set; } = string.Empty;
 
+        /// <summary>The Git object identifier of the listed entry.</summary>
         [JsonPropertyName("sha")]
         public string? Sha { get; set; }
 
+        /// <summary>The entry size in bytes.</summary>
         [JsonPropertyName("size")]
         public int Size { get; set; }
 
+        /// <summary>The entry kind reported by GitHub, such as file or dir.</summary>
         [JsonPropertyName("type")]
         public string Type { get; set; } = string.Empty;
 
+        /// <summary>The inline file payload when included in the response.</summary>
         [JsonPropertyName("content")]
         public string? Content { get; set; }
 
+        /// <summary>The encoding of the optional inline file payload.</summary>
         [JsonPropertyName("encoding")]
         public string? Encoding { get; set; }
 
+        /// <summary>The REST API URL of the listed content.</summary>
         [JsonPropertyName("url")]
         public string? Url { get; set; }
 
+        /// <summary>The browser URL of the listed content on GitHub.</summary>
         [JsonPropertyName("html_url")]
         public string? HtmlUrl { get; set; }
 
+        /// <summary>The Git data API URL of the entry's underlying object.</summary>
         [JsonPropertyName("git_url")]
         public string? GitUrl { get; set; }
 
+        /// <summary>The direct file download URL, when available.</summary>
         [JsonPropertyName("download_url")]
         public string? DownloadUrl { get; set; }
 
+        /// <summary>Related REST, Git data, and browser links for the entry.</summary>
         [JsonPropertyName("_links")]
         public GitHubLinks? Links { get; set; }
     }
@@ -612,15 +629,19 @@ public class GitHubPackageSource
     /// </summary>
     private class GitHubRefResponse
     {
+        /// <summary>The fully qualified Git reference name.</summary>
         [JsonPropertyName("ref")]
         public string Ref { get; set; } = string.Empty;
 
+        /// <summary>The reference's opaque GitHub node identifier.</summary>
         [JsonPropertyName("node_id")]
         public string? NodeId { get; set; }
 
+        /// <summary>The REST API URL of the reference.</summary>
         [JsonPropertyName("url")]
         public string? Url { get; set; }
 
+        /// <summary>The Git object targeted by this reference.</summary>
         [JsonPropertyName("object")]
         public GitHubRefObject? Object { get; set; }
     }
@@ -630,12 +651,15 @@ public class GitHubPackageSource
     /// </summary>
     private class GitHubRefObject
     {
+        /// <summary>The target Git object's identifier.</summary>
         [JsonPropertyName("sha")]
         public string? Sha { get; set; }
 
+        /// <summary>The target object kind, such as commit or tag.</summary>
         [JsonPropertyName("type")]
         public string? Type { get; set; }
 
+        /// <summary>The Git data API URL of the target object.</summary>
         [JsonPropertyName("url")]
         public string? Url { get; set; }
     }
@@ -645,12 +669,15 @@ public class GitHubPackageSource
     /// </summary>
     private class GitHubLinks
     {
+        /// <summary>The REST API URL of the linked resource.</summary>
         [JsonPropertyName("self")]
         public string? Self { get; set; }
 
+        /// <summary>The Git data API URL of the linked object.</summary>
         [JsonPropertyName("git")]
         public string? Git { get; set; }
 
+        /// <summary>The browser URL of the linked resource on GitHub.</summary>
         [JsonPropertyName("html")]
         public string? Html { get; set; }
     }

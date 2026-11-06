@@ -1,3 +1,5 @@
+// Extracts Markdown headings, sections, links, fences, and a document tree.
+
 namespace Cop.Providers.Markdown;
 
 /// <summary>
@@ -13,35 +15,35 @@ public static class MarkdownParser
     /// </summary>
     public static MarkdownDocument Parse(string sourceText)
     {
-        var lines = sourceText.Split('\n');
-        var headings = new List<HeadingInfo>();
-        var links = new List<LinkInfo>();
-        var fenceBlocks = new List<FenceBlockInfo>();
+        string[] lines = sourceText.Split('\n');
+        List<HeadingInfo> headings = new List<HeadingInfo>();
+        List<LinkInfo> links = new List<LinkInfo>();
+        List<FenceBlockInfo> fenceBlocks = new List<FenceBlockInfo>();
 
         bool inFence = false;
         string? fenceLanguage = null;
         string? fenceTag = null;
         int fenceStart = 0;
-        var contentLines = new List<string>();
+        List<string> contentLines = new List<string>();
 
         for (int i = 0; i < lines.Length; i++)
         {
-            var line = lines[i].TrimEnd('\r');
-            var trimmed = line.TrimStart();
+            string line = lines[i].TrimEnd('\r');
+            string trimmed = line.TrimStart();
             int lineNumber = i + 1; // 1-based
 
             if (!inFence)
             {
                 if (trimmed.StartsWith("```"))
                 {
-                    var afterTicks = trimmed[3..].Trim();
+                    string afterTicks = trimmed[3..].Trim();
                     inFence = true;
                     fenceStart = lineNumber;
                     contentLines.Clear();
 
                     if (afterTicks.Length > 0)
                     {
-                        var parts = afterTicks.Split(' ', 2, StringSplitOptions.RemoveEmptyEntries);
+                        string[] parts = afterTicks.Split(' ', 2, StringSplitOptions.RemoveEmptyEntries);
                         fenceLanguage = parts[0];
                         fenceTag = parts.Length > 1 ? parts[1] : null;
                     }
@@ -57,12 +59,18 @@ public static class MarkdownParser
                 if (trimmed.StartsWith('#'))
                 {
                     int level = 0;
-                    while (level < trimmed.Length && trimmed[level] == '#') level++;
+                    while (level < trimmed.Length && trimmed[level] == '#')
+                    {
+                        level++;
+                    }
+
                     if (level <= 6 && level < trimmed.Length && trimmed[level] == ' ')
                     {
-                        var text = trimmed[(level + 1)..].Trim();
+                        string text = trimmed[(level + 1)..].Trim();
                         if (text.Length > 0)
+                        {
                             headings.Add(new HeadingInfo(level, text, lineNumber));
+                        }
                     }
                 }
 
@@ -73,7 +81,7 @@ public static class MarkdownParser
             {
                 if (trimmed.StartsWith("```") && trimmed.TrimStart('`').TrimEnd().Length == 0)
                 {
-                    var content = string.Join('\n', contentLines);
+                    string content = string.Join('\n', contentLines);
                     fenceBlocks.Add(new FenceBlockInfo(fenceLanguage, fenceTag, fenceStart, lineNumber, content));
                     inFence = false;
                     fenceLanguage = null;
@@ -87,7 +95,7 @@ public static class MarkdownParser
         }
 
         // Build sections from headings
-        var sections = BuildSections(headings, lines);
+        List<SectionInfo> sections = BuildSections(headings, lines);
 
         return new MarkdownDocument(headings, links, fenceBlocks, sections)
         {
@@ -100,7 +108,7 @@ public static class MarkdownParser
         int index = 0;
         while (index < line.Length)
         {
-            if (TryReadLink(line, index, out var text, out var url, out var nextIndex))
+            if (TryReadLink(line, index, out string? text, out string? url, out int nextIndex))
             {
                 links.Add(new LinkInfo(url, text, lineNumber));
                 index = nextIndex;
@@ -119,21 +127,29 @@ public static class MarkdownParser
         nextIndex = start;
 
         if (line[start] != '[' || (start > 0 && line[start - 1] == '!'))
+        {
             return false;
+        }
 
         int textStart = start + 1;
         int textEnd = line.IndexOf(']', textStart);
         if (textEnd <= textStart)
+        {
             return false;
+        }
 
         int openParen = textEnd + 1;
         if (openParen >= line.Length || line[openParen] != '(')
+        {
             return false;
+        }
 
         int urlStart = openParen + 1;
         int urlEnd = line.IndexOf(')', urlStart);
         if (urlEnd <= urlStart)
+        {
             return false;
+        }
 
         text = line[textStart..textEnd];
         url = line[urlStart..urlEnd];
@@ -143,35 +159,23 @@ public static class MarkdownParser
 
     private static List<SectionInfo> BuildSections(List<HeadingInfo> headings, string[] lines)
     {
-        var sections = new List<SectionInfo>();
+        List<SectionInfo> sections = new List<SectionInfo>();
         for (int i = 0; i < headings.Count; i++)
         {
-            var heading = headings[i];
+            HeadingInfo heading = headings[i];
             int startLine = heading.Line;
             int endLine = (i + 1 < headings.Count) ? headings[i + 1].Line - 1 : lines.Length;
 
             // Collect content lines (skip the heading line itself)
-            var sectionLines = new List<string>();
+            List<string> sectionLines = new List<string>();
             for (int j = startLine; j < endLine && j < lines.Length; j++)
             {
                 sectionLines.Add(lines[j].TrimEnd('\r'));
             }
-            var content = string.Join('\n', sectionLines).Trim();
+            string content = string.Join('\n', sectionLines).Trim();
 
             sections.Add(new SectionInfo(heading.Text, heading.Level, content, startLine, endLine));
         }
         return sections;
     }
-}
-
-/// <summary>
-/// Cached parse result for a single markdown file.
-/// </summary>
-public record MarkdownDocument(
-    List<HeadingInfo> Headings,
-    List<LinkInfo> Links,
-    List<FenceBlockInfo> FenceBlocks,
-    List<SectionInfo> Sections)
-{
-    public MarkdownNodeInfo Root { get; init; } = new("document", "", 0, 1);
 }

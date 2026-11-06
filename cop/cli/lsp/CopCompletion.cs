@@ -1,11 +1,10 @@
+// Computes editor completion items from Cop syntax and visible symbols.
+
 using Cop.Lang;
 using Cop.Lang.Ast;
 using Cop.Lang.Interpreter;
 
 namespace Cop.Cli.Lsp;
-
-/// <summary>A completion item: label, a short detail string, and an LSP CompletionItemKind.</summary>
-internal readonly record struct CompletionEntry(string Label, string Detail, int Kind);
 
 /// <summary>
 /// Produces completions for a position in a cop document, entirely from the real compiler's
@@ -19,29 +18,62 @@ internal static class CopCompletion
     private const int Keyword = 14, Property = 10, Function = 3, Method = 2, Variable = 6,
                       Class = 7, Module = 9, Struct = 22;
 
-    private static readonly string[] DeclarationKeywordNames =
+    private static readonly string[] s_declarationKeywordNames =
         ["predicate", "function", "type", "let", "command", "flags", "enum", "collection"];
 
+    /// <summary>
+    /// Suggests declarations, members, and keywords visible at the editor position.
+    /// </summary>
     public static IReadOnlyList<CompletionEntry> Complete(
-        SemanticModel model, ModuleNode? fileModule, string text, int line, int character,
+        SemanticModel model, ModuleNode? fileModule, string text,
+        (int Line, int Character) position,
         IReadOnlyCollection<string> importablePackages)
     {
-        var lines = CopEditorContext.SplitLines(text);
-        if (line < 0 || line >= lines.Length) return [];
-        var lineText = lines[line];
-        var before = lineText[..Math.Min(Math.Max(character, 0), lineText.Length)];
-        var locals = CopEditorContext.BuildLocals(model, fileModule, lines, line);
+        (int line, int character) = position;
+        string[] lines = CopEditorContext.SplitLines(text);
+        if (line < 0 || line >= lines.Length)
+        {
+            return [];
+        }
+
+        string lineText = lines[line];
+        string before = lineText[..Math.Min(Math.Max(character, 0), lineText.Length)];
+        Dictionary<string, TypeInfo> locals = CopEditorContext.BuildLocals(model, fileModule, lines, line);
 
         // Context detection (mirrors the editor's previous behavior), most specific first.
-        var trimmed = before.TrimEnd();
-        var words = before.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
+        string trimmed = before.TrimEnd();
+        string[] words = before.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
         bool afterWhitespace = before.Length > trimmed.Length;
-        if (trimmed.EndsWith("runtime::", StringComparison.Ordinal)) return RuntimeTypes(model);
-        if (afterWhitespace && (words is ["import"] or ["export", "import"])) return Packages(importablePackages);
-        if (trimmed.EndsWith(':') && !trimmed.EndsWith("::", StringComparison.Ordinal)) return Colon(model, before, locals);
-        if (trimmed.EndsWith('.')) return Dot(model, before, locals);
-        if (trimmed.EndsWith("=>", StringComparison.Ordinal)) return Actions(model);
-        if (afterWhitespace && words is ["export"]) return DeclarationKeywords();
+        if (trimmed.EndsWith("runtime::", StringComparison.Ordinal))
+        {
+            return RuntimeTypes(model);
+        }
+
+        if (afterWhitespace && (words is ["import"] or ["export", "import"]))
+        {
+            return Packages(importablePackages);
+        }
+
+        if (trimmed.EndsWith(':') && !trimmed.EndsWith("::", StringComparison.Ordinal))
+        {
+            return Colon(model, before, locals);
+        }
+
+        if (trimmed.EndsWith('.'))
+        {
+            return Dot(model, before, locals);
+        }
+
+        if (trimmed.EndsWith("=>", StringComparison.Ordinal))
+        {
+            return Actions(model);
+        }
+
+        if (afterWhitespace && words is ["export"])
+        {
+            return DeclarationKeywords();
+        }
+
         return General(model);
     }
 
@@ -50,17 +82,25 @@ internal static class CopCompletion
     private static IReadOnlyList<CompletionEntry> Dot(
         SemanticModel model, string before, Dictionary<string, TypeInfo> locals)
     {
-        var chain = CopEditorContext.ChainBefore(before, '.');
-        if (chain is null) return [];
+        string? chain = CopEditorContext.ChainBefore(before, '.');
+        if (chain is null)
+        {
+            return [];
+        }
 
         // Namespace-qualified: `csharp.` → that package's exported functions.
         if (!chain.Contains('.') && !chain.Contains(':') && model.IsNamespace(chain))
+        {
             return Dedupe(model.NamespaceFunctions(chain).Select(c => new CompletionEntry(c.Name, FnDetail(c), Function)));
+        }
 
-        var t = model.InferExpressionType(chain, locals);
-        if (t is null) return [];
+        TypeInfo? t = model.InferExpressionType(chain, locals);
+        if (t is null)
+        {
+            return [];
+        }
 
-        var entries = new List<CompletionEntry>();
+        List<CompletionEntry> entries = new List<CompletionEntry>();
         if (t.Value.IsCollection)
         {
             entries.AddRange(Builtins(LanguageMetadata.CollectionProperties, Property));
@@ -81,29 +121,38 @@ internal static class CopCompletion
     private static IReadOnlyList<CompletionEntry> Colon(
         SemanticModel model, string before, Dictionary<string, TypeInfo> locals)
     {
-        var entries = new List<CompletionEntry>();
+        List<CompletionEntry> entries = new List<CompletionEntry>();
         entries.AddRange(Builtins(LanguageMetadata.UniversalPredicates, Method));
         entries.AddRange(Builtins(LanguageMetadata.ObjectPredicates, Method));
 
-        var chain = CopEditorContext.ChainBefore(before, ':');
-        var t = chain is not null ? model.InferExpressionType(chain, locals) : null;
+        string? chain = CopEditorContext.ChainBefore(before, ':');
+        TypeInfo? t = chain is not null ? model.InferExpressionType(chain, locals) : null;
         string? element = t?.Name;
 
         if (t is { IsCollection: true })
+        {
             entries.AddRange(Builtins(LanguageMetadata.CollectionPredicates, Method));
+        }
 
         if (element is null || SemanticModel.IsStringType(element))
+        {
             entries.AddRange(Builtins(LanguageMetadata.StringPredicates, Method));
+        }
+
         if (element is null || SemanticModel.IsNumericType(element))
+        {
             entries.AddRange(Builtins(LanguageMetadata.NumericPredicates, Method));
+        }
 
         // Declared predicates/functions: predicates filtered by applicability to the element type.
-        foreach (var c in model.Callables())
+        foreach (CallableInfo c in model.Callables())
         {
             if (c.IsPredicate)
             {
                 if (model.PredicateApplies(c.ParamTypes.Count > 0 ? c.ParamTypes[0] : null, element))
+                {
                     entries.Add(new CompletionEntry(c.Name, PredDetail(c), Method));
+                }
             }
             else
             {
@@ -115,18 +164,30 @@ internal static class CopCompletion
 
     private static IReadOnlyList<CompletionEntry> General(SemanticModel model)
     {
-        var entries = new List<CompletionEntry>();
-        foreach (var kw in LanguageMetadata.Keywords)
+        List<CompletionEntry> entries = new List<CompletionEntry>();
+        foreach (KeywordEntry kw in LanguageMetadata.Keywords)
+        {
             entries.Add(new CompletionEntry(kw.Name, kw.Detail, Keyword));
+        }
+
         entries.AddRange(Actions(model));
-        foreach (var name in model.LetNames())
+        foreach (string name in model.LetNames())
+        {
             entries.Add(new CompletionEntry(name, "let", Variable));
-        foreach (var name in model.TypeNames())
+        }
+
+        foreach (string name in model.TypeNames())
+        {
             entries.Add(new CompletionEntry(name, "type", Struct));
-        foreach (var c in model.Callables())
+        }
+
+        foreach (CallableInfo c in model.Callables())
+        {
             entries.Add(c.IsPredicate
                 ? new CompletionEntry(c.Name, PredDetail(c), Method)
                 : new CompletionEntry(c.Name, FnDetail(c), Function));
+        }
+
         entries.Add(new CompletionEntry(Evaluator.ImplicitItemVariable, "the current element", Variable));
         entries.Add(new CompletionEntry("runtime", "runtime providers", Module));
         return Dedupe(entries);
@@ -145,7 +206,7 @@ internal static class CopCompletion
         Dedupe(packages.Select(p => new CompletionEntry(p, "package", Module)));
 
     private static IReadOnlyList<CompletionEntry> DeclarationKeywords() =>
-        DeclarationKeywordNames.Select(k => new CompletionEntry(k, "declaration", Keyword)).ToList();
+        s_declarationKeywordNames.Select(k => new CompletionEntry(k, "declaration", Keyword)).ToList();
 
     // ── Helpers ────────────────────────────────────────────────────────────
 
@@ -154,24 +215,29 @@ internal static class CopCompletion
 
     private static string FnDetail(CallableInfo c)
     {
-        var pars = string.Join(", ", c.ParamTypes.Select(p => p ?? "?"));
+        string pars = string.Join(", ", c.ParamTypes.Select(p => p ?? "?"));
         return c.ReturnType is not null ? $"({pars}) => {c.ReturnType}" : $"({pars})";
     }
 
     private static string PredDetail(CallableInfo c)
     {
-        var pars = string.Join(", ", c.ParamTypes.Select(p => p ?? "?"));
-        var ret = c.IsNarrowing && c.ReturnType is not null ? c.ReturnType : "bool";
+        string pars = string.Join(", ", c.ParamTypes.Select(p => p ?? "?"));
+        string ret = c.IsNarrowing && c.ReturnType is not null ? c.ReturnType : "bool";
         return $"({pars}) => {ret}";
     }
 
     private static IReadOnlyList<CompletionEntry> Dedupe(IEnumerable<CompletionEntry> entries)
     {
-        var seen = new HashSet<string>(StringComparer.Ordinal);
-        var result = new List<CompletionEntry>();
-        foreach (var e in entries)
+        HashSet<string> seen = new HashSet<string>(StringComparer.Ordinal);
+        List<CompletionEntry> result = new List<CompletionEntry>();
+        foreach (CompletionEntry e in entries)
+        {
             if (seen.Add(e.Label))
+            {
                 result.Add(e);
+            }
+        }
+
         return result;
     }
 }

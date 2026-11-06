@@ -1,21 +1,36 @@
+// Projects JavaScript and TypeScript syntax into shared declarations and statements.
+
+using System.Text;
 using Cop.Providers.SourceModel;
 
 namespace Cop.Providers.SourceParsers;
 
+/// <summary>
+/// Parses JavaScript and TypeScript with optional compiler-backed projection.
+/// </summary>
 public class JavaScriptSourceParser : ISourceParser
 {
     private readonly TypeScriptProjection _compiler;
 
+    /// <summary>Creates a parser using the specified compiler discovery path.</summary>
     public JavaScriptSourceParser(string? toolchainSearchPath = null) => _compiler = new(toolchainSearchPath);
 
+    /// <inheritdoc />
     public override IReadOnlyList<string> Extensions => [".js", ".ts", ".tsx", ".jsx", ".mjs", ".cjs", ".mts", ".cts"];
+    /// <inheritdoc />
     public override string Language => "javascript";
+    /// <inheritdoc />
     public override bool CanCache(string filePath) => _compiler.GetCacheIdentity(filePath) is null;
 
+    /// <inheritdoc />
     public override string GetCacheIdentity(string filePath)
     {
-        var identity = _compiler.GetCacheIdentity(filePath);
-        if (identity is null) WarnFallback();
+        string? identity = _compiler.GetCacheIdentity(filePath);
+        if (identity is null)
+        {
+            WarnFallback();
+        }
+
         return base.GetCacheIdentity(filePath) + ":" + (identity ?? "simpler-syntax");
     }
 
@@ -23,13 +38,20 @@ public class JavaScriptSourceParser : ISourceParser
         "Node.js and an installed TypeScript compiler were not both found; using simpler syntax analysis. " +
         "Type inference and complete JS/TS/JSX/TSX syntax facts are unavailable.");
 
-    public override SourceFile? Parse(string filePath, string sourceText)
+    /// <inheritdoc />
+    public override async ValueTask<SourceFile?> ParseAsync(
+        string filePath, string sourceText, CancellationToken cancellationToken = default)
     {
-        var compiled = _compiler.Parse(filePath, sourceText);
-        var lexer = new JsLexer(sourceText, filePath);
-        var allToks = lexer.Tokenize();
-        var p = new JsParser(allToks, lexer.Errors, filePath, sourceText);
-        if (compiled is not null) return compiled with { Regions = p.Regions };
+        SourceFile? compiled = await _compiler.ParseAsync(filePath, sourceText, cancellationToken)
+            .ConfigureAwait(false);
+        JsLexer lexer = new JsLexer(sourceText, filePath);
+        List<JsToken> allToks = lexer.Tokenize();
+        JsParser p = new JsParser(allToks, lexer.Errors, filePath, sourceText);
+        if (compiled is not null)
+        {
+            return compiled with { Regions = p.Regions };
+        }
+
         WarnFallback();
         p.Parse();
         return new SourceFile(filePath, "javascript", p.Types, p.Statements, sourceText)
@@ -50,14 +72,24 @@ public class JavaScriptSourceParser : ISourceParser
         private readonly int[] _lineOffsets;
         private int _idx;
 
+        /// <summary>Gets the type declarations collected from the source.</summary>
         public List<TypeDeclaration> Types { get; } = [];
+        /// <summary>Gets the functions and methods collected from the source.</summary>
         public List<MethodDeclaration> Methods { get; } = [];
+        /// <summary>Gets the statements collected from the source.</summary>
         public List<StatementInfo> Statements { get; } = [];
+        /// <summary>Gets the imported module names found in the source.</summary>
         public List<string> Usings { get; } = [];
+        /// <summary>Gets lexical and parser diagnostics for the source.</summary>
         public List<string> Errors { get; }
+        /// <summary>Gets line numbers occupied by source comments.</summary>
         public HashSet<int> CommentLines { get; } = [];
+        /// <summary>Gets source regions identified during parsing.</summary>
         public List<RegionInfo> Regions { get; } = [];
 
+        /// <summary>
+        /// Creates a syntax projector over tokens and existing lexer diagnostics.
+        /// </summary>
         public JsParser(List<JsToken> allToks, List<string> lexErrors, string fp, string src)
         {
             _fp = fp; _src = src;
@@ -68,17 +100,24 @@ public class JavaScriptSourceParser : ISourceParser
             _tok = allToks.Where(t => !t.IsComment && !t.IsEof).ToList();
         }
 
+        /// <summary>
+        /// Collects declarations, statements, imports, and regions from the tokens.
+        /// </summary>
         public void Parse()
         {
-            while (_idx < _tok.Count) ParseTopLevel();
+            while (_idx < _tok.Count)
+            {
+                ParseTopLevel();
+            }
+
             CheckBracketBalance();
         }
         private void PreProcess(List<JsToken> all)
         {
-            var lines = _src.Split('\n');
-            var stack = new Stack<(string Name, int Line)>();
+            string[] lines = _src.Split('\n');
+            Stack<(string Name, int Line)> stack = new Stack<(string Name, int Line)>();
 
-            foreach (var t in all)
+            foreach (JsToken t in all)
             {
                 if (t.Kind == JsTok.LineComment)
                 {
@@ -87,7 +126,10 @@ public class JavaScriptSourceParser : ISourceParser
                     if (txt.StartsWith("[START ") && txt.Contains(']'))
                     {
                         int s = txt.IndexOf("[START ") + 7, e = txt.IndexOf(']', s);
-                        if (e > s) stack.Push((txt[s..e], t.Line));
+                        if (e > s)
+                        {
+                            stack.Push((txt[s..e], t.Line));
+                        }
                     }
                     else if (txt.StartsWith("[END ") && txt.Contains(']') && stack.Count > 0)
                     {
@@ -95,18 +137,25 @@ public class JavaScriptSourceParser : ISourceParser
                         if (e > s)
                         {
                             string endName = txt[s..e];
-                            var items = new List<(string, int)>();
+                            List<(string, int)> items = new List<(string, int)>();
                             while (stack.Count > 0)
                             {
-                                var top = stack.Pop();
+                                (string Name, int Line) top = stack.Pop();
                                 if (top.Name == endName)
                                 {
                                     int startL = top.Line, endL = t.Line;
-                                    var cl = new List<string>();
+                                    List<string> cl = new List<string>();
                                     for (int j = startL; j < endL - 1 && j < lines.Length; j++)
+                                    {
                                         cl.Add(lines[j].TrimEnd('\r'));
+                                    }
+
                                     Regions.Add(new RegionInfo(endName, startL, endL, string.Join('\n', cl)));
-                                    for (int k = items.Count - 1; k >= 0; k--) stack.Push(items[k]);
+                                    for (int k = items.Count - 1; k >= 0; k--)
+                                    {
+                                        stack.Push(items[k]);
+                                    }
+
                                     break;
                                 }
                                 items.Add(top);
@@ -117,8 +166,18 @@ public class JavaScriptSourceParser : ISourceParser
                 else if (t.Kind == JsTok.BlockComment)
                 {
                     int startL = t.Line, endL = startL;
-                    foreach (char c in t.Value) if (c == '\n') endL++;
-                    for (int l = startL; l <= endL; l++) CommentLines.Add(l);
+                    foreach (char c in t.Value)
+                    {
+                        if (c == '\n')
+                        {
+                            endL++;
+                        }
+                    }
+
+                    for (int l = startL; l <= endL; l++)
+                    {
+                        CommentLines.Add(l);
+                    }
                 }
             }
         }
@@ -127,7 +186,7 @@ public class JavaScriptSourceParser : ISourceParser
         {
             int bd = 0, pd = 0, rd = 0;
             int bl = 0, bc = 0, pl = 0, pc = 0, rl = 0, rc = 0;
-            foreach (var t in _tok)
+            foreach (JsToken t in _tok)
             {
                 if (t.IsPunct("{")) { if (bd++ == 0) { bl = t.Line; bc = t.Col; } }
                 else if (t.IsPunct("}")) { if (--bd < 0) { Errors.Add($"{_fp}({t.Line},{t.Col}): error: Unexpected '}}'"); bd = 0; } }
@@ -136,29 +195,49 @@ public class JavaScriptSourceParser : ISourceParser
                 else if (t.IsPunct("[")) { if (rd++ == 0) { rl = t.Line; rc = t.Col; } }
                 else if (t.IsPunct("]")) { if (--rd < 0) { Errors.Add($"{_fp}({t.Line},{t.Col}): error: Unexpected ']'"); rd = 0; } }
             }
-            if (bd > 0) Errors.Add($"{_fp}({bl},{bc}): error: Unclosed '{{'");
-            if (pd > 0) Errors.Add($"{_fp}({pl},{pc}): error: Unclosed '('");
-            if (rd > 0) Errors.Add($"{_fp}({rl},{rc}): error: Unclosed '['");
+            if (bd > 0)
+            {
+                Errors.Add($"{_fp}({bl},{bc}): error: Unclosed '{{'");
+            }
+
+            if (pd > 0)
+            {
+                Errors.Add($"{_fp}({pl},{pc}): error: Unclosed '('");
+            }
+
+            if (rd > 0)
+            {
+                Errors.Add($"{_fp}({rl},{rc}): error: Unclosed '['");
+            }
         }
         private void ParseTopLevel()
         {
-            if (_idx >= _tok.Count) return;
+            if (_idx >= _tok.Count)
+            {
+                return;
+            }
 
             bool isExported = false, isAbstract = false;
             while (_idx < _tok.Count)
             {
-                var t = _tok[_idx];
+                JsToken t = _tok[_idx];
                 if (t.IsWord("export")) { isExported = true; _idx++; }
                 else if (t.IsWord("default") || t.IsWord("declare")) { _idx++; }
                 else if (t.IsWord("abstract")) { isAbstract = true; _idx++; }
-                else break;
+                else
+                {
+                    break;
+                }
             }
-            if (_idx >= _tok.Count) return;
+            if (_idx >= _tok.Count)
+            {
+                return;
+            }
 
-            var tok = _tok[_idx];
+            JsToken tok = _tok[_idx];
 
             if (tok.IsWord("import") && !isExported) { ParseImport(); return; }
-            if (tok.IsWord("class")) { var ty = ParseClass(isExported, isAbstract); if (ty != null) Types.Add(ty); return; }
+            if (tok.IsWord("class")) { TypeDeclaration? ty = ParseClass(isExported, isAbstract); if (ty != null) { Types.Add(ty); } return; }
             if (tok.IsWord("interface") || tok.IsWord("enum")) { ParseTsType(isExported); return; }
             if (tok.IsWord("type")) { ParseTypeAlias(isExported); return; }
 
@@ -166,7 +245,14 @@ public class JavaScriptSourceParser : ISourceParser
             if (tok.IsWord("async"))
             {
                 isAsync = true; _idx++;
-                if (_idx < _tok.Count) tok = _tok[_idx]; else return;
+                if (_idx < _tok.Count)
+                {
+                    tok = _tok[_idx];
+                }
+                else
+                {
+                    return;
+                }
             }
 
             if (tok.IsWord("function")) { ParseFunction(isExported, isAsync); return; }
@@ -176,7 +262,10 @@ public class JavaScriptSourceParser : ISourceParser
                 int stmtEnd = FindStatementEnd(_idx);
                 ExtractRequireFromRange(_idx, stmtEnd);
                 if (!ParseVariableFunction(_idx, stmtEnd, isExported))
+                {
                     Statements.AddRange(ParseStatements(_idx, stmtEnd, false));
+                }
+
                 _idx = stmtEnd;
                 return;
             }
@@ -190,20 +279,39 @@ public class JavaScriptSourceParser : ISourceParser
 
         private bool ParseVariableFunction(int start, int end, bool isExported)
         {
-            if (start + 2 >= end || !_tok[start + 1].IsIdent) return false;
+            if (start + 2 >= end || !_tok[start + 1].IsIdent)
+            {
+                return false;
+            }
+
             int equals = start + 2;
-            while (equals < end && !_tok[equals].IsPunct("=")) equals++;
-            if (equals >= end) return false;
+            while (equals < end && !_tok[equals].IsPunct("="))
+            {
+                equals++;
+            }
+
+            if (equals >= end)
+            {
+                return false;
+            }
+
             int body = equals + 1;
             bool isAsync = body < end && _tok[body].IsWord("async");
-            if (isAsync) body++;
+            if (isAsync)
+            {
+                body++;
+            }
+
             bool isFunction = body < end && _tok[body].IsWord("function");
             bool isGenerator = false;
             if (isFunction)
             {
                 body++;
                 if (body < end && _tok[body].IsPunct("*")) { isGenerator = true; body++; }
-                if (body < end && _tok[body].IsIdent) body++;
+                if (body < end && _tok[body].IsIdent)
+                {
+                    body++;
+                }
             }
             List<ParameterDeclaration> parameters;
             if (body < end && _tok[body].IsPunct("("))
@@ -217,7 +325,11 @@ public class JavaScriptSourceParser : ISourceParser
                 parameters = [new(_tok[body].Value, null, false, false, false, _tok[body].Line)];
                 body++;
             }
-            else return false;
+            else
+            {
+                return false;
+            }
+
             TypeReference? returnType = null;
             if (body < end && _tok[body].IsPunct(":"))
             {
@@ -226,17 +338,29 @@ public class JavaScriptSourceParser : ISourceParser
             }
             if (!isFunction)
             {
-                if (body >= end || !_tok[body].IsPunct("=>")) return false;
+                if (body >= end || !_tok[body].IsPunct("=>"))
+                {
+                    return false;
+                }
+
                 body++;
             }
-            var statements = body < end && _tok[body].IsPunct("{")
+            List<StatementInfo> statements = body < end && _tok[body].IsPunct("{")
                 ? ParseBodyStatements(body, FindMatchingBrace(body), true)
                 : ParseStatements(body, end, true);
-            var modifiers = isExported ? Modifier.Public : Modifier.None;
-            if (isAsync) modifiers |= Modifier.Async;
-            var method = NewMethod(_tok[start + 1].Value, modifiers, [], returnType, parameters,
+            Modifier modifiers = isExported ? Modifier.Public : Modifier.None;
+            if (isAsync)
+            {
+                modifiers |= Modifier.Async;
+            }
+
+            JavaScriptMethodDeclaration method = NewMethod(_tok[start + 1].Value, modifiers, [], returnType, parameters,
                 _tok[start + 1].Line, statements).AsJavaScript(isArrow: !isFunction, isGenerator: isGenerator);
-            foreach (var statement in statements) statement.Method = method;
+            foreach (StatementInfo statement in statements)
+            {
+                statement.Method = method;
+            }
+
             Methods.Add(method);
             Statements.AddRange(statements);
             return true;
@@ -258,19 +382,32 @@ public class JavaScriptSourceParser : ISourceParser
         private void ParseImport()
         {
             _idx++;
-            if (_idx >= _tok.Count) return;
+            if (_idx >= _tok.Count)
+            {
+                return;
+            }
 
             if (_tok[_idx].IsStr)
             {
                 string m = UnquoteStr(_tok[_idx].Value);
-                if (!string.IsNullOrEmpty(m)) Usings.Add(m);
+                if (!string.IsNullOrEmpty(m))
+                {
+                    Usings.Add(m);
+                }
+
                 _idx++;
-                if (_idx < _tok.Count && _tok[_idx].IsPunct(";")) _idx++;
+                if (_idx < _tok.Count && _tok[_idx].IsPunct(";"))
+                {
+                    _idx++;
+                }
+
                 return;
             }
 
             while (_idx < _tok.Count && !_tok[_idx].IsWord("from") && !_tok[_idx].IsPunct(";"))
+            {
                 _idx++;
+            }
 
             if (_idx < _tok.Count && _tok[_idx].IsWord("from"))
             {
@@ -278,11 +415,18 @@ public class JavaScriptSourceParser : ISourceParser
                 if (_idx < _tok.Count && _tok[_idx].IsStr)
                 {
                     string m = UnquoteStr(_tok[_idx].Value);
-                    if (!string.IsNullOrEmpty(m)) Usings.Add(m);
+                    if (!string.IsNullOrEmpty(m))
+                    {
+                        Usings.Add(m);
+                    }
+
                     _idx++;
                 }
             }
-            if (_idx < _tok.Count && _tok[_idx].IsPunct(";")) _idx++;
+            if (_idx < _tok.Count && _tok[_idx].IsPunct(";"))
+            {
+                _idx++;
+            }
         }
         private TypeDeclaration? ParseClass(bool isExported, bool isAbstract)
         {
@@ -309,7 +453,9 @@ public class JavaScriptSourceParser : ISourceParser
                 {
                     baseType = _tok[_idx].Value; _idx++;
                     if (_idx < _tok.Count && _tok[_idx].IsPunct("<"))
+                    {
                         _idx = FindMatchingClose(_idx) + 1;
+                    }
                 }
             }
 
@@ -317,10 +463,16 @@ public class JavaScriptSourceParser : ISourceParser
             if (_idx < _tok.Count && _tok[_idx].IsWord("implements"))
             {
                 hasImplements = true; _idx++;
-                while (_idx < _tok.Count && !_tok[_idx].IsPunct("{")) _idx++;
+                while (_idx < _tok.Count && !_tok[_idx].IsPunct("{"))
+                {
+                    _idx++;
+                }
             }
 
-            while (_idx < _tok.Count && !_tok[_idx].IsPunct("{")) _idx++;
+            while (_idx < _tok.Count && !_tok[_idx].IsPunct("{"))
+            {
+                _idx++;
+            }
 
             if (_idx >= _tok.Count)
             {
@@ -332,18 +484,23 @@ public class JavaScriptSourceParser : ISourceParser
             int closeBrace = FindMatchingBrace(openBrace);
             _idx = closeBrace + 1;
 
-            var methods = new List<MethodDeclaration>();
-            var constructors = new List<MethodDeclaration>();
+            List<MethodDeclaration> methods = new List<MethodDeclaration>();
+            List<MethodDeclaration> constructors = new List<MethodDeclaration>();
             ParseClassBody(openBrace, closeBrace, methods, constructors);
 
-            var baseTypes = baseType != null ? new List<string> { baseType } : new List<string>();
-            var modifiers = isExported ? Modifier.Public : Modifier.None;
-            if (isAbstract) modifiers |= Modifier.Abstract;
+            List<string> baseTypes = baseType != null ? new List<string> { baseType } : new List<string>();
+            Modifier modifiers = isExported ? Modifier.Public : Modifier.None;
+            if (isAbstract)
+            {
+                modifiers |= Modifier.Abstract;
+            }
 
-            return new TypeDeclaration(className, TypeKind.Class, modifiers,
-                baseTypes, [], constructors, methods, [], [], classLine)
-                .AsJavaScript(isExported: isExported, hasBaseClass: baseTypes.Count > 0,
-                    isAbstract: isAbstract, isGeneric: isGeneric, hasImplements: hasImplements);
+            return new JavaScriptTypeDeclaration(new TypeDeclaration(className, TypeKind.Class, modifiers,
+                baseTypes, [], constructors, methods, [], [], classLine))
+            {
+                IsExported = isExported, HasBaseClass = baseTypes.Count > 0,
+                IsAbstract = isAbstract, IsGeneric = isGeneric, HasImplements = hasImplements
+            };
         }
 
         private void ParseClassBody(int openBrace, int closeBrace,
@@ -355,34 +512,54 @@ public class JavaScriptSourceParser : ISourceParser
                 while (idx < closeBrace && _tok[idx].IsPunct("@"))
                 {
                     idx++;
-                    while (idx < closeBrace && (_tok[idx].IsIdent || _tok[idx].IsPunct("."))) idx++;
+                    while (idx < closeBrace && (_tok[idx].IsIdent || _tok[idx].IsPunct(".")))
+                    {
+                        idx++;
+                    }
+
                     if (idx < closeBrace && _tok[idx].IsPunct("("))
+                    {
                         idx = FindMatchingClose(idx) + 1;
+                    }
                 }
-                if (idx >= closeBrace) break;
+                if (idx >= closeBrace)
+                {
+                    break;
+                }
 
                 if (_tok[idx].IsPunct(";")) { idx++; continue; }
 
                 bool isStatic = false, isAsync = false, isAbstractM = false;
                 bool isGenerator = false, isGetter = false, isSetter = false;
-                var visibility = Modifier.Public;
+                Modifier visibility = Modifier.Public;
 
                 while (idx < closeBrace)
                 {
-                    var t = _tok[idx];
+                    JsToken t = _tok[idx];
                     if (t.IsWord("static")) { isStatic = true; idx++; }
                     else if (t.IsWord("async")) { isAsync = true; idx++; }
                     else if (t.IsWord("abstract")) { isAbstractM = true; idx++; }
                     else if (t.IsWord("private")) { visibility = Modifier.Private; idx++; }
                     else if (t.IsWord("protected")) { visibility = Modifier.Protected; idx++; }
                     else if (t.IsWord("override") || t.IsWord("readonly") || t.IsWord("public"))
+                    {
                         idx++;
-                    else break;
+                    }
+                    else
+                    {
+                        break;
+                    }
                 }
-                if (idx >= closeBrace) break;
+                if (idx >= closeBrace)
+                {
+                    break;
+                }
 
                 if (_tok[idx].IsPunct("*")) { isGenerator = true; idx++; }
-                if (idx >= closeBrace) break;
+                if (idx >= closeBrace)
+                {
+                    break;
+                }
 
                 if (!isGenerator && (_tok[idx].IsWord("get") || _tok[idx].IsWord("set")))
                 {
@@ -393,7 +570,10 @@ public class JavaScriptSourceParser : ISourceParser
                         idx++;
                     }
                 }
-                if (idx >= closeBrace) break;
+                if (idx >= closeBrace)
+                {
+                    break;
+                }
 
                 if (_tok[idx].IsPunct("["))
                 {
@@ -417,7 +597,7 @@ public class JavaScriptSourceParser : ISourceParser
                     if (idx < closeBrace && _tok[idx].IsPunct("("))
                     {
                         int closeP = FindMatchingClose(idx);
-                        var parms = ParseParametersFromTokens(idx, closeP);
+                        List<ParameterDeclaration> parms = ParseParametersFromTokens(idx, closeP);
                         idx = closeP + 1;
 
                         if (idx < closeBrace && _tok[idx].IsPunct(":")) { idx++; SkipTsTypeAt(ref idx, closeBrace); }
@@ -436,21 +616,56 @@ public class JavaScriptSourceParser : ISourceParser
                             else
                             {
                                 arrowStmts = [];
-                                while (idx < closeBrace && !_tok[idx].IsPunct(";") && !_tok[idx].IsPunct("}")) idx++;
-                                if (idx < closeBrace && _tok[idx].IsPunct(";")) idx++;
+                                while (idx < closeBrace && !_tok[idx].IsPunct(";") && !_tok[idx].IsPunct("}"))
+                                {
+                                    idx++;
+                                }
+
+                                if (idx < closeBrace && _tok[idx].IsPunct(";"))
+                                {
+                                    idx++;
+                                }
                             }
-                            var mod2 = visibility;
-                            if (isStatic) mod2 |= Modifier.Static;
-                            if (isAsync) mod2 |= Modifier.Async;
-                            var m2 = NewMethod(memberName, mod2, [], null, parms, memberLine, arrowStmts)
+                            Modifier mod2 = visibility;
+                            if (isStatic)
+                            {
+                                mod2 |= Modifier.Static;
+                            }
+
+                            if (isAsync)
+                            {
+                                mod2 |= Modifier.Async;
+                            }
+
+                            JavaScriptMethodDeclaration m2 = NewMethod(memberName, mod2, [], null, parms, memberLine, arrowStmts)
                                 .AsJavaScript(isArrow: true);
-                            foreach (var statement in arrowStmts) statement.Method = m2;
-                            if (memberName == "constructor") constructors.Add(m2); else methods.Add(m2);
+                            foreach (StatementInfo statement in arrowStmts)
+                            {
+                                statement.Method = m2;
+                            }
+
+                            if (memberName == "constructor")
+                            {
+                                constructors.Add(m2);
+                            }
+                            else
+                            {
+                                methods.Add(m2);
+                            }
+
                             continue;
                         }
                     }
-                    while (idx < closeBrace && !_tok[idx].IsPunct(";") && !_tok[idx].IsPunct("}")) idx++;
-                    if (idx < closeBrace && _tok[idx].IsPunct(";")) idx++;
+                    while (idx < closeBrace && !_tok[idx].IsPunct(";") && !_tok[idx].IsPunct("}"))
+                    {
+                        idx++;
+                    }
+
+                    if (idx < closeBrace && _tok[idx].IsPunct(";"))
+                    {
+                        idx++;
+                    }
+
                     continue;
                 }
 
@@ -462,49 +677,88 @@ public class JavaScriptSourceParser : ISourceParser
                     if (idx < closeBrace && _tok[idx].IsPunct("="))
                     {
                         idx++;
-                        while (idx < closeBrace && !_tok[idx].IsPunct(";") && !_tok[idx].IsPunct("}")) idx++;
+                        while (idx < closeBrace && !_tok[idx].IsPunct(";") && !_tok[idx].IsPunct("}"))
+                        {
+                            idx++;
+                        }
                     }
-                    if (idx < closeBrace && _tok[idx].IsPunct(";")) idx++;
+                    if (idx < closeBrace && _tok[idx].IsPunct(";"))
+                    {
+                        idx++;
+                    }
+
                     continue;
                 }
 
                 // Regular method: name(...) { ... }
                 if (idx < closeBrace && _tok[idx].IsPunct("<"))
+                {
                     idx = FindMatchingClose(idx) + 1;
+                }
+
                 if (idx < closeBrace && _tok[idx].IsPunct("("))
                 {
                     int closeP = FindMatchingClose(idx);
-                    var parms = ParseParametersFromTokens(idx, closeP);
+                    List<ParameterDeclaration> parms = ParseParametersFromTokens(idx, closeP);
                     idx = closeP + 1;
 
                     TypeReference? returnType = null;
                     if (idx < closeBrace && _tok[idx].IsPunct(":"))
                     { idx++; returnType = ParseTypeAnnotationAt(ref idx, closeBrace); }
 
-                    if (idx >= closeBrace || _tok[idx].IsPunct(";")) { if (idx < closeBrace) idx++; continue; }
+                    if (idx >= closeBrace || _tok[idx].IsPunct(";")) { if (idx < closeBrace) { idx++; } continue; }
 
                     if (idx < closeBrace && _tok[idx].IsPunct("{"))
                     {
                         int bc = FindMatchingBrace(idx);
-                        var bStmts = ParseBodyStatements(idx, bc, isInMethod: true);
+                        List<StatementInfo> bStmts = ParseBodyStatements(idx, bc, isInMethod: true);
                         Statements.AddRange(bStmts);
                         idx = bc + 1;
 
-                        var mod = visibility;
-                        if (isStatic) mod |= Modifier.Static;
-                        if (isAsync) mod |= Modifier.Async;
-                        if (isAbstractM) mod |= Modifier.Abstract;
+                        Modifier mod = visibility;
+                        if (isStatic)
+                        {
+                            mod |= Modifier.Static;
+                        }
 
-                        var meth = NewMethod(memberName, mod, [], returnType, parms, memberLine, bStmts)
+                        if (isAsync)
+                        {
+                            mod |= Modifier.Async;
+                        }
+
+                        if (isAbstractM)
+                        {
+                            mod |= Modifier.Abstract;
+                        }
+
+                        JavaScriptMethodDeclaration meth = NewMethod(memberName, mod, [], returnType, parms, memberLine, bStmts)
                             .AsJavaScript(isGenerator: isGenerator, isGetter: isGetter, isSetter: isSetter);
-                        foreach (var statement in bStmts) statement.Method = meth;
-                        if (memberName == "constructor") constructors.Add(meth); else methods.Add(meth);
+                        foreach (StatementInfo statement in bStmts)
+                        {
+                            statement.Method = meth;
+                        }
+
+                        if (memberName == "constructor")
+                        {
+                            constructors.Add(meth);
+                        }
+                        else
+                        {
+                            methods.Add(meth);
+                        }
                     }
                     continue;
                 }
 
-                while (idx < closeBrace && !_tok[idx].IsPunct(";") && !_tok[idx].IsPunct("}")) idx++;
-                if (idx < closeBrace && _tok[idx].IsPunct(";")) idx++;
+                while (idx < closeBrace && !_tok[idx].IsPunct(";") && !_tok[idx].IsPunct("}"))
+                {
+                    idx++;
+                }
+
+                if (idx < closeBrace && _tok[idx].IsPunct(";"))
+                {
+                    idx++;
+                }
             }
         }
 
@@ -514,13 +768,26 @@ public class JavaScriptSourceParser : ISourceParser
             {
                 idx = FindMatchingClose(idx) + 1;
                 if (idx < closeBrace && _tok[idx].IsPunct(":")) { idx++; SkipTsTypeAt(ref idx, closeBrace); }
-                if (idx < closeBrace && _tok[idx].IsPunct("{")) idx = FindMatchingBrace(idx) + 1;
-                else if (idx < closeBrace && _tok[idx].IsPunct(";")) idx++;
+                if (idx < closeBrace && _tok[idx].IsPunct("{"))
+                {
+                    idx = FindMatchingBrace(idx) + 1;
+                }
+                else if (idx < closeBrace && _tok[idx].IsPunct(";"))
+                {
+                    idx++;
+                }
             }
             else
             {
-                while (idx < closeBrace && !_tok[idx].IsPunct(";") && !_tok[idx].IsPunct("}")) idx++;
-                if (idx < closeBrace && _tok[idx].IsPunct(";")) idx++;
+                while (idx < closeBrace && !_tok[idx].IsPunct(";") && !_tok[idx].IsPunct("}"))
+                {
+                    idx++;
+                }
+
+                if (idx < closeBrace && _tok[idx].IsPunct(";"))
+                {
+                    idx++;
+                }
             }
         }
         private void ParseFunction(bool isExported, bool isAsync)
@@ -535,30 +802,43 @@ public class JavaScriptSourceParser : ISourceParser
             _idx++;
 
             if (_idx < _tok.Count && _tok[_idx].IsPunct("<"))
+            {
                 _idx = FindMatchingClose(_idx) + 1;
+            }
 
             if (_idx >= _tok.Count || !_tok[_idx].IsPunct("(")) { SkipToBlockEnd(); return; }
 
             int closeP = FindMatchingClose(_idx);
-            var parameters = ParseParametersFromTokens(_idx, closeP);
+            List<ParameterDeclaration> parameters = ParseParametersFromTokens(_idx, closeP);
             _idx = closeP + 1;
 
             TypeReference? returnType = null;
             if (_idx < _tok.Count && _tok[_idx].IsPunct(":"))
             { _idx++; returnType = ParseTypeAnnotationAt(ref _idx, _tok.Count); }
 
-            if (_idx >= _tok.Count || !_tok[_idx].IsPunct("{")) return;
+            if (_idx >= _tok.Count || !_tok[_idx].IsPunct("{"))
+            {
+                return;
+            }
 
             int openBrace = _idx;
             int closeBrace = FindMatchingBrace(openBrace);
             _idx = closeBrace + 1;
 
-            var bStmts = ParseBodyStatements(openBrace, closeBrace, isInMethod: true);
-            var modifiers = isExported ? Modifier.Public : Modifier.None;
-            if (isAsync) modifiers |= Modifier.Async;
-            var method = NewMethod(functionName, modifiers, [], returnType, parameters, functionLine, bStmts)
+            List<StatementInfo> bStmts = ParseBodyStatements(openBrace, closeBrace, isInMethod: true);
+            Modifier modifiers = isExported ? Modifier.Public : Modifier.None;
+            if (isAsync)
+            {
+                modifiers |= Modifier.Async;
+            }
+
+            JavaScriptMethodDeclaration method = NewMethod(functionName, modifiers, [], returnType, parameters, functionLine, bStmts)
                 .AsJavaScript(isGenerator: isGenerator);
-            foreach (var statement in bStmts) statement.Method = method;
+            foreach (StatementInfo statement in bStmts)
+            {
+                statement.Method = method;
+            }
+
             Methods.Add(method);
             Statements.AddRange(bStmts);
         }
@@ -574,22 +854,31 @@ public class JavaScriptSourceParser : ISourceParser
             string typeName = _tok[_idx].Value; _idx++;
 
             if (_idx < _tok.Count && _tok[_idx].IsPunct("<"))
+            {
                 _idx = FindMatchingClose(_idx) + 1;
+            }
 
             while (_idx < _tok.Count && (_tok[_idx].IsWord("extends") || _tok[_idx].IsWord("implements")))
             {
                 _idx++;
-                while (_idx < _tok.Count && !_tok[_idx].IsPunct("{") && !_tok[_idx].IsPunct(";")) _idx++;
+                while (_idx < _tok.Count && !_tok[_idx].IsPunct("{") && !_tok[_idx].IsPunct(";"))
+                {
+                    _idx++;
+                }
             }
 
             if (_idx < _tok.Count && _tok[_idx].IsPunct("{"))
             { int cb = FindMatchingBrace(_idx); _idx = cb + 1; }
             else if (_idx < _tok.Count && _tok[_idx].IsPunct(";"))
+            {
                 _idx++;
+            }
 
-            var modifiers = isExported ? Modifier.Public : Modifier.None;
-            Types.Add(new TypeDeclaration(typeName, kind, modifiers, [], [], [], [], [], [], typeLine)
-                .AsJavaScript(isExported: isExported));
+            Modifier modifiers = isExported ? Modifier.Public : Modifier.None;
+            Types.Add(new JavaScriptTypeDeclaration(new TypeDeclaration(typeName, kind, modifiers, [], [], [], [], [], [], typeLine))
+            {
+                IsExported = isExported
+            });
         }
 
         private List<StatementInfo> ParseBodyStatements(int openBrace, int closeBrace, bool isInMethod)
@@ -597,12 +886,16 @@ public class JavaScriptSourceParser : ISourceParser
 
         private List<StatementInfo> ParseStatements(int start, int end, bool isInMethod)
         {
-            var statements = new List<StatementInfo>();
-            var parents = new Stack<(StatementInfo Statement, int End)>();
+            List<StatementInfo> statements = new List<StatementInfo>();
+            Stack<(StatementInfo Statement, int End)> parents = new Stack<(StatementInfo Statement, int End)>();
             for (int idx = start; idx < end && idx < _tok.Count; idx++)
             {
-                while (parents.Count > 0 && idx >= parents.Peek().End) parents.Pop();
-                var token = _tok[idx];
+                while (parents.Count > 0 && idx >= parents.Peek().End)
+                {
+                    parents.Pop();
+                }
+
+                JsToken token = _tok[idx];
                 StatementInfo? statement = null;
                 int statementEnd = idx + 1;
                 if (token.IsWord("if") || token.IsWord("while") || token.IsWord("for") ||
@@ -616,9 +909,16 @@ public class JavaScriptSourceParser : ISourceParser
                         statementEnd = body < end && _tok[body].IsPunct("{")
                             ? FindMatchingBrace(body) + 1 : SkipToSemi(body, end);
                         string kind = token.Value;
-                        if (kind == "for" && HasWordInRange(open + 1, close, "of")) kind = "for-of";
-                        else if (kind == "for" && HasWordInRange(open + 1, close, "in")) kind = "for-in";
-                        statement = new JavaScriptStatementInfo(kind, [token.Value], null, null, [], token.Line, isInMethod)
+                        if (kind == "for" && HasWordInRange(open + 1, close, "of"))
+                        {
+                            kind = "for-of";
+                        }
+                        else if (kind == "for" && HasWordInRange(open + 1, close, "in"))
+                        {
+                            kind = "for-in";
+                        }
+
+                        statement = new JavaScriptStatementInfo(new StatementInfo(kind, [token.Value], null, null, [], token.Line, isInMethod))
                         {
                             Condition = TokenText(open + 1, close),
                             IsBraced = body < end && _tok[body].IsPunct("{"),
@@ -631,7 +931,7 @@ public class JavaScriptSourceParser : ISourceParser
                 {
                     statementEnd = idx + 1 < end && _tok[idx + 1].IsPunct("{")
                         ? FindMatchingBrace(idx + 1) + 1 : idx + 1;
-                    statement = new JavaScriptStatementInfo("try", [], null, null, [], token.Line, isInMethod)
+                    statement = new JavaScriptStatementInfo(new StatementInfo("try", [], null, null, [], token.Line, isInMethod))
                     { IsBraced = true };
                 }
                 else if (token.IsWord("return") || token.IsWord("throw") || token.IsWord("await"))
@@ -641,31 +941,43 @@ public class JavaScriptSourceParser : ISourceParser
                         ? statementEnd - 1 : statementEnd;
                     string? typeName = token.IsWord("throw") && idx + 2 < end && _tok[idx + 1].IsWord("new")
                         ? _tok[idx + 2].Value : null;
-                    statement = new JavaScriptStatementInfo(token.Value, [], typeName, null, [], token.Line, isInMethod)
+                    statement = new JavaScriptStatementInfo(new StatementInfo(token.Value, [], typeName, null, [], token.Line, isInMethod))
                     { Expression = TokenText(idx + 1, expressionEnd), ValueExpression = ParseExpression(idx + 1, expressionEnd) };
                 }
                 else if (token.IsWord("const") || token.IsWord("let") || token.IsWord("var"))
                 {
                     if (idx + 1 < end && _tok[idx + 1].IsIdent)
-                        statement = new JavaScriptStatementInfo("declaration", [token.Value], null,
-                            _tok[idx + 1].Value, [], token.Line, isInMethod);
+                    {
+                        statement = new JavaScriptStatementInfo(new StatementInfo("declaration", [token.Value], null,
+                            _tok[idx + 1].Value, [], token.Line, isInMethod));
+                    }
                 }
                 else if (token.IsWord("debugger"))
-                    statement = new JavaScriptStatementInfo("call", ["debugger"], null, "debugger", [], token.Line, isInMethod);
+                {
+                    statement = new JavaScriptStatementInfo(new StatementInfo("call", ["debugger"], null, "debugger", [], token.Line, isInMethod));
+                }
                 else if (token.IsIdent && (!IsCtrlKw(token.Value) || token.IsWord("this") || token.IsWord("require")) &&
                     (idx == start || !_tok[idx - 1].IsPunct(".") && !_tok[idx - 1].IsPunct("?.")))
                 {
                     int calleeEnd = idx + 1;
                     while (calleeEnd + 1 < end && (_tok[calleeEnd].IsPunct(".") || _tok[calleeEnd].IsPunct("?.")) &&
-                        _tok[calleeEnd + 1].IsIdent) calleeEnd += 2;
+                        _tok[calleeEnd + 1].IsIdent)
+                    {
+                        calleeEnd += 2;
+                    }
+
                     int open = calleeEnd;
-                    if (open < end && _tok[open].IsPunct("<")) open = FindMatchingClose(open) + 1;
+                    if (open < end && _tok[open].IsPunct("<"))
+                    {
+                        open = FindMatchingClose(open) + 1;
+                    }
+
                     if (open < end && _tok[open].IsPunct("(") && !IsCallKw(_tok[calleeEnd - 1].Value))
                     {
                         int close = FindMatchingClose(open);
-                        var ranges = SplitArguments(open + 1, close);
-                        statement = new JavaScriptStatementInfo("call", [], null, _tok[calleeEnd - 1].Value,
-                            ranges.Select(r => TokenText(r.Start, r.End)).ToList(), token.Line, isInMethod)
+                        List<(int Start, int End)> ranges = SplitArguments(open + 1, close);
+                        statement = new JavaScriptStatementInfo(new StatementInfo("call", [], null, _tok[calleeEnd - 1].Value,
+                            ranges.Select(r => TokenText(r.Start, r.End)).ToList(), token.Line, isInMethod))
                         {
                             CallTarget = ParseExpression(idx, calleeEnd),
                             ArgumentExpressions = ranges.Select(r => ParseExpression(r.Start, r.End)).ToList()
@@ -674,21 +986,32 @@ public class JavaScriptSourceParser : ISourceParser
                         idx = open;
                     }
                 }
-                if (statement is null) continue;
+                if (statement is null)
+                {
+                    continue;
+                }
+
                 if (parents.Count > 0)
                 {
                     statement.Parent = parents.Peek().Statement;
-                    statement.Parent._children.Add(statement);
+                    statement.Parent.MutableChildren.Add(statement);
                 }
                 statements.Add(statement);
-                if (statementEnd > idx + 1) parents.Push((statement, statementEnd));
+                if (statementEnd > idx + 1)
+                {
+                    parents.Push((statement, statementEnd));
+                }
             }
             return statements;
         }
 
         private string TokenText(int start, int end)
         {
-            if (start >= end || start >= _tok.Count) return "";
+            if (start >= end || start >= _tok.Count)
+            {
+                return string.Empty;
+            }
+
             int Offset(JsToken token) => _lineOffsets[token.Line - 1] + token.Col - 1;
             int from = Offset(_tok[start]);
             int to = end < _tok.Count ? Offset(_tok[end]) : _src.Length;
@@ -697,47 +1020,90 @@ public class JavaScriptSourceParser : ISourceParser
 
         private List<(int Start, int End)> SplitArguments(int start, int end)
         {
-            var result = new List<(int, int)>();
+            List<(int, int)> result = new List<(int, int)>();
             int first = start;
             for (int idx = start; idx < end; idx++)
             {
                 if (_tok[idx].IsPunct("(") || _tok[idx].IsPunct("[") || _tok[idx].IsPunct("{"))
+                {
                     idx = FindMatchingClose(idx);
+                }
                 else if (_tok[idx].IsPunct(","))
                 {
                     result.Add((first, idx));
                     first = idx + 1;
                 }
             }
-            if (first < end) result.Add((first, end));
+            if (first < end)
+            {
+                result.Add((first, end));
+            }
+
             return result;
         }
 
         private ExpressionInfo ParseExpression(int start, int end)
         {
-            if (start >= end || start >= _tok.Count) return new("other");
+            if (start >= end || start >= _tok.Count)
+            {
+                return new("other");
+            }
+
             if (_tok[start].IsPunct("(") && FindMatchingClose(start) == end - 1)
+            {
                 return ParseExpression(start + 1, end - 1);
+            }
+
             if (end == start + 1)
             {
-                var token = _tok[start];
-                if (token.IsStr) return new("stringLiteral") { StringValue = DecodeString(token.Value) };
-                if (token.IsWord("true") || token.IsWord("false")) return new("booleanLiteral") { Name = token.Value };
-                if (token.IsWord("null")) return new("nullLiteral");
-                if (token.IsIdent) return new("identifier") { Name = token.Value };
-                if (token.Kind == JsTok.Number) return new("numericLiteral") { Name = token.Value };
+                JsToken token = _tok[start];
+                if (token.IsStr)
+                {
+                    return new("stringLiteral") { StringValue = DecodeString(token.Value) };
+                }
+
+                if (token.IsWord("true") || token.IsWord("false"))
+                {
+                    return new("booleanLiteral") { Name = token.Value };
+                }
+
+                if (token.IsWord("null"))
+                {
+                    return new("nullLiteral");
+                }
+
+                if (token.IsIdent)
+                {
+                    return new("identifier") { Name = token.Value };
+                }
+
+                if (token.Kind == JsTok.Number)
+                {
+                    return new("numericLiteral") { Name = token.Value };
+                }
+
                 return new("other");
             }
             if (_tok[start].IsPunct("[") && FindMatchingClose(start) == end - 1)
+            {
                 return new("arrayLiteral")
                 { Children = SplitArguments(start + 1, end - 1).Select(r => ParseExpression(r.Start, r.End)).ToList() };
+            }
+
             if (_tok[start].IsPunct("{") && FindMatchingClose(start) == end - 1)
+            {
                 return new("objectLiteral");
+            }
+
             if (_tok[end - 1].IsPunct(")"))
             {
                 for (int open = start + 1; open < end; open++)
                 {
-                    if (!_tok[open].IsPunct("(") || FindMatchingClose(open) != end - 1) continue;
+                    if (!_tok[open].IsPunct("(") || FindMatchingClose(open) != end - 1)
+                    {
+                        continue;
+                    }
+
                     return new("invocation")
                     {
                         Target = ParseExpression(start, open),
@@ -747,14 +1113,17 @@ public class JavaScriptSourceParser : ISourceParser
             }
             if (end - start >= 3 && (_tok[end - 2].IsPunct(".") || _tok[end - 2].IsPunct("?.")) &&
                 _tok[end - 1].IsIdent)
+            {
                 return new("memberAccess") { Name = _tok[end - 1].Value, Target = ParseExpression(start, end - 2) };
+            }
+
             return new("other");
         }
 
         private static string DecodeString(string value)
         {
             string content = UnquoteStr(value);
-            var result = new System.Text.StringBuilder();
+            StringBuilder result = new System.Text.StringBuilder();
             for (int idx = 0; idx < content.Length; idx++)
             {
                 if (content[idx] != '\\' || idx + 1 >= content.Length) { result.Append(content[idx]); continue; }
@@ -765,17 +1134,24 @@ public class JavaScriptSourceParser : ISourceParser
                         System.Globalization.CultureInfo.InvariantCulture, out int code))
                 { result.Append((char)code); idx += digits; }
                 else if (escaped == '\r' || escaped == '\n')
-                { if (escaped == '\r' && idx + 1 < content.Length && content[idx + 1] == '\n') idx++; }
-                else result.Append(escaped switch
+                { if (escaped == '\r' && idx + 1 < content.Length && content[idx + 1] == '\n')
+                    {
+                        idx++;
+                    }
+                }
+                else
+                {
+                    result.Append(escaped switch
                 {
                     'n' => '\n', 'r' => '\r', 't' => '\t', 'b' => '\b', 'f' => '\f', 'v' => '\v', '0' => '\0', _ => escaped
                 });
+                }
             }
             return result.ToString();
         }
         private List<ParameterDeclaration> ParseParametersFromTokens(int openParen, int closeParen)
         {
-            var result = new List<ParameterDeclaration>();
+            List<ParameterDeclaration> result = new List<ParameterDeclaration>();
             int idx = openParen + 1;
 
             while (idx < closeParen && idx < _tok.Count)
@@ -792,7 +1168,10 @@ public class JavaScriptSourceParser : ISourceParser
                 idx++;
 
                 bool optional = idx < closeParen && _tok[idx].IsPunct("?");
-                if (optional) idx++;
+                if (optional)
+                {
+                    idx++;
+                }
 
                 TypeReference? typeRef = null;
                 if (idx < closeParen && _tok[idx].IsPunct(":"))
@@ -807,10 +1186,17 @@ public class JavaScriptSourceParser : ISourceParser
                     int depth = 0;
                     while (idx < closeParen)
                     {
-                        if (_tok[idx].IsPunct("(") || _tok[idx].IsPunct("[") || _tok[idx].IsPunct("{")) depth++;
+                        if (_tok[idx].IsPunct("(") || _tok[idx].IsPunct("[") || _tok[idx].IsPunct("{"))
+                        {
+                            depth++;
+                        }
                         else if (_tok[idx].IsPunct(")") || _tok[idx].IsPunct("]") || _tok[idx].IsPunct("}"))
-                        { if (depth == 0) break; depth--; }
-                        else if (_tok[idx].IsPunct(",") && depth == 0) break;
+                        { if (depth == 0) { break; } depth--; }
+                        else if (_tok[idx].IsPunct(",") && depth == 0)
+                        {
+                            break;
+                        }
+
                         idx++;
                     }
                     defaultValue = TokenText(defaultStart, idx);
@@ -825,31 +1211,51 @@ public class JavaScriptSourceParser : ISourceParser
 
         private TypeReference? ParseTypeAnnotationAt(ref int idx, int endIdx)
         {
-            if (idx >= endIdx || !_tok[idx].IsIdent) return null;
+            if (idx >= endIdx || !_tok[idx].IsIdent)
+            {
+                return null;
+            }
+
             int start = idx;
             string name = _tok[idx].Value; idx++;
-            var arguments = new List<TypeReference>();
+            List<TypeReference> arguments = new List<TypeReference>();
             if (idx < endIdx && _tok[idx].IsPunct("<"))
             {
                 int close = FindMatchingClose(idx);
                 int argument = ++idx;
                 while (argument < close)
                 {
-                    var type = ParseTypeAnnotationAt(ref argument, close);
-                    if (type is not null) arguments.Add(type);
-                    if (argument < close && _tok[argument].IsPunct(",")) argument++;
-                    else if (type is null) argument++;
+                    TypeReference? type = ParseTypeAnnotationAt(ref argument, close);
+                    if (type is not null)
+                    {
+                        arguments.Add(type);
+                    }
+
+                    if (argument < close && _tok[argument].IsPunct(","))
+                    {
+                        argument++;
+                    }
+                    else if (type is null)
+                    {
+                        argument++;
+                    }
                 }
                 idx = close + 1;
             }
 
             while (idx < endIdx && _tok[idx].IsPunct("[") && idx + 1 < endIdx && _tok[idx + 1].IsPunct("]"))
+            {
                 idx += 2;
+            }
 
             while (idx < endIdx && (_tok[idx].IsPunct("|") || _tok[idx].IsPunct("&")))
             {
                 idx++;
-                if (idx < endIdx && _tok[idx].IsIdent) { idx++; if (idx < endIdx && _tok[idx].IsPunct("<")) idx = FindMatchingClose(idx) + 1; }
+                if (idx < endIdx && _tok[idx].IsIdent) { idx++; if (idx < endIdx && _tok[idx].IsPunct("<"))
+                    {
+                        idx = FindMatchingClose(idx) + 1;
+                    }
+                }
             }
 
             return new TypeReference(name, null, arguments, TokenText(start, idx));
@@ -860,10 +1266,20 @@ public class JavaScriptSourceParser : ISourceParser
             int depth = 0;
             for (int i = start; i < end && i < _tok.Count; i++)
             {
-                var t = _tok[i];
-                if (t.IsPunct("{")) depth++;
-                else if (t.IsPunct("}")) { depth--; if (depth < 0) return false; }
-                else if (t.IsWord("throw")) return true;
+                JsToken t = _tok[i];
+                if (t.IsPunct("{"))
+                {
+                    depth++;
+                }
+                else if (t.IsPunct("}")) { depth--; if (depth < 0)
+                    {
+                        return false;
+                    }
+                }
+                else if (t.IsWord("throw"))
+                {
+                    return true;
+                }
             }
             return false;
         }
@@ -873,14 +1289,22 @@ public class JavaScriptSourceParser : ISourceParser
             int depth = 0;
             while (idx < endIdx && idx < _tok.Count)
             {
-                var t = _tok[idx];
+                JsToken t = _tok[idx];
                 if (t.IsPunct("(") || t.IsPunct("[") || t.IsPunct("<")) { depth++; idx++; continue; }
                 if (t.IsPunct(">") || t.IsPunct(")") || t.IsPunct("]"))
                 { if (depth > 0) { depth--; idx++; continue; } break; }
-                if (t.IsPunct("{") && depth == 0) break;
+                if (t.IsPunct("{") && depth == 0)
+                {
+                    break;
+                }
+
                 if (t.IsPunct("{")) { depth++; idx++; continue; }
                 if (t.IsPunct("}")) { if (depth > 0) { depth--; idx++; continue; } break; }
-                if ((t.IsPunct(";") || t.IsPunct(",") || t.IsPunct("=")) && depth == 0) break;
+                if ((t.IsPunct(";") || t.IsPunct(",") || t.IsPunct("=")) && depth == 0)
+                {
+                    break;
+                }
+
                 idx++;
             }
         }
@@ -890,8 +1314,15 @@ public class JavaScriptSourceParser : ISourceParser
             int depth = 1, idx = openIdx + 1;
             while (idx < _tok.Count && depth > 0)
             {
-                if (_tok[idx].IsPunct("{")) depth++;
-                else if (_tok[idx].IsPunct("}")) depth--;
+                if (_tok[idx].IsPunct("{"))
+                {
+                    depth++;
+                }
+                else if (_tok[idx].IsPunct("}"))
+                {
+                    depth--;
+                }
+
                 idx++;
             }
             return idx - 1;
@@ -899,16 +1330,33 @@ public class JavaScriptSourceParser : ISourceParser
 
         private int FindMatchingClose(int openIdx)
         {
-            if (openIdx >= _tok.Count) return openIdx;
+            if (openIdx >= _tok.Count)
+            {
+                return openIdx;
+            }
+
             string open = _tok[openIdx].Value;
             string close = open == "(" ? ")" : open == "[" ? "]" : open == "<" ? ">" : "}";
             int depth = 1, idx = openIdx + 1;
             while (idx < _tok.Count && depth > 0)
             {
-                if (_tok[idx].IsPunct(open)) depth++;
-                else if (_tok[idx].IsPunct(close)) depth--;
-                else if (open == "<" && _tok[idx].IsPunct(">>")) depth -= 2;
-                else if (open == "<" && _tok[idx].IsPunct(">>>")) depth -= 3;
+                if (_tok[idx].IsPunct(open))
+                {
+                    depth++;
+                }
+                else if (_tok[idx].IsPunct(close))
+                {
+                    depth--;
+                }
+                else if (open == "<" && _tok[idx].IsPunct(">>"))
+                {
+                    depth -= 2;
+                }
+                else if (open == "<" && _tok[idx].IsPunct(">>>"))
+                {
+                    depth -= 3;
+                }
+
                 idx++;
             }
             return idx - 1;
@@ -919,12 +1367,35 @@ public class JavaScriptSourceParser : ISourceParser
             int depth = 0, idx = startIdx;
             while (idx < _tok.Count)
             {
-                var t = _tok[idx];
-                if (idx > startIdx && depth == 0 && IsNewStatement(idx)) return idx;
-                if (t.IsPunct("(") || t.IsPunct("[") || t.IsPunct("{")) depth++;
-                else if (t.IsPunct(")") || t.IsPunct("]")) { if (depth > 0) depth--; }
-                else if (t.IsPunct("}")) { if (depth > 0) depth--; else return idx; }
-                else if (t.IsPunct(";") && depth == 0) return idx + 1;
+                JsToken t = _tok[idx];
+                if (idx > startIdx && depth == 0 && IsNewStatement(idx))
+                {
+                    return idx;
+                }
+
+                if (t.IsPunct("(") || t.IsPunct("[") || t.IsPunct("{"))
+                {
+                    depth++;
+                }
+                else if (t.IsPunct(")") || t.IsPunct("]")) { if (depth > 0)
+                    {
+                        depth--;
+                    }
+                }
+                else if (t.IsPunct("}")) { if (depth > 0)
+                    {
+                        depth--;
+                    }
+                    else
+                    {
+                        return idx;
+                    }
+                }
+                else if (t.IsPunct(";") && depth == 0)
+                {
+                    return idx + 1;
+                }
+
                 idx++;
             }
             return idx;
@@ -936,12 +1407,23 @@ public class JavaScriptSourceParser : ISourceParser
             int depth = 0;
             while (idx < endIdx && idx < _tok.Count)
             {
-                var t = _tok[idx];
-                if (idx > start && depth == 0 && IsNewStatement(idx)) return idx;
-                if (t.IsPunct("(") || t.IsPunct("[") || t.IsPunct("{")) depth++;
+                JsToken t = _tok[idx];
+                if (idx > start && depth == 0 && IsNewStatement(idx))
+                {
+                    return idx;
+                }
+
+                if (t.IsPunct("(") || t.IsPunct("[") || t.IsPunct("{"))
+                {
+                    depth++;
+                }
                 else if (t.IsPunct(")") || t.IsPunct("]") || t.IsPunct("}"))
-                { if (depth == 0) return idx; depth--; }
-                else if (t.IsPunct(";") && depth == 0) return idx + 1;
+                { if (depth == 0) { return idx; } depth--; }
+                else if (t.IsPunct(";") && depth == 0)
+                {
+                    return idx + 1;
+                }
+
                 idx++;
             }
             return idx;
@@ -949,62 +1431,117 @@ public class JavaScriptSourceParser : ISourceParser
 
         private bool IsNewStatement(int idx)
         {
-            if (idx == 0 || _tok[idx].Line <= _tok[idx - 1].Line) return false;
+            if (idx == 0 || _tok[idx].Line <= _tok[idx - 1].Line)
+            {
+                return false;
+            }
+
             if (_tok[idx - 1].Value is "=" or "." or "?." or "," or "+" or "-" or "*" or "/" or "=>" or
-                "&&" or "||" or "??" or ":" or "?" or "return" or "throw" or "await" or "new") return false;
+                "&&" or "||" or "??" or ":" or "?" or "return" or "throw" or "await" or "new")
+            {
+                return false;
+            }
+
             return _tok[idx].IsIdent;
         }
 
         private void ParseTypeAlias(bool isExported)
         {
             int start = _idx++;
-            if (_idx >= _tok.Count || !_tok[_idx].IsIdent) return;
+            if (_idx >= _tok.Count || !_tok[_idx].IsIdent)
+            {
+                return;
+            }
+
             string name = _tok[_idx++].Value;
-            var parameters = new List<string>();
+            List<string> parameters = new List<string>();
             if (_idx < _tok.Count && _tok[_idx].IsPunct("<"))
             {
                 int close = FindMatchingClose(_idx);
                 for (int parameter = _idx + 1; parameter < close; parameter++)
+                {
                     if (_tok[parameter].IsIdent && (parameter == _idx + 1 || _tok[parameter - 1].IsPunct(",")))
+                    {
                         parameters.Add(_tok[parameter].Value);
+                    }
+                }
+
                 _idx = close + 1;
             }
-            if (_idx >= _tok.Count || !_tok[_idx].IsPunct("=")) return;
+            if (_idx >= _tok.Count || !_tok[_idx].IsPunct("="))
+            {
+                return;
+            }
+
             int end = FindStatementEnd(start);
             int typeStart = ++_idx;
             int typeEnd = end > typeStart && _tok[end - 1].IsPunct(";") ? end - 1 : end;
-            var target = ParseTypeAnnotationAt(ref _idx, typeEnd);
+            TypeReference? target = ParseTypeAnnotationAt(ref _idx, typeEnd);
             string original = TokenText(typeStart, typeEnd);
-            if (target is null || _idx < typeEnd) target = new(original, null, [], original);
-            Types.Add(new TypeDeclaration(name, TypeKind.Alias, isExported ? Modifier.Public : Modifier.None,
+            if (target is null || _idx < typeEnd)
+            {
+                target = new(original, null, [], original);
+            }
+
+            Types.Add(new JavaScriptTypeDeclaration(new TypeDeclaration(name, TypeKind.Alias, isExported ? Modifier.Public : Modifier.None,
                 [], [], [], [], [], [], _tok[start].Line)
-            { AliasTarget = target, TypeParameters = parameters }.AsJavaScript(isExported: isExported, isGeneric: parameters.Count > 0));
+            { AliasTarget = target, TypeParameters = parameters })
+            {
+                IsExported = isExported, IsGeneric = parameters.Count > 0
+            });
             _idx = end;
         }
 
         private void SkipToBlockEnd()
         {
-            while (_idx < _tok.Count && !_tok[_idx].IsPunct("{")) _idx++;
-            if (_idx < _tok.Count && _tok[_idx].IsPunct("{")) _idx = FindMatchingBrace(_idx) + 1;
+            while (_idx < _tok.Count && !_tok[_idx].IsPunct("{"))
+            {
+                _idx++;
+            }
+
+            if (_idx < _tok.Count && _tok[_idx].IsPunct("{"))
+            {
+                _idx = FindMatchingBrace(_idx) + 1;
+            }
         }
 
         private void SkipToBlockOrSemi()
         {
-            while (_idx < _tok.Count && !_tok[_idx].IsPunct("{") && !_tok[_idx].IsPunct(";")) _idx++;
-            if (_idx < _tok.Count && _tok[_idx].IsPunct("{")) _idx = FindMatchingBrace(_idx) + 1;
-            else if (_idx < _tok.Count && _tok[_idx].IsPunct(";")) _idx++;
+            while (_idx < _tok.Count && !_tok[_idx].IsPunct("{") && !_tok[_idx].IsPunct(";"))
+            {
+                _idx++;
+            }
+
+            if (_idx < _tok.Count && _tok[_idx].IsPunct("{"))
+            {
+                _idx = FindMatchingBrace(_idx) + 1;
+            }
+            else if (_idx < _tok.Count && _tok[_idx].IsPunct(";"))
+            {
+                _idx++;
+            }
         }
 
         private bool HasWordInRange(int start, int end, string word)
         {
             for (int i = start; i < end && i < _tok.Count; i++)
-                if (_tok[i].IsWord(word)) return true;
+            {
+                if (_tok[i].IsWord(word))
+                {
+                    return true;
+                }
+            }
+
             return false;
         }
 
         private static string UnquoteStr(string s)
         {
-            if (s.Length < 2) return s;
+            if (s.Length < 2)
+            {
+                return s;
+            }
+
             char f = s[0];
             return (f == '\'' || f == '"' || f == '`') ? s[1..^1] : s;
         }
@@ -1025,7 +1562,7 @@ public class JavaScriptSourceParser : ISourceParser
             List<string> decorators, TypeReference? returnType,
             List<ParameterDeclaration> parms, int line, List<StatementInfo> stmts)
         {
-            var m = new MethodDeclaration(name, mods, decorators, returnType, parms, line);
+            MethodDeclaration m = new MethodDeclaration(name, mods, decorators, returnType, parms, line);
             m.Statements = stmts;
             return m;
         }

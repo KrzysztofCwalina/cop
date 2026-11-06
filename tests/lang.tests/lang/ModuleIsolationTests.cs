@@ -35,7 +35,7 @@ public class ModuleIsolationTests
     /// their own value when their exported functions access it.
     /// </summary>
     [Test]
-    public void NamedTemplatesKeepPackagePrivateBindings()
+    public async Task NamedTemplatesKeepPackagePrivateBindings()
     {
         CreatePackage("template-a", """
             let prefix = 'A'
@@ -54,18 +54,18 @@ public class ModuleIsolationTests
         var errors = new List<string>();
         loader.EvalDeferredLetBindings(bridge.Evaluator, errors);
         Assert.That(errors, Is.Empty, string.Join("\n", errors));
-        bridge.LoadSource("""
+        await bridge.LoadSourceAsync("""
             command MAIN = ['Alpha', 'Beta'].Select(renderA(item) + '|' + renderB(item))
-            """, "<test>");
+            """, "<test>", cancellationToken: CancellationToken.None);
 
-        var result = bridge.RunCommand("MAIN");
+        var result = (await bridge.RunCommandAsync("MAIN", cancellationToken: CancellationToken.None));
 
         Assert.That(bridge.Errors, Is.Empty, string.Join("\n", bridge.Errors));
-        Assert.That(result.Display(), Is.EqualTo("[A Alpha|B Alpha, A Beta|B Beta]"));
+        Assert.That((await result.DisplayAsync(cancellationToken: CancellationToken.None)), Is.EqualTo("[A Alpha|B Alpha, A Beta|B Beta]"));
     }
 
     [Test]
-    public void NonExportedLetBindingsDoNotCollide()
+    public async Task NonExportedLetBindingsDoNotCollide()
     {
         // Package A: exports getA() which returns module-local 'data'
         CreatePackage("pkg-a", @"
@@ -89,8 +89,8 @@ export function getB() = data
         loader.EvalDeferredLetBindings(bridge.Evaluator, errors);
         Assert.That(errors, Is.Empty, "Deferred let eval errors: " + string.Join(", ", errors));
 
-        bridge.LoadSource("command main = getA() + ',' + getB()", "<test>");
-        var result = bridge.RunCommand("main");
+        await bridge.LoadSourceAsync("command main = getA() + ',' + getB()", "<test>", cancellationToken: CancellationToken.None);
+        var result = (await bridge.RunCommandAsync("main", cancellationToken: CancellationToken.None));
 
         Assert.That(result.ToString(), Is.EqualTo("alpha,beta"),
             "Each package's non-exported 'data' should retain its own value");
@@ -100,7 +100,7 @@ export function getB() = data
     /// Three packages all using 'let x = ...' internally should not interfere.
     /// </summary>
     [Test]
-    public void ThreePackagesWithSameLetName()
+    public async Task ThreePackagesWithSameLetName()
     {
         CreatePackage("pkg-1", @"
 let x = 100
@@ -125,8 +125,8 @@ export function val3() = x
         loader.EvalDeferredLetBindings(bridge.Evaluator, errors);
         Assert.That(errors, Is.Empty);
 
-        bridge.LoadSource("command main = val1() + val2() + val3()", "<test>");
-        var result = bridge.RunCommand("main");
+        await bridge.LoadSourceAsync("command main = val1() + val2() + val3()", "<test>", cancellationToken: CancellationToken.None);
+        var result = (await bridge.RunCommandAsync("main", cancellationToken: CancellationToken.None));
 
         Assert.That(result, Is.InstanceOf<CopInt>());
         Assert.That(((CopInt)result).Value, Is.EqualTo(600),
@@ -137,7 +137,7 @@ export function val3() = x
     /// Exported let bindings ARE visible globally (they should not be isolated).
     /// </summary>
     [Test]
-    public void ExportedLetBindingsAreGloballyVisible()
+    public async Task ExportedLetBindingsAreGloballyVisible()
     {
         CreatePackage("pkg-exported", @"
 export let greeting = 'hello world'
@@ -151,10 +151,10 @@ export let greeting = 'hello world'
         loader.EvalDeferredLetBindings(bridge.Evaluator, errors);
         Assert.That(errors, Is.Empty);
 
-        bridge.LoadSource("command main = greeting", "<test>");
-        var result = bridge.RunCommand("main");
+        await bridge.LoadSourceAsync("command main = greeting", "<test>", cancellationToken: CancellationToken.None);
+        var result = (await bridge.RunCommandAsync("main", cancellationToken: CancellationToken.None));
 
-        Assert.That(result.ToString(), Is.EqualTo("hello world"));
+        Assert.That(await result.DisplayAsync(), Is.EqualTo("hello world"));
     }
 
     /// <summary>
@@ -162,7 +162,7 @@ export let greeting = 'hello world'
     /// Only the module's own functions should see it.
     /// </summary>
     [Test]
-    public void NonExportedLetIsNotGloballyVisible()
+    public async Task NonExportedLetIsNotGloballyVisible()
     {
         CreatePackage("pkg-hidden", @"
 let secret = 'hidden-value'
@@ -178,14 +178,14 @@ export function reveal() = secret
         Assert.That(errors, Is.Empty);
 
         // reveal() should work (function captures module env)
-        bridge.LoadSource("command test1 = reveal()", "<test>");
-        var result = bridge.RunCommand("test1");
-        Assert.That(result.ToString(), Is.EqualTo("hidden-value"));
+        await bridge.LoadSourceAsync("command test1 = reveal()", "<test>", cancellationToken: CancellationToken.None);
+        var result = (await bridge.RunCommandAsync("test1", cancellationToken: CancellationToken.None));
+        Assert.That(await result.DisplayAsync(), Is.EqualTo("hidden-value"));
 
         // Direct access to 'secret' from user code should fail (not in global env)
         // LanguageBridge.RunCommand catches CopEvaluationException and adds to Errors
-        bridge.LoadSource("command test2 = secret", "<test2>");
-        bridge.RunCommand("test2");
+        await bridge.LoadSourceAsync("command test2 = secret", "<test2>", cancellationToken: CancellationToken.None);
+        await bridge.RunCommandAsync("test2", cancellationToken: CancellationToken.None);
         Assert.That(bridge.Errors, Has.Some.Contains("secret"),
             "Accessing non-exported 'secret' from user code should produce an error");
     }
@@ -196,7 +196,7 @@ export function reveal() = secret
     /// This is the exact pattern that caused issue #16.
     /// </summary>
     [Test]
-    public void ProviderPatternWithMultiplePackages()
+    public async Task ProviderPatternWithMultiplePackages()
     {
         // Simulate csharp package: let cb = ..., export function statements() => cb.Items
         CreatePackage("fake-csharp", @"
@@ -227,10 +227,10 @@ export function jsName() = cb
         Assert.That(errors, Is.Empty);
 
         // Each function should see its own module's 'cb'
-        bridge.LoadSource(@"
+        await bridge.LoadSourceAsync(@"
 command main = csharpName() + '|' + pythonName() + '|' + jsName()
-", "<test>");
-        var result = bridge.RunCommand("main");
+", "<test>", cancellationToken: CancellationToken.None);
+        var result = (await bridge.RunCommandAsync("main", cancellationToken: CancellationToken.None));
 
         Assert.That(result.ToString(), Is.EqualTo("csharp-provider|python-provider|js-provider"),
             "Each package's 'let cb' should be isolated in its own module scope");
@@ -240,7 +240,7 @@ command main = csharpName() + '|' + pythonName() + '|' + jsName()
     /// Module-local lets can reference global environment values (like provider collections).
     /// </summary>
     [Test]
-    public void ModuleLocalLetCanAccessGlobalBindings()
+    public async Task ModuleLocalLetCanAccessGlobalBindings()
     {
         // Register a global value before loading packages
         var bridge = new LanguageBridge();
@@ -258,10 +258,10 @@ export function getLocal() = local
         loader.EvalDeferredLetBindings(bridge.Evaluator, errors);
         Assert.That(errors, Is.Empty);
 
-        bridge.LoadSource("command main = getLocal()", "<test>");
-        var result = bridge.RunCommand("main");
+        await bridge.LoadSourceAsync("command main = getLocal()", "<test>", cancellationToken: CancellationToken.None);
+        var result = (await bridge.RunCommandAsync("main", cancellationToken: CancellationToken.None));
 
-        Assert.That(result.ToString(), Is.EqualTo("shared-value"),
+        Assert.That(await result.DisplayAsync(), Is.EqualTo("shared-value"),
             "Module-local let should be able to reference global environment bindings");
     }
 
@@ -270,7 +270,7 @@ export function getLocal() = local
     /// C's exported function should see C's x, not A's.
     /// </summary>
     [Test]
-    public void TransitiveImportsDoNotCollide()
+    public async Task TransitiveImportsDoNotCollide()
     {
         CreatePackage("base-pkg", @"
 let x = 'base'
@@ -291,8 +291,8 @@ export function derivedVal() = x
         loader.EvalDeferredLetBindings(bridge.Evaluator, errors);
         Assert.That(errors, Is.Empty);
 
-        bridge.LoadSource("command main = baseVal() + '|' + derivedVal()", "<test>");
-        var result = bridge.RunCommand("main");
+        await bridge.LoadSourceAsync("command main = baseVal() + '|' + derivedVal()", "<test>", cancellationToken: CancellationToken.None);
+        var result = (await bridge.RunCommandAsync("main", cancellationToken: CancellationToken.None));
 
         Assert.That(result.ToString(), Is.EqualTo("base|derived"),
             "Transitive imports should each have isolated module scopes");

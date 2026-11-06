@@ -1,3 +1,5 @@
+// Preserves JavaScript function-form facts through the shared method cache.
+
 namespace Cop.Providers.SourceModel;
 
 /// <summary>
@@ -6,6 +8,7 @@ namespace Cop.Providers.SourceModel;
 /// </summary>
 public sealed record JavaScriptMethodDeclaration : MethodDeclaration
 {
+    /// <summary>Copies a shared method and adds JavaScript function-form flags.</summary>
     public JavaScriptMethodDeclaration(
         MethodDeclaration source,
         bool isGenerator = false,
@@ -35,8 +38,10 @@ public sealed record JavaScriptMethodDeclaration : MethodDeclaration
     /// <summary>True for JavaScript/TypeScript class constructors.</summary>
     public bool IsConstructor => Name == "constructor";
 
+    /// <inheritdoc />
     public override string? LanguageTag => "javascript";
 
+    /// <inheritdoc />
     public override IReadOnlyList<KeyValuePair<string, bool>>? LanguageFlags =>
     [
         new("IsGenerator", IsGenerator),
@@ -45,22 +50,14 @@ public sealed record JavaScriptMethodDeclaration : MethodDeclaration
         new("IsSetter", IsSetter),
     ];
 
+    /// <summary>
+    /// Registers restoration of JavaScript method facts from source caches.
+    /// </summary>
     public static void RegisterCacheFactory() =>
         MethodTypeRegistry.Register("javascript", (baseDecl, flags) => new JavaScriptMethodDeclaration(
             baseDecl,
-            isGenerator: flags.TryGetValue("IsGenerator", out var generator) && generator,
-            isArrow: flags.TryGetValue("IsArrow", out var arrow) && arrow,
-            isGetter: flags.TryGetValue("IsGetter", out var getter) && getter,
-            isSetter: flags.TryGetValue("IsSetter", out var setter) && setter));
-}
-
-public static class JavaScriptMethodDeclarationExtensions
-{
-    public static JavaScriptMethodDeclaration AsJavaScript(
-        this MethodDeclaration source,
-        bool isGenerator = false,
-        bool isArrow = false,
-        bool isGetter = false,
-        bool isSetter = false)
-        => new(source, isGenerator, isArrow, isGetter, isSetter);
+            isGenerator: flags.TryGetValue("IsGenerator", out bool generator) && generator,
+            isArrow: flags.TryGetValue("IsArrow", out bool arrow) && arrow,
+            isGetter: flags.TryGetValue("IsGetter", out bool getter) && getter,
+            isSetter: flags.TryGetValue("IsSetter", out bool setter) && setter));
 }

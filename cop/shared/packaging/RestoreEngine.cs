@@ -1,3 +1,5 @@
+// Restores package graphs from configured sources into the local cache.
+
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -20,6 +22,9 @@ public class RestoreEngine
 {
     private readonly GitHubPackageSource _source;
 
+    /// <summary>
+    /// Creates a restore engine backed by the supplied GitHub package source.
+    /// </summary>
     public RestoreEngine(GitHubPackageSource source)
     {
         _source = source ?? throw new ArgumentNullException(nameof(source));
@@ -35,8 +40,9 @@ public class RestoreEngine
     /// <param name="ct">Cancellation token</param>
     public async Task<RestoreResult> RestoreAsync(List<PackageReference> packages, string sourceFilePath, string repoRoot, CancellationToken ct = default)
     {
-        var placedFiles = new List<string>();
-        var warnings = new List<string>();
+        ct.ThrowIfCancellationRequested();
+        List<string> placedFiles = new List<string>();
+        List<string> warnings = new List<string>();
 
         try
         {
@@ -46,25 +52,25 @@ public class RestoreEngine
                 {
                     PlacedFiles = placedFiles,
                     Warnings = warnings,
-                    Success = true,
+                    IsSuccessful = true,
                     PackageCount = 0,
                     FileCount = 0
                 };
             }
 
             // Resolve dependencies
-            var resolver = new DependencyResolver(_source);
-            var resolvedPackages = await resolver.ResolveAsync(packages, ct);
+            DependencyResolver resolver = new DependencyResolver(_source);
+            List<PackageReference> resolvedPackages = await resolver.ResolveAsync(packages, ct);
 
-            var nugetAnalyzers = new List<(string Id, string Version)>();
-            var diagnosticRules = new Dictionary<string, string>(); // diagnosticId -> severity
+            List<(string Id, string Version)> nugetAnalyzers = new List<(string Id, string Version)>();
+            Dictionary<string, string> diagnosticRules = new Dictionary<string, string>(); // diagnosticId -> severity
 
             // 3. & 4. Download and place files for each package
-            foreach (var package in resolvedPackages)
+            foreach (PackageReference package in resolvedPackages)
             {
                 ct.ThrowIfCancellationRequested();
 
-                var packageFiles = await _source.DownloadPackageFilesAsync(package, ct);
+                Dictionary<string, byte[]> packageFiles = await _source.DownloadPackageFilesAsync(package, ct);
                 await PlacePackageFilesAsync(packageFiles, package, repoRoot, placedFiles, warnings, nugetAnalyzers, diagnosticRules);
             }
 
@@ -75,20 +81,21 @@ public class RestoreEngine
             await GenerateAnalyzersGlobalConfigAsync(repoRoot, nugetAnalyzers, diagnosticRules, placedFiles, warnings);
 
             // 7. Compute checksums and save manifest
-            var checksumManager = new ChecksumManager(sourceFilePath, repoRoot);
-            var manifest = new Dictionary<string, string>();
+            ChecksumManager checksumManager = new ChecksumManager(sourceFilePath, repoRoot);
+            Dictionary<string, string> manifest = new Dictionary<string, string>();
 
             // Add checksums for all placed files
-            foreach (var filePath in placedFiles)
+            foreach (string filePath in placedFiles)
             {
                 try
                 {
-                    var fileBytes = await File.ReadAllBytesAsync(filePath, ct);
-                    var checksum = ChecksumManager.ComputeSha256FromBytes(fileBytes);
-                    var relativePath = Path.GetRelativePath(repoRoot, filePath);
+                    byte[] fileBytes = await File.ReadAllBytesAsync(filePath, ct);
+                    string checksum = ChecksumManager.ComputeSha256FromBytes(fileBytes);
+                    string relativePath = Path.GetRelativePath(repoRoot, filePath);
                     manifest[relativePath] = checksum;
                 }
-                catch (Exception ex)
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException
+                    or SecurityException or CryptographicException)
                 {
                     warnings.Add($"Failed to compute checksum for {filePath}: {ex.Message}");
                 }
@@ -98,22 +105,20 @@ public class RestoreEngine
 
             return new RestoreResult
             {
-                Success = true,
+                IsSuccessful = true,
                 PackageCount = resolvedPackages.Count,
                 FileCount = placedFiles.Count,
                 PlacedFiles = placedFiles,
                 Warnings = warnings
             };
         }
-        catch (OperationCanceledException)
-        {
-            warnings.Add("Restore operation was cancelled.");
-            return new RestoreResult { PlacedFiles = placedFiles, Warnings = warnings, Success = false };
-        }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException
+            or SecurityException or HttpRequestException or PackageNotFoundException
+            or CircularDependencyException or InvalidOperationException or ArgumentException
+            or FormatException or System.Text.Json.JsonException or YamlDotNet.Core.YamlException)
         {
             warnings.Add($"Restore failed: {ex.Message}");
-            return new RestoreResult { PlacedFiles = placedFiles, Warnings = warnings, Success = false };
+            return new RestoreResult { PlacedFiles = placedFiles, Warnings = warnings, IsSuccessful = false };
         }
     }
 
@@ -134,7 +139,7 @@ public class RestoreEngine
         // in the per-file loop below.
         PlaceInstructions(packageFiles, package, repoRoot, placedFiles, warnings);
 
-        foreach (var (relativePath, content) in packageFiles)
+        foreach ((string? relativePath, byte[]? content) in packageFiles)
         {
             try
             {
@@ -145,7 +150,7 @@ public class RestoreEngine
                     continue;
                 }
 
-                string targetPath = null;
+                string? targetPath = null;
 
                 // Instructions are placed once before this loop (see PlaceInstructions). Skip here.
                 if (relativePath.StartsWith("instructions/", StringComparison.OrdinalIgnoreCase) &&
@@ -157,15 +162,15 @@ public class RestoreEngine
                 else if (relativePath.StartsWith("skills/", StringComparison.OrdinalIgnoreCase) &&
                          relativePath.EndsWith(".md", StringComparison.OrdinalIgnoreCase))
                 {
-                    var skillsDir = Path.Combine(repoRoot, ".github", "skills", package.PackageName);
+                    string skillsDir = Path.Combine(repoRoot, ".github", "skills", package.PackageName);
                     Directory.CreateDirectory(skillsDir);
                     targetPath = Path.Combine(skillsDir, "SKILL.md");
 
                     // Append to existing file if it exists
                     if (File.Exists(targetPath))
                     {
-                        var existingContent = await File.ReadAllBytesAsync(targetPath);
-                        var newContent = Encoding.UTF8.GetString(existingContent) + "\n\n" + Encoding.UTF8.GetString(content);
+                        byte[] existingContent = await File.ReadAllBytesAsync(targetPath);
+                        string newContent = Encoding.UTF8.GetString(existingContent) + "\n\n" + Encoding.UTF8.GetString(content);
                         await File.WriteAllBytesAsync(targetPath, Encoding.UTF8.GetBytes(newContent));
                     }
                     else
@@ -178,9 +183,9 @@ public class RestoreEngine
                           relativePath.StartsWith("checks/analyzers/", StringComparison.OrdinalIgnoreCase)) &&
                          relativePath.EndsWith(".dll", StringComparison.OrdinalIgnoreCase))
                 {
-                    var analyzersDir = Path.Combine(repoRoot, ".cop", "analyzers");
+                    string analyzersDir = Path.Combine(repoRoot, ".cop", "analyzers");
                     Directory.CreateDirectory(analyzersDir);
-                    var fileName = Path.GetFileName(relativePath);
+                    string fileName = Path.GetFileName(relativePath);
                     targetPath = Path.Combine(analyzersDir, fileName);
                     await File.WriteAllBytesAsync(targetPath, content);
                 }
@@ -188,7 +193,7 @@ public class RestoreEngine
                 else if (relativePath.Equals("src/nuget-analyzers.yaml", StringComparison.OrdinalIgnoreCase) ||
                          relativePath.Equals("checks/nuget-analyzers.yaml", StringComparison.OrdinalIgnoreCase))
                 {
-                    var yamlContent = Encoding.UTF8.GetString(content);
+                    string yamlContent = Encoding.UTF8.GetString(content);
                     ParseNuGetAnalyzersYaml(yamlContent, nugetAnalyzers, warnings);
                     continue; // Don't place this file
                 }
@@ -196,32 +201,35 @@ public class RestoreEngine
                 else if (relativePath.Equals("src/rules.yaml", StringComparison.OrdinalIgnoreCase) ||
                          relativePath.Equals("checks/rules.yaml", StringComparison.OrdinalIgnoreCase))
                 {
-                    var rulesDir = Path.Combine(repoRoot, ".cop", "rules");
+                    string rulesDir = Path.Combine(repoRoot, ".cop", "rules");
                     Directory.CreateDirectory(rulesDir);
                     targetPath = Path.Combine(rulesDir, $"{package.PackageName}.rules.yaml");
                     await File.WriteAllBytesAsync(targetPath, content);
-                    
+
                     // Parse rules to extract diagnostic IDs
-                    var rulesContent = Encoding.UTF8.GetString(content);
+                    string rulesContent = Encoding.UTF8.GetString(content);
                     ParseRulesYaml(rulesContent, diagnosticRules, warnings);
                 }
                 // Check files: checks/*.cop → .cop/checks/{packageName}.{filename} (legacy)
                 else if (relativePath.StartsWith("checks/", StringComparison.OrdinalIgnoreCase) &&
                          relativePath.EndsWith(".cop", StringComparison.OrdinalIgnoreCase))
                 {
-                    var checksDir = Path.Combine(repoRoot, ".cop", "checks");
+                    string checksDir = Path.Combine(repoRoot, ".cop", "checks");
                     Directory.CreateDirectory(checksDir);
-                    var fileName = Path.GetFileName(relativePath);
+                    string fileName = Path.GetFileName(relativePath);
                     targetPath = Path.Combine(checksDir, $"{package.PackageName}.{fileName}");
                     await File.WriteAllBytesAsync(targetPath, content);
                 }
                 // Other files → .cop/packages/{packageName}/{relativePath}
                 else
                 {
-                    var packageDir = Path.Combine(repoRoot, ".cop", "packages", package.PackageName);
+                    string packageDir = Path.Combine(repoRoot, ".cop", "packages", package.PackageName);
                     targetPath = ValidatePackagePath(relativePath, packageDir);
-                    var targetDir = Path.GetDirectoryName(targetPath);
-                    Directory.CreateDirectory(targetDir);
+                    string? targetDir = Path.GetDirectoryName(targetPath);
+                    if (targetDir is not null)
+                    {
+                        Directory.CreateDirectory(targetDir);
+                    }
                     await File.WriteAllBytesAsync(targetPath, content);
                 }
 
@@ -230,7 +238,8 @@ public class RestoreEngine
                     placedFiles.Add(targetPath);
                 }
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException
+                or SecurityException or ArgumentException)
             {
                 warnings.Add($"Failed to place file {relativePath} from package {package.PackageName}: {ex.Message}");
             }
@@ -250,31 +259,41 @@ public class RestoreEngine
     {
         try
         {
-            var instructionFiles = packageFiles
+            List<(string, string)> instructionFiles = packageFiles
                 .Where(kv => kv.Key.StartsWith("instructions/", StringComparison.OrdinalIgnoreCase)
                           && kv.Key.EndsWith(".md", StringComparison.OrdinalIgnoreCase))
                 .Select(kv => (Path.GetFileName(kv.Key), Encoding.UTF8.GetString(kv.Value)))
                 .ToList();
 
             if (instructionFiles.Count == 0)
+            {
                 return;
+            }
 
-            var applyTo = string.Empty;
-            var metaEntry = packageFiles.FirstOrDefault(kv =>
+            string applyTo = string.Empty;
+            KeyValuePair<string, byte[]> metaEntry = packageFiles.FirstOrDefault(kv =>
                 kv.Key.Equals(PackageMetadata.MetadataFileName, StringComparison.OrdinalIgnoreCase));
             if (metaEntry.Value != null)
             {
                 try { applyTo = PackageMetadata.ParseFromJson(Encoding.UTF8.GetString(metaEntry.Value)).ApplyTo; }
-                catch { /* fall back to default ** */ }
+                catch (Exception exception) when (exception is System.Text.Json.JsonException
+                    or ArgumentException)
+                {
+                    warnings.Add(
+                        $"Cannot read instruction metadata for {package.PackageName}: {exception.Message}");
+                }
             }
 
-            var targetPath = InstructionPlacement.Place(
+            string? targetPath = InstructionPlacement.Place(
                 repoRoot, package.PackageName, applyTo, instructionFiles, out _);
 
             if (targetPath != null && !placedFiles.Contains(targetPath))
+            {
                 placedFiles.Add(targetPath);
+            }
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException
+            or SecurityException or ArgumentException)
         {
             warnings.Add($"Failed to place instructions from package {package.PackageName}: {ex.Message}");
         }
@@ -287,22 +306,22 @@ public class RestoreEngine
     {
         try
         {
-            var targetsDir = Path.Combine(repoRoot, ".cop");
+            string targetsDir = Path.Combine(repoRoot, ".cop");
             Directory.CreateDirectory(targetsDir);
-            var targetsPath = Path.Combine(targetsDir, "Directory.Build.targets");
+            string targetsPath = Path.Combine(targetsDir, "Directory.Build.targets");
 
-            var sb = new StringBuilder();
+            StringBuilder sb = new StringBuilder();
             sb.AppendLine("<Project>");
             sb.AppendLine("  <ItemGroup>");
             sb.AppendLine("    <!-- Analyzer references from cop packages -->");
 
             // Find all DLL files in .cop/analyzers
-            var analyzersDir = Path.Combine(repoRoot, ".cop", "analyzers");
+            string analyzersDir = Path.Combine(repoRoot, ".cop", "analyzers");
             if (Directory.Exists(analyzersDir))
             {
-                foreach (var dllFile in Directory.GetFiles(analyzersDir, "*.dll"))
+                foreach (string dllFile in Directory.GetFiles(analyzersDir, "*.dll"))
                 {
-                    var relativePath = Path.GetRelativePath(targetsDir, dllFile);
+                    string relativePath = Path.GetRelativePath(targetsDir, dllFile);
                     // Normalize to forward slashes for MSBuild
                     relativePath = relativePath.Replace("\\", "/");
                     sb.AppendLine($"    <Analyzer Include=\"{relativePath}\" />");
@@ -312,11 +331,12 @@ public class RestoreEngine
             sb.AppendLine("  </ItemGroup>");
             sb.AppendLine("</Project>");
 
-            var content = sb.ToString();
+            string content = sb.ToString();
             await File.WriteAllTextAsync(targetsPath, content);
             placedFiles.Add(targetsPath);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException
+            or SecurityException)
         {
             warnings.Add($"Failed to generate Directory.Build.targets: {ex.Message}");
         }
@@ -334,25 +354,26 @@ public class RestoreEngine
     {
         try
         {
-            var copDir = Path.Combine(repoRoot, ".cop");
+            string copDir = Path.Combine(repoRoot, ".cop");
             Directory.CreateDirectory(copDir);
-            var globalConfigPath = Path.Combine(copDir, "analyzers.globalconfig");
+            string globalConfigPath = Path.Combine(copDir, "analyzers.globalconfig");
 
-            var sb = new StringBuilder();
+            StringBuilder sb = new StringBuilder();
             sb.AppendLine("is_global = true");
             sb.AppendLine();
             sb.AppendLine("# Analyzer severity overrides from cop packages");
 
-            foreach (var (diagnosticId, severity) in diagnosticRules.OrderBy(x => x.Key))
+            foreach ((string? diagnosticId, string? severity) in diagnosticRules.OrderBy(x => x.Key))
             {
                 sb.AppendLine($"dotnet_diagnostic.{diagnosticId}.severity = {severity}");
             }
 
-            var content = sb.ToString();
+            string content = sb.ToString();
             await File.WriteAllTextAsync(globalConfigPath, content);
             placedFiles.Add(globalConfigPath);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException
+            or SecurityException)
         {
             warnings.Add($"Failed to generate analyzers.globalconfig: {ex.Message}");
         }
@@ -369,22 +390,22 @@ public class RestoreEngine
     {
         try
         {
-            var deserializer = new DeserializerBuilder().Build();
-            var yaml = deserializer.Deserialize<Dictionary<object, object>>(yamlContent);
+            IDeserializer deserializer = new DeserializerBuilder().Build();
+            Dictionary<object, object> yaml = deserializer.Deserialize<Dictionary<object, object>>(yamlContent);
 
-            if (yaml != null && yaml.TryGetValue("analyzers", out var analyzersObj))
+            if (yaml != null && yaml.TryGetValue("analyzers", out object? analyzersObj))
             {
                 if (analyzersObj is List<object> analyzersList)
                 {
-                    foreach (var analyzer in analyzersList)
+                    foreach (object analyzer in analyzersList)
                     {
                         if (analyzer is Dictionary<object, object> analyzerDict)
                         {
-                            if (analyzerDict.TryGetValue("id", out var idObj) &&
-                                analyzerDict.TryGetValue("version", out var versionObj))
+                            if (analyzerDict.TryGetValue("id", out object? idObj) &&
+                                analyzerDict.TryGetValue("version", out object? versionObj))
                             {
-                                var id = idObj?.ToString();
-                                var version = versionObj?.ToString();
+                                string? id = idObj?.ToString();
+                                string? version = versionObj?.ToString();
                                 if (!string.IsNullOrEmpty(id) && !string.IsNullOrEmpty(version))
                                 {
                                     nugetAnalyzers.Add((id, version));
@@ -395,7 +416,7 @@ public class RestoreEngine
                 }
             }
         }
-        catch (Exception ex)
+        catch (YamlDotNet.Core.YamlException ex)
         {
             // A malformed nuget-analyzers.yaml must not silently produce zero analyzers — surface it.
             warnings.Add($"Failed to parse nuget-analyzers.yaml: {ex.Message}");
@@ -408,40 +429,58 @@ public class RestoreEngine
     /// </summary>
     private void ParseRulesYaml(string yamlContent, Dictionary<string, string> diagnosticRules, List<string> warnings)
     {
-        try
+        // Parsing is bounds-checked throughout; unexpected implementation errors must
+        // propagate rather than turning a broken parser into an empty rule configuration.
+        foreach (string rawLine in yamlContent.Split('\n'))
         {
-            // Hand-written parsing for diagnostic severity rules.
-            // Equivalent to: dotnet_diagnostic.{id} = {value}  (id = [A-Za-z0-9]+, case-insensitive marker),
-            // where {value} is the remainder of the line.
-            foreach (var rawLine in yamlContent.Split('\n'))
+            const string marker = "dotnet_diagnostic.";
+            int idx = rawLine.IndexOf(marker, StringComparison.OrdinalIgnoreCase);
+            if (idx < 0)
             {
-                const string marker = "dotnet_diagnostic.";
-                int idx = rawLine.IndexOf(marker, StringComparison.OrdinalIgnoreCase);
-                if (idx < 0) continue;
-
-                int p = idx + marker.Length;
-                int idStart = p;
-                while (p < rawLine.Length && rawLine[p] is (>= 'a' and <= 'z') or (>= 'A' and <= 'Z') or (>= '0' and <= '9')) p++;
-                if (p == idStart) continue;
-                var id = rawLine.Substring(idStart, p - idStart).Trim();
-
-                while (p < rawLine.Length && char.IsWhiteSpace(rawLine[p])) p++;
-                if (p >= rawLine.Length || rawLine[p] != '=') continue;
-                p++;
-                while (p < rawLine.Length && char.IsWhiteSpace(rawLine[p])) p++;
-                if (p >= rawLine.Length) continue;
-
-                var severity = rawLine.Substring(p).Trim();
-                if (!diagnosticRules.ContainsKey(id))
-                {
-                    diagnosticRules[id] = severity;
-                }
+                continue;
             }
-        }
-        catch (Exception ex)
-        {
-            // A malformed rules.yaml must not silently produce zero rule overrides — surface it.
-            warnings.Add($"Failed to parse rules.yaml: {ex.Message}");
+
+            int p = idx + marker.Length;
+            int idStart = p;
+            while (p < rawLine.Length && rawLine[p] is (>= 'a' and <= 'z')
+                or (>= 'A' and <= 'Z') or (>= '0' and <= '9'))
+            {
+                p++;
+            }
+
+            if (p == idStart)
+            {
+                continue;
+            }
+
+            string id = rawLine.Substring(idStart, p - idStart).Trim();
+
+            while (p < rawLine.Length && char.IsWhiteSpace(rawLine[p]))
+            {
+                p++;
+            }
+
+            if (p >= rawLine.Length || rawLine[p] != '=')
+            {
+                continue;
+            }
+
+            p++;
+            while (p < rawLine.Length && char.IsWhiteSpace(rawLine[p]))
+            {
+                p++;
+            }
+
+            if (p >= rawLine.Length)
+            {
+                continue;
+            }
+
+            string severity = rawLine.Substring(p).Trim();
+            if (!diagnosticRules.ContainsKey(id))
+            {
+                diagnosticRules[id] = severity;
+            }
         }
     }
 
@@ -453,8 +492,8 @@ public class RestoreEngine
     {
         // Anchor on the REAL base directory (not a CWD-relative dummy, which made the check depend
         // on the process working directory). The combined path must stay within baseDir.
-        var fullBase = Path.GetFullPath(baseDir);
-        var combined = Path.GetFullPath(Path.Combine(fullBase, relativePath));
+        string fullBase = Path.GetFullPath(baseDir);
+        string combined = Path.GetFullPath(Path.Combine(fullBase, relativePath));
 
         if (!combined.StartsWith(fullBase + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase) &&
             !combined.Equals(fullBase, StringComparison.OrdinalIgnoreCase))
@@ -463,41 +502,5 @@ public class RestoreEngine
         }
 
         return Path.Combine(baseDir, relativePath);
-    }
-}
-
-/// <summary>
-/// Result of a restore operation.
-/// </summary>
-public class RestoreResult
-{
-    /// <summary>
-    /// Number of packages processed.
-    /// </summary>
-    public int PackageCount { get; init; }
-
-    /// <summary>
-    /// Number of files placed.
-    /// </summary>
-    public int FileCount { get; init; }
-
-    /// <summary>
-    /// List of files placed during restore.
-    /// </summary>
-    public List<string> PlacedFiles { get; init; } = [];
-
-    /// <summary>
-    /// Warnings encountered during restore.
-    /// </summary>
-    public List<string> Warnings { get; init; } = [];
-
-    /// <summary>
-    /// Whether the restore succeeded.
-    /// </summary>
-    public bool Success { get; init; }
-
-    public override string ToString()
-    {
-        return $"Restored {PackageCount} packages, placed {FileCount} files.";
     }
 }

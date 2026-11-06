@@ -43,7 +43,7 @@ public class QueryableCollectionTests
     }
 
     [Test]
-    public void Materialize_CallsQueryServiceWithFilter()
+    public async Task Materialize_CallsQueryServiceWithFilter()
     {
         var svc = new FakeQueryService();
         var query = new ProviderQuery { RootPath = "/data.json" };
@@ -52,7 +52,7 @@ public class QueryableCollectionTests
         var filter = new PropertyFilter("Enabled", true);
         var filtered = queryable.WithFilter(filter);
 
-        filtered.Materialize();
+        await filtered.MaterializeAsync(cancellationToken: CancellationToken.None);
 
         Assert.That(svc.LastProviderName, Is.EqualTo("json"));
         Assert.That(svc.LastQuery, Is.Not.Null);
@@ -61,7 +61,7 @@ public class QueryableCollectionTests
     }
 
     [Test]
-    public void Enumerate_ReturnsItemsFromMaterialization()
+    public async Task Enumerate_ReturnsItemsFromMaterialization()
     {
         var svc = new FakeQueryService(new CopList([
             new CopString("item1"),
@@ -70,24 +70,24 @@ public class QueryableCollectionTests
         var query = new ProviderQuery { RootPath = "/test.json" };
         var queryable = new CopQueryable("json", query, svc.QueryProvider);
 
-        var items = queryable.Enumerate().ToList();
+        var items = (await queryable.EnumerateAsync(cancellationToken: CancellationToken.None).ToListAsync(cancellationToken: CancellationToken.None));
 
         Assert.That(items, Has.Count.EqualTo(2));
-        Assert.That(items[0].Display(), Is.EqualTo("item1"));
+        Assert.That((await items[0].DisplayAsync(cancellationToken: CancellationToken.None)), Is.EqualTo("item1"));
     }
 
     [Test]
-    public void CoerceToEnumerable_MaterializesQueryable()
+    public async Task CoerceToEnumerable_MaterializesQueryable()
     {
         // CopQueryable should work anywhere a collection is expected
         var svc = new FakeQueryService(new CopList([new CopString("a")]));
         var queryable = new CopQueryable("json", new ProviderQuery { RootPath = "/t" }, svc.QueryProvider);
 
         // Display shows it's queryable (not yet materialized)
-        Assert.That(queryable.Display(), Does.Contain("queryable"));
+        Assert.That((await queryable.DisplayAsync(cancellationToken: CancellationToken.None)), Does.Contain("queryable"));
 
         // Enumerate materializes
-        var items = queryable.Enumerate().ToList();
+        var items = (await queryable.EnumerateAsync(cancellationToken: CancellationToken.None).ToListAsync(cancellationToken: CancellationToken.None));
         Assert.That(items, Has.Count.EqualTo(1));
         Assert.That(svc.QueryCount, Is.EqualTo(1));
     }
@@ -103,7 +103,7 @@ public class QueryableCollectionTests
     }
 
     [Test]
-    public void EvalFilter_UserPredicateOverQueryable_PushesItsBodyNotItsName()
+    public async Task EvalFilter_UserPredicateOverQueryable_PushesItsBodyNotItsName()
     {
         // Regression (#33): translate the body, not a nonexistent 'canVote' provider field.
         CopValue Person(string name, int age) => new CopObject(
@@ -119,8 +119,8 @@ public class QueryableCollectionTests
             """, "test.cop");
         var evaluator = new Evaluator(ffi, "test.cop");
         evaluator.GlobalEnvironment.Define("people", queryable);
-        evaluator.EvalModule(module);
-        var result = evaluator.RunCommand("main");
+        await evaluator.EvalModuleAsync(module, cancellationToken: CancellationToken.None);
+        var result = (await evaluator.RunCommandAsync("main", cancellationToken: CancellationToken.None));
 
         Assert.That(result, Is.InstanceOf<CopInt>());
         Assert.That(((CopInt)result).Value, Is.EqualTo(1), "only Ada (age 36) should pass canVote");
@@ -130,7 +130,7 @@ public class QueryableCollectionTests
 
     [TestCase(false)]
     [TestCase(true)]
-    public void PackagePredicate_OnQueryableProperty_PreservesMatchingObjects(bool negated)
+    public async Task PackagePredicate_OnQueryableProperty_PreservesMatchingObjects(bool negated)
     {
         var blob = new CopObject(new Dictionary<string, CopValue> { ["Name"] = new CopString("BlobClient") });
         var queue = new CopObject(new Dictionary<string, CopValue> { ["Name"] = new CopString("QueueClient") });
@@ -141,15 +141,15 @@ public class QueryableCollectionTests
         var clients = new CopQueryable("fixture", new ProviderQuery { RootPath = "." }, svc.QueryProvider);
         evaluator.GlobalEnvironment.Define("names", new CopQueryableProperty(clients, "Name"));
         var not = negated ? "!" : "";
-        evaluator.EvalModule(CopParser.Parse(
-            $"command MAIN = names:{not}sameAs('blob_client')", "test.cop"));
+        await evaluator.EvalModuleAsync(CopParser.Parse(
+            $"command MAIN = names:{not}sameAs('blob_client')", "test.cop"), cancellationToken: CancellationToken.None);
 
-        var result = evaluator.RunCommand("MAIN");
+        var result = (await evaluator.RunCommandAsync("MAIN", cancellationToken: CancellationToken.None));
 
         var items = result switch
         {
             CopList list => list.Items,
-            CopLazyCollection lazy => lazy.Enumerate().ToArray(),
+            CopLazyCollection lazy => (await lazy.EnumerateAsync(cancellationToken: CancellationToken.None).ToArrayAsync(cancellationToken: CancellationToken.None)),
             _ => throw new AssertionException($"Expected a collection, got {result.GetType().Name}.")
         };
         Assert.That(items, Is.EqualTo(new[] { negated ? queue : blob }));
@@ -163,7 +163,7 @@ public class QueryableCollectionTests
     [TestCase("items.Where(item.Name == 'Alpha')", "Last.Name", "Alpha")]
     [TestCase("items.Where(item.Name == 'Missing')", "Last", null)]
     [TestCase("items.Where(item.Name == 'Missing')", "last", null)]
-    public void Last_OnDeferredCollections_ReturnsExactElementOrNull(string source, string terminal, string? expected)
+    public async Task Last_OnDeferredCollections_ReturnsExactElementOrNull(string source, string terminal, string? expected)
     {
         CopValue Named(string name) => new CopObject(
             new Dictionary<string, CopValue> { ["Name"] = new CopString(name) });
@@ -173,17 +173,17 @@ public class QueryableCollectionTests
         var evaluator = new Evaluator(ffi);
         evaluator.GlobalEnvironment.Define("items",
             new CopQueryable("fixture", new ProviderQuery { RootPath = "." }, svc.QueryProvider));
-        evaluator.EvalModule(CopParser.Parse($"let selected = {source}\ncommand MAIN = selected.{terminal}", "last.cop"));
+        await evaluator.EvalModuleAsync(CopParser.Parse($"let selected = {source}\ncommand MAIN = selected.{terminal}", "last.cop"), cancellationToken: CancellationToken.None);
         Assert.That(svc.QueryCount, Is.EqualTo(0));
 
-        var result = evaluator.RunCommand("MAIN");
+        var result = (await evaluator.RunCommandAsync("MAIN", cancellationToken: CancellationToken.None));
 
         if (expected is null)
             Assert.That(result, Is.SameAs(CopNull.Instance));
         else
             Assert.That(result, Is.InstanceOf<CopString>().And.Property(nameof(CopString.Value)).EqualTo(expected));
         Assert.That(svc.QueryCount, Is.EqualTo(1));
-        Assert.That(evaluator.RunCommand("MAIN"), Is.EqualTo(result));
+        Assert.That((await evaluator.RunCommandAsync("MAIN", cancellationToken: CancellationToken.None)), Is.EqualTo(result));
         Assert.That(svc.QueryCount, Is.EqualTo(1));
     }
 
@@ -199,12 +199,13 @@ public class QueryableCollectionTests
             _result = result ?? new CopList([]);
         }
 
-        public CopValue QueryProvider(string providerName, ProviderQuery query)
+        public ValueTask<CopValue> QueryProvider(string providerName, ProviderQuery query,
+            CancellationToken cancellationToken = default)
         {
             QueryCount++;
             LastProviderName = providerName;
             LastQuery = query;
-            return _result;
+            return ValueTask.FromResult(_result);
         }
     }
 }

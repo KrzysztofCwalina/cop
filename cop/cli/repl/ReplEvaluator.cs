@@ -1,3 +1,6 @@
+// Maintains evaluation state and expression handling for interactive Cop sessions.
+
+using System.Text;
 using Cop.Lang;
 using Cop.Lang.Ast;
 using Cop.Providers;
@@ -19,28 +22,38 @@ public class ReplEvaluator
     /// <summary>
     /// Evaluates a line of REPL input and returns the output lines to display.
     /// </summary>
-    public List<string> Evaluate(string input)
+    public async ValueTask<List<string>> EvaluateAsync(
+        string input, CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         input = input.Trim();
         if (string.IsNullOrEmpty(input))
+        {
             return [];
+        }
 
         // Line reference: <N>! — evaluate line N from main.cop
         if (TryParseLineReference(input, out int lineNumber))
-            return EvaluateLineFromMainCop(lineNumber);
+        {
+            return await EvaluateLineFromMainCopAsync(lineNumber, cancellationToken);
+        }
 
         // Try as command name
-        var commandResult = TryEvaluateCommand(input);
+        List<string>? commandResult = await TryEvaluateCommandAsync(input, cancellationToken);
         if (commandResult is not null)
+        {
             return commandResult;
+        }
 
         // Try as let binding name (simple identifier)
-        var letResult = TryEvaluateLetBinding(input);
+        List<string>? letResult = await TryEvaluateLetBindingAsync(input, cancellationToken);
         if (letResult is not null)
+        {
             return letResult;
+        }
 
         // Try as ad-hoc expression
-        return EvaluateExpression(input);
+        return await EvaluateExpressionAsync(input, cancellationToken);
     }
 
     private static bool TryParseLineReference(string input, out int lineNumber)
@@ -48,62 +61,87 @@ public class ReplEvaluator
         lineNumber = 0;
         // Line reference requires trailing '!': "13!" evaluates line 13 from main.cop
         if (input.EndsWith('!') && int.TryParse(input.AsSpan(0, input.Length - 1), out lineNumber))
+        {
             return lineNumber > 0;
+        }
+
         return false;
     }
 
-    private List<string> EvaluateLineFromMainCop(int lineNumber)
+    private async ValueTask<List<string>> EvaluateLineFromMainCopAsync(
+        int lineNumber, CancellationToken cancellationToken)
     {
-        var targetPath = ResolveLineReferenceFile();
+        string? targetPath = ResolveLineReferenceFile();
         if (targetPath is null)
+        {
             return [$"Error: no .cop file found in {_context.ScriptsDir} (need exactly one file, or a main.cop)"];
+        }
 
-        var lines = File.ReadAllLines(targetPath);
+        string[] lines = File.ReadAllLines(targetPath);
         if (lineNumber > lines.Length)
+        {
             return [$"Error: {Path.GetFileName(targetPath)} has only {lines.Length} lines (requested line {lineNumber})"];
+        }
 
-        var line = lines[lineNumber - 1].Trim();
+        string line = lines[lineNumber - 1].Trim();
         if (string.IsNullOrEmpty(line) || line.StartsWith('#') || line.StartsWith("//"))
+        {
             return [$"(line {lineNumber} is empty or a comment)"];
+        }
 
         // If line defines a named command or let binding, evaluate by name
         if (line.StartsWith("let ", StringComparison.Ordinal) || line.StartsWith("export let ", StringComparison.Ordinal))
         {
-            var nameStart = line.IndexOf("let ", StringComparison.Ordinal) + 4;
-            var nameEnd = nameStart;
+            int nameStart = line.IndexOf("let ", StringComparison.Ordinal) + 4;
+            int nameEnd = nameStart;
             while (nameEnd < line.Length && (char.IsLetterOrDigit(line[nameEnd]) || line[nameEnd] == '-' || line[nameEnd] == '_'))
+            {
                 nameEnd++;
-            var name = line[nameStart..nameEnd];
+            }
+
+            string name = line[nameStart..nameEnd];
             if (!string.IsNullOrEmpty(name))
             {
                 // Try as command name first (let X = foreach ... => '...' is a command)
-                var cmdResult = TryEvaluateCommand(name);
-                if (cmdResult is not null) return cmdResult;
+                List<string>? cmdResult = await TryEvaluateCommandAsync(name, cancellationToken);
+                if (cmdResult is not null)
+                {
+                    return cmdResult;
+                }
                 // Then try as let binding
-                var letResult = TryEvaluateLetBinding(name);
-                if (letResult is not null) return letResult;
+                List<string>? letResult = await TryEvaluateLetBindingAsync(name, cancellationToken);
+                if (letResult is not null)
+                {
+                    return letResult;
+                }
             }
         }
         else if (line.StartsWith("command ", StringComparison.Ordinal) || line.StartsWith("export command ", StringComparison.Ordinal))
         {
-            var nameStart = line.IndexOf("command ", StringComparison.Ordinal) + 8;
-            var nameEnd = nameStart;
+            int nameStart = line.IndexOf("command ", StringComparison.Ordinal) + 8;
+            int nameEnd = nameStart;
             while (nameEnd < line.Length && (char.IsLetterOrDigit(line[nameEnd]) || line[nameEnd] == '-' || line[nameEnd] == '_'))
+            {
                 nameEnd++;
-            var name = line[nameStart..nameEnd];
+            }
+
+            string name = line[nameStart..nameEnd];
             if (!string.IsNullOrEmpty(name))
             {
-                var cmdResult = TryEvaluateCommand(name);
-                if (cmdResult is not null) return cmdResult;
+                List<string>? cmdResult = await TryEvaluateCommandAsync(name, cancellationToken);
+                if (cmdResult is not null)
+                {
+                    return cmdResult;
+                }
             }
         }
 
         // For multi-line constructs (e.g., object literals starting with '{'), gather
         // all lines until braces balance.
-        var snippet = GatherBalancedBlock(lines, lineNumber - 1);
+        string snippet = GatherBalancedBlock(lines, lineNumber - 1);
 
         // Otherwise evaluate as raw expression
-        return EvaluateExpression(snippet);
+        return await EvaluateExpressionAsync(snippet, cancellationToken);
     }
 
     /// <summary>
@@ -112,26 +150,40 @@ public class ReplEvaluator
     /// </summary>
     private static string GatherBalancedBlock(string[] lines, int startIndex)
     {
-        var first = lines[startIndex].Trim();
+        string first = lines[startIndex].Trim();
         int braceDepth = 0;
         foreach (char c in first)
         {
-            if (c == '{') braceDepth++;
-            else if (c == '}') braceDepth--;
+            if (c == '{')
+            {
+                braceDepth++;
+            }
+            else if (c == '}')
+            {
+                braceDepth--;
+            }
         }
 
         if (braceDepth <= 0)
+        {
             return first;
+        }
 
         // Gather subsequent lines until braces balance
-        var sb = new System.Text.StringBuilder(first);
+        StringBuilder sb = new System.Text.StringBuilder(first);
         for (int i = startIndex + 1; i < lines.Length && braceDepth > 0; i++)
         {
             sb.Append(' ').Append(lines[i].Trim());
             foreach (char c in lines[i])
             {
-                if (c == '{') braceDepth++;
-                else if (c == '}') braceDepth--;
+                if (c == '{')
+                {
+                    braceDepth++;
+                }
+                else if (c == '}')
+                {
+                    braceDepth--;
+                }
             }
         }
 
@@ -145,49 +197,60 @@ public class ReplEvaluator
     /// </summary>
     private string? ResolveLineReferenceFile()
     {
-        var topLevelFiles = Directory.GetFiles(_context.ScriptsDir, "*.cop", SearchOption.TopDirectoryOnly);
+        string[] topLevelFiles = Directory.GetFiles(_context.ScriptsDir, "*.cop", SearchOption.TopDirectoryOnly);
         if (topLevelFiles.Length == 1)
+        {
             return topLevelFiles[0];
+        }
 
-        var mainCopPath = Path.Combine(_context.ScriptsDir, "main.cop");
+        string mainCopPath = Path.Combine(_context.ScriptsDir, "main.cop");
         return File.Exists(mainCopPath) ? mainCopPath : null;
     }
 
-    private List<string>? TryEvaluateCommand(string input)
+    private async ValueTask<List<string>?> TryEvaluateCommandAsync(
+        string input, CancellationToken cancellationToken)
     {
-        var hasCommand = _context.Modules
+        bool hasCommand = _context.Modules
             .SelectMany(m => m.Module.Declarations)
             .Any(d => (d is CommandDecl cmd && string.Equals(cmd.Name, input, StringComparison.OrdinalIgnoreCase))
                    || (d is FunctionDecl f && f.IsCommand && string.Equals(f.Name, input, StringComparison.OrdinalIgnoreCase)));
 
         if (!hasCommand)
+        {
             return null;
+        }
 
-        EnsureProviders();
+        await Engine.LoadProvidersAsync(_context, cancellationToken);
         return RunWithCommand(input);
     }
 
-    private List<string>? TryEvaluateLetBinding(string input)
+    private async ValueTask<List<string>?> TryEvaluateLetBindingAsync(
+        string input, CancellationToken cancellationToken)
     {
         if (input.Contains(':') || input.Contains('.') || input.Contains('(') || input.Contains(' '))
+        {
             return null;
+        }
 
-        var letDecl = _context.Modules
+        LetDecl? letDecl = _context.Modules
             .SelectMany(m => m.Module.Declarations)
             .OfType<LetDecl>()
             .FirstOrDefault(l => string.Equals(l.Name, input, StringComparison.OrdinalIgnoreCase));
 
         if (letDecl is null)
+        {
             return null;
+        }
 
-        EnsureProviders();
-        var snippet = $"foreach {input} => '{{item}}'";
+        await Engine.LoadProvidersAsync(_context, cancellationToken);
+        string snippet = $"foreach {input} => '{{item}}'";
         return EvaluateSnippet(snippet);
     }
 
-    private List<string> EvaluateExpression(string input)
+    private async ValueTask<List<string>> EvaluateExpressionAsync(
+        string input, CancellationToken cancellationToken)
     {
-        EnsureProviders();
+        await Engine.LoadProvidersAsync(_context, cancellationToken);
         return EvaluateSnippet(input);
     }
 
@@ -208,30 +271,29 @@ public class ReplEvaluator
     }
 
 
-    private void EnsureProviders()
-    {
-        if (!_context.ProvidersLoaded)
-            Engine.LoadProviders(_context);
-    }
-
     /// <summary>
     /// Gets all available identifiers for completion: commands, lets, collections.
     /// </summary>
     public List<string> GetCompletionCandidates()
     {
-        EnsureProviders();
-        var candidates = new List<string>();
+        List<string> candidates = new List<string>();
 
-        foreach (var module in _context.Modules)
+        foreach (Engine.ParsedModule module in _context.Modules)
         {
-            foreach (var decl in module.Module.Declarations)
+            foreach (Declaration decl in module.Module.Declarations)
             {
                 if (decl is CommandDecl cmd)
+                {
                     candidates.Add(cmd.Name);
+                }
                 else if (decl is FunctionDecl f && f.IsCommand)
+                {
                     candidates.Add(f.Name);
+                }
                 else if (decl is LetDecl let)
+                {
                     candidates.Add(let.Name);
+                }
             }
         }
 
@@ -261,8 +323,12 @@ public class ReplEvaluator
     /// </summary>
     public List<string> GetPropertyNames(string typeName)
     {
-        var descriptor = _context.TypeRegistry.GetType(typeName);
-        if (descriptor is null) return [];
+        TypeDescriptor? descriptor = _context.TypeRegistry.GetType(typeName);
+        if (descriptor is null)
+        {
+            return [];
+        }
+
         return descriptor.Properties.Keys.OrderBy(s => s).ToList();
     }
 
@@ -287,7 +353,6 @@ public class ReplEvaluator
     /// </summary>
     public List<string> GetNamespaceCollections(string ns)
     {
-        EnsureProviders();
         return _context.TypeRegistry.GetNamespaceCollections(ns);
     }
 }

@@ -1,38 +1,50 @@
+// Executes Cop test declarations and reports assertion results.
+
 using System.CommandLine;
 using Cop.Lang;
 using Cop.Providers;
 
 namespace Cop.Cli.Commands;
 
+/// <summary>Runs Cop test declarations and reports their assertion outcomes.</summary>
 public static class TestCommand
 {
+    /// <summary>
+    /// Creates the test command with source selection and diagnostic options.
+    /// </summary>
     public static Command Create()
     {
-        var fileArg = new Argument<string>("file")
+        Argument<string> fileArg = new Argument<string>("file")
         {
             Arity = ArgumentArity.ZeroOrOne,
             Description = ".cop file or directory containing test files"
         };
-        var diagOption = new Option<bool>("-d") { Description = "Print diagnostic timing to stderr" };
-        var command = new Command("test", "Run ASSERT commands in .cop files and report results")
+        Option<bool> diagOption = new Option<bool>("-d") { Description = "Print diagnostic timing to stderr" };
+        Command command = new Command("test", "Run ASSERT commands in .cop files and report results")
         {
             fileArg,
             diagOption
         };
-        command.SetAction(parseResult => Execute(
+        command.SetAction(parseResult => ExecuteAsync(
             parseResult.GetValue(fileArg),
-            parseResult.GetValue(diagOption)));
+            parseResult.GetValue(diagOption)
+                ? message => Console.Error.WriteLine(RunCommand.ColorDiagLine(message))
+                : null));
         return command;
     }
 
-    public static int Execute(string? fileOrDir, bool diag = false)
+    /// <summary>
+    /// Executes tests in the selected source and returns their overall status.
+    /// </summary>
+    public static async Task<int> ExecuteAsync(
+        string? fileOrDir, Action<string>? diagnosticLog = null)
     {
         string scriptsDir;
         string rootPath;
 
         if (fileOrDir != null && fileOrDir.EndsWith(".cop", StringComparison.OrdinalIgnoreCase))
         {
-            var spec = new FileInfo(fileOrDir);
+            FileInfo spec = new FileInfo(fileOrDir);
             if (!spec.Exists) { Console.Error.WriteLine($"Error: File '{spec.FullName}' not found"); return 2; }
             scriptsDir = spec.DirectoryName ?? Directory.GetCurrentDirectory();
             rootPath = scriptsDir;
@@ -43,20 +55,28 @@ public static class TestCommand
             rootPath = scriptsDir;
         }
 
-        Action<string>? diagLog = diag ? msg => Console.Error.WriteLine(RunCommand.ColorDiagLine(msg)) : null;
-        var result = Engine.Run(scriptsDir, rootPath, diagLog: diagLog, assertMode: true);
+        EngineResult result = await Engine.RunAsync(scriptsDir, rootPath, new EngineRunOptions
+        {
+            DiagnosticLog = diagnosticLog,
+            IsAssertMode = true,
+        });
 
-        foreach (var error in result.ParseErrors)
+        foreach (string error in result.ParseErrors)
+        {
             Console.Error.WriteLine(error);
+        }
 
         if (result.HasFatalErrors)
         {
-            foreach (var error in result.Errors)
+            foreach (string error in result.Errors)
+            {
                 Console.Error.WriteLine(error);
+            }
+
             return 2;
         }
 
-        var asserts = result.Asserts ?? [];
+        List<AssertResult> asserts = result.Asserts ?? [];
         if (asserts.Count == 0)
         {
             Console.Error.WriteLine("No ASSERT commands found.");
@@ -64,7 +84,7 @@ public static class TestCommand
         }
 
         int passed = 0, failed = 0;
-        foreach (var assert in asserts)
+        foreach (AssertResult assert in asserts)
         {
             if (assert.Passed)
             {

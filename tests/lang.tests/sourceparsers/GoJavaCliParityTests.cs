@@ -47,8 +47,7 @@ public class GoJavaCliParityTests
             string? first = null;
             for (int attempt = 0; attempt < 2; attempt++)
             {
-                var result = await ToolchainProcess.RunAsync(dotnet, [cli, script, "-t", target], root,
-                    timeout: TimeSpan.FromSeconds(30), environment: environment);
+                var result = await ToolchainProcess.RunAsync(new Cop.Core.ToolchainCommand(dotnet, [cli, script, "-t", target], root, environment), new Cop.Core.ToolchainRunOptions { Timeout = TimeSpan.FromSeconds(30) });
                 string output = System.Text.RegularExpressions.Regex.Replace(
                     result.StandardOutput + result.StandardError, @"\x1b\[[0-9;]*m", "");
                 Assert.That(result.ExitCode, Is.EqualTo(1), output);
@@ -114,14 +113,12 @@ public class GoJavaCliParityTests
                 }
                 """;
             File.WriteAllText(source, positive);
-            var verify = await ToolchainProcess.RunAsync(dotnet, [cli, "verify", checks], root,
-                timeout: TimeSpan.FromSeconds(30), environment: environment);
+            var verify = await ToolchainProcess.RunAsync(new Cop.Core.ToolchainCommand(dotnet, [cli, "verify", checks], root, environment), new Cop.Core.ToolchainRunOptions { Timeout = TimeSpan.FromSeconds(30) });
             Assert.That(verify.Status, Is.EqualTo(ToolchainStatus.Success), verify.StandardOutput + verify.StandardError);
             ToolchainResult? first = null;
             for (int attempt = 0; attempt < 2; attempt++)
             {
-                var result = await ToolchainProcess.RunAsync(dotnet, [cli, script, "-t", target, "-c", "MAIN,COUNTS"], root,
-                    timeout: TimeSpan.FromSeconds(30), environment: environment);
+                var result = await ToolchainProcess.RunAsync(new Cop.Core.ToolchainCommand(dotnet, [cli, script, "-t", target, "-c", "MAIN,COUNTS"], root, environment), new Cop.Core.ToolchainRunOptions { Timeout = TimeSpan.FromSeconds(30) });
                 Assert.That(result.Status, Is.EqualTo(ToolchainStatus.Failed), result.Diagnostic);
                 Assert.That(result.ExitCode, Is.EqualTo(1), result.StandardOutput + result.StandardError);
                 Assert.That(result.StandardOutput, Does.Contain("Nested call found: inner"));
@@ -131,8 +128,7 @@ public class GoJavaCliParityTests
                 first = result;
             }
             File.WriteAllText(source, positive.Replace("inner(\"line\\nvalue\")", "\"safe\""));
-            var clean = await ToolchainProcess.RunAsync(dotnet, [cli, script, "-t", target, "-c", "MAIN,COUNTS"], root,
-                timeout: TimeSpan.FromSeconds(30), environment: environment);
+            var clean = await ToolchainProcess.RunAsync(new Cop.Core.ToolchainCommand(dotnet, [cli, script, "-t", target, "-c", "MAIN,COUNTS"], root, environment), new Cop.Core.ToolchainRunOptions { Timeout = TimeSpan.FromSeconds(30) });
             Assert.That(clean.Status, Is.EqualTo(ToolchainStatus.Success), clean.StandardOutput + clean.StandardError);
             Assert.That(clean.ExitCode, Is.EqualTo(0));
             Assert.That(clean.StandardOutput, Does.Not.Contain("Nested call found:"));

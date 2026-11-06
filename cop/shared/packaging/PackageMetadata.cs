@@ -1,3 +1,5 @@
+// Parses and validates package manifests and published metadata.
+
 using System.ComponentModel.DataAnnotations;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -174,32 +176,50 @@ public class PackageMetadata
     /// Attempts to load PackageMetadata from a directory.
     /// Checks for cop.json first, then falls back to legacy {dirName}.md with YAML front-matter.
     /// </summary>
-    public static PackageMetadata? TryLoadFromDirectory(string dirPath)
+    public static PackageMetadata? LoadFromDirectoryOrDefault(string dirPath)
     {
-        var jsonPath = Path.Combine(dirPath, MetadataFileName);
+        string jsonPath = Path.Combine(dirPath, MetadataFileName);
         if (File.Exists(jsonPath))
         {
             try
             {
-                var json = File.ReadAllText(jsonPath);
+                string json = File.ReadAllText(jsonPath);
                 return ParseFromJson(json);
             }
-            catch { return null; }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException
+                or JsonException or ArgumentException)
+            {
+                ProviderWarnings.ReportOnce("package", dirPath,
+                    $"Cannot read package metadata: {exception.Message}");
+                return null;
+            }
         }
 
         // Legacy fallback: {dirName}.md with YAML front-matter
-        var dirName = Path.GetFileName(dirPath);
-        if (string.IsNullOrEmpty(dirName)) return null;
-        var mdPath = Path.Combine(dirPath, $"{dirName}.md");
+        string dirName = Path.GetFileName(dirPath);
+        if (string.IsNullOrEmpty(dirName))
+        {
+            return null;
+        }
+
+        string mdPath = Path.Combine(dirPath, $"{dirName}.md");
         if (File.Exists(mdPath))
         {
             try
             {
-                var content = File.ReadAllText(mdPath);
+                string content = File.ReadAllText(mdPath);
                 if (content.StartsWith("---"))
+                {
                     return ParseFromMarkdown(content);
+                }
             }
-            catch { return null; }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException
+                or YamlDotNet.Core.YamlException or ArgumentException)
+            {
+                ProviderWarnings.ReportOnce("package", dirPath,
+                    $"Cannot read legacy package metadata: {exception.Message}");
+                return null;
+            }
         }
 
         return null;
@@ -211,7 +231,9 @@ public class PackageMetadata
     public static PackageMetadata ParseFromJson(string json)
     {
         if (string.IsNullOrEmpty(json))
+        {
             throw new ArgumentException("JSON content cannot be null or empty.", nameof(json));
+        }
 
         return JsonSerializer.Deserialize<PackageMetadata>(json, s_jsonOptions)
             ?? throw new ArgumentException("Failed to deserialize cop.json.", nameof(json));
@@ -223,7 +245,9 @@ public class PackageMetadata
     public static PackageMetadata ParseFromJsonFile(string filePath)
     {
         if (!File.Exists(filePath))
+        {
             throw new FileNotFoundException($"File not found: {filePath}", filePath);
+        }
 
         string json = File.ReadAllText(filePath);
         return ParseFromJson(json);
@@ -244,25 +268,31 @@ public class PackageMetadata
     public static PackageMetadata ParseFromMarkdown(string content)
     {
         if (string.IsNullOrEmpty(content))
+        {
             throw new ArgumentException("Content cannot be null or empty.", nameof(content));
+        }
 
         const string delimiter = "---";
 
         int firstDelimiterIndex = content.IndexOf(delimiter);
         if (firstDelimiterIndex != 0)
+        {
             throw new ArgumentException("Content must start with --- delimiter.", nameof(content));
+        }
 
         int secondDelimiterIndex = content.IndexOf(delimiter, firstDelimiterIndex + delimiter.Length);
         if (secondDelimiterIndex == -1)
+        {
             throw new ArgumentException("Closing --- delimiter not found.", nameof(content));
+        }
 
         string yamlContent = content.Substring(
             firstDelimiterIndex + delimiter.Length,
             secondDelimiterIndex - (firstDelimiterIndex + delimiter.Length)
         ).Trim();
 
-        var deserializer = new DeserializerBuilder().Build();
-        var metadata = deserializer.Deserialize<PackageMetadata>(yamlContent)
+        IDeserializer deserializer = new DeserializerBuilder().Build();
+        PackageMetadata metadata = deserializer.Deserialize<PackageMetadata>(yamlContent)
             ?? throw new ArgumentException("Failed to deserialize YAML front-matter.", nameof(content));
 
         return metadata;
@@ -274,7 +304,9 @@ public class PackageMetadata
     public static PackageMetadata ParseFromFile(string filePath)
     {
         if (!File.Exists(filePath))
+        {
             throw new FileNotFoundException($"File not found: {filePath}", filePath);
+        }
 
         string content = File.ReadAllText(filePath);
         return ParseFromMarkdown(content);
@@ -285,31 +317,38 @@ public class PackageMetadata
     /// </summary>
     private class TagsConverter : JsonConverter<List<string>>
     {
+        /// <inheritdoc/>
         public override List<string>? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
         {
             if (reader.TokenType == JsonTokenType.StartArray)
             {
-                var list = new List<string>();
+                List<string> list = new List<string>();
                 while (reader.Read() && reader.TokenType != JsonTokenType.EndArray)
                 {
                     if (reader.TokenType == JsonTokenType.String)
+                    {
                         list.Add(reader.GetString()!);
+                    }
                 }
                 return list;
             }
             if (reader.TokenType == JsonTokenType.String)
             {
-                var str = reader.GetString() ?? "";
+                string str = reader.GetString() ?? "";
                 return str.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
             }
             return [];
         }
 
+        /// <inheritdoc/>
         public override void Write(Utf8JsonWriter writer, List<string> value, JsonSerializerOptions options)
         {
             writer.WriteStartArray();
-            foreach (var tag in value)
+            foreach (string tag in value)
+            {
                 writer.WriteStringValue(tag);
+            }
+
             writer.WriteEndArray();
         }
     }
@@ -319,14 +358,19 @@ public class PackageMetadata
     /// </summary>
     private class YamlTagsConverter : IYamlTypeConverter
     {
+        /// <inheritdoc/>
         public bool Accepts(Type type) => type == typeof(List<string>);
 
+        /// <inheritdoc/>
         public object? ReadYaml(IParser parser, Type type, ObjectDeserializer rootDeserializer)
         {
-            if (parser.TryConsume<Scalar>(out var scalar))
+            if (parser.TryConsume<Scalar>(out Scalar? scalar))
             {
                 if (string.IsNullOrWhiteSpace(scalar.Value))
+                {
                     return new List<string>();
+                }
+
                 return scalar.Value
                     .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
                     .ToList();
@@ -334,11 +378,13 @@ public class PackageMetadata
 
             if (parser.TryConsume<SequenceStart>(out _))
             {
-                var list = new List<string>();
+                List<string> list = new List<string>();
                 while (!parser.TryConsume<SequenceEnd>(out _))
                 {
-                    if (parser.TryConsume<Scalar>(out var item))
+                    if (parser.TryConsume<Scalar>(out Scalar? item))
+                    {
                         list.Add(item.Value);
+                    }
                 }
                 return list;
             }
@@ -346,9 +392,10 @@ public class PackageMetadata
             return new List<string>();
         }
 
+        /// <inheritdoc/>
         public void WriteYaml(IEmitter emitter, object? value, Type type, ObjectSerializer serializer)
         {
-            var list = value as List<string> ?? [];
+            List<string> list = value as List<string> ?? [];
             emitter.Emit(new Scalar(string.Join(", ", list)));
         }
     }

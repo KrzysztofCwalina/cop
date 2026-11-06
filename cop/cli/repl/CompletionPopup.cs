@@ -1,3 +1,7 @@
+// Displays and navigates completion choices in the interactive terminal editor.
+
+using System.Text;
+
 namespace Cop.Repl;
 
 /// <summary>
@@ -11,16 +15,25 @@ public class CompletionPopup
     private int _scrollOffset;
     private bool _visible;
 
+    /// <summary>Creates a popup with the requested maximum number of visible rows.</summary>
     public CompletionPopup(int maxVisible = 10)
     {
         _maxVisible = maxVisible;
     }
 
+    /// <summary>Whether the popup is currently displayed.</summary>
     public bool IsVisible => _visible;
+
+    /// <summary>Zero-based index of the selected completion.</summary>
     public int SelectedIndex => _selectedIndex;
+
+    /// <summary>Selected completion, or null when no items are available.</summary>
     public string? SelectedItem => _items.Count > 0 ? _items[_selectedIndex] : null;
+
+    /// <summary>Total number of available completions.</summary>
     public int ItemCount => _items.Count;
 
+    /// <summary>Displays completions and selects the first item, or hides an empty list.</summary>
     public void Show(List<string> items)
     {
         if (items.Count == 0)
@@ -53,6 +66,7 @@ public class CompletionPopup
         EnsureVisible();
     }
 
+    /// <summary>Hides the popup and clears its selection and scrolling state.</summary>
     public void Hide()
     {
         _visible = false;
@@ -61,30 +75,50 @@ public class CompletionPopup
         _scrollOffset = 0;
     }
 
+    /// <summary>Selects the previous completion, wrapping at the start of the list.</summary>
     public void MoveUp()
     {
-        if (!_visible || _items.Count == 0) return;
+        if (!_visible || _items.Count == 0)
+        {
+            return;
+        }
+
         _selectedIndex = (_selectedIndex - 1 + _items.Count) % _items.Count;
         EnsureVisible();
     }
 
+    /// <summary>Selects the next completion, wrapping at the end of the list.</summary>
     public void MoveDown()
     {
-        if (!_visible || _items.Count == 0) return;
+        if (!_visible || _items.Count == 0)
+        {
+            return;
+        }
+
         _selectedIndex = (_selectedIndex + 1) % _items.Count;
         EnsureVisible();
     }
 
+    /// <summary>Moves the selection up by one page without wrapping.</summary>
     public void PageUp()
     {
-        if (!_visible || _items.Count == 0) return;
+        if (!_visible || _items.Count == 0)
+        {
+            return;
+        }
+
         _selectedIndex = Math.Max(0, _selectedIndex - _maxVisible);
         EnsureVisible();
     }
 
+    /// <summary>Moves the selection down by one page without wrapping.</summary>
     public void PageDown()
     {
-        if (!_visible || _items.Count == 0) return;
+        if (!_visible || _items.Count == 0)
+        {
+            return;
+        }
+
         _selectedIndex = Math.Min(_items.Count - 1, _selectedIndex + _maxVisible);
         EnsureVisible();
     }
@@ -92,9 +126,13 @@ public class CompletionPopup
     private void EnsureVisible()
     {
         if (_selectedIndex < _scrollOffset)
+        {
             _scrollOffset = _selectedIndex;
+        }
         else if (_selectedIndex >= _scrollOffset + _maxVisible)
+        {
             _scrollOffset = _selectedIndex - _maxVisible + 1;
+        }
     }
 
     /// <summary>
@@ -104,10 +142,12 @@ public class CompletionPopup
     public (string Content, int Lines) Render(int cursorCol)
     {
         if (!_visible || _items.Count == 0)
+        {
             return ("", 0);
+        }
 
         int visibleCount = Math.Min(_maxVisible, _items.Count);
-        var sb = new System.Text.StringBuilder();
+        StringBuilder sb = new System.Text.StringBuilder();
 
         // Save cursor, move to next line
         sb.Append("\x1b[s"); // save cursor
@@ -162,9 +202,12 @@ public class CompletionPopup
     /// </summary>
     public string Clear(int linesUsed)
     {
-        if (linesUsed == 0) return "";
+        if (linesUsed == 0)
+        {
+            return "";
+        }
 
-        var sb = new System.Text.StringBuilder();
+        StringBuilder sb = new System.Text.StringBuilder();
         sb.Append("\x1b[s"); // save cursor
 
         for (int i = 0; i < linesUsed + 1; i++)

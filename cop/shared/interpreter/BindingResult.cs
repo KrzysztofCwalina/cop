@@ -1,32 +1,8 @@
+// Carries resolved symbols and diagnostics produced by name binding.
+
 namespace Cop.Lang.Interpreter;
 
 using Cop.Lang.Ast;
-
-/// <summary>
-/// Severity of a binding diagnostic.
-/// </summary>
-public enum DiagnosticSeverity
-{
-    Info,
-    Warning,
-    Error
-}
-
-/// <summary>
-/// A diagnostic produced during name resolution / binding.
-/// </summary>
-public sealed record BindingDiagnostic(
-    DiagnosticSeverity Severity,
-    string Message,
-    int Line,
-    string? FilePath = null)
-{
-    public override string ToString()
-    {
-        var loc = FilePath is not null ? $"{FilePath}({Line})" : $"line {Line}";
-        return $"{Severity}: {loc}: {Message}";
-    }
-}
 
 /// <summary>
 /// The result of binding a module: resolved symbols, scope tree, and diagnostics.
@@ -71,6 +47,9 @@ public sealed class BindingResult
     internal readonly Dictionary<Declaration, Scope> _declarationScopes = new();
     internal readonly List<BindingDiagnostic> _diagnostics = [];
 
+    /// <summary>
+    /// Creates binding side tables for a module and its top-level scope.
+    /// </summary>
     public BindingResult(ModuleNode module, Scope globalScope)
     {
         Module = module;

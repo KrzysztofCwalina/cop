@@ -1,3 +1,5 @@
+// Interns UTF-8 strings and records their offsets in a shared heap.
+
 using System.Text;
 
 namespace Cop.Core;
@@ -20,7 +22,10 @@ public class StringHeapBuilder
     /// </summary>
     public long PackString(string? value)
     {
-        if (string.IsNullOrEmpty(value)) return 0;
+        if (string.IsNullOrEmpty(value))
+        {
+            return 0;
+        }
 
         int byteCount = Encoding.UTF8.GetByteCount(value);
         EnsureCapacity(byteCount);
@@ -37,7 +42,11 @@ public class StringHeapBuilder
     /// </summary>
     public byte[] Build()
     {
-        if (_heap != null) return _heap;
+        if (_heap != null)
+        {
+            return _heap;
+        }
+
         _heap = new byte[_position];
         Buffer.BlockCopy(_buffer, 0, _heap, 0, _position);
         return _heap;
@@ -46,7 +55,11 @@ public class StringHeapBuilder
     private void EnsureCapacity(int needed)
     {
         int required = _position + needed;
-        if (required <= _buffer.Length) return;
+        if (required <= _buffer.Length)
+        {
+            return;
+        }
+
         int newSize = Math.Max(_buffer.Length * 2, required);
         Array.Resize(ref _buffer, newSize);
     }

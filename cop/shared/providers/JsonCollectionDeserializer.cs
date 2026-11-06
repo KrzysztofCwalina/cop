@@ -1,3 +1,5 @@
+// Converts provider JSON collections into typed runtime records.
+
 using System.Text.Json;
 using Cop.Core;
 using Cop.Lang;
@@ -17,14 +19,14 @@ public static class JsonCollectionDeserializer
     /// </summary>
     public static object DeserializeAny(byte[] utf8Json, string typeName, ProviderSchema schema)
     {
-        var typeMap = schema.Types.ToDictionary(t => t.Name, StringComparer.Ordinal);
-        using var doc = JsonDocument.Parse(utf8Json);
-        var root = doc.RootElement;
+        Dictionary<string, ProviderTypeSchema> typeMap = schema.Types.ToDictionary(t => t.Name, StringComparer.Ordinal);
+        using JsonDocument doc = JsonDocument.Parse(utf8Json);
+        JsonElement root = doc.RootElement;
 
         if (root.ValueKind == JsonValueKind.Array)
         {
-            var items = new List<object>();
-            foreach (var elem in root.EnumerateArray())
+            List<object> items = new List<object>();
+            foreach (JsonElement elem in root.EnumerateArray())
             {
                 items.Add(DeserializeElement(elem, typeName, typeMap));
             }
@@ -45,26 +47,32 @@ public static class JsonCollectionDeserializer
     /// </summary>
     public static Dictionary<string, List<object>> Deserialize(byte[] utf8Json, ProviderSchema schema)
     {
-        var typeMap = schema.Types.ToDictionary(t => t.Name, StringComparer.Ordinal);
-        var collMap = schema.Collections.ToDictionary(c => c.Name, StringComparer.Ordinal);
-        var result = new Dictionary<string, List<object>>();
+        Dictionary<string, ProviderTypeSchema> typeMap = schema.Types.ToDictionary(t => t.Name, StringComparer.Ordinal);
+        Dictionary<string, ProviderCollectionSchema> collMap = schema.Collections.ToDictionary(c => c.Name, StringComparer.Ordinal);
+        Dictionary<string, List<object>> result = new Dictionary<string, List<object>>();
 
-        using var doc = JsonDocument.Parse(utf8Json);
-        var root = doc.RootElement;
+        using JsonDocument doc = JsonDocument.Parse(utf8Json);
+        JsonElement root = doc.RootElement;
 
         if (root.ValueKind != JsonValueKind.Object)
-            throw new InvalidOperationException("Provider Query must return a JSON object.");
-
-        foreach (var prop in root.EnumerateObject())
         {
-            if (!collMap.TryGetValue(prop.Name, out var collSchema))
+            throw new InvalidOperationException("Provider Query must return a JSON object.");
+        }
+
+        foreach (JsonProperty prop in root.EnumerateObject())
+        {
+            if (!collMap.TryGetValue(prop.Name, out ProviderCollectionSchema? collSchema))
+            {
                 continue;
+            }
 
             if (prop.Value.ValueKind != JsonValueKind.Array)
+            {
                 continue;
+            }
 
-            var items = new List<object>();
-            foreach (var elem in prop.Value.EnumerateArray())
+            List<object> items = new List<object>();
+            foreach (JsonElement elem in prop.Value.EnumerateArray())
             {
                 items.Add(DeserializeElement(elem, collSchema.ItemType, typeMap));
             }
@@ -80,7 +88,7 @@ public static class JsonCollectionDeserializer
         {
             JsonValueKind.Object => DeserializeObject(element, typeName, typeMap),
             JsonValueKind.String => element.GetString() ?? "",
-            JsonValueKind.Number => element.TryGetInt32(out var i) ? i : element.GetDouble(),
+            JsonValueKind.Number => element.TryGetInt32(out int i) ? i : element.GetDouble(),
             JsonValueKind.True => true,
             JsonValueKind.False => false,
             JsonValueKind.Null => null!,
@@ -91,20 +99,24 @@ public static class JsonCollectionDeserializer
 
     private static DataObject DeserializeObject(JsonElement element, string typeName, Dictionary<string, ProviderTypeSchema> typeMap)
     {
-        var fields = new Dictionary<string, object?>();
+        Dictionary<string, object?> fields = new Dictionary<string, object?>();
         ProviderTypeSchema? typeSchema = typeMap.GetValueOrDefault(typeName);
 
-        foreach (var prop in element.EnumerateObject())
+        foreach (JsonProperty prop in element.EnumerateObject())
         {
-            var propSchema = typeSchema?.Properties.Find(p => p.Name == prop.Name);
-            var propTypeName = propSchema?.Type ?? "string";
+            ProviderPropertySchema? propSchema = typeSchema?.Properties.Find(p => p.Name == prop.Name);
+            string propTypeName = propSchema?.Type ?? "string";
 
-            if (propSchema is { Collection: true })
+            if (propSchema is { IsCollection: true })
             {
                 if (prop.Value.ValueKind == JsonValueKind.Array)
+                {
                     fields[prop.Name] = DeserializeArray(prop.Value, propTypeName, typeMap);
+                }
                 else
+                {
                     fields[prop.Name] = new List<object>();
+                }
             }
             else
             {
@@ -122,8 +134,8 @@ public static class JsonCollectionDeserializer
 
     private static List<object> DeserializeArray(JsonElement element, string itemTypeName, Dictionary<string, ProviderTypeSchema> typeMap)
     {
-        var items = new List<object>();
-        foreach (var elem in element.EnumerateArray())
+        List<object> items = new List<object>();
+        foreach (JsonElement elem in element.EnumerateArray())
         {
             items.Add(DeserializeElement(elem, itemTypeName, typeMap));
         }
@@ -152,12 +164,12 @@ public static class JsonCollectionDeserializer
     /// </summary>
     public static void RegisterDataObjectAccessors(TypeRegistry registry, ProviderSchema schema)
     {
-        foreach (var ts in schema.Types)
+        foreach (ProviderTypeSchema ts in schema.Types)
         {
-            var accessors = new Dictionary<string, Func<object, object?>>();
-            foreach (var ps in ts.Properties)
+            Dictionary<string, Func<object, object?>> accessors = new Dictionary<string, Func<object, object?>>();
+            foreach (ProviderPropertySchema ps in ts.Properties)
             {
-                var propName = ps.Name;
+                string propName = ps.Name;
                 accessors[propName] = obj => obj is DataObject so ? so.GetField(propName) : null;
             }
             registry.RegisterAccessors(ts.Name, accessors);

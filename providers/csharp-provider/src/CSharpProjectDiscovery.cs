@@ -1,3 +1,5 @@
+// Discovers C# projects and their declared dependencies.
+
 using System.Xml.Linq;
 using Cop.Providers.SourceModel;
 using Cop.Providers.SourceParsers;
@@ -18,43 +20,47 @@ public static class CSharpProjectDiscovery
         IReadOnlyList<string>? sourceFiles = null)
     {
         rootPath = Path.GetFullPath(rootPath);
-        var csprojPaths = new List<string>();
+        List<string> csprojPaths = new List<string>();
         CollectCsprojFiles(rootPath, excludedDirs, csprojPaths);
         if (sourceFiles is null)
         {
-            var parsers = new SourceParserRegistry();
+            SourceParserRegistry parsers = new SourceParserRegistry();
             parsers.Register(new CSharpSourceParser());
-            var paths = new List<string>();
+            List<string> paths = new List<string>();
             CodeCollectionBuilder.CollectSourceFiles(rootPath, parsers, excludedDirs, paths);
             sourceFiles = paths;
         }
 
         // First pass: build a map of normalized path → project name
-        var pathToName = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        var projects = new List<(string Name, string RelativePath, List<string> RefPaths, List<string> Packages, List<string> Frameworks, Dictionary<string, string> Properties, List<string>? SourceFiles)>();
+        Dictionary<string, string> pathToName = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        List<(string Name, string RelativePath, List<string> RefPaths, List<string> Packages, List<string> Frameworks, Dictionary<string, string> Properties, List<string>? SourceFiles)> projects = new List<(string Name, string RelativePath, List<string> RefPaths, List<string> Packages, List<string> Frameworks, Dictionary<string, string> Properties, List<string>? SourceFiles)>();
 
-        foreach (var csprojPath in csprojPaths)
+        foreach (string csprojPath in csprojPaths)
         {
-            var (name, refPaths, packages, frameworks, properties, sources) = ParseCsproj(csprojPath, sourceFiles, rootPath);
-            var relativePath = Path.GetRelativePath(rootPath, csprojPath).Replace('\\', '/');
+            (string? name, List<string>? refPaths, List<string>? packages, List<string>? frameworks, Dictionary<string, string>? properties, List<string>? sources) = ParseCsproj(csprojPath, sourceFiles, rootPath);
+            string relativePath = Path.GetRelativePath(rootPath, csprojPath).Replace('\\', '/');
             pathToName[Path.GetFullPath(csprojPath)] = name;
             projects.Add((name, relativePath, refPaths, packages, frameworks, properties, sources));
         }
 
         // Second pass: resolve ProjectReference paths to project names
-        var result = new List<ProjectInfo>();
-        foreach (var (name, relativePath, refPaths, packages, frameworks, properties, sources) in projects)
+        List<ProjectInfo> result = new List<ProjectInfo>();
+        foreach ((string? name, string? relativePath, List<string>? refPaths, List<string>? packages, List<string>? frameworks, Dictionary<string, string>? properties, List<string>? sources) in projects)
         {
-            var references = new List<string>();
-            var csprojDir = Path.GetDirectoryName(Path.Combine(rootPath, NormalizePath(relativePath))) ?? rootPath;
+            List<string> references = new List<string>();
+            string csprojDir = Path.GetDirectoryName(Path.Combine(rootPath, NormalizePath(relativePath))) ?? rootPath;
 
-            foreach (var refPath in refPaths)
+            foreach (string refPath in refPaths)
             {
-                var resolvedPath = Path.GetFullPath(Path.Combine(csprojDir, NormalizePath(refPath)));
-                if (pathToName.TryGetValue(resolvedPath, out var targetName))
+                string resolvedPath = Path.GetFullPath(Path.Combine(csprojDir, NormalizePath(refPath)));
+                if (pathToName.TryGetValue(resolvedPath, out string? targetName))
+                {
                     references.Add(targetName);
+                }
                 else
+                {
                     references.Add(Path.GetFileNameWithoutExtension(NormalizePath(refPath)));
+                }
             }
 
             result.Add(new ProjectInfo(name, relativePath, "csharp", references, packages, frameworks)
@@ -70,7 +76,7 @@ public static class CSharpProjectDiscovery
     /// <summary>
     /// Property names to extract from PropertyGroup elements.
     /// </summary>
-    private static readonly HashSet<string> PropertyNames = new(StringComparer.OrdinalIgnoreCase)
+    private static readonly HashSet<string> s_propertyNames = new(StringComparer.OrdinalIgnoreCase)
     {
         "OutputType", "TargetFramework", "TargetFrameworks",
         "IsTestProject", "IsPackable", "RootNamespace",
@@ -81,28 +87,31 @@ public static class CSharpProjectDiscovery
         ParseCsproj(string csprojPath, IReadOnlyList<string> sourceFiles, string rootPath)
     {
         string name = Path.GetFileNameWithoutExtension(csprojPath);
-        var refPaths = new List<string>();
-        var packages = new List<string>();
-        var frameworks = new List<string>();
-        var properties = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        List<string> refPaths = new List<string>();
+        List<string> packages = new List<string>();
+        List<string> frameworks = new List<string>();
+        Dictionary<string, string> properties = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         List<string>? sources = null;
 
         try
         {
-            var doc = LoadProjectDocument(csprojPath);
+            XDocument? doc = LoadProjectDocument(csprojPath);
             if (doc is null)
+            {
                 return (name, refPaths, packages, frameworks, properties, sources);
+            }
+
             sources = CSharpProjectInputs.Resolve(csprojPath, doc, sourceFiles, rootPath);
-            var ns = doc.Root?.Name.Namespace ?? XNamespace.None;
+            XNamespace ns = doc.Root?.Name.Namespace ?? XNamespace.None;
 
             // Extract properties from PropertyGroup elements
-            foreach (var propGroup in doc.Root?.Elements(ns + "PropertyGroup") ?? [])
+            foreach (XElement propGroup in doc.Root?.Elements(ns + "PropertyGroup") ?? [])
             {
-                foreach (var el in propGroup.Elements())
+                foreach (XElement el in propGroup.Elements())
                 {
-                    var elName = el.Name.LocalName;
-                    var elValue = el.Value;
-                    if (!string.IsNullOrWhiteSpace(elValue) && PropertyNames.Contains(elName))
+                    string elName = el.Name.LocalName;
+                    string elValue = el.Value;
+                    if (!string.IsNullOrWhiteSpace(elValue) && s_propertyNames.Contains(elName))
                     {
                         properties[elName] = elValue.Trim();
                         AddTargetFrameworks(frameworks, elName, elValue);
@@ -111,32 +120,40 @@ public static class CSharpProjectDiscovery
             }
 
             // Try to get AssemblyName; fall back to filename
-            var assemblyName = doc.Root?.Descendants(ns + "AssemblyName").FirstOrDefault()?.Value;
+            string? assemblyName = doc.Root?.Descendants(ns + "AssemblyName").FirstOrDefault()?.Value;
             if (!string.IsNullOrWhiteSpace(assemblyName))
+            {
                 name = assemblyName;
+            }
 
             // Extract ProjectReference Include paths
-            foreach (var projRef in doc.Root?.Descendants(ns + "ProjectReference") ?? [])
+            foreach (XElement projRef in doc.Root?.Descendants(ns + "ProjectReference") ?? [])
             {
-                var include = projRef.Attribute("Include")?.Value;
+                string? include = projRef.Attribute("Include")?.Value;
                 if (!string.IsNullOrWhiteSpace(include))
+                {
                     refPaths.Add(include);
+                }
             }
 
             // Extract PackageReference names
-            foreach (var pkgRef in doc.Root?.Descendants(ns + "PackageReference") ?? [])
+            foreach (XElement pkgRef in doc.Root?.Descendants(ns + "PackageReference") ?? [])
             {
-                var include = pkgRef.Attribute("Include")?.Value;
+                string? include = pkgRef.Attribute("Include")?.Value;
                 if (!string.IsNullOrWhiteSpace(include))
+                {
                     packages.Add(include);
+                }
             }
 
             // Extract FrameworkReference names
-            foreach (var fwRef in doc.Root?.Descendants(ns + "FrameworkReference") ?? [])
+            foreach (XElement fwRef in doc.Root?.Descendants(ns + "FrameworkReference") ?? [])
             {
-                var include = fwRef.Attribute("Include")?.Value;
+                string? include = fwRef.Attribute("Include")?.Value;
                 if (!string.IsNullOrWhiteSpace(include))
+                {
                     frameworks.Add(include);
+                }
             }
         }
         catch (Exception ex) when (ex is System.Xml.XmlException or IOException or UnauthorizedAccessException)
@@ -149,7 +166,7 @@ public static class CSharpProjectDiscovery
 
     internal static XDocument? LoadProjectDocument(string path)
     {
-        using var stream = File.OpenRead(path);
+        using FileStream stream = File.OpenRead(path);
         try
         {
             return XDocument.Load(stream);
@@ -157,9 +174,11 @@ public static class CSharpProjectDiscovery
         catch (System.Xml.XmlException)
         {
             stream.Position = 0;
-            using var reader = new StreamReader(stream);
+            using StreamReader reader = new StreamReader(stream);
             if (!string.IsNullOrWhiteSpace(reader.ReadToEnd()))
+            {
                 throw;
+            }
 
             Cop.Core.ProviderWarnings.ReportOnce("csharp", Path.GetFullPath(path),
                 $"Project '{path}' is empty; analyzing its C# sources without project metadata.");
@@ -179,17 +198,23 @@ public static class CSharpProjectDiscovery
         }
 
         if (!propertyName.Equals("TargetFrameworks", StringComparison.OrdinalIgnoreCase))
+        {
             return;
+        }
 
-        foreach (var framework in propertyValue.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        foreach (string framework in propertyValue.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
             AddFramework(frameworks, framework);
+        }
     }
 
     private static void AddFramework(List<string> frameworks, string framework)
     {
         framework = framework.Trim();
         if (framework.Length == 0 || frameworks.Contains(framework, StringComparer.OrdinalIgnoreCase))
+        {
             return;
+        }
 
         frameworks.Add(framework);
     }
@@ -198,14 +223,24 @@ public static class CSharpProjectDiscovery
     {
         try
         {
-            foreach (var file in Directory.GetFiles(dir, "*.csproj"))
-                result.Add(file);
-
-            foreach (var subDir in Directory.GetDirectories(dir))
+            foreach (string file in Directory.GetFiles(dir, "*.csproj"))
             {
-                if ((File.GetAttributes(subDir) & FileAttributes.ReparsePoint) != 0) continue;
-                var dirName = Path.GetFileName(subDir);
-                if (excluded is not null && excluded.Contains(dirName)) continue;
+                result.Add(file);
+            }
+
+            foreach (string subDir in Directory.GetDirectories(dir))
+            {
+                if ((File.GetAttributes(subDir) & FileAttributes.ReparsePoint) != 0)
+                {
+                    continue;
+                }
+
+                string dirName = Path.GetFileName(subDir);
+                if (excluded is not null && excluded.Contains(dirName))
+                {
+                    continue;
+                }
+
                 CollectCsprojFiles(subDir, excluded, result);
             }
         }

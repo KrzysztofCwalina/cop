@@ -1,3 +1,5 @@
+// Preserves Python type-category facts through shared types and source caching.
+
 namespace Cop.Providers.SourceModel;
 
 /// <summary>
@@ -8,19 +10,17 @@ namespace Cop.Providers.SourceModel;
 /// </summary>
 public sealed record PythonTypeDeclaration : TypeDeclaration
 {
-    public PythonTypeDeclaration(TypeDeclaration source, bool isDataclass, bool isEnum,
-        bool isAbstract = false, bool isNamedTuple = false, bool isProtocol = false,
-        bool isException = false, bool hasSlots = false)
+    /// <summary>
+    /// Copies a shared type and preserves additive abstract-modifier facts.
+    /// </summary>
+    public PythonTypeDeclaration(TypeDeclaration source, bool isAbstract = false)
         : base(source)
     {
-        IsDataclass = isDataclass;
-        IsEnum = isEnum;
         if (isAbstract)
+        {
             Modifiers |= Modifier.Abstract;
-        IsNamedTuple = isNamedTuple;
-        IsProtocol = isProtocol;
-        IsException = isException;
-        HasSlots = hasSlots;
+        }
+
     }
 
     /// <summary>True for classes decorated with <c>@dataclass</c>.</summary>
@@ -41,8 +41,10 @@ public sealed record PythonTypeDeclaration : TypeDeclaration
     /// <summary>True for classes declaring <c>__slots__</c>.</summary>
     public bool HasSlots { get; init; }
 
+    /// <inheritdoc />
     public override string? LanguageTag => "python";
 
+    /// <inheritdoc />
     public override IReadOnlyList<KeyValuePair<string, bool>>? LanguageFlags =>
     [
         new("IsDataclass", IsDataclass),
@@ -54,22 +56,16 @@ public sealed record PythonTypeDeclaration : TypeDeclaration
         new("HasSlots", HasSlots),
     ];
 
+    /// <summary>Registers restoration of Python type facts from source caches.</summary>
     public static void RegisterCacheFactory() =>
         LanguageTypeRegistry.Register("python", (baseDecl, flags) => new PythonTypeDeclaration(
-            baseDecl,
-            isDataclass: flags.TryGetValue("IsDataclass", out var d) && d,
-            isEnum: flags.TryGetValue("IsEnum", out var e) && e,
-            isAbstract: flags.TryGetValue("IsAbstract", out var a) && a,
-            isNamedTuple: flags.TryGetValue("IsNamedTuple", out var n) && n,
-            isProtocol: flags.TryGetValue("IsProtocol", out var p) && p,
-            isException: flags.TryGetValue("IsException", out var x) && x,
-            hasSlots: flags.TryGetValue("HasSlots", out var s) && s));
-}
-
-public static class PythonTypeDeclarationExtensions
-{
-    public static PythonTypeDeclaration AsPython(this TypeDeclaration source, bool isDataclass = false, bool isEnum = false,
-        bool isAbstract = false, bool isNamedTuple = false, bool isProtocol = false,
-        bool isException = false, bool hasSlots = false)
-        => new(source, isDataclass, isEnum, isAbstract, isNamedTuple, isProtocol, isException, hasSlots);
+            baseDecl, isAbstract: flags.TryGetValue("IsAbstract", out bool a) && a)
+        {
+            IsDataclass = flags.TryGetValue("IsDataclass", out bool d) && d,
+            IsEnum = flags.TryGetValue("IsEnum", out bool e) && e,
+            IsNamedTuple = flags.TryGetValue("IsNamedTuple", out bool n) && n,
+            IsProtocol = flags.TryGetValue("IsProtocol", out bool p) && p,
+            IsException = flags.TryGetValue("IsException", out bool x) && x,
+            HasSlots = flags.TryGetValue("HasSlots", out bool s) && s
+        });
 }

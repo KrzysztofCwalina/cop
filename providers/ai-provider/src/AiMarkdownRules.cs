@@ -1,9 +1,14 @@
+// Loads repository Markdown guidance for AI analysis requests.
+
 using System.Text.Json;
 using Cop.Core;
 using Cop.Lang;
 
 namespace Cop.Providers.Ai;
 
+/// <summary>
+/// Loads Markdown guidance used when constructing AI analysis requests.
+/// </summary>
 public partial class AiProvider
 {
     private static string MarkdownRequirements(object? input, object? levelValue)
@@ -15,21 +20,31 @@ public partial class AiProvider
             _ => throw new ArgumentException("Markdown rule level must be an integer from 1 to 6")
         };
         if (level is < 1 or > 6)
+        {
             throw new ArgumentException("Markdown rule level must be an integer from 1 to 6");
+        }
+
         if (input is not DataObject document || document.TypeName != "MarkdownContent"
             || document.GetField("Documents") is not System.Collections.IEnumerable)
+        {
             throw new ArgumentException("expected MarkdownContent from markdown.parse() for the three-argument overload");
+        }
 
-        var rules = new List<object>();
-        foreach (var root in Items(document, "Documents"))
+        List<object> rules = new List<object>();
+        foreach (object root in Items(document, "Documents"))
         {
             if (Member(root, "Kind") as string != "document")
+            {
                 throw new ArgumentException("Markdown Documents must contain document roots");
-            var path = FilePath(Member(root, "File"));
+            }
+
+            string path = FilePath(Member(root, "File"));
             Visit(root, [], path, 0);
         }
         if (rules.Count == 0)
+        {
             throw new ArgumentException($"no Markdown rule sections found at heading level {level}");
+        }
 
         return "Evaluate EVERY rule below as a separate logical requirement in this combined review. " +
             "Each selected heading and its COMPLETE section body form ONE rule, regardless of paragraph count. " +
@@ -43,21 +58,37 @@ public partial class AiProvider
         void Visit(object node, List<object> ancestors, string path, int depth)
         {
             if (depth > 128)
-                throw new ArgumentException("Markdown rule tree exceeds the supported nesting depth");
-            var children = Items(node, "Children").ToList();
-            foreach (var child in children)
             {
-                if (Member(child, "Kind") as string != "heading") continue;
+                throw new ArgumentException("Markdown rule tree exceeds the supported nesting depth");
+            }
+
+            List<object> children = Items(node, "Children").ToList();
+            foreach (object? child in children)
+            {
+                if (Member(child, "Kind") as string != "heading")
+                {
+                    continue;
+                }
+
                 if (Member(child, "Text") is not string title || string.IsNullOrWhiteSpace(title)
                     || Member(child, "Content") is not string content || string.IsNullOrWhiteSpace(content))
+                {
                     throw new ArgumentException("Markdown rule headings require a title and complete section content");
+                }
+
                 int headingLevel = LineNumber(child, "Level");
                 if (headingLevel is < 1 or > 6)
+                {
                     throw new ArgumentException("Markdown heading levels must be from 1 to 6");
+                }
+
                 if (headingLevel == level)
                 {
                     if (!Items(child, "Children").Any())
+                    {
                         throw new ArgumentException($"Markdown rule '{title}' has no section body");
+                    }
+
                     rules.Add(new
                     {
                         id = rules.Count + 1,
@@ -77,7 +108,7 @@ public partial class AiProvider
 
         static object Context(object node) => new
         {
-            title = Member(node, "Text") as string ?? "",
+            title = Member(node, "Text") as string ?? string.Empty,
             content = Items(node, "Children")
                 .Where(child => Member(child, "Kind") as string != "heading")
                 .Select(child => Member(child, "Content") as string

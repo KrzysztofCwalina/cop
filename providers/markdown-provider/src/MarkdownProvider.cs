@@ -1,3 +1,5 @@
+// Exposes parsed Markdown documents and their structural collections to Cop.
+
 using System.Collections.Concurrent;
 using Cop.Core;
 using Cop.Lang;
@@ -10,19 +12,27 @@ namespace Cop.Providers.Markdown;
 /// </summary>
 public class MarkdownProvider : DataProvider
 {
+    /// <inheritdoc />
     public override string QueryResultType => "MarkdownContent";
-    public override ReadOnlyMemory<byte> GetSchema() => _schema.ToJson();
+    /// <inheritdoc />
+    public override ReadOnlyMemory<byte> GetSchema() => s_schema.ToJson();
 
-    private static readonly ProviderSchema _schema = BuildSchema();
-    private static readonly RuntimeBindings _bindings = BuildBindings();
+    private static readonly ProviderSchema s_schema = BuildSchema();
+    private static readonly RuntimeBindings s_bindings = BuildBindings();
 
-    public override Dictionary<string, Func<List<object?>, Task<object?>>>? GetFunctions() => new()
+    /// <inheritdoc />
+    public override Dictionary<string,
+        Func<List<object?>, CancellationToken, ValueTask<object?>>>? GetFunctions() => new()
     {
-        ["toContent"] = args => Task.FromResult<object?>(ToContent(args.Count == 1 ? args[0] : null))
+        ["toContent"] = (args, token) =>
+        {
+            token.ThrowIfCancellationRequested();
+            return ValueTask.FromResult<object?>(ToContent(args.Count == 1 ? args[0] : null));
+        }
     };
 
     // Markdown file extensions
-    private static readonly HashSet<string> MarkdownExtensions = new(StringComparer.OrdinalIgnoreCase)
+    private static readonly HashSet<string> s_markdownExtensions = new(StringComparer.OrdinalIgnoreCase)
         { ".md", ".markdown", ".mdown", ".mkd" };
 
     private static ProviderSchema BuildSchema()
@@ -71,84 +81,103 @@ public class MarkdownProvider : DataProvider
     private static ProviderPropertySchema Prop(string name, string type = "string")
         => new() { Name = name, Type = type };
     private static ProviderPropertySchema Opt(string name, string type = "string")
-        => new() { Name = name, Type = type, Optional = true };
+        => new() { Name = name, Type = type, IsOptional = true };
 
-    public override RuntimeBindings GetRuntimeBindings() => _bindings;
+    /// <inheritdoc />
+    public override RuntimeBindings GetRuntimeBindings() => s_bindings;
 
     private static RuntimeBindings BuildBindings()
     {
-        var bindings = CodeBindings.Build();
+        RuntimeBindings bindings = CodeBindings.Build();
         bindings.ClrTypeMappings![typeof(HeadingInfo)] = "Heading";
         bindings.ClrTypeMappings[typeof(LinkInfo)] = "Link";
         bindings.ClrTypeMappings[typeof(SectionInfo)] = "Section";
         bindings.ClrTypeMappings[typeof(FenceBlockInfo)] = "FenceBlock";
         bindings.ClrTypeMappings[typeof(MarkdownNodeInfo)] = "MarkdownNode";
-        foreach (var (name, accessors) in BuildAccessors())
+        foreach ((string? name, Dictionary<string, Func<object, object?>>? accessors) in BuildAccessors())
+        {
             bindings.Accessors![name] = accessors;
-        foreach (var (name, extractor) in BuildExtractors())
+        }
+
+        foreach ((string? name, Func<object, List<object>>? extractor) in BuildExtractors())
+        {
             bindings.CollectionExtractors![name] = extractor;
+        }
+
         return bindings;
     }
 
     /// <summary>
     /// Reads one Markdown file or scans a directory, returning trees and flat collections.
     /// </summary>
-    public override object? Query(ProviderQuery query)
+    public override async ValueTask<object?> QueryAsync(
+        ProviderQuery query, CancellationToken cancellationToken = default)
     {
         if (query.RootPath is null)
+        {
             return new Dictionary<string, List<object>>();
+        }
 
-        var rootPath = query.RootPath;
-        var excluded = query.ExcludedDirectories;
+        string rootPath = query.RootPath;
+        IReadOnlySet<string>? excluded = query.ExcludedDirectories;
 
         // Collect markdown file paths
-        var filePaths = new List<string>();
+        List<string> filePaths = new List<string>();
         if (File.Exists(rootPath))
         {
-            if (!MarkdownExtensions.Contains(Path.GetExtension(rootPath)))
+            if (!s_markdownExtensions.Contains(Path.GetExtension(rootPath)))
+            {
                 throw new InvalidOperationException($"Not a Markdown file: '{rootPath}'.");
+            }
+
             filePaths.Add(rootPath);
             rootPath = Path.GetDirectoryName(Path.GetFullPath(rootPath))!;
         }
         else
         {
             if (!Directory.Exists(rootPath))
+            {
                 throw new FileNotFoundException($"Markdown path not found: '{rootPath}'.", rootPath);
+            }
+
             CollectMarkdownFiles(rootPath, excluded, filePaths);
         }
 
         // Parse files and build SourceFile wrappers for File backlinks
-        var parsedFiles = new ConcurrentBag<(SourceFile File, MarkdownDocument Doc)>();
-        Parallel.ForEach(filePaths,
-            new ParallelOptions { MaxDegreeOfParallelism = Environment.ProcessorCount },
-            filePath =>
+        ConcurrentBag<(SourceFile File, MarkdownDocument Doc)> parsedFiles = new ConcurrentBag<(SourceFile File, MarkdownDocument Doc)>();
+        await Parallel.ForEachAsync(filePaths,
+            new ParallelOptions
             {
-                var text = File.ReadAllText(filePath);
-                var relativePath = Path.GetRelativePath(rootPath, filePath).Replace('\\', '/');
+                MaxDegreeOfParallelism = Environment.ProcessorCount,
+                CancellationToken = cancellationToken
+            }, async (filePath, token) =>
+            {
+                string text = await File.ReadAllTextAsync(filePath, token).ConfigureAwait(false);
+                string relativePath = Path.GetRelativePath(rootPath, filePath).Replace('\\', '/');
 
-                var sourceFile = new SourceFile(relativePath, "markdown", [], [], text)
+                SourceFile sourceFile = new SourceFile(relativePath, "markdown", [], [], text)
                 {
                     FullPath = Path.GetFullPath(filePath),
                     SourceRoot = Path.GetFullPath(rootPath)
                 };
 
-                var doc = MarkdownParser.Parse(text);
+                MarkdownDocument doc = MarkdownParser.Parse(text);
                 ExecutionStatistics.RecordInputFile(filePath);
                 SetFile(doc.Root, sourceFile);
                 parsedFiles.Add((sourceFile, doc));
-            });
+            }).ConfigureAwait(false);
 
         // Sort for deterministic order
-        var sorted = parsedFiles.OrderBy(p => p.File.Path, StringComparer.Ordinal).ToList();
+        List<(SourceFile File, MarkdownDocument Doc)> sorted = parsedFiles.OrderBy(p => p.File.Path, StringComparer.Ordinal).ToList();
 
         // Build flat collections
-        var headings = new List<object>();
-        var links = new List<object>();
-        var sections = new List<object>();
-        var fenceBlocks = new List<object>();
-        var documents = new List<object>();
+        List<object> headings = new List<object>();
+        List<object> links = new List<object>();
+        List<object> sections = new List<object>();
+        List<object> fenceBlocks = new List<object>();
+        List<object> documents = new List<object>();
 
-        foreach (var (file, doc) in sorted)
+        foreach ((SourceFile? file, MarkdownDocument? doc) in sorted)
         {
             headings.AddRange(doc.Headings.Select(h => (object)(h with { File = file })));
             links.AddRange(doc.Links.Select(l => (object)(l with { File = file })));
@@ -157,30 +186,59 @@ public class MarkdownProvider : DataProvider
             documents.Add(doc.Root);
         }
 
-        var collections = new Dictionary<string, List<object>>();
-        var requested = query.Collection;
-        if (requested is null || requested == "Headings") collections["Headings"] = headings;
-        if (requested is null || requested == "Links") collections["Links"] = links;
-        if (requested is null || requested == "Sections") collections["Sections"] = sections;
-        if (requested is null || requested == "FenceBlocks") collections["FenceBlocks"] = fenceBlocks;
-        if (requested is null || requested == "Documents") collections["Documents"] = documents;
+        Dictionary<string, List<object>> collections = new Dictionary<string, List<object>>();
+        string? requested = query.Collection;
+        if (requested is null || requested == "Headings")
+        {
+            collections["Headings"] = headings;
+        }
+
+        if (requested is null || requested == "Links")
+        {
+            collections["Links"] = links;
+        }
+
+        if (requested is null || requested == "Sections")
+        {
+            collections["Sections"] = sections;
+        }
+
+        if (requested is null || requested == "FenceBlocks")
+        {
+            collections["FenceBlocks"] = fenceBlocks;
+        }
+
+        if (requested is null || requested == "Documents")
+        {
+            collections["Documents"] = documents;
+        }
 
         return ApplyQueryFilters(query, collections);
     }
 
     private static void CollectMarkdownFiles(string dir, IReadOnlySet<string>? excluded, List<string> result)
     {
-        foreach (var file in Directory.GetFiles(dir))
+        foreach (string file in Directory.GetFiles(dir))
         {
-            if (MarkdownExtensions.Contains(Path.GetExtension(file)))
+            if (s_markdownExtensions.Contains(Path.GetExtension(file)))
+            {
                 result.Add(file);
+            }
         }
 
-        foreach (var subDir in Directory.GetDirectories(dir))
+        foreach (string subDir in Directory.GetDirectories(dir))
         {
-            var dirName = Path.GetFileName(subDir);
-            if (excluded is not null && excluded.Contains(dirName)) continue;
-            if ((File.GetAttributes(subDir) & FileAttributes.ReparsePoint) != 0) continue;
+            string dirName = Path.GetFileName(subDir);
+            if (excluded is not null && excluded.Contains(dirName))
+            {
+                continue;
+            }
+
+            if ((File.GetAttributes(subDir) & FileAttributes.ReparsePoint) != 0)
+            {
+                continue;
+            }
+
             CollectMarkdownFiles(subDir, excluded, result);
         }
     }
@@ -188,31 +246,54 @@ public class MarkdownProvider : DataProvider
     private static void SetFile(MarkdownNodeInfo node, SourceFile file)
     {
         node.File = file;
-        foreach (var child in node.Children) SetFile(child, file);
+        foreach (MarkdownNodeInfo child in node.Children)
+        {
+            SetFile(child, file);
+        }
     }
 
     private static DataObject ToContent(object? value)
     {
-        if (value is System.Collections.IList { Count: 1 } list) value = list[0];
+        if (value is System.Collections.IList { Count: 1 } list)
+        {
+            value = list[0];
+        }
+
         if (value is not DataObject parsed)
+        {
             throw new ArgumentException("Markdown parsing requires a provider result.");
-        var content = new DataObject("MarkdownContent");
-        foreach (var name in new[] { "Headings", "Links", "Sections", "FenceBlocks", "Documents" })
+        }
+
+        DataObject content = new DataObject("MarkdownContent");
+        foreach (string? name in new[] { "Headings", "Links", "Sections", "FenceBlocks", "Documents" })
+        {
             content.Set(name, Wrap(parsed.GetField(name)) ?? new List<object>());
+        }
+
         return content;
     }
 
     private static object? Wrap(object? value)
     {
-        if (value is null or string or bool or int or long or double or DataObject) return value;
+        if (value is null or string or bool or int or long or double or DataObject)
+        {
+            return value;
+        }
+
         if (value is System.Collections.IEnumerable sequence)
+        {
             return sequence.Cast<object?>().Select(Wrap).ToList();
-        if (!_bindings.ClrTypeMappings!.TryGetValue(value.GetType(), out var type)
-            || !_bindings.Accessors!.TryGetValue(type, out var accessors))
+        }
+
+        if (!s_bindings.ClrTypeMappings!.TryGetValue(value.GetType(), out string? type)
+            || !s_bindings.Accessors!.TryGetValue(type, out Dictionary<string, Func<object, object?>>? accessors))
+        {
             throw new InvalidOperationException($"Unsupported Markdown model value: {value.GetType().Name}.");
+        }
+
         return new DataObject(type).WithFieldResolver(name =>
         {
-            var accessor = accessors.FirstOrDefault(pair => pair.Key.Equals(name, StringComparison.OrdinalIgnoreCase)).Value;
+            Func<object, object?>? accessor = accessors.FirstOrDefault(pair => pair.Key.Equals(name, StringComparison.OrdinalIgnoreCase)).Value;
             return accessor is null ? null : Wrap(accessor(value));
         });
     }
@@ -282,37 +363,57 @@ public class MarkdownProvider : DataProvider
         {
             ["Headings"] = doc =>
             {
-                var file = (SourceFile)doc;
-                if (file.Language != "markdown") return [];
-                var md = MarkdownParser.Parse(file.RawText);
+                SourceFile file = (SourceFile)doc;
+                if (file.Language != "markdown")
+                {
+                    return [];
+                }
+
+                MarkdownDocument md = MarkdownParser.Parse(file.RawText);
                 return md.Headings.Select(h => (object)(h with { File = file })).ToList();
             },
             ["Links"] = doc =>
             {
-                var file = (SourceFile)doc;
-                if (file.Language != "markdown") return [];
-                var md = MarkdownParser.Parse(file.RawText);
+                SourceFile file = (SourceFile)doc;
+                if (file.Language != "markdown")
+                {
+                    return [];
+                }
+
+                MarkdownDocument md = MarkdownParser.Parse(file.RawText);
                 return md.Links.Select(l => (object)(l with { File = file })).ToList();
             },
             ["Sections"] = doc =>
             {
-                var file = (SourceFile)doc;
-                if (file.Language != "markdown") return [];
-                var md = MarkdownParser.Parse(file.RawText);
+                SourceFile file = (SourceFile)doc;
+                if (file.Language != "markdown")
+                {
+                    return [];
+                }
+
+                MarkdownDocument md = MarkdownParser.Parse(file.RawText);
                 return md.Sections.Select(s => (object)(s with { File = file })).ToList();
             },
             ["FenceBlocks"] = doc =>
             {
-                var file = (SourceFile)doc;
-                if (file.Language != "markdown") return [];
-                var md = MarkdownParser.Parse(file.RawText);
+                SourceFile file = (SourceFile)doc;
+                if (file.Language != "markdown")
+                {
+                    return [];
+                }
+
+                MarkdownDocument md = MarkdownParser.Parse(file.RawText);
                 return md.FenceBlocks.Select(fb => (object)(fb with { File = file })).ToList();
             },
             ["Documents"] = doc =>
             {
-                var file = (SourceFile)doc;
-                if (file.Language != "markdown") return [];
-                var root = MarkdownParser.Parse(file.RawText).Root;
+                SourceFile file = (SourceFile)doc;
+                if (file.Language != "markdown")
+                {
+                    return [];
+                }
+
+                MarkdownNodeInfo root = MarkdownParser.Parse(file.RawText).Root;
                 SetFile(root, file);
                 return [(object)root];
             },

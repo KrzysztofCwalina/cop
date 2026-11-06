@@ -1,3 +1,5 @@
+// Serializes source models while preserving declaration and statement identity.
+
 using System.IO.Compression;
 using System.Text;
 using System.Reflection;
@@ -8,43 +10,56 @@ namespace Cop.Providers;
 
 internal static class SourceCacheSerializer
 {
-    private static readonly byte[] Magic = [(byte)'C', (byte)'O', (byte)'P', (byte)'C'];
-    private const int FormatVersion = 8;
+    private static readonly byte[] s_magic = [(byte)'C', (byte)'O', (byte)'P', (byte)'C'];
+    private const int FormatVersion = 12;
 
+    /// <summary>
+    /// Writes a parsed source graph in the versioned binary format.
+    /// </summary>
     public static void Save(string cachePath, byte[] fingerprint, List<SourceFile> sourceFiles)
     {
-        var directory = Path.GetDirectoryName(cachePath);
+        string? directory = Path.GetDirectoryName(cachePath);
         if (!string.IsNullOrEmpty(directory))
+        {
             Directory.CreateDirectory(directory);
+        }
 
-        using var fileStream = new FileStream(cachePath, FileMode.Create, FileAccess.Write, FileShare.None);
+        using FileStream fileStream = new FileStream(cachePath, FileMode.Create, FileAccess.Write, FileShare.None);
         Save(fileStream, fingerprint, sourceFiles);
     }
 
     internal static void Save(Stream stream, byte[] fingerprint, List<SourceFile> sourceFiles)
     {
-        using var gzip = new GZipStream(stream, CompressionLevel.SmallestSize, leaveOpen: true);
-        using var writer = new CacheWriter(gzip);
+        using GZipStream gzip = new GZipStream(stream, CompressionLevel.SmallestSize, leaveOpen: true);
+        using CacheWriter writer = new CacheWriter(gzip);
 
-        writer.Write(Magic);
+        writer.Write(s_magic);
         writer.Write(FormatVersion);
         writer.Write(fingerprint.Length);
         writer.Write(fingerprint);
         WriteList(writer, sourceFiles, WriteSourceFile);
     }
 
-    public static List<SourceFile>? TryLoad(string cachePath, byte[] fingerprint)
-        => TryLoad(cachePath, fingerprint, typeof(SourceCacheSerializer).Assembly);
+    /// <summary>
+    /// Restores a valid cached source graph, or returns null when it cannot be reused.
+    /// </summary>
+    public static List<SourceFile>? LoadOrDefault(string cachePath, byte[] fingerprint)
+        => LoadOrDefault(cachePath, fingerprint, typeof(SourceCacheSerializer).Assembly);
 
-    public static List<SourceFile>? TryLoad(string cachePath, byte[] fingerprint, Assembly parserAssembly)
+    /// <summary>
+    /// Restores a valid cached source graph, or returns null when it cannot be reused.
+    /// </summary>
+    public static List<SourceFile>? LoadOrDefault(string cachePath, byte[] fingerprint, Assembly parserAssembly)
     {
         if (!File.Exists(cachePath))
+        {
             return null;
+        }
 
         try
         {
-            using var fileStream = new FileStream(cachePath, FileMode.Open, FileAccess.Read, FileShare.Read);
-            return TryLoad(fileStream, fingerprint, parserAssembly);
+            using FileStream fileStream = new FileStream(cachePath, FileMode.Open, FileAccess.Read, FileShare.Read);
+            return LoadOrDefault(fileStream, fingerprint, parserAssembly);
         }
         catch (IOException)
         {
@@ -52,25 +67,31 @@ internal static class SourceCacheSerializer
         }
     }
 
-    internal static List<SourceFile>? TryLoad(Stream stream, byte[] fingerprint, Assembly parserAssembly)
+    internal static List<SourceFile>? LoadOrDefault(Stream stream, byte[] fingerprint, Assembly parserAssembly)
     {
         try
         {
-            using var gzip = new GZipStream(stream, CompressionMode.Decompress, leaveOpen: true);
-            using var reader = new CacheReader(gzip,
+            using GZipStream gzip = new GZipStream(stream, CompressionMode.Decompress, leaveOpen: true);
+            using CacheReader reader = new CacheReader(gzip,
                 AssemblyLoadContext.GetLoadContext(parserAssembly) ?? AssemblyLoadContext.Default);
 
-            var magic = reader.ReadBytes(Magic.Length);
-            if (magic.Length != Magic.Length || !magic.SequenceEqual(Magic))
+            byte[] magic = reader.ReadBytes(s_magic.Length);
+            if (magic.Length != s_magic.Length || !magic.SequenceEqual(s_magic))
+            {
                 return null;
+            }
 
-            var version = reader.ReadInt32();
+            int version = reader.ReadInt32();
             if (version != FormatVersion)
+            {
                 return null;
+            }
 
-            var cachedFingerprint = ReadBytes(reader, nameof(fingerprint));
+            byte[] cachedFingerprint = ReadBytes(reader, nameof(fingerprint));
             if (!cachedFingerprint.SequenceEqual(fingerprint))
+            {
                 return null;
+            }
 
             return ReadList(reader, ReadSourceFile, "SourceFiles");
         }
@@ -91,24 +112,47 @@ internal static class SourceCacheSerializer
     private sealed class CacheReader(Stream input, AssemblyLoadContext context)
         : BinaryReader(input, Encoding.UTF8, leaveOpen: false)
     {
+        /// <summary>
+        /// The assembly-load context used to reconstruct language-specific model types.
+        /// </summary>
         public AssemblyLoadContext Context { get; } = context;
+        /// <summary>
+        /// The statement objects already restored for each cached graph identity.
+        /// </summary>
         public Dictionary<int, StatementInfo> Statements { get; } = [];
+        /// <summary>
+        /// The method objects already restored for each cached graph identity.
+        /// </summary>
         public Dictionary<int, MethodDeclaration> Methods { get; } = [];
+        /// <summary>The type objects already restored for each graph identity.</summary>
         public Dictionary<int, TypeDeclaration> Types { get; } = [];
+        /// <summary>
+        /// The expression objects already restored for each cached graph identity.
+        /// </summary>
         public Dictionary<int, ExpressionInfo> Expressions { get; } = [];
     }
 
     private sealed class CacheWriter(Stream output) : BinaryWriter(output, Encoding.UTF8, leaveOpen: false)
     {
+        /// <summary>
+        /// The graph identities assigned to statement objects while writing the cache.
+        /// </summary>
         public Dictionary<StatementInfo, int> Statements { get; } = new(ReferenceEqualityComparer.Instance);
+        /// <summary>
+        /// The graph identities assigned to method objects while writing the cache.
+        /// </summary>
         public Dictionary<MethodDeclaration, int> Methods { get; } = new(ReferenceEqualityComparer.Instance);
+        /// <summary>The graph identities assigned to type objects while writing.</summary>
         public Dictionary<TypeDeclaration, int> Types { get; } = new(ReferenceEqualityComparer.Instance);
+        /// <summary>
+        /// The expression identities tracked while serializing this graph.
+        /// </summary>
         public Dictionary<ExpressionInfo, int> Expressions { get; } = new(ReferenceEqualityComparer.Instance);
     }
 
     private static void WriteSourceFile(BinaryWriter writer, SourceFile sourceFile)
     {
-        var graph = (CacheWriter)writer;
+        CacheWriter graph = (CacheWriter)writer;
         graph.Statements.Clear();
         graph.Methods.Clear();
         graph.Types.Clear();
@@ -122,24 +166,38 @@ internal static class SourceCacheSerializer
         WriteNullableString(writer, sourceFile.Namespace);
         WriteList(writer, sourceFile.Regions, WriteRegionInfo);
         WriteHashSet(writer, sourceFile.CommentLines);
+        WriteList(writer, sourceFile.Comments, static (w, comment) =>
+        {
+            w.Write(comment.Kind);
+            w.Write(comment.Content);
+            w.Write(comment.Line);
+        });
         WriteList(writer, sourceFile.Methods, WriteMethodDeclaration);
         WriteList(writer, sourceFile.Imports, WriteImport);
         WriteList(writer, sourceFile.ParseErrors, static (w, error) => w.Write(error));
-        var statements = graph.Statements.Keys.ToList();
-        var seen = statements.ToHashSet(ReferenceEqualityComparer.Instance);
+        List<StatementInfo> statements = graph.Statements.Keys.ToList();
+        HashSet<object?> seen = statements.ToHashSet(ReferenceEqualityComparer.Instance);
         for (int i = 0; i < statements.Count; i++)
         {
-            var statement = statements[i];
+            StatementInfo statement = statements[i];
             if (statement.Parent is not null && seen.Add(statement.Parent))
+            {
                 statements.Add(statement.Parent);
-            foreach (var related in statement.Children.Concat(statement.Method?.Statements ?? []))
-                if (seen.Add(related)) statements.Add(related);
+            }
+
+            foreach (StatementInfo? related in statement.Children.Concat(statement.Method?.Statements ?? []))
+            {
+                if (seen.Add(related))
+                {
+                    statements.Add(related);
+                }
+            }
         }
         WriteList(writer, statements, WriteStatementInfo);
         WriteList(writer, statements.Where(s => s.Method is not null).Select(s => s.Method!)
             .Distinct<MethodDeclaration>(ReferenceEqualityComparer.Instance).ToList(), WriteMethodDeclaration);
         writer.Write(graph.Statements.Count);
-        foreach (var (statement, id) in graph.Statements)
+        foreach ((StatementInfo? statement, int id) in graph.Statements)
         {
             writer.Write(id);
             writer.Write(statement.Parent is null ? -1 : graph.Statements[statement.Parent]);
@@ -149,38 +207,47 @@ internal static class SourceCacheSerializer
 
     private static SourceFile ReadSourceFile(BinaryReader reader)
     {
-        var graph = (CacheReader)reader;
+        CacheReader graph = (CacheReader)reader;
         graph.Statements.Clear();
         graph.Methods.Clear();
         graph.Types.Clear();
         graph.Expressions.Clear();
-        var path = reader.ReadString();
-        var language = reader.ReadString();
-        var types = ReadList(reader, ReadTypeDeclaration, "SourceFile.Types");
-        var statements = ReadList(reader, ReadStatementInfo, "SourceFile.Statements");
-        var rawText = reader.ReadString();
-        var usings = ReadList(reader, static r => r.ReadString(), "SourceFile.Usings");
-        var @namespace = ReadNullableString(reader);
-        var regions = ReadList(reader, ReadRegionInfo, "SourceFile.Regions");
-        var commentLines = ReadHashSet(reader, "SourceFile.CommentLines");
-        var methods = ReadList(reader, ReadMethodDeclaration, "SourceFile.Methods");
-        var imports = ReadList(reader, ReadImport, "SourceFile.Imports");
-        var errors = ReadList(reader, static r => r.ReadString(), "SourceFile.ParseErrors");
+        string path = reader.ReadString();
+        string language = reader.ReadString();
+        List<TypeDeclaration> types = ReadList(reader, ReadTypeDeclaration, "SourceFile.Types");
+        List<StatementInfo> statements = ReadList(reader, ReadStatementInfo, "SourceFile.Statements");
+        string rawText = reader.ReadString();
+        List<string> usings = ReadList(reader, static r => r.ReadString(), "SourceFile.Usings");
+        string? @namespace = ReadNullableString(reader);
+        List<RegionInfo> regions = ReadList(reader, ReadRegionInfo, "SourceFile.Regions");
+        HashSet<int> commentLines = ReadHashSet(reader, "SourceFile.CommentLines");
+        List<CommentInfo> comments = ReadList(reader,
+            static r => new CommentInfo(r.ReadString(), r.ReadString(), r.ReadInt32()),
+            "SourceFile.Comments");
+        List<MethodDeclaration> methods = ReadList(reader, ReadMethodDeclaration, "SourceFile.Methods");
+        List<ImportInfo> imports = ReadList(reader, ReadImport, "SourceFile.Imports");
+        List<string> errors = ReadList(reader, static r => r.ReadString(), "SourceFile.ParseErrors");
         _ = ReadList(reader, ReadStatementInfo, "SourceFile.ParentStatements");
         _ = ReadList(reader, ReadMethodDeclaration, "SourceFile.StatementMethods");
-        var count = ReadCount(reader, "SourceFile.Graph");
+        int count = ReadCount(reader, "SourceFile.Graph");
         if (count != graph.Statements.Count)
+        {
             throw new InvalidDataException("Invalid statement graph size.");
-        var linked = new HashSet<int>();
+        }
+
+        HashSet<int> linked = new HashSet<int>();
         for (int i = 0; i < count; i++)
         {
-            var statementId = reader.ReadInt32();
-            var parentId = reader.ReadInt32();
-            var methodIndex = reader.ReadInt32();
-            if (!linked.Add(statementId) || !graph.Statements.TryGetValue(statementId, out var statement)
+            int statementId = reader.ReadInt32();
+            int parentId = reader.ReadInt32();
+            int methodIndex = reader.ReadInt32();
+            if (!linked.Add(statementId) || !graph.Statements.TryGetValue(statementId, out StatementInfo? statement)
                 || parentId < -1 || (parentId >= 0 && !graph.Statements.ContainsKey(parentId))
                 || methodIndex < -1 || (methodIndex >= 0 && !graph.Methods.ContainsKey(methodIndex)))
+            {
                 throw new InvalidDataException("Invalid statement graph reference.");
+            }
+
             statement.Parent = parentId < 0 ? null : graph.Statements[parentId];
             statement.Method = methodIndex < 0 ? null : graph.Methods[methodIndex];
         }
@@ -191,6 +258,7 @@ internal static class SourceCacheSerializer
             Namespace = @namespace,
             Regions = regions,
             CommentLines = commentLines,
+            Comments = comments,
             Methods = methods,
             Imports = imports,
             ParseErrors = errors
@@ -199,8 +267,8 @@ internal static class SourceCacheSerializer
 
     private static void WriteTypeDeclaration(BinaryWriter writer, TypeDeclaration type)
     {
-        var graph = (CacheWriter)writer;
-        if (graph.Types.TryGetValue(type, out var existing))
+        CacheWriter graph = (CacheWriter)writer;
+        if (graph.Types.TryGetValue(type, out int existing))
         {
             writer.Write(existing);
             writer.Write(false);
@@ -231,13 +299,13 @@ internal static class SourceCacheSerializer
         WriteList(writer, type.CachedInterfaces, static (w, value) => w.Write(value));
 
         // Language-specific subtype tag + flags (e.g. RustType). Null for base types.
-        var languageTag = type.LanguageTag;
+        string? languageTag = type.LanguageTag;
         WriteNullableString(writer, languageTag);
         if (languageTag is not null)
         {
-            var flags = type.LanguageFlags ?? [];
+            IReadOnlyList<KeyValuePair<string, bool>> flags = type.LanguageFlags ?? [];
             writer.Write(flags.Count);
-            foreach (var flag in flags)
+            foreach (KeyValuePair<string, bool> flag in flags)
             {
                 writer.Write(flag.Key);
                 writer.Write(flag.Value);
@@ -247,12 +315,15 @@ internal static class SourceCacheSerializer
 
     private static TypeDeclaration ReadTypeDeclaration(BinaryReader reader)
     {
-        var graph = (CacheReader)reader;
-        var id = reader.ReadInt32();
+        CacheReader graph = (CacheReader)reader;
+        int id = reader.ReadInt32();
         if (!reader.ReadBoolean())
-            return graph.Types.TryGetValue(id, out var existing) ? existing
+        {
+            return graph.Types.TryGetValue(id, out TypeDeclaration? existing) ? existing
                 : throw new InvalidDataException("Invalid type reference.");
-        var type = new TypeDeclaration(
+        }
+
+        TypeDeclaration type = new TypeDeclaration(
             reader.ReadString(),
             (TypeKind)reader.ReadInt32(),
             (Modifier)reader.ReadInt32(),
@@ -279,14 +350,14 @@ internal static class SourceCacheSerializer
         };
 
         // Language-specific subtype tag + flags — reconstruct the subtype if registered.
-        var languageTag = ReadNullableString(reader);
+        string? languageTag = ReadNullableString(reader);
         if (languageTag is not null)
         {
-            var flagCount = ReadCount(reader, "TypeDeclaration.LanguageFlags");
-            var flags = new Dictionary<string, bool>(flagCount, StringComparer.Ordinal);
+            int flagCount = ReadCount(reader, "TypeDeclaration.LanguageFlags");
+            Dictionary<string, bool> flags = new Dictionary<string, bool>(flagCount, StringComparer.Ordinal);
             for (int i = 0; i < flagCount; i++)
             {
-                var key = reader.ReadString();
+                string key = reader.ReadString();
                 flags[key] = reader.ReadBoolean();
             }
             type = LanguageTypeRegistry.Reconstruct(languageTag, type, flags, graph.Context) with
@@ -302,14 +373,17 @@ internal static class SourceCacheSerializer
         }
 
         if (!graph.Types.TryAdd(id, type))
+        {
             throw new InvalidDataException("Duplicate type identity.");
+        }
+
         return type;
     }
 
     private static void WriteMethodDeclaration(BinaryWriter writer, MethodDeclaration method)
     {
-        var graph = (CacheWriter)writer;
-        if (graph.Methods.TryGetValue(method, out var existing))
+        CacheWriter graph = (CacheWriter)writer;
+        if (graph.Methods.TryGetValue(method, out int existing))
         {
             writer.Write(existing);
             writer.Write(false);
@@ -331,16 +405,20 @@ internal static class SourceCacheSerializer
         WriteList(writer, method.TypeParameters, static (w, value) => w.Write(value));
         WriteSpan(writer, method.Column, method.EndLine, method.EndColumn);
         WriteLanguageSubtype(writer, method.LanguageTag, method.LanguageFlags);
+        writer.Write(method.Kind);
     }
 
     private static MethodDeclaration ReadMethodDeclaration(BinaryReader reader)
     {
-        var graph = (CacheReader)reader;
-        var id = reader.ReadInt32();
+        CacheReader graph = (CacheReader)reader;
+        int id = reader.ReadInt32();
         if (!reader.ReadBoolean())
-            return graph.Methods.TryGetValue(id, out var existing) ? existing
+        {
+            return graph.Methods.TryGetValue(id, out MethodDeclaration? existing) ? existing
                 : throw new InvalidDataException("Invalid method reference.");
-        var method = new MethodDeclaration(
+        }
+
+        MethodDeclaration method = new MethodDeclaration(
             reader.ReadString(),
             (Modifier)reader.ReadInt32(),
             ReadList(reader, static r => r.ReadString(), "MethodDeclaration.Decorators"),
@@ -357,24 +435,32 @@ internal static class SourceCacheSerializer
             EndLine = ReadNullableInt(reader),
             EndColumn = ReadNullableInt(reader)
         };
-        var (tag, flags) = ReadLanguageSubtype(reader, "MethodDeclaration");
+        (string? tag, Dictionary<string, bool>? flags) = ReadLanguageSubtype(reader, "MethodDeclaration");
+        method = method with { Kind = reader.ReadString() };
         if (tag is not null)
+        {
             method = MethodTypeRegistry.Reconstruct(tag, method, flags, graph.Context) with
             {
+                Kind = method.Kind,
                 Statements = method.Statements, ReceiverType = method.ReceiverType,
                 TypeParameters = method.TypeParameters,
                 Column = method.Column, EndLine = method.EndLine, EndColumn = method.EndColumn,
                 HasDocComment = method.HasDocComment, DocComment = method.DocComment
             };
+        }
+
         if (!graph.Methods.TryAdd(id, method))
+        {
             throw new InvalidDataException("Duplicate method identity.");
+        }
+
         return method;
     }
 
     private static void WriteStatementInfo(BinaryWriter writer, StatementInfo statement)
     {
-        var graph = (CacheWriter)writer;
-        if (graph.Statements.TryGetValue(statement, out var existing))
+        CacheWriter graph = (CacheWriter)writer;
+        if (graph.Statements.TryGetValue(statement, out int existing))
         {
             writer.Write(existing);
             writer.Write(false);
@@ -399,21 +485,25 @@ internal static class SourceCacheSerializer
         writer.Write(statement.CopIgnore);
         WriteExpression(writer, statement.CallTarget);
         WriteExpression(writer, statement.ValueExpression);
+        WriteExpression(writer, statement.ConditionExpression);
         WriteList(writer, statement.ArgumentExpressions, WriteExpression);
         WriteSpan(writer, statement.Column, statement.EndLine, statement.EndColumn);
         WriteList(writer, statement.CachedConstructedTypeInterfaces, static (w, value) => w.Write(value));
-        WriteList(writer, statement._children, WriteStatementInfo);
+        WriteList(writer, statement.MutableChildren, WriteStatementInfo);
         WriteLanguageSubtype(writer, statement.LanguageTag, statement.LanguageFlags);
     }
 
     private static StatementInfo ReadStatementInfo(BinaryReader reader)
     {
-        var graph = (CacheReader)reader;
-        var id = reader.ReadInt32();
+        CacheReader graph = (CacheReader)reader;
+        int id = reader.ReadInt32();
         if (!reader.ReadBoolean())
-            return graph.Statements.TryGetValue(id, out var existing) ? existing
+        {
+            return graph.Statements.TryGetValue(id, out StatementInfo? existing) ? existing
                 : throw new InvalidDataException("Invalid statement reference.");
-        var statement = new StatementInfo(
+        }
+
+        StatementInfo statement = new StatementInfo(
             reader.ReadString(),
             ReadList(reader, static r => r.ReadString(), "StatementInfo.Keywords"),
             ReadNullableString(reader),
@@ -431,18 +521,20 @@ internal static class SourceCacheSerializer
             CopIgnore = reader.ReadString(),
             CallTarget = ReadExpression(reader),
             ValueExpression = ReadExpression(reader),
+            ConditionExpression = ReadExpression(reader),
             ArgumentExpressions = ReadList(reader, r => ReadExpression(r)
                 ?? throw new InvalidDataException("Null argument expression."), "StatementInfo.ArgumentExpressions"),
             Column = ReadNullableInt(reader),
             EndLine = ReadNullableInt(reader),
             EndColumn = ReadNullableInt(reader),
             ConstructedTypeInterfaces = ReadList(reader, static r => r.ReadString(), "StatementInfo.ConstructedTypeInterfaces"),
-            _children = ReadList(reader, ReadStatementInfo, "StatementInfo.Children")
+            MutableChildren = ReadList(reader, ReadStatementInfo, "StatementInfo.Children")
         };
-        var (tag, flags) = ReadLanguageSubtype(reader, "StatementInfo");
-        var result = tag is not null ? StatementTypeRegistry.Reconstruct(tag, statement, flags, graph.Context) : statement;
+        (string? tag, Dictionary<string, bool>? flags) = ReadLanguageSubtype(reader, "StatementInfo");
+        StatementInfo result = tag is not null ? StatementTypeRegistry.Reconstruct(tag, statement, flags, graph.Context) : statement;
         result.CallTarget = statement.CallTarget;
         result.ValueExpression = statement.ValueExpression;
+        result.ConditionExpression = statement.ConditionExpression;
         result.ArgumentExpressions = statement.ArgumentExpressions;
         result.Column = statement.Column;
         result.EndLine = statement.EndLine;
@@ -451,18 +543,25 @@ internal static class SourceCacheSerializer
         result.Expression = statement.Expression;
         result.CopIgnore = statement.CopIgnore;
         result.ConstructedTypeInterfaces = statement.CachedConstructedTypeInterfaces;
-        result._children = statement._children;
+        result.MutableChildren = statement.MutableChildren;
         if (!graph.Statements.TryAdd(id, result))
+        {
             throw new InvalidDataException("Duplicate statement identity.");
+        }
+
         return result;
     }
 
     private static void WriteExpression(BinaryWriter writer, ExpressionInfo? expression)
     {
         writer.Write(expression is not null);
-        if (expression is null) return;
-        var graph = (CacheWriter)writer;
-        if (graph.Expressions.TryGetValue(expression, out var existing))
+        if (expression is null)
+        {
+            return;
+        }
+
+        CacheWriter graph = (CacheWriter)writer;
+        if (graph.Expressions.TryGetValue(expression, out int existing))
         {
             writer.Write(existing);
             writer.Write(false);
@@ -474,28 +573,45 @@ internal static class SourceCacheSerializer
         writer.Write(expression.Kind);
         WriteNullableString(writer, expression.Name);
         WriteNullableString(writer, expression.StringValue);
+        writer.Write(expression.BooleanValue.HasValue);
+        if (expression.BooleanValue.HasValue)
+        {
+            writer.Write(expression.BooleanValue.Value);
+        }
+
         WriteExpression(writer, expression.Target);
         WriteList(writer, expression.Children, WriteExpression);
     }
 
     private static ExpressionInfo? ReadExpression(BinaryReader reader)
     {
-        if (!reader.ReadBoolean()) return null;
-        var graph = (CacheReader)reader;
-        var id = reader.ReadInt32();
         if (!reader.ReadBoolean())
-            return graph.Expressions.TryGetValue(id, out var existing) ? existing
+        {
+            return null;
+        }
+
+        CacheReader graph = (CacheReader)reader;
+        int id = reader.ReadInt32();
+        if (!reader.ReadBoolean())
+        {
+            return graph.Expressions.TryGetValue(id, out ExpressionInfo? existing) ? existing
                 : throw new InvalidDataException("Invalid expression reference.");
-        var expression = new ExpressionInfo(reader.ReadString())
+        }
+
+        ExpressionInfo expression = new ExpressionInfo(reader.ReadString())
         {
             Name = ReadNullableString(reader),
             StringValue = ReadNullableString(reader),
+            BooleanValue = reader.ReadBoolean() ? reader.ReadBoolean() : null,
             Target = ReadExpression(reader),
             Children = ReadList(reader, r => ReadExpression(r)
                 ?? throw new InvalidDataException("Null child expression."), "CodeExpression.Children")
         };
         if (!graph.Expressions.TryAdd(id, expression))
+        {
             throw new InvalidDataException("Duplicate expression identity.");
+        }
+
         return expression;
     }
 
@@ -505,9 +621,9 @@ internal static class SourceCacheSerializer
         WriteNullableString(writer, tag);
         if (tag is not null)
         {
-            var list = flags ?? [];
+            IReadOnlyList<KeyValuePair<string, bool>> list = flags ?? [];
             writer.Write(list.Count);
-            foreach (var flag in list)
+            foreach (KeyValuePair<string, bool> flag in list)
             {
                 writer.Write(flag.Key);
                 writer.Write(flag.Value);
@@ -518,14 +634,14 @@ internal static class SourceCacheSerializer
     /// <summary>Reads a language-specific subtype tag + flags written by <see cref="WriteLanguageSubtype"/>.</summary>
     private static (string? Tag, Dictionary<string, bool> Flags) ReadLanguageSubtype(BinaryReader reader, string context)
     {
-        var tag = ReadNullableString(reader);
-        var flags = new Dictionary<string, bool>(StringComparer.Ordinal);
+        string? tag = ReadNullableString(reader);
+        Dictionary<string, bool> flags = new Dictionary<string, bool>(StringComparer.Ordinal);
         if (tag is not null)
         {
-            var flagCount = ReadCount(reader, $"{context}.LanguageFlags");
+            int flagCount = ReadCount(reader, $"{context}.LanguageFlags");
             for (int i = 0; i < flagCount; i++)
             {
-                var key = reader.ReadString();
+                string key = reader.ReadString();
                 flags[key] = reader.ReadBoolean();
             }
         }
@@ -646,7 +762,10 @@ internal static class SourceCacheSerializer
     private static void WriteNullableInt(BinaryWriter writer, int? value)
     {
         writer.Write(value.HasValue);
-        if (value.HasValue) writer.Write(value.Value);
+        if (value.HasValue)
+        {
+            writer.Write(value.Value);
+        }
     }
 
     private static int? ReadNullableInt(BinaryReader reader) => reader.ReadBoolean() ? reader.ReadInt32() : null;
@@ -657,6 +776,7 @@ internal static class SourceCacheSerializer
         WriteNullableString(writer, typeReference.Namespace);
         WriteList(writer, typeReference.GenericArguments, WriteTypeReference);
         writer.Write(typeReference.OriginalText);
+        writer.Write(typeReference.IsAnonymous);
     }
 
     private static TypeReference ReadTypeReference(BinaryReader reader) =>
@@ -664,7 +784,7 @@ internal static class SourceCacheSerializer
             reader.ReadString(),
             ReadNullableString(reader),
             ReadList(reader, ReadTypeReference, "TypeReference.GenericArguments"),
-            reader.ReadString());
+            reader.ReadString()) { IsAnonymous = reader.ReadBoolean() };
 
     private static void WriteRegionInfo(BinaryWriter writer, RegionInfo region)
     {
@@ -681,7 +801,9 @@ internal static class SourceCacheSerializer
     {
         writer.Write(value is not null);
         if (value is not null)
+        {
             writer.Write(value);
+        }
     }
 
     private static string? ReadNullableString(BinaryReader reader)
@@ -693,7 +815,9 @@ internal static class SourceCacheSerializer
     {
         writer.Write(value is not null);
         if (value is not null)
+        {
             WriteTypeReference(writer, value);
+        }
     }
 
     private static TypeReference? ReadNullableTypeReference(BinaryReader reader)
@@ -704,16 +828,21 @@ internal static class SourceCacheSerializer
     private static void WriteHashSet(BinaryWriter writer, HashSet<int> values)
     {
         writer.Write(values.Count);
-        foreach (var value in values.Order())
+        foreach (int value in values.Order())
+        {
             writer.Write(value);
+        }
     }
 
     private static HashSet<int> ReadHashSet(BinaryReader reader, string name)
     {
-        var count = ReadCount(reader, name);
-        var result = new HashSet<int>();
+        int count = ReadCount(reader, name);
+        HashSet<int> result = new HashSet<int>();
         for (int i = 0; i < count; i++)
+        {
             result.Add(reader.ReadInt32());
+        }
+
         return result;
     }
 
@@ -721,32 +850,43 @@ internal static class SourceCacheSerializer
     {
         writer.Write(items.Count);
         for (int i = 0; i < items.Count; i++)
+        {
             writeItem(writer, items[i]);
+        }
     }
 
     private static List<T> ReadList<T>(BinaryReader reader, Func<BinaryReader, T> readItem, string name)
     {
-        var count = ReadCount(reader, name);
-        var result = new List<T>(count);
+        int count = ReadCount(reader, name);
+        List<T> result = new List<T>(count);
         for (int i = 0; i < count; i++)
+        {
             result.Add(readItem(reader));
+        }
+
         return result;
     }
 
     private static byte[] ReadBytes(BinaryReader reader, string name)
     {
-        var count = ReadCount(reader, name);
-        var bytes = reader.ReadBytes(count);
+        int count = ReadCount(reader, name);
+        byte[] bytes = reader.ReadBytes(count);
         if (bytes.Length != count)
+        {
             throw new FormatException($"Unexpected end of stream while reading {name}.");
+        }
+
         return bytes;
     }
 
     private static int ReadCount(BinaryReader reader, string name)
     {
-        var count = reader.ReadInt32();
+        int count = reader.ReadInt32();
         if (count < 0)
+        {
             throw new FormatException($"Invalid count for {name}: {count}.");
+        }
+
         return count;
     }
 }

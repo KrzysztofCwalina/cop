@@ -1,0 +1,1234 @@
+// Selects Python AST or source-only parsing and tracks toolchain cache identity.
+
+using System.Text.Json;
+using Cop.Providers.SourceModel;
+
+namespace Cop.Providers.SourceParsers;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Internal recursive-descent parser
+// ─────────────────────────────────────────────────────────────────────────────
+
+internal sealed class PythonParserCore
+{
+    private readonly string _filePath;
+    private readonly List<Tok> _toks;
+    private int _pos;
+
+    private readonly List<TypeDeclaration> _types      = [];
+    private readonly List<MethodDeclaration> _functions = [];
+    private readonly List<StatementInfo>   _statements = [];
+    private readonly List<string>          _usings     = [];
+    private readonly List<ImportInfo>      _imports    = [];
+    private readonly List<string>          _errors     = [];
+    private readonly HashSet<int>          _commentLines;
+
+    internal PythonParserCore(string filePath, List<Tok> toks,
+        HashSet<int> commentLines, List<string> lexErrors)
+    {
+        _filePath     = filePath;
+        _toks         = toks;
+        _commentLines = commentLines;
+        _errors.AddRange(lexErrors);
+    }
+
+    // ── Token navigation ────────────────────────────────────────────────────
+
+    private Tok Peek(int offset = 0)
+    {
+        int idx = _pos + offset;
+        return idx < _toks.Count ? _toks[idx] : new Tok(TK.Eof, string.Empty, 0, 0);
+    }
+
+    private Tok Consume()
+    {
+        Tok t = Peek();
+        if (_pos < _toks.Count)
+        {
+            _pos++;
+        }
+
+        return t;
+    }
+
+    private bool At(TK k)         => Peek().Kind == k;
+    private bool AtIdent(string s) => Peek().Is(s);
+
+    private void SkipNewlines()
+    {
+        while (At(TK.Newline))
+        {
+            Consume();
+        }
+    }
+
+    private void SkipStructural()
+    {
+        while (At(TK.Newline) || At(TK.Indent) || At(TK.Dedent))
+        {
+            Consume();
+        }
+    }
+
+    private void SkipToNewline()
+    {
+        while (!At(TK.Newline) && !At(TK.Indent) && !At(TK.Dedent) && !At(TK.Eof))
+        {
+            Consume();
+        }
+
+        if (At(TK.Newline))
+        {
+            Consume();
+        }
+    }
+
+    private void SkipBlock()
+    {
+        if (!At(TK.Indent))
+        {
+            return;
+        }
+
+        Consume();
+        int depth = 1;
+        while (!At(TK.Eof) && depth > 0)
+        {
+            if (At(TK.Indent))
+            {
+                depth++;
+            }
+            else if (At(TK.Dedent))
+            {
+                depth--;
+            }
+
+            Consume();
+        }
+    }
+
+    private void AddError(int line, int col, string msg) =>
+        _errors.Add($"{_filePath}({line},{col}): error: {msg}");
+
+    // ── Module-level parse ──────────────────────────────────────────────────
+
+    internal SourceFile ParseModule(string sourceText)
+    {
+        List<string> decorators = new List<string>();
+
+        while (!At(TK.Eof))
+        {
+            SkipStructural();
+            if (At(TK.Eof))
+            {
+                break;
+            }
+
+            Tok tok = Peek();
+
+            // Decorator
+            if (tok.Kind == TK.At)
+            {
+                decorators.Add(ParseDecoratorName());
+                SkipToNewline();
+                continue;
+            }
+
+            // Class declaration
+            if (tok.Is("class"))
+            {
+                TypeDeclaration? type = ParseClassDecl(decorators);
+                if (type != null)
+                {
+                    _types.Add(type);
+                }
+
+                decorators = [];
+                continue;
+            }
+
+            // Function declaration (sync)
+            if (tok.Is("def"))
+            {
+                ParseTopLevelFunc(decorators, isAsync: false);
+                decorators = [];
+                continue;
+            }
+
+            // async def (top-level function)
+            if (tok.Is("async") && Peek(1).Is("def"))
+            {
+                Consume(); // "async"
+                ParseTopLevelFunc(decorators, isAsync: true);
+                decorators = [];
+                continue;
+            }
+
+            // Import statements
+            if (tok.Is("import")) { ParseImport();     decorators = []; continue; }
+            if (tok.Is("from"))   { ParseFromImport(); decorators = []; continue; }
+
+            // All other module-level statements
+            List<Tok> lineToks = CollectLineTokens();
+            AnalyzeBodyLine(lineToks, isInMethod: false, _statements);
+            decorators = [];
+        }
+
+        return new SourceFile(_filePath, "python", _types, _statements, sourceText)
+        {
+            Methods      = _functions,
+            Usings       = _usings,
+            Imports      = _imports,
+            Regions      = ExtractRegions(sourceText),
+            CommentLines = _commentLines,
+            ParseErrors  = _errors,
+        };
+    }
+
+    // ── Import parsing ──────────────────────────────────────────────────────
+
+    private void ParseImport()
+    {
+        Tok import = Consume();
+        List<Tok> lineToks = CollectLineTokens();
+
+        int i = 0;
+        while (i < lineToks.Count)
+        {
+            // Collect dotted module name tokens (Names and Dots), stop at "as"/Comma
+            List<string> parts = new List<string>();
+            while (i < lineToks.Count
+                   && !lineToks[i].Is("as")
+                   && lineToks[i].Kind != TK.Comma)
+            {
+                if (lineToks[i].Kind == TK.Name)
+                {
+                    parts.Add(lineToks[i].Text);
+                }
+
+                i++;
+            }
+
+            if (parts.Count > 0)
+            {
+                _usings.Add(string.Join(".", parts));
+            }
+
+            string? alias = null;
+            if (i < lineToks.Count && lineToks[i].Is("as"))
+            {
+                i++; // "as"
+                if (i < lineToks.Count)
+                {
+                    alias = lineToks[i++].Text;
+                }
+            }
+            if (parts.Count > 0)
+            {
+                _imports.Add(new(string.Join(".", parts), import.Line) { Alias = alias });
+            }
+
+            // Skip comma separator
+            if (i < lineToks.Count && lineToks[i].Kind == TK.Comma)
+            {
+                i++;
+            }
+        }
+    }
+
+    private void ParseFromImport()
+    {
+        Tok from = Consume();
+        List<Tok> lineToks = CollectLineTokens();
+
+        // Collect module name (Names + Dots) until "import"
+        List<string> parts = new List<string>();
+        int level = 0;
+        bool seenModule = false;
+        int i = 0;
+        while (i < lineToks.Count && !lineToks[i].Is("import"))
+        {
+            if (lineToks[i].Kind == TK.Name) { parts.Add(lineToks[i].Text); seenModule = true; }
+            else if (!seenModule && lineToks[i].Kind == TK.Dot)
+            {
+                level++;
+            }
+
+            i++;
+        }
+
+        // Only register if "import" keyword was found
+        if (i < lineToks.Count && lineToks[i].Is("import"))
+        {
+            string module = string.Join(".", parts);
+            _usings.Add(new string('.', level) + module);
+            i++;
+            while (i < lineToks.Count)
+            {
+                Tok name = lineToks[i++];
+                if (name.Kind is not (TK.Name or TK.Star))
+                {
+                    continue;
+                }
+
+                string? alias = null;
+                if (i + 1 < lineToks.Count && lineToks[i].Is("as"))
+                {
+                    i++;
+                    alias = lineToks[i++].Text;
+                }
+                _imports.Add(new(module, from.Line) { Name = name.Text, Alias = alias, RelativeLevel = level, IsWildcard = name.Kind == TK.Star });
+            }
+        }
+    }
+
+    // ── Class declaration ───────────────────────────────────────────────────
+
+    private TypeDeclaration? ParseClassDecl(List<string> decorators)
+    {
+        Tok classTok = Consume(); // "class"
+
+        if (!At(TK.Name))
+        {
+            AddError(classTok.Line, classTok.Col, "expected class name after 'class'");
+            SkipToNewline();
+            if (At(TK.Indent))
+            {
+                SkipBlock();
+            }
+
+            return null;
+        }
+        string className = Consume().Text;
+
+        // Optional base types: (Base1, Base2, ...)
+        List<string> baseTypes = new List<string>();
+        if (At(TK.LParen))
+        {
+            Consume();
+            baseTypes = ParseBaseTypes(CollectUntilBalanced(TK.RParen));
+            if (At(TK.RParen))
+            {
+                Consume();
+            }
+            else
+            {
+                AddError(classTok.Line, classTok.Col, $"unclosed '(' in class '{className}'");
+            }
+        }
+
+        if (!At(TK.Colon))
+        {
+            AddError(classTok.Line, classTok.Col, $"expected ':' after class '{className}'");
+            SkipToNewline();
+            if (At(TK.Indent))
+            {
+                SkipBlock();
+            }
+
+            return null;
+        }
+        Consume(); // ':'
+        SkipToNewline();
+        SkipNewlines();
+
+        if (!At(TK.Indent))
+        {
+            AddError(classTok.Line, classTok.Col, $"expected indented block for class '{className}'");
+            return BuildClassDecl(className, classTok.Line, baseTypes, decorators, [], [], false, false);
+        }
+        Consume(); // INDENT
+
+        List<MethodDeclaration> methods      = new List<MethodDeclaration>();
+        List<MethodDeclaration> constructors = new List<MethodDeclaration>();
+        List<TypeDeclaration> nestedTypes = new List<TypeDeclaration>();
+        bool hasDocstring = false;
+        bool hasSlots     = false;
+        bool firstItem    = true;
+        List<string> innerDecs    = new List<string>();
+
+        while (!At(TK.Dedent) && !At(TK.Eof))
+        {
+            SkipNewlines();
+            if (At(TK.Dedent) || At(TK.Eof))
+            {
+                break;
+            }
+
+            if (At(TK.Indent))
+            {
+                SkipBlock();
+                continue;
+            }
+
+            Tok tok = Peek();
+
+            // Decorator
+            if (tok.Kind == TK.At)
+            {
+                innerDecs.Add(ParseDecoratorName());
+                SkipToNewline();
+                continue;
+            }
+
+            // Docstring (first non-blank item in class body that is a string literal)
+            if (firstItem && tok.Kind == TK.Str)
+            {
+                hasDocstring = true;
+                Consume();
+                SkipToNewline();
+                firstItem = false;
+                innerDecs = [];
+                continue;
+            }
+
+            firstItem = false;
+
+            // Method definition
+            if (tok.Is("def") || (tok.Is("async") && Peek(1).Is("def")))
+            {
+                bool isAsync = tok.Is("async");
+                if (isAsync)
+                {
+                    Consume(); // "async"
+                }
+
+                MethodDeclaration? m = ParseMethodDecl(innerDecs, isAsync);
+                if (m != null)
+                {
+                    (m.Name == "__init__" ? constructors : methods).Add(m);
+                    _statements.AddRange(m.Statements);
+                }
+                innerDecs = [];
+                continue;
+            }
+
+            if (tok.Is("class"))
+            {
+                TypeDeclaration? nested = ParseClassDecl(innerDecs);
+                if (nested is not null)
+                {
+                    nestedTypes.Add(nested);
+                }
+
+                innerDecs = [];
+                continue;
+            }
+
+            // __slots__ detection
+            if (tok.Kind == TK.Name && tok.Text == "__slots__")
+            {
+                hasSlots = true;
+            }
+
+            innerDecs = [];
+            SkipToNewline();
+        }
+
+        if (At(TK.Dedent))
+        {
+            Consume();
+        }
+
+        return BuildClassDecl(className, classTok.Line, baseTypes, decorators,
+            constructors, methods, hasDocstring, hasSlots) with { NestedTypes = nestedTypes };
+    }
+
+    private TypeDeclaration BuildClassDecl(string name, int line, List<string> baseTypes,
+        List<string> decorators, List<MethodDeclaration> constructors,
+        List<MethodDeclaration> methods, bool hasDocstring, bool hasSlots)
+        => new PythonTypeDeclaration(new TypeDeclaration(name, TypeKind.Class,
+                name.StartsWith('_') && !(name.StartsWith("__") && name.EndsWith("__")) ? Modifier.Private : Modifier.Public,
+                baseTypes, decorators, constructors, methods, [], [], line)
+            { HasDocComment = hasDocstring },
+            isAbstract: baseTypes.Exists(b => b == "ABC" || b == "ABCMeta" || b.EndsWith(".ABC")))
+        {
+            IsDataclass = decorators.Exists(d => d.Contains("dataclass")),
+            IsEnum = baseTypes.Exists(b => b is "Enum" or "IntEnum" or "StrEnum" or "Flag" or "IntFlag"),
+            IsNamedTuple = baseTypes.Exists(b => b == "NamedTuple" || b.EndsWith(".NamedTuple")),
+            IsProtocol = baseTypes.Exists(b => b == "Protocol" || b.EndsWith(".Protocol")),
+            IsException = baseTypes.Exists(b => b.EndsWith("Exception") || b.EndsWith("Error") || b == "BaseException"),
+            HasSlots = hasSlots
+        };
+
+    // ── Function / method declaration ───────────────────────────────────────
+
+    private void ParseTopLevelFunc(List<string> decorators, bool isAsync)
+    {
+        MethodDeclaration? m = ParseMethodDecl(decorators, isAsync);
+        if (m != null)
+        {
+            _functions.Add(m);
+            _statements.AddRange(m.Statements);
+        }
+    }
+
+    private MethodDeclaration? ParseMethodDecl(List<string> decorators, bool isAsync)
+    {
+        Tok defTok = Consume(); // "def"
+
+        if (!At(TK.Name))
+        {
+            AddError(defTok.Line, defTok.Col, "expected function name after 'def'");
+            SkipToNewline();
+            if (At(TK.Indent))
+            {
+                SkipBlock();
+            }
+
+            return null;
+        }
+        string methodName = Consume().Text;
+
+        if (!At(TK.LParen))
+        {
+            AddError(defTok.Line, defTok.Col, $"expected '(' after function name '{methodName}'");
+            SkipToNewline();
+            if (At(TK.Indent))
+            {
+                SkipBlock();
+            }
+
+            return null;
+        }
+        Consume(); // '('
+        List<Tok> paramToks = CollectUntilBalanced(TK.RParen);
+        if (At(TK.RParen))
+        {
+            Consume();
+        }
+        else
+        {
+            AddError(defTok.Line, defTok.Col, $"unclosed '(' in function '{methodName}'");
+        }
+
+        // Optional return annotation
+        string? returnType = null;
+        if (At(TK.Arrow)) { Consume(); returnType = CollectReturnType(); }
+
+        if (!At(TK.Colon))
+        {
+            AddError(defTok.Line, defTok.Col, $"expected ':' at end of function definition '{methodName}'");
+        }
+        else
+        {
+            Consume();
+        }
+
+        SkipToNewline();
+        SkipNewlines();
+
+        // Check for docstring (first non-newline token in body is a Str)
+        bool hasDocstring = false;
+        if (At(TK.Indent))
+        {
+            int la = _pos + 1; // past INDENT
+            while (la < _toks.Count && _toks[la].Kind == TK.Newline)
+            {
+                la++;
+            }
+
+            if (la < _toks.Count && _toks[la].Kind == TK.Str)
+            {
+                hasDocstring = true;
+            }
+        }
+
+        // Build modifiers
+        Modifier modifiers = Modifier.None;
+        if (isAsync)
+        {
+            modifiers |= Modifier.Async;
+        }
+
+        if (decorators.Contains("staticmethod"))
+        {
+            modifiers |= Modifier.Static;
+        }
+
+        if (decorators.Contains("abstractmethod"))
+        {
+            modifiers |= Modifier.Abstract;
+        }
+
+        if (!methodName.StartsWith('_') || methodName.StartsWith("__") && methodName.EndsWith("__"))
+        {
+            modifiers |= Modifier.Public;
+        }
+        else
+        {
+            modifiers |= Modifier.Private;
+        }
+
+        List<ParameterDeclaration> parameters   = ParseParameters(paramToks);
+        TypeReference? retRef       = returnType is not null ? new TypeReference(returnType.Trim('\'', '"'), null, [], returnType) : null;
+        List<StatementInfo> bodyStatements = new List<StatementInfo>();
+
+        if (At(TK.Indent))
+        {
+            ParseFlatBody(isInMethod: true, bodyStatements);
+        }
+
+        PythonMethodDeclaration method = new MethodDeclaration(methodName, modifiers, decorators, retRef, parameters, defTok.Line)
+        {
+            Statements   = bodyStatements,
+            HasDocComment = hasDocstring,
+        }
+        .AsPython(isGenerator: bodyStatements.Exists(s => s.Kind == "yield"));
+        foreach (StatementInfo statement in bodyStatements)
+        {
+            statement.Method = method;
+        }
+
+        return method;
+    }
+
+    // ── Flat body scanner ───────────────────────────────────────────────────
+    // Processes ALL tokens inside a block (at any nesting depth) to extract
+    // statements, matching the original line-scanner's flat enumeration.
+
+    private void ParseFlatBody(bool isInMethod, List<StatementInfo> outStatements)
+    {
+        if (!At(TK.Indent))
+        {
+            return;
+        }
+
+        Consume(); // initial INDENT
+
+        int depth = 1;
+
+        while (!At(TK.Eof) && depth > 0)
+        {
+            Tok tok = Peek();
+
+            if (tok.Kind == TK.Indent)  { depth++;                            Consume(); continue; }
+            if (tok.Kind == TK.Dedent)  { depth--; if (depth > 0) { Consume(); } continue; }
+            if (tok.Kind == TK.Newline || tok.Kind == TK.Semi) { Consume();  continue; }
+
+            if (tok.Is("def") || tok.Is("async") && Peek(1).Is("def"))
+            {
+                bool isAsync = tok.Is("async");
+                if (isAsync)
+                {
+                    Consume();
+                }
+
+                ParseTopLevelFunc([], isAsync);
+                continue;
+            }
+
+            // except clauses are handled specially (need look-ahead for HasRethrow)
+            if (tok.Is("except"))
+            {
+                ParseExceptLine(isInMethod, outStatements);
+                continue;
+            }
+
+            List<Tok> lineToks = CollectLineTokens();
+            AnalyzeBodyLine(lineToks, isInMethod, outStatements);
+        }
+
+        if (At(TK.Dedent))
+        {
+            Consume();
+        }
+    }
+
+    // ── Except clause ───────────────────────────────────────────────────────
+
+    private void ParseExceptLine(bool isInMethod, List<StatementInfo> outStatements)
+    {
+        Tok exceptTok = Consume(); // "except"
+
+        string? caughtType  = null;
+        bool    isGeneric   = true;   // bare except or Exception/BaseException
+
+        if (At(TK.Colon))
+        {
+            // bare except:
+            Consume();
+        }
+        else if (At(TK.Star))
+        {
+            // except* (Python 3.11+ exception groups) — consume star + type
+            Consume();
+            if (At(TK.Name)) { caughtType = Consume().Text; isGeneric = false; }
+            if (At(TK.Name) && AtIdent("as")) { Consume(); if (At(TK.Name))
+                {
+                    Consume();
+                }
+            }
+            if (At(TK.Colon))
+            {
+                Consume();
+            }
+            else
+            {
+                AddError(exceptTok.Line, exceptTok.Col, "expected ':' after except* clause");
+            }
+        }
+        else if (At(TK.LParen))
+        {
+            // Tuple form: except (ValueError, TypeError):
+            Consume();
+            List<Tok> inner = CollectUntilBalanced(TK.RParen);
+            if (At(TK.RParen))
+            {
+                Consume();
+            }
+
+            int fi = inner.FindIndex(t => t.Kind == TK.Name);
+            caughtType = fi >= 0 ? inner[fi].Text : null;
+            isGeneric  = caughtType is null or "Exception" or "BaseException";
+            if (At(TK.Name) && AtIdent("as")) { Consume(); if (At(TK.Name))
+                {
+                    Consume();
+                }
+            }
+            if (At(TK.Colon))
+            {
+                Consume();
+            }
+            else
+            {
+                AddError(exceptTok.Line, exceptTok.Col, "expected ':' after except clause");
+            }
+        }
+        else if (At(TK.Name))
+        {
+            // Single type: except ValueError: or except ValueError as e:
+            caughtType = Consume().Text;
+            // Dotted name: except os.error:
+            while (At(TK.Dot) && Peek(1).Kind == TK.Name)
+            {
+                caughtType += "." + Peek(1).Text;
+                Consume(); Consume();
+            }
+            isGeneric = caughtType is "Exception" or "BaseException";
+            // Optional "as alias"
+            if (AtIdent("as")) { Consume(); if (At(TK.Name))
+                {
+                    Consume();
+                }
+            }
+            if (At(TK.Colon))
+            {
+                Consume();
+            }
+            else
+            {
+                AddError(exceptTok.Line, exceptTok.Col, "expected ':' after except clause");
+            }
+        }
+
+        // Consume trailing newlines before the except body block
+        while (At(TK.Newline))
+        {
+            Consume();
+        }
+
+        // Look ahead (without consuming) to detect a bare re-raise in the body
+        bool hasRethrow = HasBareRaiseInNextBlock();
+
+        outStatements.Add(new PythonStatementInfo(new StatementInfo("catch", [], caughtType, null, [], exceptTok.Line, isInMethod))
+        {
+            IsErrorHandler         = true,
+            IsGenericErrorHandler  = isGeneric,
+            HasRethrow             = hasRethrow,
+        });
+    }
+
+    /// <summary>
+    /// Non-consuming look-ahead: scans the upcoming INDENT...DEDENT block to find
+    /// a bare <c>raise</c> statement (i.e., <c>raise</c> followed by NEWLINE or end-of-block).
+    /// </summary>
+    private bool HasBareRaiseInNextBlock()
+    {
+        int i = _pos;
+        // Skip any stray newlines before INDENT
+        while (i < _toks.Count && _toks[i].Kind == TK.Newline)
+        {
+            i++;
+        }
+
+        if (i >= _toks.Count || _toks[i].Kind != TK.Indent)
+        {
+            return false;
+        }
+
+        i++; // past INDENT
+
+        int  depth     = 1;
+        bool lineStart = true;
+
+        while (i < _toks.Count && depth > 0)
+        {
+            Tok t = _toks[i];
+            switch (t.Kind)
+            {
+                case TK.Indent:  depth++; i++; lineStart = true;  continue;
+                case TK.Dedent:  depth--; i++; lineStart = true;  continue;
+                case TK.Newline: i++;          lineStart = true;  continue;
+                case TK.Eof:     goto Done;
+            }
+
+            if (lineStart && t.Is("raise"))
+            {
+                // Bare raise = Name("raise") immediately followed by Newline / Dedent / EOF
+                int j = i + 1;
+                while (j < _toks.Count && _toks[j].Kind == TK.Newline)
+                {
+                    j++;
+                }
+
+                if (j >= _toks.Count)
+                {
+                    return true;
+                }
+
+                if (_toks[j].Kind is TK.Dedent or TK.Eof)
+                {
+                    return true;
+                }
+                // raise <something> → not bare
+            }
+
+            lineStart = false;
+            i++;
+        }
+        Done:
+        return false;
+    }
+
+    // ── Line collection & analysis ──────────────────────────────────────────
+
+    /// <summary>Consume tokens up to (and including) the next NEWLINE or SEMI.</summary>
+    private List<Tok> CollectLineTokens()
+    {
+        List<Tok> result = new List<Tok>();
+        while (!At(TK.Newline) && !At(TK.Indent) && !At(TK.Dedent) && !At(TK.Semi) && !At(TK.Eof))
+        {
+            result.Add(Consume());
+        }
+
+        if (At(TK.Newline) || At(TK.Semi))
+        {
+            Consume();
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Analyse tokens on one logical line and emit the appropriate statement(s),
+    /// replicating the semantics of the original ExtractLineStatement / ExtractBodyStatements.
+    /// </summary>
+    private void AnalyzeBodyLine(List<Tok> lt, bool isInMethod, List<StatementInfo> out_)
+    {
+        if (lt.Count == 0)
+        {
+            return;
+        }
+
+        int lineNum = lt[0].Line;
+        Tok first   = lt[0];
+        for (int index = 0; index < lt.Count; index++)
+        {
+            if (index > 0 && lt[index - 1].Kind == TK.Dot)
+            {
+                continue;
+            }
+
+            (bool ok, string? typeName, string? memberName) = DetectCall(lt[index..]);
+            if (ok)
+            {
+                out_.Add(new PythonStatementInfo(new StatementInfo("call", [], typeName, memberName, [], lt[index].Line, isInMethod)));
+            }
+        }
+        if (first.Text is "if" or "elif" or "while" && lt.Count > 1 && lt[1].Kind == TK.Colon)
+        {
+            AddError(lineNum, first.Col, $"expected condition after '{first.Text}'");
+        }
+
+        // yield anywhere on the line → yield statement (return early, matches original)
+        if (lt.Any(t => t.Is("yield")))
+        {
+            out_.Add(new PythonStatementInfo(new StatementInfo("yield", [], null, null, [], lineNum, isInMethod)));
+            return;
+        }
+
+        // Comprehension: 'for' inside brackets (can co-exist with a call below)
+        if (HasForInBrackets(lt))
+        {
+            out_.Add(new PythonStatementInfo(new StatementInfo("comprehension", [], null, null, [], lineNum, isInMethod)));
+        }
+
+        // async with
+        if (first.Is("async") && lt.Count > 1 && lt[1].Is("with"))
+        {
+            out_.Add(new PythonStatementInfo(new StatementInfo("async with", [], null, null, [], lineNum, isInMethod)));
+            return;
+        }
+
+        if (first.Is("with"))     { out_.Add(new PythonStatementInfo(new StatementInfo("with",     [], null, null, [], lineNum, isInMethod))); return; }
+        if (first.Is("assert"))   { out_.Add(new PythonStatementInfo(new StatementInfo("assert",   [], null, null, [], lineNum, isInMethod))); return; }
+        if (first.Is("global"))   { out_.Add(new PythonStatementInfo(new StatementInfo("global",   [], null, null, [], lineNum, isInMethod))); return; }
+        if (first.Is("nonlocal")) { out_.Add(new PythonStatementInfo(new StatementInfo("nonlocal", [], null, null, [], lineNum, isInMethod))); return; }
+
+        // raise
+        if (first.Is("raise"))
+        {
+            string? typeName = lt.Count > 1 && lt[1].Kind == TK.Name ? lt[1].Text : null;
+            out_.Add(new PythonStatementInfo(new StatementInfo("throw", [], typeName, null, [], lineNum, isInMethod)));
+            return;
+        }
+
+    }
+
+    // ── Call and comprehension detection ────────────────────────────────────
+
+    private static (bool Ok, string? TypeName, string? MemberName) DetectCall(List<Tok> lt)
+    {
+        if (lt.Count == 0)
+        {
+            return (false, null, null);
+        }
+
+        int i = 0;
+
+        // Must start with a Name token
+        if (i >= lt.Count || lt[i].Kind != TK.Name)
+        {
+            return (false, null, null);
+        }
+
+        // Collect dotted path: Name (.Name)*
+        List<string> parts = new List<string> { lt[i].Text };
+        i++;
+        while (i + 1 < lt.Count && lt[i].Kind == TK.Dot && lt[i + 1].Kind == TK.Name)
+        {
+            parts.Add(lt[i + 1].Text);
+            i += 2;
+        }
+
+        // Must be followed by '('
+        if (i >= lt.Count || lt[i].Kind != TK.LParen)
+        {
+            return (false, null, null);
+        }
+
+        string member = parts[^1];
+
+        // Exclude control-flow keywords
+        if (member is "if" or "for" or "while" or "with" or "elif" or "def" or "class"
+                   or "return" or "assert" or "del" or "except" or "raise"
+                   or "yield" or "import" or "from")
+        {
+            return (false, null, null);
+        }
+
+        string? typeName = parts.Count > 1 ? string.Join(".", parts[..^1]) : null;
+        return (true, typeName, member);
+    }
+
+    private static bool HasForInBrackets(List<Tok> lt)
+    {
+        int depth = 0;
+        foreach (Tok t in lt)
+        {
+            if (t.Kind is TK.LParen or TK.LBrack or TK.LBrace)
+            {
+                depth++;
+            }
+            else if (t.Kind is TK.RParen or TK.RBrack or TK.RBrace)
+            {
+                depth--;
+            }
+            else if (depth > 0 && t.Is("for"))
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    // ── Decorator / parameter / type helpers ────────────────────────────────
+
+    private string ParseDecoratorName()
+    {
+        Consume(); // '@'
+        List<string> parts = new List<string>();
+        while (At(TK.Name))
+        {
+            parts.Add(Consume().Text);
+            if (At(TK.Dot)) { Consume(); continue; }
+            break;
+        }
+        return string.Join(".", parts);
+    }
+
+    /// <summary>Collect tokens until a matching close bracket (without consuming it).</summary>
+    private List<Tok> CollectUntilBalanced(TK closeKind)
+    {
+        List<Tok> result = new List<Tok>();
+        int depth  = 0;
+        while (!At(TK.Eof))
+        {
+            Tok t = Peek();
+            if (t.Kind == closeKind && depth == 0)
+            {
+                break;
+            }
+
+            if (t.Kind is TK.LParen or TK.LBrack or TK.LBrace)
+            {
+                depth++;
+            }
+
+            if (t.Kind is TK.RParen or TK.RBrack or TK.RBrace) { if (depth == 0) { break; } depth--; }
+            result.Add(Consume());
+        }
+        return result;
+    }
+
+    private List<string> ParseBaseTypes(List<Tok> tokens)
+    {
+        List<string> result     = new List<string>();
+        List<string> nameParts  = new List<string>();
+        int depth      = 0;
+        bool inKwarg   = false;
+
+        foreach (Tok t in tokens)
+        {
+            if (t.Kind is TK.LParen or TK.LBrack or TK.LBrace) { depth++;   continue; }
+            if (t.Kind is TK.RParen or TK.RBrack or TK.RBrace) { depth--;   continue; }
+            if (depth > 0)
+            {
+                continue;
+            }
+
+            if (t.Kind == TK.Eq)    { inKwarg = true; continue; }
+            if (inKwarg)             { continue; }
+            if (t.Kind == TK.Comma)
+            {
+                if (nameParts.Count > 0)
+                {
+                    result.Add(string.Join(".", nameParts));
+                }
+
+                nameParts = []; inKwarg = false;
+                continue;
+            }
+            if (t.Kind == TK.Name)
+            {
+                nameParts.Add(t.Text);
+            }
+        }
+        if (nameParts.Count > 0 && !inKwarg)
+        {
+            result.Add(string.Join(".", nameParts));
+        }
+
+        return result;
+    }
+
+    private List<ParameterDeclaration> ParseParameters(List<Tok> paramToks)
+    {
+        List<ParameterDeclaration> result = new List<ParameterDeclaration>();
+
+        // Split on top-level commas
+        List<List<Tok>> segments = new List<List<Tok>>();
+        List<Tok> cur      = new List<Tok>();
+        int depth    = 0;
+        foreach (Tok t in paramToks)
+        {
+            if (t.Kind is TK.LParen or TK.LBrack or TK.LBrace) { depth++; cur.Add(t); }
+            else if (t.Kind is TK.RParen or TK.RBrack or TK.RBrace) { depth--; cur.Add(t); }
+            else if (t.Kind == TK.Comma && depth == 0) { segments.Add(cur); cur = []; }
+            else
+            {
+                cur.Add(t);
+            }
+        }
+        if (cur.Count > 0)
+        {
+            segments.Add(cur);
+        }
+
+        foreach (List<Tok> seg in segments)
+        {
+            if (seg.Count == 0)
+            {
+                continue;
+            }
+
+            int i        = 0;
+            bool isKw    = false;
+            bool isVar   = false;
+
+            if (i < seg.Count && seg[i].Kind == TK.StarStar) { isKw  = true; i++; }
+            else if (i < seg.Count && seg[i].Kind == TK.Star) { isVar = true; i++; }
+
+            if (i >= seg.Count || seg[i].Kind != TK.Name)
+            {
+                continue;
+            }
+
+            string name = seg[i].Text; i++;
+
+            // Optional type annotation: name: Type = default
+            string? typeName = null;
+            if (i < seg.Count && seg[i].Kind == TK.Colon)
+            {
+                i++;
+                List<string> tp = new List<string>();
+                while (i < seg.Count && seg[i].Kind != TK.Eq)
+                {
+                    tp.Add(seg[i].Text);
+                    i++;
+                }
+                if (tp.Count > 0)
+                {
+                    typeName = string.Join(string.Empty, tp);
+                }
+            }
+
+            TypeReference? typeRef = typeName is not null ? new TypeReference(typeName, null, [], typeName) : null;
+            bool hasDefault = i < seg.Count && seg[i].Kind == TK.Eq;
+            result.Add(new ParameterDeclaration(name, typeRef, isVar, isKw, hasDefault, seg[0].Line)
+            {
+                DefaultValueText = hasDefault ? string.Concat(seg.Skip(i + 1).Select(t => t.Text)) : null,
+                IsOptional = hasDefault,
+            });
+        }
+
+        return result;
+    }
+
+    /// <summary>Collect tokens for a return type annotation (up to ':' or NEWLINE).</summary>
+    private string? CollectReturnType()
+    {
+        List<string> parts = new List<string>();
+        int depth = 0;
+        while (!At(TK.Eof))
+        {
+            Tok t = Peek();
+            if (t.Kind == TK.Colon && depth == 0)
+            {
+                break;
+            }
+
+            if (t.Kind == TK.Newline)
+            {
+                break;
+            }
+
+            if (t.Kind is TK.LParen or TK.LBrack or TK.LBrace)
+            {
+                depth++;
+            }
+
+            if (t.Kind is TK.RParen or TK.RBrack or TK.RBrace)
+            {
+                depth--;
+            }
+
+            parts.Add(Consume().Text);
+        }
+        return parts.Count == 0 ? null : string.Concat(parts);
+    }
+
+    // ── Region extraction (same logic as original) ───────────────────────────
+
+    internal static List<RegionInfo> ExtractRegions(string sourceText)
+    {
+        string[] lines   = sourceText.Split('\n');
+        List<RegionInfo> regions = new List<RegionInfo>();
+        Stack<(string Name, int Line)> stack   = new Stack<(string Name, int Line)>();
+
+        for (int i = 0; i < lines.Length; i++)
+        {
+            string trimmed = lines[i].TrimStart();
+            if (trimmed.StartsWith("# [START"))
+            {
+                string? name = ParseRegionMarker(trimmed, "START");
+                if (name is not null)
+                {
+                    stack.Push((name, i + 1));
+                }
+            }
+            else if (trimmed.StartsWith("# [END") && stack.Count > 0)
+            {
+                string? endName = ParseRegionMarker(trimmed, "END");
+                if (endName is not null)
+                {
+                    List<(string Name, int Line)> items = new List<(string Name, int Line)>();
+                    while (stack.Count > 0)
+                    {
+                        (string Name, int Line) top = stack.Pop();
+                        if (top.Name == endName)
+                        {
+                            List<string> contentLines = new List<string>();
+                            for (int j = top.Line; j < i && j < lines.Length; j++)
+                            {
+                                contentLines.Add(lines[j].TrimEnd('\r'));
+                            }
+
+                            regions.Add(new RegionInfo(endName, top.Line, i + 1,
+                                string.Join('\n', contentLines)));
+                            for (int k = items.Count - 1; k >= 0; k--)
+                            {
+                                stack.Push(items[k]);
+                            }
+
+                            break;
+                        }
+                        items.Add(top);
+                    }
+                }
+            }
+        }
+        return regions;
+    }
+
+    private static string? ParseRegionMarker(string text, string marker)
+    {
+        int i = 0;
+        if (i >= text.Length || text[i] != '#')
+        {
+            return null;
+        }
+
+        i++;
+        while (i < text.Length && char.IsWhiteSpace(text[i]))
+        {
+            i++;
+        }
+
+        string prefix = "[" + marker;
+        if (i + prefix.Length > text.Length)
+        {
+            return null;
+        }
+
+        if (!text.AsSpan(i, prefix.Length).SequenceEqual(prefix))
+        {
+            return null;
+        }
+
+        i += prefix.Length;
+        if (i >= text.Length || !char.IsWhiteSpace(text[i]))
+        {
+            return null;
+        }
+
+        while (i < text.Length && char.IsWhiteSpace(text[i]))
+        {
+            i++;
+        }
+
+        int end = text.IndexOf(']', i);
+        return end > i ? text[i..end] : null;
+    }
+}

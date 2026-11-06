@@ -1,3 +1,5 @@
+// Evaluates provider filter operations against record fields.
+
 using System.Text.RegularExpressions;
 
 namespace Cop.Core;
@@ -19,7 +21,11 @@ public static class FilterEvaluator
     /// <returns>true if the record matches the filter (or filter is null).</returns>
     public static bool Matches(FilterExpression? filter, Func<string, object?> getValue)
     {
-        if (filter is null) return true;
+        if (filter is null)
+        {
+            return true;
+        }
+
         return Eval(filter, getValue);
     }
 
@@ -42,17 +48,31 @@ public static class FilterEvaluator
 
     private static bool EvalBool(PropertyFilter pf, object? raw)
     {
-        if (raw is null) return false;
+        if (raw is null)
+        {
+            return false;
+        }
+
         if (raw is not bool b)
+        {
             throw new ArgumentException($"PropertyFilter expects bool for '{pf.Property}', got {raw?.GetType().Name ?? "null"}");
+        }
+
         return b == pf.Value;
     }
 
     private static bool EvalString(StringOpFilter sf, object? raw)
     {
-        if (raw is null) return false;
+        if (raw is null)
+        {
+            return false;
+        }
+
         if (raw is not string s)
+        {
             throw new ArgumentException($"StringOpFilter expects string for '{sf.Property}', got {raw?.GetType().Name ?? "null"}");
+        }
+
         return sf.Op switch
         {
             StringOp.ExactEquals => s.Equals(sf.Value, StringComparison.Ordinal),
@@ -69,32 +89,46 @@ public static class FilterEvaluator
     private static bool EvalContainsAny(ContainsAnyFilter caf, object? raw)
     {
         if (raw is not string s)
+        {
             throw new ArgumentException($"ContainsAnyFilter expects string for '{caf.Property}', got {raw?.GetType().Name ?? "null"}");
-        foreach (var value in caf.Values)
+        }
+
+        foreach (string value in caf.Values)
         {
             if (s.Contains(value, StringComparison.OrdinalIgnoreCase))
+            {
                 return true;
+            }
         }
         return false;
     }
 
     private static bool EvalIn(InFilter inf, object? raw)
     {
-        var s = raw?.ToString() ?? "";
-        foreach (var value in inf.Values)
+        string s = raw?.ToString() ?? "";
+        foreach (string value in inf.Values)
         {
             if (s.Equals(value, StringComparison.OrdinalIgnoreCase))
+            {
                 return true;
+            }
         }
         return false;
     }
 
     private static bool EvalNumeric(ComparisonFilter cf, object? raw)
     {
-        if (raw is null) return false;
+        if (raw is null)
+        {
+            return false;
+        }
+
         if (raw is not (int or long or double or float))
+        {
             throw new ArgumentException($"ComparisonFilter expects numeric for '{cf.Property}', got {raw?.GetType().Name ?? "null"}");
-        var num = AsDouble(raw);
+        }
+
+        double num = AsDouble(raw);
         return cf.Op switch
         {
             CompareOp.Equals => num == cf.Value,
@@ -134,11 +168,16 @@ public static class FilterEvaluator
     private static bool EvalCollectionContains(CollectionContainsFilter ccf, object? raw)
     {
         if (raw is not System.Collections.IList list)
+        {
             return false;
-        foreach (var item in list)
+        }
+
+        foreach (object? item in list)
         {
             if (string.Equals(item?.ToString(), ccf.Value, StringComparison.OrdinalIgnoreCase))
+            {
                 return true;
+            }
         }
         return false;
     }
@@ -146,7 +185,9 @@ public static class FilterEvaluator
     private static bool EvalCollectionAny(CollectionAnyFilter canyf, object? raw, Func<string, object?> parentGetValue)
     {
         if (raw is not System.Collections.IList list)
+        {
             return false;
+        }
         // Each item in the collection is evaluated against the item filter.
         // The getValue callback for sub-items delegates to the item's own properties —
         // but at the FilterEvaluator level we only have the parent's getValue.
@@ -159,7 +200,10 @@ public static class FilterEvaluator
     private static bool EvalCollectionCount(CollectionCountFilter ccntf, object? raw)
     {
         if (raw is not System.Collections.IList list)
+        {
             return false;
+        }
+
         int count = list.Count;
         return ccntf.Op switch
         {
@@ -178,14 +222,16 @@ public static class FilterEvaluator
     /// </summary>
     private static string NormalizeIdentifier(string s)
     {
-        var len = s.Length;
-        var chars = len <= 128 ? stackalloc char[len] : new char[len];
+        int len = s.Length;
+        Span<char> chars = len <= 128 ? stackalloc char[len] : new char[len];
         int pos = 0;
         for (int i = 0; i < len; i++)
         {
-            var c = s[i];
+            char c = s[i];
             if (c != '_' && c != '-')
+            {
                 chars[pos++] = char.ToLowerInvariant(c);
+            }
         }
         return new string(chars[..pos]);
     }

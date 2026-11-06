@@ -1,3 +1,5 @@
+// Registers the shared code-model schema and interpreter bindings.
+
 using Cop.Core;
 
 namespace Cop.Providers;
@@ -11,11 +13,20 @@ namespace Cop.Providers;
 public class CodeSchemaProvider : DataProvider
 {
 
+    /// <inheritdoc />
     public override ReadOnlyMemory<byte> GetSchema() => CodeSchema.GetTypesOnlyJson();
 
+    /// <inheritdoc />
     public override RuntimeBindings? GetRuntimeBindings() => CodeBindings.Build();
 
-    public override object? Query(ProviderQuery query) => null;
+    /// <inheritdoc />
+    public override ValueTask<object?> QueryAsync(
+        ProviderQuery query, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return ValueTask.FromResult<object?>(null);
+    }
 
+    /// <inheritdoc />
     public override string ToString() => "CodeSchemaProvider";
 }

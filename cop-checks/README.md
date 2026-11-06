@@ -11,6 +11,13 @@ Run it with `cop cop-checks/main.cop -t .`; opt into AI checks with `-c AI`.
 Group folders are not standalone programs. The separate package-source suite is
 `cop cop-checks/cop/packages/main.cop -t packages`.
 
+The default suite also includes `csharp-checks`, restricted to production sources.
+Tests, samples, and examples remain available as intentional negative-test fixtures.
+`main.cop` builds `csharp-source-codebase` from the shared production-file scope and
+passes it to `csharpChecks(...)`. This scopes analysis before compiler-bound checks run,
+rather than filtering their findings afterward. The package's existing exported lists
+remain useful for standalone runs but use its own unscoped parsed model.
+
 ## Reading and maintaining a rule
 
 Start each rule with one or two short lines explaining its purpose and useful rationale.
@@ -113,8 +120,16 @@ below, the catalog's filenames refer to `csharp/derived/`.
 
 Run: `cop cop-checks/main.cop -t . -c DERIVED`
 
-All self-checks use parsed model facts, not regex or source-text parsing. Verify the whole
-suite with `cop verify cop-checks/ --strict-structure` (no text-check exceptions).
+Structural self-checks use parsed model facts, not regex or source-text parsing.
+The only approved source-text checks are tab and trailing-whitespace detection:
+
+```text
+cop verify cop-checks/ --strict-structure \
+  --allow-text-check hasTab --allow-text-check hasTrailingWhitespace
+```
+
+Pass these options on one line in PowerShell. Named approvals may select a private
+predicate from an imported package; ambiguous imported names are rejected.
 Names, paths, imports, project settings, and decoded literal values can still be compared
 as strings. Calls use `CallTarget`/`ArgumentExpressions`; nullable directives use their
 parsed `Kind` and `Keywords`. The environment check exempts secrets only by the actual

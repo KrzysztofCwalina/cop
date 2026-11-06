@@ -1,3 +1,5 @@
+// Represents canonical API signatures for surface comparisons.
+
 namespace Cop.Providers.SourceModel;
 
 /// <summary>
@@ -13,15 +15,21 @@ public record ApiEntry(
     string Signature,
     int Line)
 {
+    /// <summary>
+    /// The source file that owns this declaration or source location.
+    /// </summary>
     public SourceFile? File { get; init; }
 
+    /// <summary>
+    /// The display source location used in diagnostics.
+    /// </summary>
     public string Source => Signature;
 
     /// <summary>
     /// The C# stub line for this API entry (e.g., "public virtual string Name { get { throw null; } }").
     /// Does NOT include indentation — the generator adds that based on nesting level.
     /// </summary>
-    public string ApiAsText { get; init; } = "";
+    public string ApiAsText { get; init; } = string.Empty;
 
     /// <summary>
     /// Build a canonical signature for a type-level entry.
@@ -30,7 +38,7 @@ public record ApiEntry(
     public static ApiEntry ForType(TypeDeclaration type) => new(
         Kind: type.Kind.ToString().ToLowerInvariant(),
         TypeName: type.Name,
-        MemberName: "",
+        MemberName: string.Empty,
         Signature: $"{type.Kind.ToString().ToLowerInvariant()} {type.Name}",
         Line: type.Line)
     {
@@ -139,66 +147,114 @@ public record ApiEntry(
             (true, true) => "get; set;",
             (true, false) => "get;",
             (false, true) => "set;",
-            _ => ""
+            _ => string.Empty
         };
 
     // --- ApiAsText helpers (full C# stub representation) ---
 
     private static string FormatModifiers(Modifier mods)
     {
-        var parts = new List<string>();
-        if (mods.HasFlag(Modifier.Public)) parts.Add("public");
-        else if (mods.HasFlag(Modifier.Protected) && mods.HasFlag(Modifier.Internal)) parts.Add("protected internal");
-        else if (mods.HasFlag(Modifier.Protected)) parts.Add("protected");
-        else if (mods.HasFlag(Modifier.Internal)) parts.Add("internal");
-        if (mods.HasFlag(Modifier.Static)) parts.Add("static");
-        if (mods.HasFlag(Modifier.Const)) parts.Add("const");
-        if (mods.HasFlag(Modifier.Readonly)) parts.Add("readonly");
-        if (mods.HasFlag(Modifier.Abstract)) parts.Add("abstract");
-        if (mods.HasFlag(Modifier.Virtual)) parts.Add("virtual");
-        if (mods.HasFlag(Modifier.Override)) parts.Add("override");
+        List<string> parts = new List<string>();
+        if (mods.HasFlag(Modifier.Public))
+        {
+            parts.Add("public");
+        }
+        else if (mods.HasFlag(Modifier.Protected) && mods.HasFlag(Modifier.Internal))
+        {
+            parts.Add("protected internal");
+        }
+        else if (mods.HasFlag(Modifier.Protected))
+        {
+            parts.Add("protected");
+        }
+        else if (mods.HasFlag(Modifier.Internal))
+        {
+            parts.Add("internal");
+        }
+
+        if (mods.HasFlag(Modifier.Static))
+        {
+            parts.Add("static");
+        }
+
+        if (mods.HasFlag(Modifier.Const))
+        {
+            parts.Add("const");
+        }
+
+        if (mods.HasFlag(Modifier.Readonly))
+        {
+            parts.Add("readonly");
+        }
+
+        if (mods.HasFlag(Modifier.Abstract))
+        {
+            parts.Add("abstract");
+        }
+
+        if (mods.HasFlag(Modifier.Virtual))
+        {
+            parts.Add("virtual");
+        }
+
+        if (mods.HasFlag(Modifier.Override))
+        {
+            parts.Add("override");
+        }
+
         if (mods.HasFlag(Modifier.Sealed) && mods.HasFlag(Modifier.Override)) { } // sealed override handled above
-        else if (mods.HasFlag(Modifier.Sealed)) parts.Add("sealed");
-        if (mods.HasFlag(Modifier.Async)) parts.Add("async");
-        return parts.Count > 0 ? string.Join(" ", parts) + " " : "";
+        else if (mods.HasFlag(Modifier.Sealed))
+        {
+            parts.Add("sealed");
+        }
+
+        if (mods.HasFlag(Modifier.Async))
+        {
+            parts.Add("async");
+        }
+
+        return parts.Count > 0 ? string.Join(" ", parts) + " " : string.Empty;
     }
 
     private static string FormatParametersFull(List<ParameterDeclaration> parameters) =>
         string.Join(", ", parameters.Select(p =>
         {
-            var type = p.Type?.OriginalText ?? "object";
-            var result = $"{type} {p.Name}";
+            string type = p.Type?.OriginalText ?? "object";
+            string result = $"{type} {p.Name}";
             if (p.HasDefaultValue)
+            {
                 result += $" = {p.DefaultValueText ?? $"default({type})"}";
+            }
+
             return result;
         }));
 
     private static string FormatTypeStub(TypeDeclaration type)
     {
-        var mods = FormatModifiers(type.Modifiers);
-        var kind = type.Kind.ToString().ToLowerInvariant();
-        var partial = type.Kind is TypeKind.Class or TypeKind.Struct or TypeKind.Interface ? "partial " : "";
-        var name = type.Name;
-        var baseList = type.BaseTypes.Count > 0 ? $" : {string.Join(", ", type.BaseTypes)}" : "";
+        string mods = FormatModifiers(type.Modifiers);
+        string kind = type.Kind.ToString().ToLowerInvariant();
+        string partial = type.Kind is TypeKind.Class or TypeKind.Struct or TypeKind.Interface ? "partial " : string.Empty;
+        string name = type.Name;
+        string baseList = type.BaseTypes.Count > 0 ? $" : {string.Join(", ", type.BaseTypes)}" : string.Empty;
         return $"{mods}{partial}{kind} {name}{baseList}";
     }
 
     private static string FormatMethodStub(MethodDeclaration method)
     {
-        var mods = FormatModifiers(method.Modifiers);
-        var returnType = method.ReturnType?.OriginalText ?? "void";
-        var name = method.Name;
-        var parameters = FormatParametersFull(method.Parameters);
-        var isVoid = returnType is "void" or "System.Void";
-        var body = isVoid ? "{ }" : "{ throw null; }";
+        string mods = FormatModifiers(method.Modifiers);
+        string returnType = method.ReturnType?.OriginalText ?? "void";
+        string name = method.Name;
+        string parameters = FormatParametersFull(method.Parameters);
+        bool isVoid = returnType is "void" or "System.Void";
+        string body = isVoid ? "{ }" : "{ throw null; }";
         return $"{mods}{returnType} {name}({parameters}) {body}";
     }
 
     private static string FormatPropertyStub(PropertyDeclaration prop)
     {
-        var mods = FormatModifiers(prop.Modifiers);
-        var type = prop.Type?.OriginalText ?? "object";
-        var accessors = (prop.HasGetter, prop.HasSetter) switch
+        string mods = FormatModifiers(prop.Modifiers);
+        string type = prop.Type?.OriginalText ?? "object";
+        string accessors = (prop.HasGetter, prop.HasSetter) switch
         {
             (true, true) => "{ get { throw null; } set { } }",
             (true, false) => "{ get { throw null; } }",

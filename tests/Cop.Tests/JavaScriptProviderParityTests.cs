@@ -29,7 +29,7 @@ public class JavaScriptProviderParityTests
     public void TearDown() => Directory.Delete(_root, true);
 
     [Test]
-    public void ShippedChecks_ReportConsoleAndAwaitLiteral_AndDoNotRejectAThenable()
+    public async Task ShippedChecks_ReportConsoleAndAwaitLiteral_AndDoNotRejectAThenable()
     {
         File.WriteAllText(Path.Combine(_root, "sample.ts"), """
             export async function run() {
@@ -41,7 +41,7 @@ public class JavaScriptProviderParityTests
             """);
         for (int run = 0; run < 2; run++)
         {
-            var result = Engine.RunProject([Path.Combine(RepoRoot, "packages")], ["javascript-checks"], _root, []);
+            var result = (await Engine.RunProjectAsync([Path.Combine(RepoRoot, "packages")], ["javascript-checks"], _root, []));
             Assert.That(result.HasFatalErrors, Is.False, string.Join("; ", result.Errors));
             Assert.That(result.Outputs.Select(o => o.Message), Is.EqualTo(new[]
             {
@@ -55,7 +55,7 @@ public class JavaScriptProviderParityTests
     [TestCase(".ts")]
     [TestCase(".jsx")]
     [TestCase(".tsx")]
-    public void PublicCollections_KeepModuleMethodsNestedCallsAndDecodedLiterals_ColdAndWarm(string extension)
+    public async Task PublicCollections_KeepModuleMethodsNestedCallsAndDecodedLiterals_ColdAndWarm(string extension)
     {
         File.WriteAllText(Path.Combine(_root, "sample" + extension), """
             export function run() { return outer(inner('decoded')); }
@@ -73,15 +73,15 @@ public class JavaScriptProviderParityTests
             """);
         for (int run = 0; run < 2; run++)
         {
-            var result = Engine.RunProject([Path.Combine(RepoRoot, "packages")], ["javascript"], _root, ["MAIN"],
-                additionalScriptFiles: [script]);
+            var result = (await Engine.RunProjectAsync([Path.Combine(RepoRoot, "packages")], ["javascript"], _root, ["MAIN"],
+                new EngineRunOptions { ScriptFiles = [script] }));
             Assert.That(result.HasFatalErrors, Is.False, string.Join("; ", result.Errors));
             Assert.That(result.Outputs.Select(o => o.Message), Is.EqualTo(new[] { "2", "4", "decoded", "run" }));
         }
     }
 
     [Test]
-    public void PublicBindingQueries_SelectOverloadsAndRefreshImportedDeclarations()
+    public async Task PublicBindingQueries_SelectOverloadsAndRefreshImportedDeclarations()
     {
         var library = Path.Combine(_root, "library.ts");
         File.WriteAllText(Path.Combine(_root, "main.ts"), """
@@ -123,8 +123,9 @@ public class JavaScriptProviderParityTests
                 """);
             for (int repeat = 0; repeat < 2; repeat++)
             {
-                var result = Engine.RunProject([Path.Combine(RepoRoot, "packages")],
-                    ["javascript"], _root, ["TEST"], additionalScriptFiles: [script]);
+                var result = (await Engine.RunProjectAsync([Path.Combine(RepoRoot, "packages")],
+                    ["javascript"], _root, ["TEST"],
+                    new EngineRunOptions { ScriptFiles = [script] }));
                 Assert.That(result.HasFatalErrors, Is.False, string.Join("; ", result.Errors));
                 Assert.That(result.Outputs.Select(o => o.Message), Is.EqualTo(new[]
                 {
@@ -139,7 +140,7 @@ public class JavaScriptProviderParityTests
     }
 
     [Test]
-    public void AzureConsoleLogging_UsesParsedReceiver_AndExcludesOtherReceivers()
+    public async Task AzureConsoleLogging_UsesParsedReceiver_AndExcludesOtherReceivers()
     {
         File.WriteAllText(Path.Combine(_root, "sample.ts"), """
             export class StorageClient {
@@ -155,8 +156,9 @@ public class JavaScriptProviderParityTests
             import javascript-library-azure-checks
             command TEST = CHECK(no-console-logging)
             """);
-        var result = Engine.RunProject([Path.Combine(RepoRoot, "packages")],
-            ["javascript-library-azure-checks"], _root, ["TEST"], additionalScriptFiles: [script]);
+        var result = (await Engine.RunProjectAsync([Path.Combine(RepoRoot, "packages")],
+            ["javascript-library-azure-checks"], _root, ["TEST"],
+            new EngineRunOptions { ScriptFiles = [script] }));
         Assert.That(result.HasFatalErrors, Is.False, string.Join("; ", result.Errors));
         Assert.That(result.Outputs.Select(o => o.Message), Is.EqualTo(new[]
         {
@@ -166,7 +168,7 @@ public class JavaScriptProviderParityTests
 
     [TestCase("FIRST")]
     [TestCase("TAKE")]
-    public void DeferredSelection_DoesNotOpenAnUnrelatedLockedLaterFile(string command)
+    public async Task DeferredSelection_DoesNotOpenAnUnrelatedLockedLaterFile(string command)
     {
         File.WriteAllText(Path.Combine(_root, "a.ts"), "export class First {}");
         var later = Path.Combine(_root, "z.ts");
@@ -179,8 +181,8 @@ public class JavaScriptProviderParityTests
             command TAKE = foreach cb.Types.take(1) => '{item.Name}'
             """);
         using var locked = new FileStream(later, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
-        var result = Engine.RunProject([Path.Combine(RepoRoot, "packages")], ["javascript"], _root, [command],
-            additionalScriptFiles: [script]);
+        var result = (await Engine.RunProjectAsync([Path.Combine(RepoRoot, "packages")], ["javascript"], _root, [command],
+            new EngineRunOptions { ScriptFiles = [script] }));
         Assert.That(result.HasFatalErrors, Is.False, string.Join("; ", result.Errors));
         Assert.That(result.Outputs.Select(o => o.Message), Is.EqualTo(new[] { "First" }));
         Assert.That((result.Warnings ?? []).Any(w => w.Contains("z.ts")), Is.False, string.Join("; ", result.Warnings ?? []));

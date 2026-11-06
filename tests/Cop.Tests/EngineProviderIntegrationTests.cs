@@ -11,7 +11,7 @@ public class EngineProviderIntegrationTests
     private static string BehaviorRoot => Path.Combine(RepoRoot, "tests", "behavior", "model");
 
     [Test]
-    public void CheckHonorsPredicatesAndViolationTemplates()
+    public async Task CheckHonorsPredicatesAndViolationTemplates()
     {
         // Issue #25
         var fixture = CreateFixture(nameof(CheckHonorsPredicatesAndViolationTemplates));
@@ -31,7 +31,7 @@ public class EngineProviderIntegrationTests
                 }
                 """);
 
-            var messages = RunCop(fixture, """
+            var messages = (await RunCop(fixture, """
                 import code
                 import code
                 import csharp
@@ -43,7 +43,7 @@ public class EngineProviderIntegrationTests
                     :toWarning('templated {item.MemberName} at line {item.Line}')
 
                 command MAIN = CHECK(violations)
-                """);
+                """));
 
             Assert.That(messages, Is.EqualTo(new[] { "CheckTemplate.cs(8): warning: templated WriteLine at line 8" }));
         }
@@ -56,7 +56,7 @@ public class EngineProviderIntegrationTests
     [Test]
     [Explicit("Issue #18: explicit csharp.parse() returns no model items when another language file is present — remove when fixed")]
     [Category("PendingFix")]
-    public void ExplicitCSharpProvider_DoesNotLeakOtherLanguageModelItems()
+    public async Task ExplicitCSharpProvider_DoesNotLeakOtherLanguageModelItems()
     {
         // Issue #18
         var fixture = CreateFixture(nameof(ExplicitCSharpProvider_DoesNotLeakOtherLanguageModelItems));
@@ -74,7 +74,7 @@ public class EngineProviderIntegrationTests
                     pass
                 """);
 
-            var messages = RunCop(fixture, """
+            var messages = (await RunCop(fixture, """
                 import code
                 import csharp
 
@@ -84,7 +84,7 @@ public class EngineProviderIntegrationTests
                     foreach cb.Files => 'file:{item.Path}:{item.Language}' |
                     foreach cb.Types => 'type:{item.Name}:{item.File.Language}' |
                     foreach cb.Lines => 'line:{item.File.Path}:{item.File.Language}'
-                """);
+                """));
 
             Assert.That(messages, Is.EqualTo(new[]
             {
@@ -106,7 +106,7 @@ public class EngineProviderIntegrationTests
     [Test]
     [Explicit("Issues #20/#47: csharp.parse() and parse('subdir') return no model items for a minimal path fixture — remove when fixed")]
     [Category("PendingFix")]
-    public void CSharpParse_DefaultAndExplicitPathReturnUsableCodebases()
+    public async Task CSharpParse_DefaultAndExplicitPathReturnUsableCodebases()
     {
         // Issues #20, #47
         var fixture = CreateFixture(nameof(CSharpParse_DefaultAndExplicitPathReturnUsableCodebases));
@@ -119,7 +119,7 @@ public class EngineProviderIntegrationTests
                     public void M() { }
                 }
                 """);
-            var messages = RunCop(fixture, """
+            var messages = (await RunCop(fixture, """
                 import code
                 import csharp
 
@@ -129,7 +129,7 @@ public class EngineProviderIntegrationTests
                 command MAIN =
                     foreach all.Types => 'all:{item.Name}:{item.File.Path}' |
                     foreach sub.Types => 'sub:{item.Name}:{item.File.Path}'
-                """);
+                """));
 
             Assert.That(messages, Is.EqualTo(new[]
             {
@@ -146,13 +146,13 @@ public class EngineProviderIntegrationTests
     [Test]
     [Explicit("Issue #33: object.Get returns a fatal error for Cop object literals — remove when fixed")]
     [Category("PendingFix")]
-    public void CustomPredicateOverDynamicObjects_ReturnsCorrectMatches()
+    public async Task CustomPredicateOverDynamicObjects_ReturnsCorrectMatches()
     {
         // Issue #33
         var fixture = CreateFixture(nameof(CustomPredicateOverDynamicObjects_ReturnsCorrectMatches));
         try
         {
-            var messages = RunCop(fixture, """
+            var messages = (await RunCop(fixture, """
                 let items = [
                     { Name = 'alpha' Enabled = true }
                     { Name = 'beta' Enabled = false }
@@ -162,7 +162,7 @@ public class EngineProviderIntegrationTests
                 predicate isEnabled(object) => object.Get('Enabled') == true
 
                 command MAIN = foreach items:isEnabled => 'enabled:{item.Get('Name')}'
-                """);
+                """));
 
             Assert.That(messages, Is.EqualTo(new[]
             {
@@ -177,7 +177,7 @@ public class EngineProviderIntegrationTests
     }
 
     [Test]
-    public void ThirdLanguageConstrainedPredicateOverload_DispatchesEarlierOverloads()
+    public async Task ThirdLanguageConstrainedPredicateOverload_DispatchesEarlierOverloads()
     {
         // Issue #35
         var fixture = CreateFixture(nameof(ThirdLanguageConstrainedPredicateOverload_DispatchesEarlierOverloads));
@@ -196,7 +196,7 @@ public class EngineProviderIntegrationTests
                 }
                 """);
 
-            var messages = RunCop(fixture, """
+            var messages = (await RunCop(fixture, """
                 import code
                 import csharp
                 import python
@@ -209,7 +209,7 @@ public class EngineProviderIntegrationTests
                 predicate selected(Type:isJavaScript) => Type.Name == 'JavaScriptType'
 
                 command MAIN = foreach cb.Types:selected => 'selected:{item.Name}:{item.File.Language}'
-                """);
+                """));
 
             Assert.That(messages, Is.EqualTo(new[]
             {
@@ -225,7 +225,7 @@ public class EngineProviderIntegrationTests
     }
 
     [Test]
-    public void ReasonablyNamedPredicate_ProducesExpectedNonZeroResult()
+    public async Task ReasonablyNamedPredicate_ProducesExpectedNonZeroResult()
     {
         // Issue #22
         var fixture = CreateFixture(nameof(ReasonablyNamedPredicate_ProducesExpectedNonZeroResult));
@@ -244,7 +244,7 @@ public class EngineProviderIntegrationTests
                 }
                 """);
 
-            var messages = RunCop(fixture, """
+            var messages = (await RunCop(fixture, """
                 import code
                 import csharp
 
@@ -252,7 +252,7 @@ public class EngineProviderIntegrationTests
                 predicate usesRegex(Statement) => Statement.MemberName == 'IsMatch'
 
                 command MAIN = foreach cb.Statements:usesRegex => 'regex:{item.MemberName}:line={item.Line}'
-                """);
+                """));
 
             Assert.That(messages, Is.EqualTo(new[] { "regex:IsMatch:line=8" }));
         }
@@ -272,10 +272,13 @@ public class EngineProviderIntegrationTests
         return new Fixture(root, scriptsDir, targetDir);
     }
 
-    private static IReadOnlyList<string> RunCop(Fixture fixture, string copSource)
+    private static async Task<IReadOnlyList<string>> RunCop(Fixture fixture, string copSource)
     {
         File.WriteAllText(Path.Combine(fixture.ScriptsDir, "main.cop"), copSource);
-        var result = Engine.Run(fixture.ScriptsDir, fixture.TargetDir, additionalFeedPaths: [PackagesDir]);
+        var result = (await Engine.RunAsync(fixture.ScriptsDir, fixture.TargetDir, new EngineRunOptions
+        {
+            AdditionalFeedPaths = [PackagesDir],
+        }));
 
         Assert.That(result.HasParseErrors, Is.False, "Parse errors: " + string.Join(Environment.NewLine, result.ParseErrors));
         Assert.That(result.HasFatalErrors, Is.False, "Fatal errors: " + string.Join(Environment.NewLine, result.Errors));

@@ -1,7 +1,8 @@
+// Validates and publishes package versions from the CLI.
+
 using System;
 using System.CommandLine;
 using System.CommandLine.Parsing;
-using System.Diagnostics;
 using System.IO;
 using System.Collections.Generic;
 using System.Linq;
@@ -17,13 +18,31 @@ public static class PublishCommand
     // True if version is exactly three dot-separated numeric parts (X.Y.Z).
     private static bool IsSemVer3(string? version)
     {
-        if (string.IsNullOrEmpty(version)) return false;
-        var parts = version.Split('.');
-        if (parts.Length != 3) return false;
-        foreach (var p in parts)
+        if (string.IsNullOrEmpty(version))
         {
-            if (p.Length == 0) return false;
-            foreach (var c in p) if (c is < '0' or > '9') return false;
+            return false;
+        }
+
+        string[] parts = version.Split('.');
+        if (parts.Length != 3)
+        {
+            return false;
+        }
+
+        foreach (string p in parts)
+        {
+            if (p.Length == 0)
+            {
+                return false;
+            }
+
+            foreach (char c in p)
+            {
+                if (c is < '0' or > '9')
+                {
+                    return false;
+                }
+            }
         }
         return true;
     }
@@ -32,15 +51,19 @@ public static class PublishCommand
     /// Creates the publish command.
     /// </summary>
     /// <returns>A System.CommandLine.Command configured for the publish subcommand.</returns>
+    /// <summary>
+    /// Creates the package-publication command and its version options.
+    /// </summary>
     public static Command Create()
     {
-        var nameArgument = new Argument<string>("name");
-        var command = new Command("publish", "Validate and publish a package version")
+        Argument<string> nameArgument = new Argument<string>("name");
+        Command command = new Command("publish", "Validate and publish a package version")
         {
             nameArgument
         };
 
-        command.SetAction(parseResult => Execute(parseResult.GetValue(nameArgument)));
+        command.SetAction(parseResult => ExecuteAsync(parseResult.GetValue(nameArgument)
+            ?? throw new InvalidOperationException("The required package name is missing.")));
 
         return command;
     }
@@ -48,9 +71,9 @@ public static class PublishCommand
     /// <summary>
     /// Executes the publish command: validates package and creates git tag.
     /// </summary>
-    private static int Execute(string name)
+    private static async Task<int> ExecuteAsync(string name)
     {
-        var packagePath = LocalPackageSource.FindPackagePath("packages", name)
+        string packagePath = LocalPackageSource.FindPackagePath("packages", name)
             ?? Path.Combine("packages", name);
 
         // Step 1: Directory exists
@@ -60,7 +83,7 @@ public static class PublishCommand
             return 1;
         }
 
-        var metadataFile = Path.Combine(packagePath, PackageMetadata.MetadataFileName);
+        string metadataFile = Path.Combine(packagePath, PackageMetadata.MetadataFileName);
 
         // Step 2: Metadata file exists
         if (!File.Exists(metadataFile))
@@ -76,7 +99,8 @@ public static class PublishCommand
             string content = File.ReadAllText(metadataFile);
             metadata = PackageMetadata.ParseFromJson(content);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or
+            System.Text.Json.JsonException)
         {
             Console.Error.WriteLine($"Error: Failed to parse metadata: {ex.Message}");
             return 1;
@@ -114,10 +138,10 @@ public static class PublishCommand
         }
 
         // Step 7: Required directories exist
-        var requiredDirs = new[] { "instructions", "skills", "src", "tests" };
-        foreach (var dir in requiredDirs)
+        string[] requiredDirs = new[] { "instructions", "skills", "src", "tests" };
+        foreach (string? dir in requiredDirs)
         {
-            var dirPath = Path.Combine(packagePath, dir);
+            string dirPath = Path.Combine(packagePath, dir);
             if (!Directory.Exists(dirPath))
             {
                 Console.Error.WriteLine($"Error: Required directory '{dir}/' does not exist.");
@@ -128,18 +152,18 @@ public static class PublishCommand
         // Step 8: No circular self-dependency
         if (metadata.Dependencies.Count > 0)
         {
-            foreach (var dep in metadata.Dependencies)
+            foreach (string dep in metadata.Dependencies)
             {
                 try
                 {
-                    var packageRef = PackageReference.Parse(dep);
+                    PackageReference packageRef = PackageReference.Parse(dep);
                     if (packageRef.PackageName == name)
                     {
                         Console.Error.WriteLine($"Error: Package has circular dependency on itself: {dep}");
                         return 1;
                     }
                 }
-                catch (Exception ex)
+                catch (Exception ex) when (ex is FormatException or ArgumentException)
                 {
                     Console.Error.WriteLine($"Error: Invalid dependency '{dep}': {ex.Message}");
                     return 1;
@@ -147,28 +171,34 @@ public static class PublishCommand
             }
         }
 
-        var tagName = $"{name}/{metadata.Version}";
+        string tagName = $"{name}/{metadata.Version}";
 
-        // Check if tag already exists
-        if (TagExists(tagName))
+        string? git = ToolchainProcess.FindExecutable("git");
+        if (git is null)
+        {
+            Console.Error.WriteLine("Error: Cannot publish because git is not installed.");
+            return 1;
+        }
+
+        string workingDirectory = Directory.GetCurrentDirectory();
+        ToolchainResult inspection = await ToolchainProcess.RunAsync(
+            new ToolchainCommand(git, ["tag", "-l", tagName], workingDirectory));
+        if (inspection.Status != ToolchainStatus.Success)
+        {
+            Console.Error.WriteLine($"Error: Cannot inspect existing git tags: {inspection.Diagnostic} {inspection.StandardError}".TrimEnd());
+            return 1;
+        }
+        if (!string.IsNullOrWhiteSpace(inspection.StandardOutput))
         {
             Console.Error.WriteLine($"Error: Version {metadata.Version} already published (tag '{tagName}' exists).");
             return 1;
         }
 
-        // Create git tag
-        try
+        ToolchainResult creation = await ToolchainProcess.RunAsync(
+            new ToolchainCommand(git, ["tag", tagName], workingDirectory));
+        if (creation.Status != ToolchainStatus.Success)
         {
-            var result = RunGitCommand($"tag {tagName}");
-            if (result != 0)
-            {
-                Console.Error.WriteLine($"Error: Failed to create git tag '{tagName}'.");
-                return 1;
-            }
-        }
-        catch (Exception ex)
-        {
-            Console.Error.WriteLine($"Error: Failed to create git tag: {ex.Message}");
+            Console.Error.WriteLine($"Error: Failed to create git tag '{tagName}': {creation.Diagnostic} {creation.StandardError}".TrimEnd());
             return 1;
         }
 
@@ -178,59 +208,4 @@ public static class PublishCommand
         return 0;
     }
 
-    /// <summary>
-    /// Tests if a git tag exists.
-    /// </summary>
-    private static bool TagExists(string tagName)
-    {
-        try
-        {
-            var process = new Process
-            {
-                StartInfo = new ProcessStartInfo
-                {
-                    FileName = "git",
-                    Arguments = $"tag -l \"{tagName}\"",
-                    UseShellExecute = false,
-                    RedirectStandardOutput = true,
-                    RedirectStandardError = true,
-                    CreateNoWindow = true
-                }
-            };
-
-            process.Start();
-            string output = process.StandardOutput.ReadToEnd();
-            process.WaitForExit();
-
-            return !string.IsNullOrWhiteSpace(output);
-        }
-        catch
-        {
-            return false;
-        }
-    }
-
-    /// <summary>
-    /// Runs a git command and returns the exit code.
-    /// </summary>
-    private static int RunGitCommand(string arguments)
-    {
-        var process = new Process
-        {
-            StartInfo = new ProcessStartInfo
-            {
-                FileName = "git",
-                Arguments = arguments,
-                UseShellExecute = false,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                CreateNoWindow = true
-            }
-        };
-
-        process.Start();
-        process.WaitForExit();
-
-        return process.ExitCode;
-    }
 }

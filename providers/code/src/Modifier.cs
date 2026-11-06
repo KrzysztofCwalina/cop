@@ -1,5 +1,10 @@
+// Defines language-independent declaration modifiers.
+
 namespace Cop.Providers.SourceModel;
 
+/// <summary>
+/// The combinable modifiers recorded on parsed declarations.
+/// </summary>
 [Flags]
 public enum Modifier
 {

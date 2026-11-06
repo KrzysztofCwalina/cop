@@ -1,3 +1,5 @@
+// Parses Cop tokens into declarations, expressions, and command statements.
+
 namespace Cop.Lang.Parser;
 
 using Cop.Lang.Ast;
@@ -23,12 +25,15 @@ public class CopParser
         _source = source;
     }
 
+    /// <summary>
+    /// Tokenizes source and parses its complete module with optional file attribution.
+    /// </summary>
     public static ModuleNode Parse(string source, string? filePath = null)
     {
         filePath ??= "<unknown>";
-        var tokenizer = new Tokenizer(source, filePath);
-        var tokens = tokenizer.Tokenize();
-        var parser = new CopParser(tokens, filePath, source);
+        Tokenizer tokenizer = new Tokenizer(source, filePath);
+        List<Token> tokens = tokenizer.Tokenize();
+        CopParser parser = new CopParser(tokens, filePath, source);
         return parser.ParseModule();
     }
 
@@ -40,8 +45,8 @@ public class CopParser
     public static ModuleNode ParseWithRecovery(string source, string? filePath, out IReadOnlyList<ParseException> errors)
     {
         filePath ??= "<unknown>";
-        var tokenizer = new Tokenizer(source, filePath);
-        var errs = new List<ParseException>();
+        Tokenizer tokenizer = new Tokenizer(source, filePath);
+        List<ParseException> errs = new List<ParseException>();
         List<Token> tokens;
         try
         {
@@ -53,8 +58,8 @@ public class CopParser
             errors = [ex];
             return new ModuleNode([], 1);
         }
-        var parser = new CopParser(tokens, filePath, source);
-        var module = parser.ParseModuleWithRecovery(errs);
+        CopParser parser = new CopParser(tokens, filePath, source);
+        ModuleNode module = parser.ParseModuleWithRecovery(errs);
         errors = errs;
         return module;
     }
@@ -65,20 +70,20 @@ public class CopParser
     /// </summary>
     public static Cop.Lang.ScriptFile ParseFile(string source, string? filePath = null)
     {
-        var resolvedFilePath = filePath ?? "<unknown>";
-        var module = Parse(source, resolvedFilePath);
+        string resolvedFilePath = filePath ?? "<unknown>";
+        ModuleNode module = Parse(source, resolvedFilePath);
 
-        var imports = new List<string>();
-        var typeDefinitions = new List<Cop.Lang.TypeDefinition>();
-        var collectionDeclarations = new List<Cop.Lang.CollectionDeclaration>();
-        var letDeclarations = new List<Cop.Lang.LetDeclaration>();
-        var predicates = new List<Cop.Lang.PredicateDefinition>();
-        var functions = new List<Cop.Lang.FunctionDefinition>();
-        var commands = new List<Cop.Lang.CommandBlock>();
-        var flagsDefinitions = new List<Cop.Lang.FlagsDefinition>();
-        var enumDefinitions = new List<Cop.Lang.EnumDefinition>();
+        List<string> imports = new List<string>();
+        List<TypeDefinition> typeDefinitions = new List<Cop.Lang.TypeDefinition>();
+        List<CollectionDeclaration> collectionDeclarations = new List<Cop.Lang.CollectionDeclaration>();
+        List<LetDeclaration> letDeclarations = new List<Cop.Lang.LetDeclaration>();
+        List<PredicateDefinition> predicates = new List<Cop.Lang.PredicateDefinition>();
+        List<FunctionDefinition> functions = new List<Cop.Lang.FunctionDefinition>();
+        List<CommandBlock> commands = new List<Cop.Lang.CommandBlock>();
+        List<FlagsDefinition> flagsDefinitions = new List<Cop.Lang.FlagsDefinition>();
+        List<EnumDefinition> enumDefinitions = new List<Cop.Lang.EnumDefinition>();
 
-        foreach (var declaration in module.Declarations)
+        foreach (Declaration declaration in module.Declarations)
         {
             switch (declaration)
             {
@@ -157,14 +162,19 @@ public class CopParser
     // Module (top-level)
     // ========================================================================
 
+    /// <summary>
+    /// Parses declarations until the token stream reaches the end of the module.
+    /// </summary>
     public ModuleNode ParseModule()
     {
-        var declarations = new List<Declaration>();
+        List<Declaration> declarations = new List<Declaration>();
         while (!IsAtEnd())
         {
-            var decl = ParseDeclaration();
+            Declaration? decl = ParseDeclaration();
             if (decl is not null)
+            {
                 declarations.Add(decl);
+            }
         }
         return new ModuleNode(declarations, 1) { FeedPaths = [.. _feedPaths] };
     }
@@ -178,15 +188,17 @@ public class CopParser
     /// </summary>
     public ModuleNode ParseModuleWithRecovery(List<ParseException> errors)
     {
-        var declarations = new List<Declaration>();
+        List<Declaration> declarations = new List<Declaration>();
         while (!IsAtEnd())
         {
             int before = _pos;
             try
             {
-                var decl = ParseDeclaration();
+                Declaration? decl = ParseDeclaration();
                 if (decl is not null)
+                {
                     declarations.Add(decl);
+                }
             }
             catch (ParseException ex)
             {
@@ -195,7 +207,9 @@ public class CopParser
             }
             // Guarantee forward progress so a non-consuming declaration can never spin the loop.
             if (_pos == before && !IsAtEnd())
+            {
                 Advance();
+            }
         }
         return new ModuleNode(declarations, 1) { FeedPaths = [.. _feedPaths] };
     }
@@ -203,9 +217,15 @@ public class CopParser
     /// <summary>Skips past the offending token to the next declaration boundary (or EOF).</summary>
     private void SynchronizeToNextDeclaration()
     {
-        if (!IsAtEnd()) Advance();
-        while (!IsAtEnd() && !IsDeclarationStart())
+        if (!IsAtEnd())
+        {
             Advance();
+        }
+
+        while (!IsAtEnd() && !IsDeclarationStart())
+        {
+            Advance();
+        }
     }
 
     // ========================================================================
@@ -214,8 +234,11 @@ public class CopParser
 
     private Declaration? ParseDeclaration()
     {
-        SkipDocComments(out var docComment);
-        if (IsAtEnd()) return null;
+        SkipDocComments(out string? docComment);
+        if (IsAtEnd())
+        {
+            return null;
+        }
 
         bool isExported = false;
         int line = CurrentLine();
@@ -226,65 +249,95 @@ public class CopParser
             SkipDocComments(out _); // export may be followed by doc comment
         }
 
-        var token = Peek();
+        Token token = Peek();
 
         // type declaration
         if (IsKeyword(token, "type"))
+        {
             return ParseTypeDecl(isExported, docComment, line);
+        }
 
         // enum declaration
         if (IsKeyword(token, "enum"))
+        {
             return ParseEnumDecl(isExported, docComment, line);
+        }
 
         // flags declaration
         if (IsKeyword(token, "flags"))
+        {
             return ParseFlagsDecl(isExported, docComment, line);
+        }
 
         // function declaration
         if (IsKeyword(token, "function"))
+        {
             return ParseFunctionDecl(isExported, docComment, line);
+        }
 
         // predicate declaration (parsed as a function returning bool)
         if (IsKeyword(token, "predicate"))
+        {
             return ParsePredicateAsFunction(isExported, docComment, line);
+        }
 
         // let declaration
         if (IsKeyword(token, "let"))
+        {
             return ParseLetDecl(isExported, docComment, line);
+        }
 
         // command declaration
         if (IsKeyword(token, "command"))
+        {
             return ParseCommandDecl(isExported, docComment, line);
+        }
 
         // import declaration
         if (IsKeyword(token, "import"))
+        {
             return ParseImportDecl(line);
+        }
 
         // async foreach (streaming command sugar)
         if (token.Kind == TokenKind.AsyncKeyword)
         {
             Advance(); // consume 'async'
             if (!Check(TokenKind.ForeachKeyword))
+            {
                 throw new ParseException("Expected 'foreach' after 'async'", _filePath, CurrentLine(),
                     sourceLine: ParseException.GetSourceLine(_source ?? "", CurrentLine()));
+            }
+
             return ParseForeachAsCommand(isExported, docComment, line, isAsync: true);
         }
 
         // foreach (top-level command sugar)
         if (IsKeyword(token, "foreach"))
+        {
             return ParseForeachAsCommand(isExported, docComment, line);
+        }
 
         // test declaration → parse as command with name
         if (IsKeyword(token, "test"))
+        {
             return ParseTestAsCommand(docComment, line);
+        }
 
         // Feed metadata is retained without resolving or loading the feed.
         if (IsKeyword(token, "feed"))
         {
             Advance();
             if (Peek().Line == line && Peek().Kind is TokenKind.StringLiteral or TokenKind.VerbatimStringLiteral)
+            {
                 _feedPaths.Add(Advance().Value);
-            while (!IsAtEnd() && Peek().Line == line) Advance();
+            }
+
+            while (!IsAtEnd() && Peek().Line == line)
+            {
+                Advance();
+            }
+
             return null;
         }
 
@@ -300,9 +353,11 @@ public class CopParser
         // valid. Fail loudly instead of silently skipping it. Other unrecognized lines are tolerated
         // as bare expressions (the CLI wraps those into an implicit command).
         if (IsStrayTopLevelToken(token))
+        {
             throw new ParseException(
                 $"Unexpected token '{token.Value}' ({token.Kind})",
                 _filePath, CurrentLine(), sourceLine: ParseException.GetSourceLine(_source ?? "", CurrentLine()));
+        }
 
         // Bare expression at top level → expression statement in implicit "main"
         // For now, skip unrecognized lines
@@ -322,7 +377,7 @@ public class CopParser
     private Declaration ParseImportDecl(int line)
     {
         Advance(); // consume 'import'
-        var name = ExpectIdentifier("module name");
+        string name = ExpectIdentifier("module name");
         return new ImportDecl(name, line);
     }
 
@@ -335,7 +390,7 @@ public class CopParser
         if (Check(TokenKind.LBracket))
         {
             Advance(); // consume '['
-            var inner = ExpectIdentifier("type parameter");
+            string inner = ExpectIdentifier("type parameter");
             Expect(TokenKind.RBracket, "']'");
             name = $"[{inner}]";
         }
@@ -354,7 +409,7 @@ public class CopParser
             if (Check(TokenKind.LBracket))
             {
                 Advance();
-                var inner = ExpectIdentifier("type parameter");
+                string inner = ExpectIdentifier("type parameter");
                 Expect(TokenKind.RBracket, "']'");
                 firstParent = $"[{inner}]";
             }
@@ -372,7 +427,7 @@ public class CopParser
             }
         }
 
-        var properties = new List<PropertyDecl>();
+        List<PropertyDecl> properties = new List<PropertyDecl>();
 
         // Handle brace-enclosed property block: type Name = { Prop : Type, ... }
         if (Match(TokenKind.Equals))
@@ -396,22 +451,28 @@ public class CopParser
         // Properties follow on subsequent indented lines: Name : Type
         while (!IsAtEnd() && !IsDeclarationStart())
         {
-            SkipDocComments(out var propDoc);
-            if (IsAtEnd() || IsDeclarationStart()) break;
+            SkipDocComments(out string? propDoc);
+            if (IsAtEnd() || IsDeclarationStart())
+            {
+                break;
+            }
 
-            var propLine = CurrentLine();
-            var propToken = Peek();
+            int propLine = CurrentLine();
+            Token propToken = Peek();
 
             // Property: Name : Type or Name : Type?
             if (propToken.Kind == TokenKind.Identifier)
             {
-                var propName = Advance().Value;
+                string propName = Advance().Value;
                 if (Match(TokenKind.Colon))
                 {
-                    var typeRef = ParseTypeRef();
+                    TypeRef typeRef = ParseTypeRef();
                     bool isOptional = false;
                     if (Match(TokenKind.QuestionMark))
+                    {
                         isOptional = true;
+                    }
+
                     Match(TokenKind.Comma); // optional trailing comma
                     properties.Add(new PropertyDecl(propName, typeRef, isOptional, propLine));
                 }
@@ -441,25 +502,32 @@ public class CopParser
         while (!IsAtEnd() && !Check(TokenKind.RBrace))
         {
             SkipDocComments(out _);
-            if (Check(TokenKind.RBrace)) break;
-            var propLine = CurrentLine();
-            var propName = ExpectIdentifier("property name");
+            if (Check(TokenKind.RBrace))
+            {
+                break;
+            }
+
+            int propLine = CurrentLine();
+            string propName = ExpectIdentifier("property name");
 
             // Computed property: name => expr
             if (Match(TokenKind.Arrow))
             {
-                var expr = ParseExpression();
+                Expression expr = ParseExpression();
                 Match(TokenKind.Comma); // optional trailing comma
-                var computedType = new TypeRef("computed", false, propLine);
+                TypeRef computedType = new TypeRef("computed", false, propLine);
                 properties.Add(new PropertyDecl(propName, computedType, false, propLine, expr));
                 continue;
             }
 
             Expect(TokenKind.Colon, "':'");
-            var typeRef = ParseTypeRef();
+            TypeRef typeRef = ParseTypeRef();
             bool isOptional = false;
             if (Match(TokenKind.QuestionMark))
+            {
                 isOptional = true;
+            }
+
             Match(TokenKind.Comma); // optional trailing comma
             properties.Add(new PropertyDecl(propName, typeRef, isOptional, propLine));
         }
@@ -469,7 +537,7 @@ public class CopParser
     private Declaration ParseEnumDecl(bool isExported, string? docComment, int line)
     {
         Advance(); // consume 'enum'
-        var name = ExpectIdentifier("enum name");
+        string name = ExpectIdentifier("enum name");
 
         TypeRef? memberType = null;
         // Optional type annotation: enum Name : TypeKind = ...
@@ -481,7 +549,7 @@ public class CopParser
 
         Expect(TokenKind.Equals, "'='");
 
-        var members = new List<string>();
+        List<string> members = new List<string>();
         members.Add(ExpectIdentifierOrString("enum member"));
         while (Match(TokenKind.Pipe))
         {
@@ -494,11 +562,11 @@ public class CopParser
     private Declaration ParseFlagsDecl(bool isExported, string? docComment, int line)
     {
         Advance(); // consume 'flags'
-        var name = ExpectIdentifier("flags name");
+        string name = ExpectIdentifier("flags name");
 
         Expect(TokenKind.Equals, "'='");
 
-        var members = new List<string>();
+        List<string> members = new List<string>();
         members.Add(ExpectIdentifier("flags member"));
         while (Match(TokenKind.Pipe))
         {
@@ -511,10 +579,10 @@ public class CopParser
     private Declaration ParseFunctionDecl(bool isExported, string? docComment, int line)
     {
         Advance(); // consume 'function'
-        var name = ExpectIdentifier("function name");
+        string name = ExpectIdentifier("function name");
 
         // Parse parameters: (param1: Type1, param2: Type2)
-        var parameters = ParseParameterList();
+        List<Parameter> parameters = ParseParameterList();
 
         // Optional return type: : ReturnType
         TypeRef? returnType = null;
@@ -547,12 +615,12 @@ public class CopParser
             else if (Check(TokenKind.LBrace) && !IsCommandName(name))
             {
                 // For lowercase names, { } after = is an object literal expression
-                var expr = ParseExpression();
+                Expression expr = ParseExpression();
                 body = new ExpressionBody(expr);
             }
             else
             {
-                var expr = ParseExpression();
+                Expression expr = ParseExpression();
                 body = new ExpressionBody(expr);
             }
         }
@@ -565,7 +633,7 @@ public class CopParser
         {
             // Braced mapping body after return type: => Violation { Severity = ..., ... }
             // Parse as object literal expression
-            var expr = ParseExpression();
+            Expression expr = ParseExpression();
             body = new ExpressionBody(expr);
         }
         else
@@ -580,17 +648,17 @@ public class CopParser
     private Declaration ParsePredicateAsFunction(bool isExported, string? docComment, int line)
     {
         Advance(); // consume 'predicate'
-        var name = ExpectIdentifier("predicate name");
+        string name = ExpectIdentifier("predicate name");
 
         // Parse parameters
-        var parameters = ParseParameterList();
+        List<Parameter> parameters = ParseParameterList();
 
         // Predicates implicitly return bool, but may have narrowing type: predicate name(T) : NarrowedType
-        var returnType = new TypeRef("bool");
+        TypeRef returnType = new TypeRef("bool");
         if (Match(TokenKind.Colon))
         {
             // Narrowing type annotation — record it as the return type
-            var narrowed = ParseTypeRef();
+            TypeRef narrowed = ParseTypeRef();
             returnType = narrowed;
         }
 
@@ -612,14 +680,14 @@ public class CopParser
             }
             else
             {
-                var expr = ParseExpression();
+                Expression expr = ParseExpression();
                 body = new ExpressionBody(expr);
             }
         }
         else
         {
             // Constraint-style body (inline expression without =)
-            var expr = ParseExpression();
+            Expression expr = ParseExpression();
             body = new ExpressionBody(expr);
         }
 
@@ -629,7 +697,7 @@ public class CopParser
     private Declaration ParseLetDecl(bool isExported, string? docComment, int line)
     {
         Advance(); // consume 'let'
-        var name = ExpectIdentifier("binding name");
+        string name = ExpectIdentifier("binding name");
 
         TypeRef? typeAnnotation = null;
         if (Match(TokenKind.Colon))
@@ -638,7 +706,7 @@ public class CopParser
         }
 
         Expect(TokenKind.Equals, "'='");
-        var value = ParseExpression();
+        Expression value = ParseExpression();
 
         return new LetDecl(name, typeAnnotation, value, isExported, docComment, line);
     }
@@ -646,10 +714,10 @@ public class CopParser
     private Declaration ParseCommandDecl(bool isExported, string? docComment, int line)
     {
         Advance(); // consume 'command'
-        var name = ExpectIdentifier("command name");
+        string name = ExpectIdentifier("command name");
 
         // Uppercase the name — command is sugar for an uppercase block function
-        var upperName = name.ToUpperInvariant();
+        string upperName = name.ToUpperInvariant();
 
         List<Parameter> parameters = new();
         if (Check(TokenKind.LParen))
@@ -659,7 +727,9 @@ public class CopParser
             {
                 parameters.Add(new Parameter(ExpectIdentifier("parameter"), null));
                 while (Match(TokenKind.Comma))
+                {
                     parameters.Add(new Parameter(ExpectIdentifier("parameter"), null));
+                }
             }
             Expect(TokenKind.RParen, "')'");
         }
@@ -675,8 +745,8 @@ public class CopParser
             else
             {
                 // Single statement → wrap in block
-                var stmt = ParseStatement();
-                var stmts = stmt is not null ? new List<Statement> { stmt } : new List<Statement>();
+                Statement? stmt = ParseStatement();
+                List<Statement> stmts = stmt is not null ? new List<Statement> { stmt } : new List<Statement>();
                 body = new BlockBody(stmts);
             }
         }
@@ -699,18 +769,18 @@ public class CopParser
     private Declaration ParseForeachAsCommand(bool isExported, string? docComment, int line, bool isAsync = false)
     {
         // foreach at top-level is sugar for an uppercase command function
-        var stmt = ParseForEachStatement(isAsync);
-        var body = new BlockBody(new List<Statement> { stmt });
+        ForEachStatement stmt = ParseForEachStatement(isAsync);
+        BlockBody body = new BlockBody(new List<Statement> { stmt });
         return new FunctionDecl("__FOREACH__", new List<Parameter>(), null, body, isExported, null, docComment, line);
     }
 
     private Declaration ParseTestAsCommand(string? docComment, int line)
     {
         Advance(); // consume 'test'
-        var name = ExpectIdentifier("test name");
+        string name = ExpectIdentifier("test name");
 
         // Uppercase the name — test is sugar for an uppercase block function
-        var upperName = "TEST-" + name.ToUpperInvariant();
+        string upperName = "TEST-" + name.ToUpperInvariant();
 
         FunctionBody body;
         if (Match(TokenKind.Equals))
@@ -721,8 +791,8 @@ public class CopParser
             }
             else
             {
-                var stmt = ParseStatement();
-                var stmts = stmt is not null ? new List<Statement> { stmt } : new List<Statement>();
+                Statement? stmt = ParseStatement();
+                List<Statement> stmts = stmt is not null ? new List<Statement> { stmt } : new List<Statement>();
                 body = new BlockBody(stmts);
             }
         }
@@ -740,27 +810,37 @@ public class CopParser
 
     private Statement? ParseStatement()
     {
-        if (IsAtEnd()) return null;
+        if (IsAtEnd())
+        {
+            return null;
+        }
 
-        var token = Peek();
+        Token token = Peek();
 
         if (IsKeyword(token, "let"))
+        {
             return ParseLetStatement();
+        }
 
         if (IsKeyword(token, "foreach"))
+        {
             return ParseForEachStatement();
+        }
 
         // Expression statement (may include pipeline)
-        var expr = ParseExpression();
-        if (expr is null) return null;
+        Expression? expr = ParseExpression();
+        if (expr is null)
+        {
+            return null;
+        }
 
         // Check for pipeline: expr => expr => expr
         if (Check(TokenKind.Arrow))
         {
-            var stages = new List<PipelineStage>();
+            List<PipelineStage> stages = new List<PipelineStage>();
             while (Match(TokenKind.Arrow))
             {
-                var stageExpr = ParseExpression();
+                Expression stageExpr = ParseExpression();
                 stages.Add(new PipelineStage(stageExpr, stageExpr.Line));
             }
             return new PipelineStatement(expr, stages, expr.Line);
@@ -773,14 +853,16 @@ public class CopParser
     {
         int line = CurrentLine();
         Advance(); // consume 'let'
-        var name = ExpectIdentifier("binding name");
+        string name = ExpectIdentifier("binding name");
 
         TypeRef? typeAnnotation = null;
         if (Match(TokenKind.Colon))
+        {
             typeAnnotation = ParseTypeRef();
+        }
 
         Expect(TokenKind.Equals, "'='");
-        var value = ParseExpression();
+        Expression value = ParseExpression();
         return new LetStatement(name, typeAnnotation, value, line);
     }
 
@@ -790,13 +872,13 @@ public class CopParser
         Advance(); // consume 'foreach'
 
         // Collection expression (what we iterate over)
-        var collection = ParseExpression();
+        Expression collection = ParseExpression();
 
         // Optional pipeline stages in the foreach
-        var body = new List<Statement>();
+        List<Statement> body = new List<Statement>();
         while (Match(TokenKind.Arrow))
         {
-            var stageExpr = ParseExpression();
+            Expression stageExpr = ParseExpression();
             body.Add(new ExpressionStatement(stageExpr, stageExpr.Line));
         }
 
@@ -807,11 +889,14 @@ public class CopParser
     // Expressions — Pratt / Precedence Climbing
     // ========================================================================
 
+    /// <summary>
+    /// Parses one expression using the language's precedence rules.
+    /// </summary>
     public Expression ParseExpression() => ParseTernary();
 
     private Expression ParseTernary()
     {
-        var expr = ParseOr();
+        Expression expr = ParseOr();
 
         if (Match(TokenKind.QuestionMark))
         {
@@ -824,11 +909,11 @@ public class CopParser
 
     private Expression ParseOr()
     {
-        var left = ParseAnd();
+        Expression left = ParseAnd();
         while (Match(TokenKind.OrOr))
         {
             int line = Previous().Line;
-            var right = ParseAnd();
+            Expression right = ParseAnd();
             left = new BinaryExpr(left, BinaryOp.Or, right, line);
         }
         return left;
@@ -836,11 +921,11 @@ public class CopParser
 
     private Expression ParseAnd()
     {
-        var left = ParseEquality();
+        Expression left = ParseEquality();
         while (Match(TokenKind.AndAnd))
         {
             int line = Previous().Line;
-            var right = ParseEquality();
+            Expression right = ParseEquality();
             left = new BinaryExpr(left, BinaryOp.And, right, line);
         }
         return left;
@@ -848,67 +933,73 @@ public class CopParser
 
     private Expression ParseEquality()
     {
-        var left = ParseComparison();
+        Expression left = ParseComparison();
         while (true)
         {
             if (Match(TokenKind.EqualEqual))
             {
                 int line = Previous().Line;
-                var right = ParseComparison();
+                Expression right = ParseComparison();
                 left = new BinaryExpr(left, BinaryOp.Equal, right, line);
             }
             else if (Match(TokenKind.NotEqual))
             {
                 int line = Previous().Line;
-                var right = ParseComparison();
+                Expression right = ParseComparison();
                 left = new BinaryExpr(left, BinaryOp.NotEqual, right, line);
             }
-            else break;
+            else
+            {
+                break;
+            }
         }
         return left;
     }
 
     private Expression ParseComparison()
     {
-        var left = ParseBitwiseOr();
+        Expression left = ParseBitwiseOr();
         while (true)
         {
             if (Match(TokenKind.GreaterThan))
             {
                 int line = Previous().Line;
-                var right = ParseBitwiseOr();
+                Expression right = ParseBitwiseOr();
                 left = new BinaryExpr(left, BinaryOp.GreaterThan, right, line);
             }
             else if (Match(TokenKind.LessThan))
             {
                 int line = Previous().Line;
-                var right = ParseBitwiseOr();
+                Expression right = ParseBitwiseOr();
                 left = new BinaryExpr(left, BinaryOp.LessThan, right, line);
             }
             else if (Match(TokenKind.GreaterEqual))
             {
                 int line = Previous().Line;
-                var right = ParseBitwiseOr();
+                Expression right = ParseBitwiseOr();
                 left = new BinaryExpr(left, BinaryOp.GreaterOrEqual, right, line);
             }
             else if (Match(TokenKind.LessEqual))
             {
                 int line = Previous().Line;
-                var right = ParseBitwiseOr();
+                Expression right = ParseBitwiseOr();
                 left = new BinaryExpr(left, BinaryOp.LessOrEqual, right, line);
             }
-            else break;
+            else
+            {
+                break;
+            }
         }
         return left;
     }
 
     private Expression ParseBitwiseOr()
     {
-        var left = ParseBitwiseAnd();
+        Expression left = ParseBitwiseAnd();
         while (Match(TokenKind.Pipe))
         {
             int line = Previous().Line;
-            var right = ParseBitwiseAnd();
+            Expression right = ParseBitwiseAnd();
             left = new BinaryExpr(left, BinaryOp.BitwiseOr, right, line);
         }
         return left;
@@ -916,7 +1007,7 @@ public class CopParser
 
     private Expression ParseBitwiseAnd()
     {
-        var left = ParseAdditive();
+        Expression left = ParseAdditive();
         while (Match(TokenKind.Ampersand))
         {
             int line = Previous().Line;
@@ -933,50 +1024,56 @@ public class CopParser
 
     private Expression ParseAdditive()
     {
-        var left = ParseMultiplicative();
+        Expression left = ParseMultiplicative();
         while (true)
         {
             if (Match(TokenKind.Plus))
             {
                 int line = Previous().Line;
-                var right = ParseMultiplicative();
+                Expression right = ParseMultiplicative();
                 left = new BinaryExpr(left, BinaryOp.Add, right, line);
             }
             else if (Match(TokenKind.Minus))
             {
                 int line = Previous().Line;
-                var right = ParseMultiplicative();
+                Expression right = ParseMultiplicative();
                 left = new BinaryExpr(left, BinaryOp.Subtract, right, line);
             }
-            else break;
+            else
+            {
+                break;
+            }
         }
         return left;
     }
 
     private Expression ParseMultiplicative()
     {
-        var left = ParseUnary();
+        Expression left = ParseUnary();
         while (true)
         {
             if (Match(TokenKind.Star))
             {
                 int line = Previous().Line;
-                var right = ParseUnary();
+                Expression right = ParseUnary();
                 left = new BinaryExpr(left, BinaryOp.Multiply, right, line);
             }
             else if (Match(TokenKind.Slash))
             {
                 int line = Previous().Line;
-                var right = ParseUnary();
+                Expression right = ParseUnary();
                 left = new BinaryExpr(left, BinaryOp.Divide, right, line);
             }
             else if (Match(TokenKind.Percent))
             {
                 int line = Previous().Line;
-                var right = ParseUnary();
+                Expression right = ParseUnary();
                 left = new BinaryExpr(left, BinaryOp.Modulo, right, line);
             }
-            else break;
+            else
+            {
+                break;
+            }
         }
         return left;
     }
@@ -986,13 +1083,13 @@ public class CopParser
         if (Match(TokenKind.Not))
         {
             int line = Previous().Line;
-            var operand = ParseUnary();
+            Expression operand = ParseUnary();
             return new UnaryExpr(UnaryOp.Not, operand, line);
         }
         if (Match(TokenKind.Minus))
         {
             int line = Previous().Line;
-            var operand = ParseUnary();
+            Expression operand = ParseUnary();
             return new UnaryExpr(UnaryOp.Negate, operand, line);
         }
         return ParsePostfix();
@@ -1000,20 +1097,20 @@ public class CopParser
 
     private Expression ParsePostfix()
     {
-         var expr = ParsePrimary();
+        Expression expr = ParsePrimary();
 
         while (true)
         {
             if (Match(TokenKind.Dot))
             {
                 int line = Previous().Line;
-                var member = ExpectIdentifier("member name");
+                string member = ExpectIdentifier("member name");
                 expr = new MemberExpr(expr, member, line);
 
                 // Check for call: obj.method(args)
                 if (Check(TokenKind.LParen))
                 {
-                    var args = ParseArgList();
+                    List<Expression> args = ParseArgList();
                     expr = new CallExpr(expr, args, line);
                 }
             }
@@ -1023,14 +1120,14 @@ public class CopParser
                 // Filter syntax: expr:predicate or expr:!predicate
                 int line = Previous().Line;
                 bool negated = Match(TokenKind.Not);
-                var predicate = ParsePostfixPredicate();
+                Expression predicate = ParsePostfixPredicate();
                 expr = new FilterExpr(expr, predicate, negated, line);
             }
             else if (Check(TokenKind.LParen) && expr is IdentifierExpr or MemberExpr)
             {
                 // Direct call: func(args)
                 int line = CurrentLine();
-                var args = ParseArgList();
+                List<Expression> args = ParseArgList();
                 expr = new CallExpr(expr, args, line);
             }
             else if (Check(TokenKind.LBrace) && expr is IdentifierExpr typeId && typeId.Name.Length > 0 && char.IsUpper(typeId.Name[0]))
@@ -1038,12 +1135,14 @@ public class CopParser
                 // Typed object literal: TypeName { Field = value, ... }
                 int line = CurrentLine();
                 Advance(); // consume '{'
-                var fields = new List<FieldInit>();
+                List<FieldInit> fields = new List<FieldInit>();
                 if (!Check(TokenKind.RBrace))
                 {
                     ParseObjectField(fields, CurrentLine());
                     while (Match(TokenKind.Comma) || (!Check(TokenKind.RBrace) && !IsAtEnd() && IsIdentifierLike(Peek())))
+                    {
                         ParseObjectField(fields, CurrentLine());
+                    }
                 }
                 Expect(TokenKind.RBrace, "'}'");
                 expr = new ObjectExpr(typeId.Name, fields, line);
@@ -1052,7 +1151,7 @@ public class CopParser
             {
                 // Index: expr[index]
                 int line = Previous().Line;
-                var index = ParseExpression();
+                Expression index = ParseExpression();
                 Expect(TokenKind.RBracket, "']'");
                 expr = new IndexExpr(expr, index, line);
             }
@@ -1073,13 +1172,13 @@ public class CopParser
         // A trailing `.member` is intentionally NOT consumed here — it binds to the
         // filter *result*, so `coll:pred.Count` parses as `(coll:pred).Count`
         // (handled by the outer postfix loop).
-        var ident = ExpectIdentifier("predicate name");
+        string ident = ExpectIdentifier("predicate name");
         Expression pred = new IdentifierExpr(ident, CurrentLine());
 
         // Call with args: pred(args)
         if (Check(TokenKind.LParen))
         {
-            var args = ParseArgList();
+            List<Expression> args = ParseArgList();
             pred = new CallExpr(pred, args, CurrentLine());
         }
 
@@ -1096,7 +1195,7 @@ public class CopParser
         // Suppress filter colon so `cond ? x : y` isn't parsed as `cond ? (x:y)`.
 
         _suppressFilterColon = true;
-        var firstExpr = ParseBitwiseAnd();
+        Expression firstExpr = ParseBitwiseAnd();
         _suppressFilterColon = false;
 
         if (Match(TokenKind.Arrow))
@@ -1105,9 +1204,9 @@ public class CopParser
             // separator is not swallowed as a bitwise-or (which would pull the next arm's `_`
             // pattern into the result expression and evaluate it — issue #40). Wrap a result in
             // parentheses if it genuinely needs `|` or `||`.
-            var arms = new List<MatchArm>();
-            var firstResult = ParseBitwiseAnd();
-            var firstPattern = ExprToPattern(firstExpr);
+            List<MatchArm> arms = new List<MatchArm>();
+            Expression firstResult = ParseBitwiseAnd();
+            Pattern firstPattern = ExprToPattern(firstExpr);
             arms.Add(new MatchArm(firstPattern, firstResult, line));
 
             while (Match(TokenKind.Pipe))
@@ -1115,10 +1214,10 @@ public class CopParser
                 // Parse the arm pattern with ParseBitwiseAnd (like the first arm) so that `_ => x`
                 // is NOT consumed as a lambda — `_` must become a WildcardPattern (issue #40).
                 _suppressFilterColon = true;
-                var patExpr = ParseBitwiseAnd();
+                Expression patExpr = ParseBitwiseAnd();
                 _suppressFilterColon = false;
                 Expect(TokenKind.Arrow, "'=>'");
-                var result = ParseBitwiseAnd();
+                Expression result = ParseBitwiseAnd();
                 arms.Add(new MatchArm(ExprToPattern(patExpr), result, CurrentLine()));
             }
 
@@ -1128,7 +1227,7 @@ public class CopParser
         if (Match(TokenKind.Colon) || Match(TokenKind.Pipe))
         {
             // Simple ternary: condition ? then : else  OR  condition ? then | else
-            var elseExpr = ParseExpression();
+            Expression elseExpr = ParseExpression();
             return new ConditionalExpr(condition, firstExpr, elseExpr, line);
         }
 
@@ -1139,14 +1238,17 @@ public class CopParser
     private Expression ParsePrimary()
     {
         int line = CurrentLine();
-        var token = Peek();
+        Token token = Peek();
 
         // String literal (may be interpolated)
         if (token.Kind == TokenKind.StringLiteral)
         {
             Advance();
             if (token.Value.Contains('{'))
+            {
                 return ParseInterpolatedString(token.Value, line);
+            }
+
             return new LiteralExpr(token.Value, line);
         }
 
@@ -1218,7 +1320,7 @@ public class CopParser
             // This could be a unit value or empty lambda params
             if (Match(TokenKind.Arrow))
             {
-                var body = ParseExpression();
+                Expression body = ParseExpression();
                 return new LambdaExpr(new List<Parameter>(), body, line);
             }
             return new LiteralExpr(null, line);
@@ -1227,17 +1329,17 @@ public class CopParser
         // Try to detect lambda: (param, param) => body
         // Save position for backtracking
         int savedPos = _pos;
-        bool isLambda = TryParseLambdaParams(out var lambdaParams);
+        bool isLambda = TryParseLambdaParams(out List<Parameter>? lambdaParams);
 
         if (isLambda && Match(TokenKind.Arrow))
         {
-            var body = ParseExpression();
+            Expression body = ParseExpression();
             return new LambdaExpr(lambdaParams!, body, line);
         }
 
         // Not a lambda, restore and parse as grouped expression
         _pos = savedPos;
-        var expr = ParseExpression();
+        Expression expr = ParseExpression();
         Expect(TokenKind.RParen, "')'");
         return expr;
     }
@@ -1249,10 +1351,13 @@ public class CopParser
 
         try
         {
-            var name = ExpectIdentifier("parameter");
+            string name = ExpectIdentifier("parameter");
             TypeRef? type = null;
             if (Match(TokenKind.Colon))
+            {
                 type = ParseTypeRef();
+            }
+
             parameters.Add(new Parameter(name, type));
 
             while (Match(TokenKind.Comma))
@@ -1260,7 +1365,10 @@ public class CopParser
                 name = ExpectIdentifier("parameter");
                 type = null;
                 if (Match(TokenKind.Colon))
+                {
                     type = ParseTypeRef();
+                }
+
                 parameters.Add(new Parameter(name, type));
             }
 
@@ -1273,7 +1381,7 @@ public class CopParser
 
             return true;
         }
-        catch
+        catch (ParseException)
         {
             _pos = saved;
             parameters = null;
@@ -1285,7 +1393,7 @@ public class CopParser
     {
         int line = CurrentLine();
         Advance(); // consume '['
-        var elements = new List<Expression>();
+        List<Expression> elements = new List<Expression>();
 
         if (!Check(TokenKind.RBracket))
         {
@@ -1294,7 +1402,11 @@ public class CopParser
             while (!Check(TokenKind.RBracket) && !IsAtEnd())
             {
                 Match(TokenKind.Comma); // optional comma
-                if (Check(TokenKind.RBracket)) break;
+                if (Check(TokenKind.RBracket))
+                {
+                    break;
+                }
+
                 elements.Add(ParseExpression());
             }
         }
@@ -1307,7 +1419,7 @@ public class CopParser
     {
         int line = CurrentLine();
         Advance(); // consume '{'
-        var fields = new List<FieldInit>();
+        List<FieldInit> fields = new List<FieldInit>();
 
         if (!Check(TokenKind.RBrace))
         {
@@ -1327,17 +1439,20 @@ public class CopParser
 
     private void ParseObjectField(List<FieldInit> fields, int line)
     {
-        if (Check(TokenKind.RBrace)) return;
+        if (Check(TokenKind.RBrace))
+        {
+            return;
+        }
         // Accept a quoted key for names with special characters (issue #43): `'content-type' = ...`.
-        var fieldName = ExpectIdentifierOrString("field name");
+        string fieldName = ExpectIdentifierOrString("field name");
         // Accept both ':' and '=' as field separator
         if (!Match(TokenKind.Colon) && !Match(TokenKind.Equals))
         {
-            var errLine = CurrentLine();
+            int errLine = CurrentLine();
             throw new ParseException($"Expected ':' or '=' after field name '{fieldName}'", _filePath, errLine,
                 sourceLine: ParseException.GetSourceLine(_source ?? "", errLine));
         }
-        var fieldValue = ParseExpression();
+        Expression fieldValue = ParseExpression();
         fields.Add(new FieldInit(fieldName, fieldValue, line));
     }
 
@@ -1351,7 +1466,7 @@ public class CopParser
         // Returns InterpolatedStringExpr with TextPart and ExpressionPart segments.
         // Only treat {X} as interpolation if X starts with a letter (valid identifier).
         // This allows regex quantifiers like {2}, {1,3} to remain literal.
-        var parts = new List<StringPart>();
+        List<StringPart> parts = new List<StringPart>();
         int i = 0;
 
         while (i < raw.Length)
@@ -1366,7 +1481,7 @@ public class CopParser
                     break;
                 }
 
-                var inner = raw[(i + 1)..end];
+                string inner = raw[(i + 1)..end];
 
                 // Regex quantifiers like {2}, {1,3}, {2,} contain only digits/commas/spaces — keep
                 // them literal. Anything else (identifiers, operators, calls) is an interpolated
@@ -1384,17 +1499,21 @@ public class CopParser
                 // vs expression with styling: {expr.path@style}
                 if (inner.Contains('@'))
                 {
-                    var atIndex = inner.IndexOf('@');
-                    var exprPart = inner[..atIndex];
-                    var stylePart = inner[(atIndex + 1)..];
+                    int atIndex = inner.IndexOf('@');
+                    string exprPart = inner[..atIndex];
+                    string stylePart = inner[(atIndex + 1)..];
 
                     // A bare word (single identifier) is literal styled text (e.g., {Hello@red});
                     // anything with member access / operators / calls is an expression to evaluate.
                     bool isBareWord = exprPart.Length > 0 && exprPart.All(c => char.IsLetterOrDigit(c) || c == '_');
                     if (isBareWord)
+                    {
                         parts.Add(new TextPart(exprPart));
+                    }
                     else
+                    {
                         parts.Add(new ExpressionPart(ParseEmbeddedExpression(exprPart, line), stylePart));
+                    }
                 }
                 else
                 {
@@ -1412,7 +1531,10 @@ public class CopParser
                     break;
                 }
                 if (next > i)
+                {
                     parts.Add(new TextPart(raw[i..next]));
+                }
+
                 i = next;
             }
         }
@@ -1430,11 +1552,11 @@ public class CopParser
     {
         try
         {
-            var tokens = new Tokenizer(inner, _filePath).Tokenize();
-            var sub = new CopParser(tokens, _filePath, inner);
+            List<Token> tokens = new Tokenizer(inner, _filePath).Tokenize();
+            CopParser sub = new CopParser(tokens, _filePath, inner);
             return sub.ParseExpression();
         }
-        catch
+        catch (ParseException)
         {
             return ParseDottedPath(inner, line);
         }
@@ -1444,15 +1566,20 @@ public class CopParser
     {
         // Parse "item.Name" or "x.y.z" into a MemberExpr chain.
         // Trailing "()" on a segment is stripped (e.g., "item.Children.count()" → member "count").
-        var segments = path.Split('.');
+        string[] segments = path.Split('.');
         Expression expr = new IdentifierExpr(segments[0].Trim(), line);
         for (int i = 1; i < segments.Length; i++)
         {
-            var seg = segments[i].Trim();
+            string seg = segments[i].Trim();
             if (seg.EndsWith("()"))
+            {
                 seg = seg[..^2];
+            }
+
             if (seg.Length > 0)
+            {
                 expr = new MemberExpr(expr, seg, line);
+            }
         }
         return expr;
     }
@@ -1463,14 +1590,19 @@ public class CopParser
 
     private List<Parameter> ParseParameterList()
     {
-        var parameters = new List<Parameter>();
-        if (!Match(TokenKind.LParen)) return parameters;
+        List<Parameter> parameters = new List<Parameter>();
+        if (!Match(TokenKind.LParen))
+        {
+            return parameters;
+        }
 
         if (!Check(TokenKind.RParen))
         {
             parameters.Add(ParseParameter());
             while (Match(TokenKind.Comma))
+            {
                 parameters.Add(ParseParameter());
+            }
         }
         Expect(TokenKind.RParen, "')'");
         return parameters;
@@ -1479,23 +1611,23 @@ public class CopParser
     private Parameter ParseParameter()
     {
         int line = CurrentLine();
-        var first = ExpectIdentifier("parameter name or type");
+        string first = ExpectIdentifier("parameter name or type");
 
         // Check if this is "name : Type" or "Type:constraint" or just "Type"
         if (Match(TokenKind.Colon))
         {
             // Look at what follows to decide: is this "name : Type" or "Type:constraint"?
-            var nextToken = Peek();
+            Token nextToken = Peek();
 
             // If next is an identifier and the token after THAT is ')', ',', or ':' (chained filter),
             // and first starts with uppercase, this might be Type:constraint
             if (char.IsUpper(first[0]) && IsIdentifierLike(nextToken))
             {
-                // Peek further: if after the next ident we see '(' or ':' or ')' or ',' 
+                // Peek further: if after the next ident we see '(' or ':' or ')' or ','
                 // without seeing '=' or '=>', it's a constraint chain, not name:Type
                 int savedPos = _pos;
                 Advance(); // consume the next ident
-                var afterIdent = Peek();
+                Token afterIdent = Peek();
                 _pos = savedPos; // restore
 
                 if (afterIdent.Kind == TokenKind.LParen || afterIdent.Kind == TokenKind.Colon
@@ -1511,8 +1643,8 @@ public class CopParser
                 }
             }
 
-            // Standard "name : Type" 
-            var type = ParseTypeRef();
+            // Standard "name : Type"
+            TypeRef type = ParseTypeRef();
             return new Parameter(first, type, line);
         }
 
@@ -1536,7 +1668,9 @@ public class CopParser
     {
         // Skip tokens until we hit ')', ','  (end of this parameter)
         while (!IsAtEnd() && !Check(TokenKind.RParen) && !Check(TokenKind.Comma))
+        {
             Advance();
+        }
     }
 
     private TypeRef ParseTypeRef()
@@ -1545,10 +1679,13 @@ public class CopParser
         // [Type] or [Type:Constraint] for collection types
         if (Match(TokenKind.LBracket))
         {
-            var innerName = ExpectIdentifier("type name");
+            string innerName = ExpectIdentifier("type name");
             string? constraint = null;
             if (Match(TokenKind.Colon))
+            {
                 constraint = ExpectIdentifier("constraint name");
+            }
+
             Expect(TokenKind.RBracket, "']'");
             return new TypeRef(innerName, true, line, constraint);
         }
@@ -1563,24 +1700,26 @@ public class CopParser
         {
             return ParseFunctionTypeRef(line);
         }
-        var name = ExpectIdentifier("type name");
+        string name = ExpectIdentifier("type name");
         return new TypeRef(name, false, line);
     }
 
     private TypeRef ParseFunctionTypeRef(int line)
     {
         Advance(); // consume '('
-        var paramTypes = new List<string>();
+        List<string> paramTypes = new List<string>();
         if (!Check(TokenKind.RParen))
         {
             paramTypes.Add(ParseFunctionParam());
             while (Match(TokenKind.Comma))
+            {
                 paramTypes.Add(ParseFunctionParam());
+            }
         }
         Expect(TokenKind.RParen, "')'");
         Expect(TokenKind.Arrow, "'=>'");
-        var returnType = ParseTypeRef();
-        var signature = $"({string.Join(", ", paramTypes)}) => {FormatTypeRef(returnType)}";
+        TypeRef returnType = ParseTypeRef();
+        string signature = $"({string.Join(", ", paramTypes)}) => {FormatTypeRef(returnType)}";
         return new TypeRef(signature, false, line);
     }
 
@@ -1589,9 +1728,9 @@ public class CopParser
         // Check for named parameter: name : Type
         if (Check(TokenKind.Identifier) && _pos + 1 < _tokens.Count && _tokens[_pos + 1].Kind == TokenKind.Colon)
         {
-            var paramName = Advance().Value;
+            string paramName = Advance().Value;
             Advance(); // consume ':'
-            var typeRef = ParseTypeRef();
+            TypeRef typeRef = ParseTypeRef();
             return $"{paramName}: {FormatTypeRef(typeRef)}";
         }
         return FormatTypeRef(ParseTypeRef());
@@ -1602,28 +1741,34 @@ public class CopParser
         int depth = 0;
         while (!IsAtEnd())
         {
-            if (Check(TokenKind.LBrace)) depth++;
-            else if (Check(TokenKind.RBrace)) { depth--; Advance(); if (depth <= 0) return; continue; }
+            if (Check(TokenKind.LBrace))
+            {
+                depth++;
+            }
+            else if (Check(TokenKind.RBrace)) { depth--; Advance(); if (depth <= 0) { return; } continue; }
             Advance();
         }
     }
 
     private MappingBody ParseMappingBody()
     {
-        var mappings = new List<FieldMapping>();
+        List<FieldMapping> mappings = new List<FieldMapping>();
         while (!IsAtEnd() && !IsDeclarationStart())
         {
             int line = CurrentLine();
-            var token = Peek();
-            if (!IsIdentifierLike(token)) break;
+            Token token = Peek();
+            if (!IsIdentifierLike(token))
+            {
+                break;
+            }
 
-            var fieldName = Advance().Value;
+            string fieldName = Advance().Value;
             if (!Match(TokenKind.Equals))
             {
                 _pos--;
                 break;
             }
-            var value = ParseExpression();
+            Expression value = ParseExpression();
             mappings.Add(new FieldMapping(fieldName, value, line));
         }
         return new MappingBody(mappings);
@@ -1632,14 +1777,18 @@ public class CopParser
     private BlockBody ParseBlockBody()
     {
         Advance(); // consume '{'
-        var stmts = new List<Statement>();
+        List<Statement> stmts = new List<Statement>();
         while (!Check(TokenKind.RBrace) && !IsAtEnd())
         {
-            var stmt = ParseStatement();
+            Statement? stmt = ParseStatement();
             if (stmt is not null)
+            {
                 stmts.Add(stmt);
+            }
             else
+            {
                 break;
+            }
         }
         Expect(TokenKind.RBrace, "'}'");
         return new BlockBody(stmts);
@@ -1654,20 +1803,24 @@ public class CopParser
         foreach (char c in name)
         {
             if (char.IsLetter(c) && !char.IsUpper(c))
+            {
                 return false;
+            }
         }
         return name.Length > 0 && name.Any(char.IsLetter);
     }
 
     private List<Expression> ParseArgList()
     {
-        var args = new List<Expression>();
+        List<Expression> args = new List<Expression>();
         Advance(); // consume '('
         if (!Check(TokenKind.RParen))
         {
             args.Add(ParseExpression());
             while (Match(TokenKind.Comma))
+            {
                 args.Add(ParseExpression());
+            }
         }
         Expect(TokenKind.RParen, "')'");
         return args;
@@ -1687,10 +1840,18 @@ public class CopParser
     /// </summary>
     private bool IsFilterColonFollowed()
     {
-        if (!Check(TokenKind.Colon)) return false;
+        if (!Check(TokenKind.Colon))
+        {
+            return false;
+        }
+
         int next = _pos + 1;
-        if (next >= _tokens.Count) return false;
-        var nextToken = _tokens[next];
+        if (next >= _tokens.Count)
+        {
+            return false;
+        }
+
+        Token nextToken = _tokens[next];
         // Filter: followed by identifier or ! (negated filter)
         return IsIdentifierLike(nextToken) || nextToken.Kind == TokenKind.Not;
     }
@@ -1768,9 +1929,9 @@ public class CopParser
 
     private static Cop.Lang.PredicateDefinition ConvertPredicateDefinition(FunctionDecl functionDecl)
     {
-        var parameter = functionDecl.Params[0];
-        var parameterType = parameter.Type is not null ? FormatTypeRef(parameter.Type) : "object";
-        var narrowedType = functionDecl.ReturnType is not null
+        Parameter parameter = functionDecl.Params[0];
+        string parameterType = parameter.Type is not null ? FormatTypeRef(parameter.Type) : "object";
+        string? narrowedType = functionDecl.ReturnType is not null
             && !string.Equals(functionDecl.ReturnType.Name, "bool", StringComparison.OrdinalIgnoreCase)
                 ? FormatTypeRef(functionDecl.ReturnType)
                 : null;
@@ -1788,28 +1949,34 @@ public class CopParser
 
     private static Cop.Lang.FunctionDefinition ConvertFunctionDefinition(FunctionDecl functionDecl)
     {
-        var inputType = functionDecl.Params.Count > 0 && functionDecl.Params[0].Type is not null
+        string inputType = functionDecl.Params.Count > 0 && functionDecl.Params[0].Type is not null
             ? FormatTypeRef(functionDecl.Params[0].Type!)
             : "";
 
-        var inputName = functionDecl.Params.Count > 0 ? functionDecl.Params[0].Name : null;
+        string? inputName = functionDecl.Params.Count > 0 ? functionDecl.Params[0].Name : null;
 
-        var parameters = functionDecl.Params
+        List<FunctionParameter> parameters = functionDecl.Params
             .Skip(1)
             .Select(p => new Cop.Lang.FunctionParameter(p.Name, p.Type is not null ? FormatTypeRef(p.Type) : "object"))
             .ToList();
 
-        var fieldMappings = new Dictionary<string, Cop.Lang.Expression>();
+        Dictionary<string, Lang.Expression> fieldMappings = new Dictionary<string, Cop.Lang.Expression>();
         switch (functionDecl.Body)
         {
             case MappingBody mappingBody:
-                foreach (var mapping in mappingBody.Mappings)
+                foreach (FieldMapping mapping in mappingBody.Mappings)
+                {
                     fieldMappings[mapping.FieldName] = WrapExpression(mapping.Value);
+                }
+
                 break;
 
             case ExpressionBody { Expr: ObjectExpr objectExpr }:
-                foreach (var field in objectExpr.Fields)
+                foreach (FieldInit field in objectExpr.Fields)
+                {
                     fieldMappings[field.Name] = WrapExpression(field.Value);
+                }
+
                 break;
         }
 
@@ -1831,7 +1998,7 @@ public class CopParser
 
     private static Cop.Lang.CommandBlock ConvertCommandBlock(FunctionDecl functionDecl)
     {
-        var name = functionDecl.Name;
+        string name = functionDecl.Name;
         string messageTemplate = string.Empty;
         string? collection = null;
         List<Cop.Lang.Expression> filters = [];
@@ -1841,9 +2008,9 @@ public class CopParser
 
         PopulateCommandShape(functionDecl.Body, ref name, ref messageTemplate, ref collection, filters, ref pathOverride, ref outputExpression, ref exclusions);
 
-        var isTest = name.StartsWith("TEST-", StringComparison.Ordinal);
-        var isCommand = !string.Equals(functionDecl.Name, "__FOREACH__", StringComparison.Ordinal) && !isTest;
-        var parameters = functionDecl.Params.Count > 0 ? functionDecl.Params.Select(p => p.Name).ToList() : null;
+        bool isTest = name.StartsWith("TEST-", StringComparison.Ordinal);
+        bool isCommand = !string.Equals(functionDecl.Name, "__FOREACH__", StringComparison.Ordinal) && !isTest;
+        List<string>? parameters = functionDecl.Params.Count > 0 ? functionDecl.Params.Select(p => p.Name).ToList() : null;
 
         return new Cop.Lang.CommandBlock(
             name,
@@ -1870,7 +2037,7 @@ public class CopParser
 
     private static Cop.Lang.CommandBlock ConvertCommandBlock(CommandDecl commandDecl)
     {
-        var name = commandDecl.Name;
+        string name = commandDecl.Name;
         string messageTemplate = string.Empty;
         string? collection = null;
         List<Cop.Lang.Expression> filters = [];
@@ -1878,8 +2045,10 @@ public class CopParser
         Cop.Lang.Expression? outputExpression = null;
         Cop.Lang.Expression? exclusions = null;
 
-        foreach (var statement in commandDecl.Body)
+        foreach (Statement statement in commandDecl.Body)
+        {
             ApplyCommandStatement(statement, ref name, ref messageTemplate, ref collection, filters, ref pathOverride, ref outputExpression, ref exclusions);
+        }
 
         return new Cop.Lang.CommandBlock(
             name,
@@ -1919,13 +2088,18 @@ public class CopParser
                 break;
 
             case BlockBody blockBody:
-                foreach (var statement in blockBody.Statements)
+                foreach (Statement statement in blockBody.Statements)
+                {
                     ApplyCommandStatement(statement, ref name, ref messageTemplate, ref collection, filters, ref pathOverride, ref outputExpression, ref exclusions);
+                }
+
                 break;
         }
 
         if (string.Equals(name, "__FOREACH__", StringComparison.Ordinal) && !string.IsNullOrEmpty(collection))
+        {
             name = collection!;
+        }
     }
 
     private static void ApplyCommandStatement(
@@ -1941,7 +2115,7 @@ public class CopParser
         switch (statement)
         {
             case ForEachStatement forEachStatement:
-                if (TryExtractCollectionQuery(forEachStatement.Collection, out var extractedCollection, out var extractedFilters, out var extractedPath, out var extractedExclusions))
+                if (TryExtractCollectionQuery(forEachStatement.Collection, out string? extractedCollection, out List<Lang.Expression>? extractedFilters, out string? extractedPath, out Lang.Expression? extractedExclusions))
                 {
                     collection = extractedCollection;
                     filters.AddRange(extractedFilters);
@@ -1969,7 +2143,7 @@ public class CopParser
 
             case PipelineStatement pipelineStatement:
                 if (collection is null
-                    && TryExtractCollectionQuery(pipelineStatement.Source, out var pipelineCollection, out var pipelineFilters, out var pipelinePath, out var pipelineExclusions))
+                    && TryExtractCollectionQuery(pipelineStatement.Source, out string? pipelineCollection, out List<Lang.Expression>? pipelineFilters, out string? pipelinePath, out Lang.Expression? pipelineExclusions))
                 {
                     collection = pipelineCollection;
                     filters.AddRange(pipelineFilters);
@@ -1978,7 +2152,10 @@ public class CopParser
                 }
 
                 if (pipelineStatement.Stages.Count > 0)
+                {
                     outputExpression = WrapExpression(pipelineStatement.Stages[^1].Expr);
+                }
+
                 break;
         }
     }
@@ -1992,14 +2169,14 @@ public class CopParser
         ref Cop.Lang.Expression? outputExpression,
         ref Cop.Lang.Expression? exclusions)
     {
-        if (TryExtractStringLiteral(expression, out var literal))
+        if (TryExtractStringLiteral(expression, out string? literal))
         {
             messageTemplate = literal;
             return;
         }
 
         if (collection is null
-            && TryExtractCollectionQuery(expression, out var extractedCollection, out var extractedFilters, out var extractedPath, out var extractedExclusions))
+            && TryExtractCollectionQuery(expression, out string? extractedCollection, out List<Lang.Expression>? extractedFilters, out string? extractedPath, out Lang.Expression? extractedExclusions))
         {
             collection = extractedCollection;
             filters.AddRange(extractedFilters);
@@ -2039,17 +2216,17 @@ public class CopParser
         exclusions = null;
 
         if (expression is BinaryExpr { Op: BinaryOp.Subtract } subtraction
-            && TryExtractCollectionQuery(subtraction.Left, out baseCollection, out filters, out pathOverride, out var nestedExclusions))
+            && TryExtractCollectionQuery(subtraction.Left, out baseCollection, out filters, out pathOverride, out Lang.Expression? nestedExclusions))
         {
             exclusions = nestedExclusions ?? WrapExpression(subtraction.Right);
             return true;
         }
 
-        var collectedFilters = new Stack<Expression>();
-        var current = expression;
+        Stack<Expression> collectedFilters = new Stack<Expression>();
+        Expression current = expression;
         while (current is FilterExpr filterExpr)
         {
-            var predicate = filterExpr.Negated
+            Expression predicate = filterExpr.Negated
                 ? new UnaryExpr(UnaryOp.Not, filterExpr.Predicate, filterExpr.Line)
                 : filterExpr.Predicate;
             collectedFilters.Push(predicate);
@@ -2057,10 +2234,14 @@ public class CopParser
         }
 
         if (!TryExtractCollectionReference(current, out baseCollection, out pathOverride))
+        {
             return false;
+        }
 
         while (collectedFilters.Count > 0)
+        {
             filters.Add(WrapExpression(collectedFilters.Pop()));
+        }
 
         return true;
     }
@@ -2071,10 +2252,12 @@ public class CopParser
         pathOverride = null;
 
         if (TryExtractDottedName(expression, out collection))
+        {
             return true;
+        }
 
         if (expression is CallExpr { Args.Count: 1 } callExpr
-            && TryExtractStringLiteral(callExpr.Args[0], out var path)
+            && TryExtractStringLiteral(callExpr.Args[0], out string? path)
             && TryExtractDottedName(callExpr.Callee, out collection))
         {
             pathOverride = path;
@@ -2092,7 +2275,7 @@ public class CopParser
                 name = identifierExpr.Name;
                 return true;
 
-            case MemberExpr memberExpr when TryExtractDottedName(memberExpr.Object, out var parentName):
+            case MemberExpr memberExpr when TryExtractDottedName(memberExpr.Object, out string? parentName):
                 name = $"{parentName}.{memberExpr.Member}";
                 return true;
 
@@ -2117,9 +2300,11 @@ public class CopParser
     private static string? TryExtractSimpleName(Expression? expression)
     {
         if (expression is null)
+        {
             return null;
+        }
 
-        return TryExtractDottedName(expression, out var name) ? name : null;
+        return TryExtractDottedName(expression, out string? name) ? name : null;
     }
 
     private static string FormatTypeRef(TypeRef typeRef)
@@ -2142,8 +2327,12 @@ public class CopParser
 
     private Token Advance()
     {
-        var token = Peek();
-        if (!IsAtEnd()) _pos++;
+        Token token = Peek();
+        if (!IsAtEnd())
+        {
+            _pos++;
+        }
+
         return token;
     }
 
@@ -2157,35 +2346,39 @@ public class CopParser
 
     private bool MatchKeyword(string keyword)
     {
-        var token = Peek();
+        Token token = Peek();
         if (IsKeyword(token, keyword)) { Advance(); return true; }
         return false;
     }
 
     private Token Expect(TokenKind kind, string expected)
     {
-        if (Check(kind)) return Advance();
-        var line = CurrentLine();
+        if (Check(kind))
+        {
+            return Advance();
+        }
+
+        int line = CurrentLine();
         throw new ParseException($"Expected {expected}, got '{Peek().Value}'", _filePath, line,
             sourceLine: ParseException.GetSourceLine(_source ?? "", line));
     }
 
     private string ExpectIdentifier(string context)
     {
-        var token = Peek();
+        Token token = Peek();
         if (IsIdentifierLike(token))
         {
             Advance();
             return token.Value;
         }
-        var line = CurrentLine();
+        int line = CurrentLine();
         throw new ParseException($"Expected {context} (identifier), got '{token.Value}' ({token.Kind})", _filePath, line,
             sourceLine: ParseException.GetSourceLine(_source ?? "", line));
     }
 
     private string ExpectIdentifierOrString(string context)
     {
-        var token = Peek();
+        Token token = Peek();
         if (token.Kind == TokenKind.StringLiteral || token.Kind == TokenKind.VerbatimStringLiteral
             || token.Kind == TokenKind.IntLiteral
             || token.Kind == TokenKind.NumberLiteral || IsIdentifierLike(token))
@@ -2193,7 +2386,7 @@ public class CopParser
             Advance();
             return token.Value;
         }
-        var line = CurrentLine();
+        int line = CurrentLine();
         throw new ParseException($"Expected {context}, got '{token.Value}'", _filePath, line,
             sourceLine: ParseException.GetSourceLine(_source ?? "", line));
     }
@@ -2228,13 +2421,17 @@ public class CopParser
     private static bool IsKeyword(Token token, string keyword)
     {
         // Match both dedicated keyword tokens and identifiers with the keyword value
-        if (token.Value == keyword) return true;
+        if (token.Value == keyword)
+        {
+            return true;
+        }
+
         return false;
     }
 
     private bool IsDeclarationStart()
     {
-        var token = Peek();
+        Token token = Peek();
         return token.Kind == TokenKind.ExportKeyword
             || IsKeyword(token, "type")
             || IsKeyword(token, "enum")
@@ -2256,7 +2453,7 @@ public class CopParser
         docComment = null;
         while (Check(TokenKind.DocComment))
         {
-            var text = Advance().Value;
+            string text = Advance().Value;
             docComment = docComment is null ? text : $"{docComment}\n{text}";
         }
     }
@@ -2266,6 +2463,8 @@ public class CopParser
         // Advance past tokens until we reach a token on a different line or EOF
         int line = CurrentLine();
         while (!IsAtEnd() && Peek().Line == line)
+        {
             Advance();
+        }
     }
 }
