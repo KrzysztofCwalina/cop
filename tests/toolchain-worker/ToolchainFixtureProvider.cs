@@ -19,10 +19,17 @@ public sealed class ToolchainFixtureProvider : DataProvider
         Accessors = { ["FixtureItem"] = new() { ["Name"] = value => ((Item)value).Name } }
     };
 
-    public override object QueryDeferred(ProviderQuery query) =>
-        new DeferredProviderResult(new Dictionary<string, IEnumerable<object>> { ["Items"] = Enumerate(query) });
+    public override ValueTask<object?> QueryDeferredAsync(
+        ProviderQuery query, CancellationToken cancellationToken = default) =>
+        ValueTask.FromResult<object?>(new DeferredProviderResult(
+            new Dictionary<string, IAsyncEnumerable<object>>
+            {
+                ["Items"] = EnumerateAsync(query, cancellationToken)
+            }));
 
-    private static IEnumerable<object> Enumerate(ProviderQuery query)
+    private static async IAsyncEnumerable<object> EnumerateAsync(
+        ProviderQuery query,
+        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken)
     {
         var root = query.RootPath!;
         var mode = File.ReadAllText(Path.Combine(root, "mode.txt"));
@@ -30,7 +37,9 @@ public sealed class ToolchainFixtureProvider : DataProvider
         var helper = File.ReadAllText(Path.Combine(root, "helper.txt"));
         for (int i = 0; i < 2; i++)
         {
-            var result = ToolchainExecutionScope.RequestAsync(dotnet, [helper, "worker"], root, "{}").GetAwaiter().GetResult();
+            var result = await ToolchainExecutionScope.RequestAsync(
+                new ToolchainCommand(dotnet, [helper, "worker"], root), "{}",
+                cancellationToken: cancellationToken);
             if (result.Status != ToolchainStatus.Success) throw new InvalidOperationException(result.Diagnostic);
             using var response = JsonDocument.Parse(result.StandardOutput);
             File.AppendAllText(Path.Combine(root, "pids.txt"), response.RootElement.GetProperty("pid") + "\n");

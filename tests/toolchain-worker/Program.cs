@@ -33,8 +33,12 @@ switch (args[0])
     case "environment":
         Console.Write(Environment.GetEnvironmentVariable(args[1]));
         break;
+    case "auth-token":
+        Console.WriteLine("fixture-token-not-a-real-credential");
+        Console.Error.Write(new string('e', 20_000));
+        break;
     case "engine-probe":
-        var engineResult = Engine.Run(args[1], args[2]);
+        var engineResult = await Engine.RunAsync(args[1], args[2]);
         var pids = File.ReadAllLines(Path.Combine(args[2], "pids.txt")).Select(int.Parse).Distinct().ToArray();
         bool stopped = true;
         foreach (var pid in pids)
