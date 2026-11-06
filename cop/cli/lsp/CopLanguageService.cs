@@ -54,10 +54,7 @@ internal static class CopLanguageService
             {
                 return bufferText;
             }
-            // A sibling file can be deleted/locked mid-edit; never let that crash analysis.
-            try { return File.ReadAllText(f); }
-            catch (IOException) { return string.Empty; }
-            catch (UnauthorizedAccessException) { return string.Empty; }
+            return File.ReadAllText(f);
         });
 
         // Only surface diagnostics for the open document. A diagnostic with no file (rare) is
@@ -93,9 +90,7 @@ internal static class CopLanguageService
         foreach (string f in ProgramFiles(full, dir))
         {
             string text = PathsEqual(f, full) ? ModelText(bufferText, line) : SafeRead(f);
-            ModuleNode module;
-            try { module = CopParser.Parse(text, f); }
-            catch { continue; }
+            ModuleNode module = CopParser.ParseWithRecovery(text, f, out _);
 
             foreach (Declaration decl in module.Declarations)
             {
@@ -172,7 +167,8 @@ internal static class CopLanguageService
 
         ModuleNode? fileModule = TryParse(modelText, full);
         IReadOnlyCollection<string> packages = VerifyCommand.ListAvailablePackages(dir);
-        return CopCompletion.Complete(model, fileModule, bufferText, line, character, packages);
+        return CopCompletion.Complete(
+            model, fileModule, bufferText, (line, character), packages);
     }
 
     private static string[] ProgramFiles(string fullPath, string dir)
@@ -243,19 +239,23 @@ internal static class CopLanguageService
     private static bool Parses(string text)
     {
         try { CopParser.Parse(text, "probe.cop"); return true; }
-        catch { return false; }
+        catch (ParseException) { return false; }
     }
 
     private static ModuleNode? TryParse(string text, string path)
     {
         try { return CopParser.Parse(text, path); }
-        catch { return null; }
+        catch (ParseException) { return null; }
     }
 
     private static string SafeRead(string file)
     {
         try { return File.ReadAllText(file); }
-        catch (IOException) { return string.Empty; }
-        catch (UnauthorizedAccessException) { return string.Empty; }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or
+            System.Security.SecurityException)
+        {
+            Console.Error.WriteLine($"[cop-editor] Could not read '{file}': {ex.Message}");
+            return string.Empty;
+        }
     }
 }

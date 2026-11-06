@@ -7,8 +7,8 @@ namespace Cop.Core;
 
 internal static class ProviderCompatibility
 {
-    private static readonly System.Reflection.AssemblyName Host = typeof(DataProvider).Assembly.GetName();
-    internal static string HostVersion => Host.Version!.ToString();
+    private static readonly System.Reflection.AssemblyName s_host = typeof(DataProvider).Assembly.GetName();
+    internal static string HostVersion => s_host.Version!.ToString();
 
     internal static string? GetError(string packageDir, PackageMetadata metadata)
     {
@@ -23,7 +23,7 @@ internal static class ProviderCompatibility
         foreach (AssemblyReferenceHandle handle in reader.AssemblyReferences)
         {
             AssemblyReference reference = reader.GetAssemblyReference(handle);
-            if (reader.GetString(reference.Name) == Host.Name && reference.Version != Host.Version)
+            if (reader.GetString(reference.Name) == s_host.Name && reference.Version != s_host.Version)
             {
                 return $"Provider '{metadata.Name}' at '{path}' is incompatible: it requires cop {reference.Version}, " +
                     $"but this executable is {HostVersion}.";

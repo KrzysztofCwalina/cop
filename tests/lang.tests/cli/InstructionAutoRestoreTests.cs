@@ -34,7 +34,7 @@ public class InstructionAutoRestoreTests
         File.WriteAllText(Path.Combine(pkg, "instructions", "guide.md"), instructionBody);
     }
 
-    private static int RunInRepo(string repo, string copFileName)
+    private static async Task<int> RunInRepoAsync(string repo, string copFileName)
     {
         var previousCwd = Directory.GetCurrentDirectory();
         var previousOut = Console.Out;
@@ -46,7 +46,8 @@ public class InstructionAutoRestoreTests
             using var se = new StringWriter();
             Console.SetOut(so);
             Console.SetError(se);
-            return RunCommand.Execute(Path.Combine(repo, copFileName), target: repo);
+            return await RunCommand.ExecuteAsync(Path.Combine(repo, copFileName),
+                new RunOptions { Target = repo });
         }
         finally
         {
@@ -57,7 +58,7 @@ public class InstructionAutoRestoreTests
     }
 
     [Test]
-    public void AutoRestore_PlacesImportedPackageInstructions_Idempotently()
+    public async Task AutoRestore_PlacesImportedPackageInstructions_Idempotently()
     {
         var repo = NewTempRepo();
         try
@@ -66,7 +67,7 @@ public class InstructionAutoRestoreTests
             File.WriteAllText(Path.Combine(repo, "program.cop"),
                 "import demo-instr-checks\ncommand MAIN = foreach [1 2] => 'n={item}'\n");
 
-            var exit = RunInRepo(repo, "program.cop");
+            var exit = await RunInRepoAsync(repo, "program.cop");
             Assert.That(exit, Is.EqualTo(0), "program should run cleanly");
 
             var placed = Path.Combine(repo, ".github", "instructions", "demo-instr-checks.instructions.md");
@@ -76,7 +77,7 @@ public class InstructionAutoRestoreTests
 
             // A second run must not change the placed file (no working-tree churn).
             var before = File.ReadAllBytes(placed);
-            var exit2 = RunInRepo(repo, "program.cop");
+            var exit2 = await RunInRepoAsync(repo, "program.cop");
             Assert.That(exit2, Is.EqualTo(0));
             Assert.That(File.ReadAllBytes(placed), Is.EqualTo(before), "second run must not rewrite the file");
         }

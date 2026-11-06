@@ -46,7 +46,7 @@ public sealed class NewPipelineRunner
     /// <summary>
     /// Load all .cop source files from a package directory.
     /// </summary>
-    public bool LoadPackageDir(string srcDir)
+    public async ValueTask<bool> LoadPackageDirAsync(string srcDir, CancellationToken cancellationToken = default)
     {
         if (!Directory.Exists(srcDir))
         {
@@ -62,9 +62,10 @@ public sealed class NewPipelineRunner
             try
             {
                 string source = File.ReadAllText(file);
-                _bridge.LoadSource(source, file);
+                await _bridge.LoadSourceAsync(source, file, cancellationToken: cancellationToken);
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException
+                or ParseException or CopEvaluationException)
             {
                 _parseErrors.Add($"{file}: {ex.Message}");
             }
@@ -76,14 +77,14 @@ public sealed class NewPipelineRunner
     /// <summary>
     /// Load a single .cop source string.
     /// </summary>
-    public bool LoadSource(string source, string path = "<input>")
+    public async ValueTask<bool> LoadSourceAsync(string source, string path = "<input>", CancellationToken cancellationToken = default)
     {
         try
         {
-            _bridge.LoadSource(source, path);
+            await _bridge.LoadSourceAsync(source, path, cancellationToken: cancellationToken);
             return true;
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is ParseException or CopEvaluationException)
         {
             _parseErrors.Add($"{path}: {ex.Message}");
             return false;
@@ -105,8 +106,8 @@ public sealed class NewPipelineRunner
     /// <summary>
     /// Run a named command (defaults to "main").
     /// </summary>
-    public CopValue Run(string command = "main")
-        => _bridge.RunCommand(command);
+    public async ValueTask<CopValue> RunAsync(string command = "main", CancellationToken cancellationToken = default)
+        => (await _bridge.RunCommandAsync(command, cancellationToken: cancellationToken));
 
     /// <summary>
     /// Access the underlying bridge for advanced scenarios.

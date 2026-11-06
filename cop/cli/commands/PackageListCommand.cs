@@ -28,25 +28,26 @@ public static class PackageListCommand
             feedOption
         };
 
-        command.SetAction(parseResult => Execute(parseResult.GetValue(feedOption)));
+        command.SetAction(parseResult => ExecuteAsync(parseResult.GetValue(feedOption)));
 
         return command;
     }
 
-    private static int Execute(string? feedFilter)
+    private static async Task<int> ExecuteAsync(string? feedFilter)
     {
         try
         {
-            return ExecuteAsync(feedFilter).GetAwaiter().GetResult();
+            return await ListFeedsAsync(feedFilter);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or
+            HttpRequestException or JsonException or System.ComponentModel.Win32Exception)
         {
             Console.Error.WriteLine($"Error: {ex.Message}");
             return 1;
         }
     }
 
-    private static async Task<int> ExecuteAsync(string? feedFilter)
+    private static async Task<int> ListFeedsAsync(string? feedFilter)
     {
         FeedManager feedManager = new FeedManager();
         List<string> feeds = feedManager.GetFeeds();
@@ -136,7 +137,7 @@ public static class PackageListCommand
         HttpClient httpClient, string owner, string repo)
     {
         // Try master first (most common for existing repos), fall back to main
-        string? token = GetGhToken();
+        string? token = await GitHubAuthentication.ResolveTokenAsync();
         List<string>? packages = await TryListFromBranch(httpClient, owner, repo, "master", token);
         if (packages == null)
         {
@@ -151,29 +152,29 @@ public static class PackageListCommand
     {
         string url = $"https://api.github.com/repos/{owner}/{repo}/git/trees/{branch}?recursive=1";
 
-        HttpResponseMessage response;
-        if (token != null)
+        using HttpRequestMessage request = new HttpRequestMessage(HttpMethod.Get, url);
+        if (token is not null)
         {
-            HttpRequestMessage request = new HttpRequestMessage(HttpMethod.Get, url);
             request.Headers.Add("Authorization", $"Bearer {token}");
-            response = await httpClient.SendAsync(request);
         }
-        else
+        using HttpResponseMessage response = await httpClient.SendAsync(request);
+        if (token is null && response.StatusCode == System.Net.HttpStatusCode.Forbidden)
         {
-            response = await httpClient.GetAsync(url);
-            // If rate-limited, retry with gh token
-            if (response.StatusCode == System.Net.HttpStatusCode.Forbidden)
+            token = await GitHubAuthentication.ResolveTokenAsync();
+            if (token is not null)
             {
-                token = GetGhToken();
-                if (token != null)
-                {
-                    HttpRequestMessage request = new HttpRequestMessage(HttpMethod.Get, url);
-                    request.Headers.Add("Authorization", $"Bearer {token}");
-                    response = await httpClient.SendAsync(request);
-                }
+                using HttpRequestMessage retry = new HttpRequestMessage(HttpMethod.Get, url);
+                retry.Headers.Add("Authorization", $"Bearer {token}");
+                using HttpResponseMessage retried = await httpClient.SendAsync(retry);
+                return await ReadPackagesAsync(retried);
             }
         }
 
+        return await ReadPackagesAsync(response);
+    }
+
+    private static async Task<List<string>?> ReadPackagesAsync(HttpResponseMessage response)
+    {
         if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
         {
             return null; // Branch doesn't exist — caller will try another
@@ -209,36 +210,4 @@ public static class PackageListCommand
         return packages.OrderBy(n => n).ToList();
     }
 
-    private static string? GetGhToken()
-    {
-        string? envToken = Environment.GetEnvironmentVariable("GITHUB_TOKEN");
-        if (!string.IsNullOrWhiteSpace(envToken))
-        {
-            return envToken;
-        }
-
-        try
-        {
-            ProcessStartInfo psi = new System.Diagnostics.ProcessStartInfo("gh", "auth token")
-            {
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                UseShellExecute = false,
-                CreateNoWindow = true
-            };
-            using Process? process = System.Diagnostics.Process.Start(psi);
-            if (process != null)
-            {
-                string output = process.StandardOutput.ReadToEnd().Trim();
-                process.WaitForExit(5000);
-                if (process.ExitCode == 0 && !string.IsNullOrEmpty(output))
-                {
-                    return output;
-                }
-            }
-        }
-        catch { }
-
-        return null;
-    }
 }

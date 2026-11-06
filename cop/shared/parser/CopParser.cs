@@ -25,6 +25,9 @@ public class CopParser
         _source = source;
     }
 
+    /// <summary>
+    /// Tokenizes source and parses its complete module with optional file attribution.
+    /// </summary>
     public static ModuleNode Parse(string source, string? filePath = null)
     {
         filePath ??= "<unknown>";
@@ -159,6 +162,9 @@ public class CopParser
     // Module (top-level)
     // ========================================================================
 
+    /// <summary>
+    /// Parses declarations until the token stream reaches the end of the module.
+    /// </summary>
     public ModuleNode ParseModule()
     {
         List<Declaration> declarations = new List<Declaration>();
@@ -883,6 +889,9 @@ public class CopParser
     // Expressions — Pratt / Precedence Climbing
     // ========================================================================
 
+    /// <summary>
+    /// Parses one expression using the language's precedence rules.
+    /// </summary>
     public Expression ParseExpression() => ParseTernary();
 
     private Expression ParseTernary()
@@ -1372,7 +1381,7 @@ public class CopParser
 
             return true;
         }
-        catch
+        catch (ParseException)
         {
             _pos = saved;
             parameters = null;
@@ -1547,7 +1556,7 @@ public class CopParser
             CopParser sub = new CopParser(tokens, _filePath, inner);
             return sub.ParseExpression();
         }
-        catch
+        catch (ParseException)
         {
             return ParseDottedPath(inner, line);
         }
@@ -1614,7 +1623,7 @@ public class CopParser
             // and first starts with uppercase, this might be Type:constraint
             if (char.IsUpper(first[0]) && IsIdentifierLike(nextToken))
             {
-                // Peek further: if after the next ident we see '(' or ':' or ')' or ',' 
+                // Peek further: if after the next ident we see '(' or ':' or ')' or ','
                 // without seeing '=' or '=>', it's a constraint chain, not name:Type
                 int savedPos = _pos;
                 Advance(); // consume the next ident
@@ -1634,7 +1643,7 @@ public class CopParser
                 }
             }
 
-            // Standard "name : Type" 
+            // Standard "name : Type"
             TypeRef type = ParseTypeRef();
             return new Parameter(first, type, line);
         }

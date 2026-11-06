@@ -54,6 +54,7 @@ public static class JavaScriptBindings
         };
         bindings.Accessors["JavaScriptStatement"] = jsStatementAccessors;
 
+        CodeBindings.AddDerivedAsyncAccessors(bindings);
         return bindings;
     }
 }

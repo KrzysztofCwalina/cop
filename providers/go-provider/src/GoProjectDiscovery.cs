@@ -101,7 +101,7 @@ public static class GoProjectDiscovery
             string name = moduleName.Contains('/') ? moduleName[(moduleName.LastIndexOf('/') + 1)..] : moduleName;
 
             Dictionary<string, string> properties = new Dictionary<string, string> { ["Module"] = moduleName.Trim('"') };
-            ReadContext(filePath, properties, "");
+            ReadContext(filePath, properties, string.Empty);
             return new ProjectInfo(name.Trim('"'), relativePath, "go", dependencies.Distinct().ToList(), dependencies.Distinct().ToList(), [])
             { Properties = properties };
         }
@@ -195,7 +195,7 @@ public static class GoProjectDiscovery
     }
     private static bool TryReadTokenAfterKeyword(string text, string keyword, bool requireWhitespaceAfterToken, out string token)
     {
-        token = "";
+        token = string.Empty;
         if (!text.StartsWith(keyword, StringComparison.Ordinal))
         {
             return false;
@@ -234,7 +234,7 @@ public static class GoProjectDiscovery
 
     private static bool TryReadFirstTokenBeforeWhitespace(string text, out string token)
     {
-        token = "";
+        token = string.Empty;
         int index = 0;
         while (index < text.Length && !char.IsWhiteSpace(text[index]))
         {

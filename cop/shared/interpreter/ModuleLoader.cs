@@ -23,9 +23,21 @@ public sealed class ModuleLoader
     private readonly List<(ModuleNode Module, string FilePath, string Source)> _loadedFiles = [];
     private readonly Dictionary<string, List<ModuleNode>> _packageModules = new(StringComparer.Ordinal);
 
+    /// <summary>
+    /// The human-readable failures encountered while loading packages.
+    /// </summary>
     public IReadOnlyList<string> Errors => _errors;
+    /// <summary>
+    /// The structured source diagnostics produced during package loading.
+    /// </summary>
     public IReadOnlyList<CopDiagnostic> Diagnostics => _diagnostics;
+    /// <summary>
+    /// The package directories requiring provider assembly registration.
+    /// </summary>
     public IReadOnlyList<(string Dir, string PackageName)> ProviderPackages => _providerPackages;
+    /// <summary>
+    /// The parsed modules successfully loaded from package source files.
+    /// </summary>
     public IReadOnlyList<ModuleNode> LoadedModules => _loadedModules;
     /// <summary>Imported modules with their source locations, for compiler diagnostics.</summary>
     public IReadOnlyList<(ModuleNode Module, string FilePath, string Source)> LoadedFiles => _loadedFiles;
@@ -108,7 +120,7 @@ public sealed class ModuleLoader
                 _errors.Add($"in package '{packageName}': {pex.Message}");
                 _diagnostics.Add(pex.ToDiagnostic());
             }
-            catch (Exception ex) when (ex is not OutOfMemoryException)
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
                 _errors.Add($"{file}: {ex.Message}");
                 _diagnostics.Add(new CopDiagnostic(
@@ -177,6 +189,9 @@ public sealed class ModuleLoader
     public static List<string> ExtractFeedPaths(string source, string scriptsDir)
         => ExtractFeedPaths(Cop.Lang.Parser.CopParser.ParseWithRecovery(source, null, out _), scriptsDir);
 
+    /// <summary>
+    /// Resolves a module's feed declarations relative to its script directory.
+    /// </summary>
     public static List<string> ExtractFeedPaths(ModuleNode module, string scriptsDir)
     {
         List<string> paths = new List<string>();
@@ -284,7 +299,8 @@ public sealed class ModuleLoader
                     evaluator.GlobalEnvironment.Define(ld.Name, thunk);
                 }
             }
-            catch (Exception ex) when (ex is not OutOfMemoryException)
+            catch (Exception ex) when (ex is CopEvaluationException
+                or InvalidOperationException or ArgumentException)
             {
                 errors.Add($"{filePath}: {ex.Message}");
             }
@@ -317,13 +333,15 @@ public sealed class ModuleLoader
         // raw text, so a description that merely mentions "provider" is not misclassified.
         try
         {
-            PackageMetadata? metadata = Cop.Core.PackageMetadata.TryLoadFromDirectory(packageDir);
+            PackageMetadata? metadata = Cop.Core.PackageMetadata.LoadFromDirectoryOrDefault(packageDir);
             if (metadata is not null && metadata.IsProvider)
             {
                 _providerPackages.Add((packageDir, packageName));
             }
         }
-        catch (Exception ex) when (ex is not OutOfMemoryException)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException
+            or System.Text.Json.JsonException or YamlDotNet.Core.YamlException
+            or ArgumentException)
         {
             _errors.Add($"Failed to read provider metadata in '{packageDir}': {ex.Message}");
         }

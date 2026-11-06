@@ -27,14 +27,14 @@ public static class HelpCommand
         {
             fileArg
         };
-        command.SetAction(parseResult => Execute(parseResult.GetValue(fileArg)));
+        command.SetAction(parseResult => ExecuteAsync(parseResult.GetValue(fileArg)));
         return command;
     }
 
     /// <summary>
     /// Displays declarations from a source file or the current directory.
     /// </summary>
-    public static int Execute(string? file)
+    public static async Task<int> ExecuteAsync(string? file)
     {
         // Bare "cop help" with no argument — show general help
         if (file == null)
@@ -53,7 +53,7 @@ public static class HelpCommand
         // If the argument doesn't end in .cop and isn't a file path, treat as package name
         if (!file.EndsWith(".cop", StringComparison.OrdinalIgnoreCase) && !File.Exists(file))
         {
-            return ExecutePackageHelp(file);
+            return await ExecutePackageHelpAsync(file);
         }
 
         // Explicit file: list commands in that .cop file
@@ -98,7 +98,8 @@ public static class HelpCommand
                 string source = File.ReadAllText(path);
                 module = CopParser.Parse(source, path);
             }
-            catch (Exception ex) when (ex is not OutOfMemoryException)
+            catch (Exception ex) when (ex is ParseException or IOException or
+                UnauthorizedAccessException)
             {
                 Console.Error.WriteLine(ex.Message);
                 continue;
@@ -206,10 +207,10 @@ public static class HelpCommand
     }
 
     /// <summary>Resolves a package and prints its exported API documentation.</summary>
-    public static int ExecutePackageHelp(string packageName)
+    public static async Task<int> ExecutePackageHelpAsync(string packageName)
     {
         List<string> feedPaths = PackageResolver.GetFeedPaths();
-        string? packageDir = PackageResolver.ResolvePackageDir(packageName, feedPaths);
+        string? packageDir = await PackageResolver.ResolvePackageDirAsync(packageName, feedPaths);
 
         if (packageDir == null)
         {
@@ -320,8 +321,9 @@ public static class HelpCommand
                             break;
 
                         case FunctionDecl fd when fd.IsExported && fd.IsPredicate:
-                            string paramType = fd.Params.Count > 0 && fd.Params[0].Type != null
-                                ? fd.Params[0].Type.Name : "object";
+                            string paramType = fd.Params.Count > 0 &&
+                                fd.Params[0].Type is { } parameterType
+                                ? parameterType.Name : "object";
                             predicates.Add((fd.Name, fd.DocComment, paramType));
                             if (fd.Name.Length > 2 && fd.Name.StartsWith("as", StringComparison.Ordinal) && char.IsUpper(fd.Name[2]))
                             {
@@ -365,9 +367,10 @@ public static class HelpCommand
                     }
                 }
             }
-            catch (Exception ex) when (ex is not OutOfMemoryException)
+            catch (Exception ex) when (ex is ParseException or IOException or
+                UnauthorizedAccessException)
             {
-                // Skip unparseable files
+                Console.Error.WriteLine($"Cannot read package source '{copFile}': {ex.Message}");
             }
         }
 
@@ -667,7 +670,7 @@ public static class HelpCommand
         return isOptional ? $"{name}?" : name;
     }
 
-    private static readonly HashSet<string> CopKeywords = new(StringComparer.Ordinal)
+    private static readonly HashSet<string> s_copKeywords = new(StringComparer.Ordinal)
     {
         "import", "export", "let", "type", "enum", "flags", "predicate", "function",
         "command", "foreach", "async", "if", "else", "match", "true", "false", "nic"
@@ -769,7 +772,7 @@ public static class HelpCommand
                 }
 
                 string word = line[start..i];
-                if (CopKeywords.Contains(word))
+                if (s_copKeywords.Contains(word))
                 {
                     Console.Write($"{ConsoleMarkdown.Cyan}{word}{ConsoleMarkdown.Reset}");
                 }

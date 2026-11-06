@@ -12,7 +12,13 @@ namespace Cop.Lang.Interpreter;
 /// </summary>
 public sealed class CopEnumConstructor : CopValue, ICopCallable
 {
+    /// <summary>
+    /// The enum type assigned to values constructed by this callable.
+    /// </summary>
     public string EnumName { get; }
+    /// <summary>
+    /// The number of arguments still required to invoke this callable.
+    /// </summary>
     public int Arity => 1;
 
     public CopEnumConstructor(string enumName)
@@ -20,7 +26,8 @@ public sealed class CopEnumConstructor : CopValue, ICopCallable
         EnumName = enumName;
     }
 
-    public CopValue Invoke(IReadOnlyList<CopValue> args, Evaluator evaluator, Environment env)
+    /// <inheritdoc cref="ICopCallable.InvokeAsync"/>
+    public async ValueTask<CopValue> InvokeAsync(IReadOnlyList<CopValue> args, Evaluator evaluator, Environment env, CancellationToken cancellationToken = default)
     {
         if (args.Count != 1)
         {
@@ -28,10 +35,12 @@ public sealed class CopEnumConstructor : CopValue, ICopCallable
                 $"Enum constructor '{EnumName}' expects exactly 1 argument, got {args.Count}", 0, null);
         }
 
-        string arg = args[0] is CopString s ? s.Value : args[0].Display();
+        string arg = args[0] is CopString s ? s.Value : (await args[0].DisplayAsync(cancellationToken: cancellationToken));
         return new CopString(arg);
     }
 
+    /// <inheritdoc/>
     public override string Display() => $"<enum {EnumName}>";
+    /// <inheritdoc/>
     public override string ToString() => Display();
 }

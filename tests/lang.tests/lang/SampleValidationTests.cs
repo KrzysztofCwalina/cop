@@ -46,7 +46,7 @@ public class SampleValidationTests
     }
 
     [TestCaseSource(nameof(GetSampleFiles))]
-    public void SampleCompiles(string sampleFilePath)
+    public async Task SampleCompiles(string sampleFilePath)
     {
         var tempDir = Path.Combine(Path.GetTempPath(), "cop-sample-tests", Path.GetFileNameWithoutExtension(sampleFilePath));
         if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
@@ -59,10 +59,10 @@ public class SampleValidationTests
             foreach (var file in Directory.GetFiles(sampleDir))
                 File.Copy(file, Path.Combine(tempDir, Path.GetFileName(file)), true);
 
-            var result = Engine.Run(tempDir, tempDir, new EngineRunOptions
+            var result = (await Engine.RunAsync(tempDir, tempDir, new EngineRunOptions
             {
                 AdditionalFeedPaths = [PackagesDir],
-            });
+            }));
 
             if (result.HasParseErrors)
                 Assert.Fail($"Parse errors:\n{string.Join("\n", result.ParseErrors)}");

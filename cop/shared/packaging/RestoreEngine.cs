@@ -40,6 +40,7 @@ public class RestoreEngine
     /// <param name="ct">Cancellation token</param>
     public async Task<RestoreResult> RestoreAsync(List<PackageReference> packages, string sourceFilePath, string repoRoot, CancellationToken ct = default)
     {
+        ct.ThrowIfCancellationRequested();
         List<string> placedFiles = new List<string>();
         List<string> warnings = new List<string>();
 
@@ -51,7 +52,7 @@ public class RestoreEngine
                 {
                     PlacedFiles = placedFiles,
                     Warnings = warnings,
-                    Success = true,
+                    IsSuccessful = true,
                     PackageCount = 0,
                     FileCount = 0
                 };
@@ -93,7 +94,8 @@ public class RestoreEngine
                     string relativePath = Path.GetRelativePath(repoRoot, filePath);
                     manifest[relativePath] = checksum;
                 }
-                catch (Exception ex)
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException
+                    or SecurityException or CryptographicException)
                 {
                     warnings.Add($"Failed to compute checksum for {filePath}: {ex.Message}");
                 }
@@ -103,22 +105,20 @@ public class RestoreEngine
 
             return new RestoreResult
             {
-                Success = true,
+                IsSuccessful = true,
                 PackageCount = resolvedPackages.Count,
                 FileCount = placedFiles.Count,
                 PlacedFiles = placedFiles,
                 Warnings = warnings
             };
         }
-        catch (OperationCanceledException)
-        {
-            warnings.Add("Restore operation was cancelled.");
-            return new RestoreResult { PlacedFiles = placedFiles, Warnings = warnings, Success = false };
-        }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException
+            or SecurityException or HttpRequestException or PackageNotFoundException
+            or CircularDependencyException or InvalidOperationException or ArgumentException
+            or FormatException or System.Text.Json.JsonException or YamlDotNet.Core.YamlException)
         {
             warnings.Add($"Restore failed: {ex.Message}");
-            return new RestoreResult { PlacedFiles = placedFiles, Warnings = warnings, Success = false };
+            return new RestoreResult { PlacedFiles = placedFiles, Warnings = warnings, IsSuccessful = false };
         }
     }
 
@@ -150,7 +150,7 @@ public class RestoreEngine
                     continue;
                 }
 
-                string targetPath = null;
+                string? targetPath = null;
 
                 // Instructions are placed once before this loop (see PlaceInstructions). Skip here.
                 if (relativePath.StartsWith("instructions/", StringComparison.OrdinalIgnoreCase) &&
@@ -226,7 +226,10 @@ public class RestoreEngine
                     string packageDir = Path.Combine(repoRoot, ".cop", "packages", package.PackageName);
                     targetPath = ValidatePackagePath(relativePath, packageDir);
                     string? targetDir = Path.GetDirectoryName(targetPath);
-                    Directory.CreateDirectory(targetDir);
+                    if (targetDir is not null)
+                    {
+                        Directory.CreateDirectory(targetDir);
+                    }
                     await File.WriteAllBytesAsync(targetPath, content);
                 }
 
@@ -235,7 +238,8 @@ public class RestoreEngine
                     placedFiles.Add(targetPath);
                 }
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException
+                or SecurityException or ArgumentException)
             {
                 warnings.Add($"Failed to place file {relativePath} from package {package.PackageName}: {ex.Message}");
             }
@@ -272,7 +276,12 @@ public class RestoreEngine
             if (metaEntry.Value != null)
             {
                 try { applyTo = PackageMetadata.ParseFromJson(Encoding.UTF8.GetString(metaEntry.Value)).ApplyTo; }
-                catch { /* fall back to default ** */ }
+                catch (Exception exception) when (exception is System.Text.Json.JsonException
+                    or ArgumentException)
+                {
+                    warnings.Add(
+                        $"Cannot read instruction metadata for {package.PackageName}: {exception.Message}");
+                }
             }
 
             string? targetPath = InstructionPlacement.Place(
@@ -283,7 +292,8 @@ public class RestoreEngine
                 placedFiles.Add(targetPath);
             }
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException
+            or SecurityException or ArgumentException)
         {
             warnings.Add($"Failed to place instructions from package {package.PackageName}: {ex.Message}");
         }
@@ -325,7 +335,8 @@ public class RestoreEngine
             await File.WriteAllTextAsync(targetsPath, content);
             placedFiles.Add(targetsPath);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException
+            or SecurityException)
         {
             warnings.Add($"Failed to generate Directory.Build.targets: {ex.Message}");
         }
@@ -361,7 +372,8 @@ public class RestoreEngine
             await File.WriteAllTextAsync(globalConfigPath, content);
             placedFiles.Add(globalConfigPath);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException
+            or SecurityException)
         {
             warnings.Add($"Failed to generate analyzers.globalconfig: {ex.Message}");
         }
@@ -404,7 +416,7 @@ public class RestoreEngine
                 }
             }
         }
-        catch (Exception ex)
+        catch (YamlDotNet.Core.YamlException ex)
         {
             // A malformed nuget-analyzers.yaml must not silently produce zero analyzers — surface it.
             warnings.Add($"Failed to parse nuget-analyzers.yaml: {ex.Message}");
@@ -417,66 +429,58 @@ public class RestoreEngine
     /// </summary>
     private void ParseRulesYaml(string yamlContent, Dictionary<string, string> diagnosticRules, List<string> warnings)
     {
-        try
+        // Parsing is bounds-checked throughout; unexpected implementation errors must
+        // propagate rather than turning a broken parser into an empty rule configuration.
+        foreach (string rawLine in yamlContent.Split('\n'))
         {
-            // Hand-written parsing for diagnostic severity rules.
-            // Equivalent to: dotnet_diagnostic.{id} = {value}  (id = [A-Za-z0-9]+, case-insensitive marker),
-            // where {value} is the remainder of the line.
-            foreach (string rawLine in yamlContent.Split('\n'))
+            const string marker = "dotnet_diagnostic.";
+            int idx = rawLine.IndexOf(marker, StringComparison.OrdinalIgnoreCase);
+            if (idx < 0)
             {
-                const string marker = "dotnet_diagnostic.";
-                int idx = rawLine.IndexOf(marker, StringComparison.OrdinalIgnoreCase);
-                if (idx < 0)
-                {
-                    continue;
-                }
-
-                int p = idx + marker.Length;
-                int idStart = p;
-                while (p < rawLine.Length && rawLine[p] is (>= 'a' and <= 'z') or (>= 'A' and <= 'Z') or (>= '0' and <= '9'))
-                {
-                    p++;
-                }
-
-                if (p == idStart)
-                {
-                    continue;
-                }
-
-                string id = rawLine.Substring(idStart, p - idStart).Trim();
-
-                while (p < rawLine.Length && char.IsWhiteSpace(rawLine[p]))
-                {
-                    p++;
-                }
-
-                if (p >= rawLine.Length || rawLine[p] != '=')
-                {
-                    continue;
-                }
-
-                p++;
-                while (p < rawLine.Length && char.IsWhiteSpace(rawLine[p]))
-                {
-                    p++;
-                }
-
-                if (p >= rawLine.Length)
-                {
-                    continue;
-                }
-
-                string severity = rawLine.Substring(p).Trim();
-                if (!diagnosticRules.ContainsKey(id))
-                {
-                    diagnosticRules[id] = severity;
-                }
+                continue;
             }
-        }
-        catch (Exception ex)
-        {
-            // A malformed rules.yaml must not silently produce zero rule overrides — surface it.
-            warnings.Add($"Failed to parse rules.yaml: {ex.Message}");
+
+            int p = idx + marker.Length;
+            int idStart = p;
+            while (p < rawLine.Length && rawLine[p] is (>= 'a' and <= 'z')
+                or (>= 'A' and <= 'Z') or (>= '0' and <= '9'))
+            {
+                p++;
+            }
+
+            if (p == idStart)
+            {
+                continue;
+            }
+
+            string id = rawLine.Substring(idStart, p - idStart).Trim();
+
+            while (p < rawLine.Length && char.IsWhiteSpace(rawLine[p]))
+            {
+                p++;
+            }
+
+            if (p >= rawLine.Length || rawLine[p] != '=')
+            {
+                continue;
+            }
+
+            p++;
+            while (p < rawLine.Length && char.IsWhiteSpace(rawLine[p]))
+            {
+                p++;
+            }
+
+            if (p >= rawLine.Length)
+            {
+                continue;
+            }
+
+            string severity = rawLine.Substring(p).Trim();
+            if (!diagnosticRules.ContainsKey(id))
+            {
+                diagnosticRules[id] = severity;
+            }
         }
     }
 

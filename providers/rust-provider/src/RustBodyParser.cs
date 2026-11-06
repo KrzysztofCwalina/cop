@@ -8,7 +8,7 @@ namespace Cop.Providers.SourceParsers;
 
 // Syntax facts only: a receiver is an expression, never an inferred CLR/Rust type.
 internal sealed class RustBodyParser(List<RustToken> tokens, string source, List<StatementInfo> statements,
-    Action<RustToken> reportNestingLimit, Func<int, int> parseNestedFunction, Dictionary<int, int> pairs)
+    RustBodyParserCallbacks callbacks, Dictionary<int, int> pairs)
 {
     private readonly Dictionary<int, int> _pairs = pairs;
     private readonly List<(int position, StatementInfo statement)> _statements = [];
@@ -29,8 +29,8 @@ internal sealed class RustBodyParser(List<RustToken> tokens, string source, List
         statements.AddRange(_statements.OrderBy(s => s.position).Select(s => s.statement));
     }
 
-    private string Value => _pos < _end ? tokens[_pos].Value : "";
-    private string Next => _pos + 1 < _end ? tokens[_pos + 1].Value : "";
+    private string Value => _pos < _end ? tokens[_pos].Value : string.Empty;
+    private string Next => _pos + 1 < _end ? tokens[_pos + 1].Value : string.Empty;
     private bool AtEnd => _pos >= _end;
     private static bool IsTrivia(RustToken token) => token.Kind is RustTokenKind.LineComment
         or RustTokenKind.BlockComment or RustTokenKind.DocComment or RustTokenKind.Attribute;
@@ -58,7 +58,7 @@ internal sealed class RustBodyParser(List<RustToken> tokens, string source, List
             if (Value is "fn" or "async" or "unsafe" or "const" or "extern"
                 && tokens.Skip(_pos).Take(6).Any(t => t.Value == "fn"))
             {
-                _pos = parseNestedFunction(_pos);
+                _pos = callbacks.ParseNestedFunction(_pos);
             }
             else if (Value is "if" or "while" or "for" or "loop" or "match")
             {
@@ -306,7 +306,7 @@ internal sealed class RustBodyParser(List<RustToken> tokens, string source, List
         }
         else
         {
-            reportNestingLimit(tokens[Math.Max(0, _pos - 1)]);
+            callbacks.ReportNestingLimit(tokens[Math.Max(0, _pos - 1)]);
         }
 
         _depth--;
@@ -328,7 +328,7 @@ internal sealed class RustBodyParser(List<RustToken> tokens, string source, List
         if (++_depth > 256)
         {
             _depth--;
-            reportNestingLimit(tokens[_pos]);
+            callbacks.ReportNestingLimit(tokens[_pos]);
             _pos++;
             return new(new("other"), start, _pos, []);
         }
@@ -339,7 +339,7 @@ internal sealed class RustBodyParser(List<RustToken> tokens, string source, List
             Trivia();
             if (++postfixCount > 256)
             {
-                reportNestingLimit(tokens[Math.Min(_pos, tokens.Count - 1)]);
+                callbacks.ReportNestingLimit(tokens[Math.Min(_pos, tokens.Count - 1)]);
                 while (!AtEnd && Value is not ";" and not "," and not "}" and not ")" and not "]")
                 {
                     if (_pairs.TryGetValue(_pos, out int end))
@@ -399,9 +399,9 @@ internal sealed class RustBodyParser(List<RustToken> tokens, string source, List
                 }
 
                 bool panic = macro && member is "panic!" or "todo!" or "unimplemented!" or "unreachable!";
-                RustStatementInfo call = new RustStatementInfo(panic ? "throw" : "call", [],
+                RustStatementInfo call = new RustStatementInfo(new StatementInfo(panic ? "throw" : "call", [],
                     ReceiverName(result.Info.Target), member,
-                    args.Select(a => Text(a.Start, a.End)).ToList(), tokens[start].Line, true)
+                    args.Select(a => Text(a.Start, a.End)).ToList(), tokens[start].Line, true))
                 {
                     CallTarget = macro ? result.Info with { Name = member } : result.Info,
                     ArgumentExpressions = args.Select(a => a.Info).ToList(),
@@ -601,7 +601,7 @@ internal sealed class RustBodyParser(List<RustToken> tokens, string source, List
         string? condition = null, bool braced = false, string? member = null)
     {
         int end = StatementEnd(position);
-        RustStatementInfo statement = new RustStatementInfo(kind, keywords, null, member, [], tokens[position].Line, true)
+        RustStatementInfo statement = new RustStatementInfo(new StatementInfo(kind, keywords, null, member, [], tokens[position].Line, true))
         {
             Condition = condition, IsBraced = braced, Column = Column(tokens[position].Start),
             EndLine = tokens[end].Line, EndColumn = Column(tokens[end].End)
@@ -634,7 +634,7 @@ internal sealed class RustBodyParser(List<RustToken> tokens, string source, List
             }
 
             child.Parent = parent;
-            parent._children.Add(child);
+            parent.MutableChildren.Add(child);
         }
     }
 
@@ -663,7 +663,7 @@ internal sealed class RustBodyParser(List<RustToken> tokens, string source, List
     }
 
     private string Text(int start, int end) => start < end && start < tokens.Count
-        ? source[tokens[start].Start..tokens[Math.Min(end, tokens.Count) - 1].End] : "";
+        ? source[tokens[start].Start..tokens[Math.Min(end, tokens.Count) - 1].End] : string.Empty;
 
     private int Column(int position)
     {
@@ -791,7 +791,7 @@ internal sealed class RustBodyParser(List<RustToken> tokens, string source, List
                     }
 
                     int close = text.IndexOf('}', i + 2);
-                    if (close < 0 || !int.TryParse(text[(i + 2)..close].Replace("_", ""),
+                    if (close < 0 || !int.TryParse(text[(i + 2)..close].Replace("_", string.Empty),
                         NumberStyles.HexNumber, CultureInfo.InvariantCulture, out int scalar) || !Rune.IsValid(scalar))
                     {
                         return null;

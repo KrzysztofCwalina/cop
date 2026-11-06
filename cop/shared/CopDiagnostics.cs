@@ -18,17 +18,17 @@ public static class CopDiagnostics
     /// Verbosity level: 0 = off, 1 = -d (summaries), 2 = -dd (+ phase/parse timing),
     /// 3 = -ddd (+ per-item evaluator trace firehose).
     /// </summary>
-    public static int Level;
+    public static int Level { get; set; }
 
     /// <summary>Optional path for the AI judge transcript log (--ai-log). Null = disabled.</summary>
-    public static string? AiLogPath;
+    public static string? AiLogPath { get; set; }
 
     /// <summary>-d and up: emit [diag] summaries.</summary>
-    public static bool Summaries => Level >= 1;
+    public static bool IsSummaryEnabled => Level >= 1;
 
     /// <summary>-dd and up: emit provider phase timing and per-file parse timing.</summary>
-    public static bool Timing => Level >= 2;
+    public static bool IsTimingEnabled => Level >= 2;
 
     /// <summary>-ddd and up: emit the per-item evaluator [trace] firehose.</summary>
-    public static bool Trace => Level >= 3;
+    public static bool IsTraceEnabled => Level >= 3;
 }

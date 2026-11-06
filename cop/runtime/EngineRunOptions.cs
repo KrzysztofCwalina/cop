@@ -31,6 +31,14 @@ public sealed record EngineRunOptions
     /// <summary>Gets provider packages already resolved by the caller.</summary>
     public IReadOnlyList<(string Dir, PackageMetadata Meta)>? ProviderPackages { get; init; }
 
+    /// <summary>Gets extra provider package names to resolve during a package run.</summary>
+    public IReadOnlyList<string>? ProviderNames { get; init; }
+
     /// <summary>Gets optional review settings for changed-code analysis.</summary>
     public ReviewOptions? ReviewOptions { get; init; }
+
+    /// <summary>Gets the token that cancels program evaluation and provider operations.</summary>
+    public CancellationToken CancellationToken { get; init; }
+
+    internal Dictionary<string, List<Engine.ParsedModule>>? PackageModules { get; init; }
 }

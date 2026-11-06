@@ -8,7 +8,7 @@ using System.Text.Json;
 namespace Cop.Core;
 
 /// <summary>A bounded, serialized one-request/one-response JSON-lines process, without a shell.</summary>
-public sealed class ToolchainJsonWorker : IDisposable
+public sealed class ToolchainJsonWorker : IAsyncDisposable
 {
     private readonly string _executable;
     private readonly string[] _arguments;
@@ -36,6 +36,9 @@ public sealed class ToolchainJsonWorker : IDisposable
         _environment = environment?.ToDictionary(pair => pair.Key, pair => pair.Value);
     }
 
+    /// <summary>
+    /// Exchanges one bounded JSON-lines request with the serialized worker.
+    /// </summary>
     public async Task<ToolchainResult> RequestAsync(string request, TimeSpan? timeout = null,
         int maxOutputCharacters = 4_194_304, CancellationToken cancellationToken = default)
     {
@@ -90,7 +93,8 @@ public sealed class ToolchainJsonWorker : IDisposable
             using (JsonDocument.Parse(response)) { }
             if (_stderrOverflow)
             {
-                return Fail(ToolchainStatus.OutputLimitExceeded, "Worker stderr exceeded its 65536 character limit.");
+                return await FailAsync(ToolchainStatus.OutputLimitExceeded,
+                    "Worker stderr exceeded its 65536 character limit.").ConfigureAwait(false);
             }
 
             return new(ToolchainStatus.Success, _path, null, response, Stderr(), null);
@@ -100,7 +104,7 @@ public sealed class ToolchainJsonWorker : IDisposable
             // A timed-out queued request must not kill another caller's active request.
             if (entered)
             {
-                Stop();
+                await StopAsync().ConfigureAwait(false);
             }
 
             cancellationToken.ThrowIfCancellationRequested();
@@ -110,11 +114,13 @@ public sealed class ToolchainJsonWorker : IDisposable
         }
         catch (OutputLimitException)
         {
-            return Fail(ToolchainStatus.OutputLimitExceeded, $"Worker response exceeded its {maxOutputCharacters} character limit.");
+            return await FailAsync(ToolchainStatus.OutputLimitExceeded,
+                $"Worker response exceeded its {maxOutputCharacters} character limit.").ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is IOException or JsonException or Win32Exception)
         {
-            return Fail(ToolchainStatus.Failed, $"Worker request failed: {ex.Message}");
+            return await FailAsync(ToolchainStatus.Failed,
+                $"Worker request failed: {ex.Message}").ConfigureAwait(false);
         }
         finally
         {
@@ -209,7 +215,10 @@ public sealed class ToolchainJsonWorker : IDisposable
                 }
                 if (_stderrOverflow)
                 {
-                    _containment?.Terminate();
+                    if (_containment is not null)
+                    {
+                        await _containment.TerminateAsync().ConfigureAwait(false);
+                    }
                     if (!_process.HasExited)
                     {
                         _process.Kill(entireProcessTree: true);
@@ -278,9 +287,9 @@ public sealed class ToolchainJsonWorker : IDisposable
         catch (InvalidOperationException) { return false; }
     }
 
-    private ToolchainResult Fail(ToolchainStatus status, string diagnostic)
+    private async Task<ToolchainResult> FailAsync(ToolchainStatus status, string diagnostic)
     {
-        Stop();
+        await StopAsync().ConfigureAwait(false);
         if (_stderrOverflow)
         {
             status = ToolchainStatus.OutputLimitExceeded;
@@ -289,23 +298,24 @@ public sealed class ToolchainJsonWorker : IDisposable
         return _failure = Result(status, diagnostic);
     }
 
-    private void Stop()
+    private async Task StopAsync()
     {
         _lifetime.Cancel();
         if (_process is not null)
         {
             try
             {
-                _containment?.Terminate();
+                if (_containment is not null)
+                {
+                    await _containment.TerminateAsync().ConfigureAwait(false);
+                }
                 if (!HasExited(_process))
                 {
                     _process.Kill(entireProcessTree: true);
                 }
 
-                if (!_process.WaitForExit(2000))
-                {
-                    throw new TimeoutException("Worker process did not exit after termination.");
-                }
+                await _process.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(2))
+                    .ConfigureAwait(false);
             }
             catch (Exception ex) when (ex is Win32Exception or InvalidOperationException or TimeoutException)
             {
@@ -317,7 +327,11 @@ public sealed class ToolchainJsonWorker : IDisposable
         }
     }
 
-    public void Dispose()
+    /// <summary>
+    /// Stops the worker and releases its process, cancellation, and synchronization
+    /// state.
+    /// </summary>
+    public async ValueTask DisposeAsync()
     {
         if (_disposed)
         {
@@ -325,11 +339,22 @@ public sealed class ToolchainJsonWorker : IDisposable
         }
 
         _disposed = true;
-        Stop();
-        _containment?.Dispose();
+        await StopAsync().ConfigureAwait(false);
+        if (_containment is not null)
+        {
+            await _containment.DisposeAsync().ConfigureAwait(false);
+        }
         _process?.Dispose();
-        try { _stderrTask?.GetAwaiter().GetResult(); }
+        try
+        {
+            if (_stderrTask is not null)
+            {
+                await _stderrTask.ConfigureAwait(false);
+            }
+        }
         catch (ObjectDisposedException) { }
+        await _requests.WaitAsync().ConfigureAwait(false);
+        _requests.Dispose();
         _lifetime.Dispose();
     }
 

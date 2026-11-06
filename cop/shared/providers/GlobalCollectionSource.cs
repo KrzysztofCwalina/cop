@@ -14,6 +14,7 @@ public class GlobalCollectionSource : ICollectionSource
     private readonly List<object> _items;
     private readonly Func<FilterExpression, Func<object, bool>>? _filterCompiler;
 
+    /// <inheritdoc/>
     public override bool IsPerDocument => false;
 
     public GlobalCollectionSource(
@@ -24,6 +25,7 @@ public class GlobalCollectionSource : ICollectionSource
         _filterCompiler = filterCompiler;
     }
 
+    /// <inheritdoc/>
     public override List<object> Query(CollectionQuery query)
     {
         if (query.Filter is not null && _filterCompiler is not null)

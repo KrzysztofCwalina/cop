@@ -12,12 +12,12 @@ public class GoJavaParityRegressionTests
 {
     [TestCase("go")]
     [TestCase("java")]
-    public void InstalledNativeToolchain_ProducesExactAstFacts(string language)
+    public async System.Threading.Tasks.Task InstalledNativeToolchain_ProducesExactAstFacts(string language)
     {
         string tool = language == "go" ? "go" : "javac";
         if (ToolchainProcess.FindExecutable(tool) is null) Assert.Ignore($"{tool} is not installed; deterministic protocol and fallback tests still run.");
         ProviderWarnings.Clear();
-        using var scope = new ToolchainExecutionScope();
+        await using var scope = new ToolchainExecutionScope();
         ISourceParser parser = language == "go" ? new GoSourceParser() : new JavaSourceParser();
         Assert.That(parser.GetCacheIdentity("fixture"), Does.Contain(language == "go" ? "go-ast:" : "jdk-tree:"),
             string.Join("\n", ProviderWarnings.Drain()));
@@ -42,11 +42,11 @@ public class GoJavaParityRegressionTests
                 }
             }
             """;
-        var file = parser.Parse(language == "go" ? "fixture.go" : "Pair.java", source)!;
+        var file = (await parser.ParseAsync(language == "go" ? "fixture.go" : "Pair.java", source, cancellationToken: CancellationToken.None))!;
         Assert.That(file.ParseErrors, Is.Empty);
         var type = file.Types.First(t => t.Name == "Pair");
         Assert.That(type.Fields.Select(f => f.Name), Is.EqualTo(language == "go" ? new[] { "A", "B" } : new[] { "a", "b" }));
-        var method = type.Methods.Single();
+        var method = (await AsyncSourceFacts.MembersAsync(type, CancellationToken.None)).Methods.Single();
         Assert.That(method.Name, Is.EqualTo("Run"));
         Assert.That(method.Line, Is.EqualTo(language == "go" ? 4 : 3));
         Assert.That(method.Parameters.Single().Name, Is.EqualTo("value"));
@@ -63,15 +63,15 @@ public class GoJavaParityRegressionTests
 
     [TestCase("go")]
     [TestCase("java")]
-    public void InstalledNativeToolchain_PreservesGenericImportsAndSameLineOwners(string language)
+    public async System.Threading.Tasks.Task InstalledNativeToolchain_PreservesGenericImportsAndSameLineOwners(string language)
     {
         string tool = language == "go" ? "go" : "javac";
         if (ToolchainProcess.FindExecutable(tool) is null) Assert.Ignore($"{tool} is not installed.");
-        using var scope = new ToolchainExecutionScope();
+        await using var scope = new ToolchainExecutionScope();
         ISourceParser parser = language == "go" ? new GoSourceParser() : new JavaSourceParser();
         Assert.That(parser.GetCacheIdentity("fixture"), Does.Contain(language == "go" ? "go-ast:" : "jdk-tree:"),
             string.Join("\n", ProviderWarnings.Drain()));
-        var file = parser.Parse(language == "go" ? "fixture.go" : "Box.java", language == "go" ? """
+        var file = (await parser.ParseAsync(language == "go" ? "fixture.go" : "Box.java", language == "go" ? """
             package sample
             import alias "example.org/library"
             type Box[T any] struct { Value T }
@@ -81,9 +81,9 @@ public class GoJavaParityRegressionTests
             class Box<T> {
                 java.util.List<String> First(java.util.Map<String, Box<Integer>> value) { return one(); } void Second() { two(); }
             }
-            """)!;
+            """, cancellationToken: CancellationToken.None))!;
         Assert.That(file.ParseErrors, Is.Empty);
-        var methods = file.Types.SelectMany(t => t.Methods).ToList();
+        var methods = await file.Types.ToAsyncEnumerable().SelectMany(AsyncSourceFacts.MethodsAsync).ToListAsync();
         var first = methods.Single(m => m.Name == "First");
         var second = methods.Single(m => m.Name == "Second");
         Assert.That(first.Line, Is.EqualTo(second.Line));
@@ -102,9 +102,9 @@ public class GoJavaParityRegressionTests
     }
 
     [Test]
-    public void GoFallback_GroupedTypesMultiFieldsAliasesAndSignatures()
+    public async Task GoFallback_GroupedTypesMultiFieldsAliasesAndSignatures()
     {
-        var file = new GoSourceParser(toolchainSearchPath: "").Parse("types.go", """
+        var file = (await new GoSourceParser(toolchainSearchPath: "").ParseAsync("types.go", """
             package sample
             type (
                 Pair[T any] struct {
@@ -117,7 +117,7 @@ public class GoJavaParityRegressionTests
                 logger pkg.Logger,
                 others ...int,
             ) *Pair[int] { return nil }
-            """)!;
+            """, cancellationToken: CancellationToken.None))!;
         Assert.That(file.ParseErrors, Is.Empty);
         Assert.That(file.Types.Select(t => t.Name), Is.EqualTo(new[] { "Pair", "Alias", "types (functions)" }));
         Assert.That(file.Types[0].Fields.Select(f => f.Name), Is.EqualTo(new[] { "A", "B" }));
@@ -126,7 +126,7 @@ public class GoJavaParityRegressionTests
         Assert.That(file.Types[1].Kind, Is.EqualTo(TypeKind.Alias));
         Assert.That(file.Types[1].AliasTarget?.Name, Is.EqualTo("Pair[int]"));
         Assert.That(((GoTypeDeclaration)file.Types[1]).IsStruct, Is.False);
-        var method = file.Types[2].Methods.Single();
+        var method = (await AsyncSourceFacts.MembersAsync(file.Types[2], CancellationToken.None)).Methods.Single();
         Assert.That(method.Line, Is.EqualTo(8));
         Assert.That(method.Parameters.Select(p => p.Name), Is.EqualTo(new[] { "left", "right", "logger", "others" }));
         Assert.That(method.Parameters.Select(p => p.Type?.Name), Is.EqualTo(new[] { "string", "string", "pkg.Logger", "int" }));
@@ -136,14 +136,14 @@ public class GoJavaParityRegressionTests
     }
 
     [Test]
-    public void GoFallback_PreservesCrossFileReceiverAndUnnamedQualifiedParameters()
+    public async Task GoFallback_PreservesCrossFileReceiverAndUnnamedQualifiedParameters()
     {
-        var file = new GoSourceParser(toolchainSearchPath: "").Parse("methods.go", """
+        var file = (await new GoSourceParser(toolchainSearchPath: "").ParseAsync("methods.go", """
             package sample
             func (p *Pair[T]) Read(pkg.Logger, *Other, []byte) {
                 sink(inside("line\nvalue"), `raw`)
             }
-            """)!;
+            """, cancellationToken: CancellationToken.None))!;
         var method = file.Methods.Single();
         Assert.That(method.Name, Is.EqualTo("Read"));
         Assert.That(method.ReceiverType, Is.EqualTo("Pair"));
@@ -154,24 +154,24 @@ public class GoJavaParityRegressionTests
     }
 
     [Test]
-    public void GoFallback_UnnamedGenericParametersAreNotNames()
+    public async Task GoFallback_UnnamedGenericParametersAreNotNames()
     {
-        var file = new GoSourceParser(toolchainSearchPath: "").Parse("generic.go",
-            "package sample\nfunc Run(Box[T], Map[string, Box[int]], values []Box[T]) {}")!;
-        var parameters = file.Types.Single().Methods.Single().Parameters;
+        var file = (await new GoSourceParser(toolchainSearchPath: "").ParseAsync("generic.go",
+            "package sample\nfunc Run(Box[T], Map[string, Box[int]], values []Box[T]) {}", cancellationToken: CancellationToken.None))!;
+        var parameters = (await AsyncSourceFacts.MembersAsync(file.Types.Single(), CancellationToken.None)).Methods.Single().Parameters;
         Assert.That(parameters.Select(p => p.Name), Is.EqualTo(new[] { "", "", "values" }));
         Assert.That(parameters.Select(p => p.Type!.Name), Is.EqualTo(new[] { "Box[T]", "Map[string,Box[int]]", "[]Box[T]" }));
     }
 
     [TestCase("go")]
     [TestCase("java")]
-    public void Fallback_FluentCallTargetsRetainEveryInvocation(string language)
+    public async Task Fallback_FluentCallTargetsRetainEveryInvocation(string language)
     {
         var file = language == "go"
-            ? new GoSourceParser(toolchainSearchPath: "").Parse("fluent.go",
-                "package sample\nfunc Run() { factory().Next(inner(\"value\")).End() }")!
-            : new JavaSourceParser(toolchainSearchPath: "").Parse("Fluent.java",
-                "class Fluent { void Run() { factory().Next(inner(\"value\")).End(); } }")!;
+            ? (await new GoSourceParser(toolchainSearchPath: "").ParseAsync("fluent.go",
+                "package sample\nfunc Run() { factory().Next(inner(\"value\")).End() }", cancellationToken: CancellationToken.None))!
+            : (await new JavaSourceParser(toolchainSearchPath: "").ParseAsync("Fluent.java",
+                "class Fluent { void Run() { factory().Next(inner(\"value\")).End(); } }", cancellationToken: CancellationToken.None))!;
         Assert.That(file.Statements.Where(s => s.Kind == "call").Select(s => s.MemberName),
             Is.EquivalentTo(new[] { "factory", "Next", "inner", "End" }));
         var next = file.Statements.Single(s => s.MemberName == "Next");
@@ -181,26 +181,26 @@ public class GoJavaParityRegressionTests
     }
 
     [Test]
-    public void JavaFallback_AnnotationStringParenthesesDoNotConsumeDeclarations()
+    public async Task JavaFallback_AnnotationStringParenthesesDoNotConsumeDeclarations()
     {
-        var file = new JavaSourceParser(toolchainSearchPath: "").Parse("Annotated.java", """
+        var file = (await new JavaSourceParser(toolchainSearchPath: "").ParseAsync("Annotated.java", """
             @Tag ("(")
             class Annotated {
                 @Tag(")")
                 void run() { call(); }
             }
-            """)!;
+            """, cancellationToken: CancellationToken.None))!;
         Assert.That(file.ParseErrors, Is.Empty);
         Assert.That(file.Types.Single().Name, Is.EqualTo("Annotated"));
         Assert.That(file.Types.Single().Decorators, Is.EqualTo(new[] { "Tag" }));
-        Assert.That(file.Types.Single().Methods.Single().Name, Is.EqualTo("run"));
+        Assert.That((await AsyncSourceFacts.MembersAsync(file.Types.Single(), CancellationToken.None)).Methods.Single().Name, Is.EqualTo("run"));
         Assert.That(file.Statements.Single(s => s.Kind == "call").MemberName, Is.EqualTo("call"));
     }
 
     [Test]
-    public void GoFallback_InitializerAndHeaderCallsAreNotSkipped()
+    public async Task GoFallback_InitializerAndHeaderCallsAreNotSkipped()
     {
-        var file = new GoSourceParser(toolchainSearchPath: "").Parse("calls.go", """
+        var file = (await new GoSourceParser(toolchainSearchPath: "").ParseAsync("calls.go", """
             package sample
             var value = outside(initial())
             func Run() {
@@ -208,7 +208,7 @@ public class GoJavaParityRegressionTests
                     finish(wrap("line\nvalue"))
                 }
             }
-            """)!;
+            """, cancellationToken: CancellationToken.None))!;
         Assert.That(file.Statements.Where(s => s.Kind == "call").Select(s => s.MemberName),
             Is.EquivalentTo(new[] { "outside", "initial", "ready", "probe", "finish", "wrap" }));
         Assert.That(file.Statements.Single(s => s.MemberName == "outside").IsInMethod, Is.False);
@@ -219,9 +219,9 @@ public class GoJavaParityRegressionTests
     }
 
     [Test]
-    public void JavaFallback_FieldsAnnotationsGenericsPermitsAndLocations()
+    public async Task JavaFallback_FieldsAnnotationsGenericsPermitsAndLocations()
     {
-        var file = new JavaSourceParser(toolchainSearchPath: "").Parse("Example.java", """
+        var file = (await new JavaSourceParser(toolchainSearchPath: "").ParseAsync("Example.java", """
             @interface Tag { String value(); }
             sealed class Example<T extends Number> extends Base<T> implements Face<T> permits Child {
                 int a = factory(first()), b = factory(second());
@@ -231,14 +231,14 @@ public class GoJavaParityRegressionTests
                     return outer(inner("line\nvalue"));
                 }
             }
-            """)!;
+            """, cancellationToken: CancellationToken.None))!;
         Assert.That(file.Types.Select(t => t.Name), Is.EqualTo(new[] { "Tag", "Example" }));
         Assert.That(file.Types[0].Kind, Is.EqualTo(TypeKind.Interface));
         var type = file.Types[1];
         Assert.That(type.BaseTypes, Is.EqualTo(new[] { "Base<T>", "Face<T>" }));
         Assert.That(type.TypeParameters, Is.EqualTo(new[] { "T extends Number" }));
         Assert.That(type.Fields.Select(f => f.Name), Is.EqualTo(new[] { "a", "b" }));
-        var method = type.Methods.Single();
+        var method = (await AsyncSourceFacts.MembersAsync(type, CancellationToken.None)).Methods.Single();
         Assert.That(method.Line, Is.EqualTo(4));
         Assert.That(method.Decorators, Is.EqualTo(new[] { "Tag" }));
         Assert.That(method.ReturnType?.Name, Is.EqualTo("java.util.List<T>"));
@@ -250,9 +250,9 @@ public class GoJavaParityRegressionTests
     }
 
     [Test]
-    public void JavaFallback_NestedHeaderConstructorAndResourceCalls()
+    public async Task JavaFallback_NestedHeaderConstructorAndResourceCalls()
     {
-        var file = new JavaSourceParser(toolchainSearchPath: "").Parse("Calls.java", """
+        var file = (await new JavaSourceParser(toolchainSearchPath: "").ParseAsync("Calls.java", """
             class Calls {
                 void run() {
                     if (ready(probe())) {
@@ -263,7 +263,7 @@ public class GoJavaParityRegressionTests
                     try (Resource r = open(config())) { consume(r); }
                 }
             }
-            """)!;
+            """, cancellationToken: CancellationToken.None))!;
         Assert.That(file.Statements.Where(s => s.Kind == "call").Select(s => s.MemberName),
             Is.EquivalentTo(new[] { "ready", "probe", "keepGoing", "<init>", "wrap", "open", "config", "consume" }));
         Assert.That(file.Statements.Single(s => s.MemberName == "<init>").Parent?.Kind, Is.EqualTo("while"));
@@ -272,11 +272,11 @@ public class GoJavaParityRegressionTests
 
     [TestCase("go")]
     [TestCase("java")]
-    public void Fallback_TracksEveryBlockCommentLineAndImportFacts(string language)
+    public async Task Fallback_TracksEveryBlockCommentLineAndImportFacts(string language)
     {
         var file = language == "go"
-            ? new GoSourceParser(toolchainSearchPath: "").Parse("source.go", "package sample\n/* first\nmiddle\nlast */\nimport alias \"example.org/lib\"\n")!
-            : new JavaSourceParser(toolchainSearchPath: "").Parse("Source.java", "package sample;\n/* first\nmiddle\nlast */\nimport static java.util.Collections.*;\nclass Source {}")!;
+            ? (await new GoSourceParser(toolchainSearchPath: "").ParseAsync("source.go", "package sample\n/* first\nmiddle\nlast */\nimport alias \"example.org/lib\"\n", cancellationToken: CancellationToken.None))!
+            : (await new JavaSourceParser(toolchainSearchPath: "").ParseAsync("Source.java", "package sample;\n/* first\nmiddle\nlast */\nimport static java.util.Collections.*;\nclass Source {}", cancellationToken: CancellationToken.None))!;
         Assert.That(file.CommentLines.Order(), Is.EqualTo(new[] { 2, 3, 4 }));
         Assert.That(file.Imports, Has.Count.EqualTo(1));
         if (language == "go") Assert.That(file.Imports[0].Alias, Is.EqualTo("alias"));
@@ -363,23 +363,25 @@ public class GoJavaParityRegressionTests
     [TestCase("java", ToolchainStatus.Failed)]
     public void NativeRequestFailure_IsExplicitAndNeverFallsBack(string language, ToolchainStatus status)
     {
-        ToolchainResult Request(string _) => new(status, "fixture", null, "", "failure", "fixture failure");
+        ValueTask<ToolchainResult> Request(string _, CancellationToken cancellationToken) =>
+            ValueTask.FromResult(new ToolchainResult(status, "fixture", null, "", "failure", "fixture failure"));
         ISourceParser parser = language == "go" ? new GoSourceParser(nativeRequest: Request) : new JavaSourceParser(nativeRequest: Request);
-        Assert.That(() => parser.Parse("fixture", ""), Throws.InvalidOperationException.With.Message.Contains(status.ToString()));
+        Assert.That(async () => await parser.ParseAsync("fixture", "", cancellationToken: CancellationToken.None), Throws.InvalidOperationException.With.Message.Contains(status.ToString()));
     }
 
     [TestCase("go", "{}")]
     [TestCase("java", "not-json")]
     public void NativeProtocolFailure_IsExplicit(string language, string json)
     {
-        ToolchainResult Request(string _) => new(ToolchainStatus.Success, "fixture", 0, json, "", null);
+        ValueTask<ToolchainResult> Request(string _, CancellationToken cancellationToken) =>
+            ValueTask.FromResult(new ToolchainResult(ToolchainStatus.Success, "fixture", 0, json, "", null));
         ISourceParser parser = language == "go" ? new GoSourceParser(nativeRequest: Request) : new JavaSourceParser(nativeRequest: Request);
-        Assert.That(() => parser.Parse("fixture", ""), Throws.InvalidOperationException);
+        Assert.That(async () => await parser.ParseAsync("fixture", "", cancellationToken: CancellationToken.None), Throws.InvalidOperationException);
     }
 
     [TestCase("go")]
     [TestCase("java")]
-    public void NativeProtocol_ProjectsDeclarationsNotFallbackGuesses(string language)
+    public async Task NativeProtocol_ProjectsDeclarationsNotFallbackGuesses(string language)
     {
         var response = language == "go" ? """
             {"namespace":"fixture","imports":[],"errors":[],"calls":[],"statements":[],
@@ -391,14 +393,14 @@ public class GoJavaParityRegressionTests
              "baseTypes":[],"typeParameters":["T"],"fields":[{"name":"value","type":"T","modifiers":["private"],"line":2,"column":9,"endLine":2,"endColumn":14}],
              "methods":[],"nestedTypes":[],"enumValues":[]}]}
             """;
-        ToolchainResult Request(string input)
+        ValueTask<ToolchainResult> Request(string input, CancellationToken cancellationToken)
         {
             using var request = JsonDocument.Parse(input);
             Assert.That(request.RootElement.GetProperty("Source").GetString(), Is.Not.Empty);
-            return new(ToolchainStatus.Success, "fixture", 0, response, "", null);
+            return ValueTask.FromResult(new ToolchainResult(ToolchainStatus.Success, "fixture", 0, response, "", null));
         }
         ISourceParser parser = language == "go" ? new GoSourceParser(nativeRequest: Request) : new JavaSourceParser(nativeRequest: Request);
-        var file = parser.Parse("fixture", language == "go" ? "package fixture" : "class Ignored {}")!;
+        var file = (await parser.ParseAsync("fixture", language == "go" ? "package fixture" : "class Ignored {}", cancellationToken: CancellationToken.None))!;
         Assert.That(file.Types.Select(t => t.Name), Is.EqualTo(new[] { "FromNative" }));
         Assert.That(file.Types[0].Fields.Single().Type?.Name, Is.EqualTo("T"));
         Assert.That(file.Types[0].Column, Is.EqualTo(1));

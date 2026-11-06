@@ -8,13 +8,13 @@ namespace Cop.Tests.Lang;
 public class ListAppendSinkTests
 {
     [Test]
-    public void WriteAsync_AppendsToList()
+    public async Task WriteAsync_AppendsToList()
     {
         var target = new List<object>();
         var sink = new ListAppendSink(target);
 
-        sink.WriteAsync(null, "hello").GetAwaiter().GetResult();
-        sink.WriteAsync(null, "world").GetAwaiter().GetResult();
+        await sink.WriteAsync(null, "hello");
+        await sink.WriteAsync(null, "world");
 
         Assert.That(target, Has.Count.EqualTo(2));
         Assert.That(target[0], Is.EqualTo("hello"));
@@ -22,7 +22,7 @@ public class ListAppendSinkTests
     }
 
     [Test]
-    public void WriteAsync_ThreadSafe_ConcurrentAppends()
+    public async Task WriteAsync_ThreadSafe_ConcurrentAppends()
     {
         var target = new List<object>();
         var sink = new ListAppendSink(target);
@@ -31,7 +31,7 @@ public class ListAppendSinkTests
             .Select(i => Task.Run(() => sink.WriteAsync(null, i)))
             .ToArray();
 
-        Task.WaitAll(tasks);
+        await Task.WhenAll(tasks);
 
         Assert.That(target, Has.Count.EqualTo(100));
         // All items should be present (order may vary due to concurrency)

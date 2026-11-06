@@ -76,7 +76,7 @@ public static class CSharpProjectDiscovery
     /// <summary>
     /// Property names to extract from PropertyGroup elements.
     /// </summary>
-    private static readonly HashSet<string> PropertyNames = new(StringComparer.OrdinalIgnoreCase)
+    private static readonly HashSet<string> s_propertyNames = new(StringComparer.OrdinalIgnoreCase)
     {
         "OutputType", "TargetFramework", "TargetFrameworks",
         "IsTestProject", "IsPackable", "RootNamespace",
@@ -111,7 +111,7 @@ public static class CSharpProjectDiscovery
                 {
                     string elName = el.Name.LocalName;
                     string elValue = el.Value;
-                    if (!string.IsNullOrWhiteSpace(elValue) && PropertyNames.Contains(elName))
+                    if (!string.IsNullOrWhiteSpace(elValue) && s_propertyNames.Contains(elName))
                     {
                         properties[elName] = elValue.Trim();
                         AddTargetFrameworks(frameworks, elName, elValue);

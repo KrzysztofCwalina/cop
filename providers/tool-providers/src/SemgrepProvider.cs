@@ -12,9 +12,12 @@ public class SemgrepProvider : ToolProvider
 {
     protected override string ToolName => "semgrep";
 
-    protected override List<object> RunTool(string rootPath, IReadOnlySet<string> excluded)
+    protected override async ValueTask<List<object>> RunToolAsync(
+        string rootPath, IReadOnlySet<string> excluded, CancellationToken cancellationToken)
     {
-        (string? stdout, string _, int _) = RunProcess("semgrep", "scan --json --quiet .", rootPath);
+        (string? stdout, string _, int _) = await RunProcessAsync(
+            new("semgrep", "scan --json --quiet .", rootPath), cancellationToken)
+            .ConfigureAwait(false);
         if (string.IsNullOrWhiteSpace(stdout))
         {
             return [];
@@ -31,7 +34,7 @@ public class SemgrepProvider : ToolProvider
         foreach (JsonElement item in results.EnumerateArray())
         {
             string filePath = NormalizePath(
-                item.TryGetProperty("path", out JsonElement p) ? p.GetString() ?? "" : "", rootPath);
+                item.TryGetProperty("path", out JsonElement p) ? p.GetString() ?? string.Empty : string.Empty, rootPath);
             if (string.IsNullOrEmpty(filePath) || IsExcluded(filePath, excluded))
             {
                 continue;
@@ -43,11 +46,11 @@ public class SemgrepProvider : ToolProvider
                 line = ln.GetInt32();
             }
 
-            string? ruleId = item.TryGetProperty("check_id", out JsonElement cid) ? cid.GetString() : "";
-            string message = "";
+            string? ruleId = item.TryGetProperty("check_id", out JsonElement cid) ? cid.GetString() : string.Empty;
+            string message = string.Empty;
             if (item.TryGetProperty("extra", out JsonElement extra))
             {
-                message = extra.TryGetProperty("message", out JsonElement m) ? m.GetString() ?? "" : "";
+                message = extra.TryGetProperty("message", out JsonElement m) ? m.GetString() ?? string.Empty : string.Empty;
             }
 
             string severity = "warning";

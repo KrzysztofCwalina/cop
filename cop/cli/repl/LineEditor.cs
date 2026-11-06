@@ -19,11 +19,13 @@ public class LineEditor
     private int _lastPopupLines;
     private string _prompt = "cop> ";
 
+    /// <summary>Creates an editor using the session's completion provider.</summary>
     public LineEditor(ReplCompleter completer)
     {
         _completer = completer;
     }
 
+    /// <summary>Changes the prompt used when redrawing the current input line.</summary>
     public void SetPrompt(string prompt) => _prompt = prompt;
 
     /// <summary>
@@ -496,7 +498,11 @@ public class LineEditor
                 p?.WaitForExit(1000);
             }
         }
-        catch { /* clipboard not available */ }
+        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or
+            IOException or InvalidOperationException)
+        {
+            Console.Error.WriteLine($"Clipboard unavailable: {ex.Message}");
+        }
     }
 
     private static string? GetClipboard()
@@ -529,7 +535,11 @@ public class LineEditor
                 return result;
             }
         }
-        catch { /* clipboard not available */ }
+        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or
+            IOException or InvalidOperationException)
+        {
+            Console.Error.WriteLine($"Clipboard unavailable: {ex.Message}");
+        }
         return null;
     }
 }

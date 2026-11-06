@@ -11,9 +11,9 @@ namespace Cop.Providers;
 
 internal static class CSharpProjectCompilations
 {
-    internal static Dictionary<SyntaxTree, CSharpCompilation> Create(string root,
+    internal static async ValueTask<Dictionary<SyntaxTree, CSharpCompilation>> CreateAsync(string root,
         IEnumerable<SyntaxTree> syntaxTrees, IReadOnlySet<string>? excluded,
-        Func<string, List<MetadataReference>> references)
+        Func<string, List<MetadataReference>> references, CancellationToken cancellationToken)
     {
         root = Path.GetFullPath(root);
         SyntaxTree[] allTrees = syntaxTrees.ToArray();
@@ -33,8 +33,8 @@ internal static class CSharpProjectCompilations
             string[] memberships = projects.Where(project => projectFiles[project] is { } sources
                 ? sources.Contains(path)
                 : path.StartsWith(Path.GetDirectoryName(project)! + Path.DirectorySeparatorChar, comparison)).ToArray();
-            owners[tree] = memberships.FirstOrDefault() ?? "";
-            foreach (string? project in memberships.Length == 0 ? new[] { "" } : memberships)
+            owners[tree] = memberships.FirstOrDefault() ?? string.Empty;
+            foreach (string? project in memberships.Length == 0 ? new[] { string.Empty } : memberships)
             {
                 if (!groups.TryGetValue(project, out List<SyntaxTree>? group))
                 {
@@ -47,8 +47,9 @@ internal static class CSharpProjectCompilations
 
         Dictionary<string, CSharpCompilation> compiled = new Dictionary<string, CSharpCompilation>(comparer);
         HashSet<string> visiting = new HashSet<string>(comparer);
-        CSharpCompilation Compile(string project)
+        async ValueTask<CSharpCompilation> CompileAsync(string project)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             if (compiled.TryGetValue(project, out CSharpCompilation? cached))
             {
                 return cached;
@@ -68,7 +69,7 @@ internal static class CSharpProjectCompilations
                     string targetFramework = elements
                         .FirstOrDefault(element => element.Name.LocalName is
                             "TargetFramework" or "TargetFrameworks")
-                        ?.Value.Split(';', StringSplitOptions.TrimEntries)[0] ?? "";
+                        ?.Value.Split(';', StringSplitOptions.TrimEntries)[0] ?? string.Empty;
                     HashSet<string?> referenceNames = metadata
                         .Select(reference => Path.GetFileName(reference.Display))
                         .ToHashSet(StringComparer.OrdinalIgnoreCase);
@@ -79,8 +80,11 @@ internal static class CSharpProjectCompilations
                         {
                             continue;
                         }
-                        foreach (MetadataReference reference in
-                            CSharpFrameworkReferences.Resolve(name, targetFramework, project))
+                        IEnumerable<MetadataReference> frameworkReferences =
+                            await CSharpFrameworkReferences.ResolveAsync(
+                                name, targetFramework, project, cancellationToken)
+                                .ConfigureAwait(false);
+                        foreach (MetadataReference reference in frameworkReferences)
                         {
                             if (referenceNames.Add(Path.GetFileName(reference.Display)))
                             {
@@ -120,7 +124,9 @@ internal static class CSharpProjectCompilations
                             ProviderWarnings.ReportOnce("csharp", project, $"Cyclic project reference in '{project}'; semantic resolution is incomplete.");
                             continue;
                         }
-                        metadata.Add(Compile(dependency).ToMetadataReference());
+                        CSharpCompilation dependencyCompilation = await CompileAsync(dependency)
+                            .ConfigureAwait(false);
+                        metadata.Add(dependencyCompilation.ToMetadataReference());
                     }
                     if (elements.Any(e => e.Name.LocalName == "ImplicitUsings" && e.Value.Trim() is "enable" or "true"))
                     {
@@ -164,7 +170,7 @@ internal static class CSharpProjectCompilations
         Dictionary<SyntaxTree, CSharpCompilation> result = new Dictionary<SyntaxTree, CSharpCompilation>();
         foreach (SyntaxTree? tree in allTrees)
         {
-            result[tree] = Compile(owners[tree]);
+            result[tree] = await CompileAsync(owners[tree]).ConfigureAwait(false);
         }
 
         return result;

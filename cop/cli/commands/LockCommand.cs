@@ -27,25 +27,27 @@ public static class LockCommand
             listOption
         };
 
-        command.SetAction(parseResult => Execute(
-            parseResult.GetValue(filesArg),
-            parseResult.GetValue(listOption)));
+        command.SetAction(parseResult =>
+        {
+            if (parseResult.GetValue(listOption))
+            {
+                List();
+            }
+            else
+            {
+                Execute(parseResult.GetValue(filesArg));
+            }
+        });
 
         return command;
     }
 
     /// <summary>
-    /// Lists existing locks or signs the content of the selected files.
+    /// Signs selected files, or re-signs existing locks when no files are supplied.
     /// </summary>
-    public static void Execute(string[]? files, bool list)
+    public static void Execute(string[]? files)
     {
         string rootDirectory = Directory.GetCurrentDirectory();
-
-        if (list)
-        {
-            ExecuteList(rootDirectory);
-            return;
-        }
 
         if (files == null || files.Length == 0)
         {
@@ -56,8 +58,10 @@ public static class LockCommand
         ExecuteLock(rootDirectory, files);
     }
 
-    private static void ExecuteList(string rootDirectory)
+    /// <summary>Lists content locks in the current repository without requesting a key.</summary>
+    public static void List()
     {
+        string rootDirectory = Directory.GetCurrentDirectory();
         LockFile? lockFile = LockFile.Load(rootDirectory);
         if (lockFile == null || lockFile.Files.Count == 0)
         {
@@ -106,7 +110,8 @@ public static class LockCommand
                 string relativePath = ResolveRelativePath(rootDirectory, file);
                 relativePaths.Add(relativePath);
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is ArgumentException or IOException or
+                UnauthorizedAccessException or NotSupportedException)
             {
                 Console.Error.WriteLine($"Error: {ex.Message}");
                 Environment.Exit(1);
@@ -124,7 +129,8 @@ public static class LockCommand
                 lockFile.Lock(relativePath, rootDirectory, key);
                 Console.WriteLine($"Locked: {relativePath}");
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is ArgumentException or IOException or
+                UnauthorizedAccessException or System.Security.Cryptography.CryptographicException)
             {
                 Console.Error.WriteLine($"Error locking '{relativePath}': {ex.Message}");
                 Environment.Exit(1);

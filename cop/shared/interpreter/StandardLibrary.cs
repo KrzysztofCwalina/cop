@@ -15,7 +15,7 @@ namespace Cop.Lang.Interpreter;
 /// </summary>
 public static class StandardLibrary
 {
-    private static readonly Lazy<ModuleNode> CoreModule = new(() =>
+    private static readonly Lazy<ModuleNode> s_coreModule = new(() =>
     {
         using Stream stream = typeof(StandardLibrary).Assembly.GetManifestResourceStream("Cop.Lang.Core.cop")
             ?? throw new InvalidOperationException("Embedded core package declarations are missing.");
@@ -25,7 +25,7 @@ public static class StandardLibrary
 
     internal static void RegisterPackageFunctions(Evaluator evaluator)
     {
-        foreach (Declaration declaration in CoreModule.Value.Declarations)
+        foreach (Declaration declaration in s_coreModule.Value.Declarations)
         {
             if (declaration is FunctionDecl { IsExported: true } function
                 && function.Body is not IntrinsicBody)
@@ -41,40 +41,40 @@ public static class StandardLibrary
     public static void Register(ForeignFunctionRegistry ffi, Action<string>? outputHandler = null)
     {
         // Output functions
-        ffi.Register("print", (args, env) =>
+        ffi.RegisterAsync("print", async (args, env, cancellationToken) =>
         {
-            string text = args.Count > 0 ? args[0].Display() : "";
+            string text = args.Count > 0 ? (await args[0].DisplayAsync(cancellationToken: cancellationToken)) : "";
             outputHandler?.Invoke(text);
             return CopNull.Instance;
         });
 
-        ffi.Register("debug", (args, env) =>
+        ffi.RegisterAsync("debug", async (args, env, cancellationToken) =>
         {
-            string text = args.Count > 0 ? args[0].Display() : "";
+            string text = args.Count > 0 ? (await args[0].DisplayAsync(cancellationToken: cancellationToken)) : "";
             outputHandler?.Invoke($"[debug] {text}");
             return CopNull.Instance;
         });
 
         // Assertion / error functions
-        ffi.Register("assert", (args, env) =>
+        ffi.RegisterAsync("assert", async (args, env, cancellationToken) =>
         {
-            if (args.Count > 0 && !args[0].IsTruthy)
+            if (args.Count > 0 && !(await args[0].IsTruthyAsync(cancellationToken)))
             {
-                string msg = args.Count > 1 ? args[1].Display() : "Assertion failed";
+                string msg = args.Count > 1 ? (await args[1].DisplayAsync(cancellationToken: cancellationToken)) : "Assertion failed";
                 throw new CopEvaluationException(msg);
             }
             return CopNull.Instance;
         });
 
-        ffi.Register("fail", (args, env) =>
+        ffi.RegisterAsync("fail", async (args, env, cancellationToken) =>
         {
-            string msg = args.Count > 0 ? args[0].Display() : "fail";
+            string msg = args.Count > 0 ? (await args[0].DisplayAsync(cancellationToken: cancellationToken)) : "fail";
             throw new CopEvaluationException(msg);
         });
 
-        ffi.Register("error", (args, env) =>
+        ffi.RegisterAsync("error", async (args, env, cancellationToken) =>
         {
-            string msg = args.Count > 0 ? args[0].Display() : "error";
+            string msg = args.Count > 0 ? (await args[0].DisplayAsync(cancellationToken: cancellationToken)) : "error";
             Dictionary<string, CopValue> fields = new Dictionary<string, CopValue>
             {
                 ["Type"] = new CopString("Error"),
@@ -84,14 +84,14 @@ public static class StandardLibrary
         });
 
         // I/O functions
-        ffi.Register("read", (args, env) =>
+        ffi.RegisterAsync("read", async (args, env, cancellationToken) =>
         {
             if (args.Count == 0)
             {
                 throw new CopEvaluationException("read() requires a path argument");
             }
 
-            string path = args[0].Display();
+            string path = (await args[0].DisplayAsync(cancellationToken: cancellationToken));
             try
             {
                 return new CopString(File.ReadAllText(path));
@@ -102,15 +102,15 @@ public static class StandardLibrary
             }
         });
 
-        ffi.Register("save", (args, env) =>
+        ffi.RegisterAsync("save", async (args, env, cancellationToken) =>
         {
             if (args.Count < 2)
             {
                 return CopNull.Instance;
             }
 
-            string path = args[0].Display();
-            string content = args[1].Display();
+            string path = (await args[0].DisplayAsync(cancellationToken: cancellationToken));
+            string content = (await args[1].DisplayAsync(cancellationToken: cancellationToken));
             try
             {
                 string? dir = Path.GetDirectoryName(path);
@@ -129,29 +129,29 @@ public static class StandardLibrary
         });
 
         // Path matching
-        ffi.Register("pathMatches", (args, env) =>
+        ffi.RegisterAsync("pathMatches", async (args, env, cancellationToken) =>
         {
             if (args.Count < 2)
             {
                 return CopBool.False;
             }
 
-            string path = args[0].Display();
-            string pattern = args[1].Display();
+            string path = (await args[0].DisplayAsync(cancellationToken: cancellationToken));
+            string pattern = (await args[1].DisplayAsync(cancellationToken: cancellationToken));
             bool matches = PathMatchesGlob(path, pattern);
             return CopBool.Of(matches);
         });
 
         // Capital alias used as `item.Name:Matches('rx')`.
-        ffi.Register("Matches", (args, env) =>
+        ffi.RegisterAsync("Matches", async (args, env, cancellationToken) =>
         {
             if (args.Count < 2)
             {
                 return CopBool.False;
             }
 
-            try { return CopBool.Of(RegexCache.IsMatch(args[0].Display(), args[1].Display())); }
-            catch (Exception ex) { throw new CopEvaluationException($"Invalid regex pattern '{args[1].Display()}': {ex.Message}"); }
+            try { return CopBool.Of(RegexCache.IsMatch((await args[0].DisplayAsync(cancellationToken: cancellationToken)), (await args[1].DisplayAsync(cancellationToken: cancellationToken)))); }
+            catch (Exception ex) { throw new CopEvaluationException($"Invalid regex pattern '{(await args[1].DisplayAsync(cancellationToken: cancellationToken))}': {ex.Message}"); }
         });
 
         // Collection methods (registered as functions that operate on collections)
@@ -167,14 +167,14 @@ public static class StandardLibrary
         RegisterFlagPredicates(ffi);
 
         // provider intrinsic — returns a proxy that resolves member access to provider collections
-        ffi.Register("provider", (args, env) =>
+        ffi.RegisterAsync("provider", async (args, env, cancellationToken) =>
         {
             if (args.Count == 0)
             {
                 return CopNull.Instance;
             }
 
-            string providerName = args[0].Display();
+            string providerName = (await args[0].DisplayAsync(cancellationToken: cancellationToken));
             return new CopProviderProxy(providerName, env);
         });
 
@@ -191,78 +191,78 @@ public static class StandardLibrary
     private static void RegisterCollectionMethods(ForeignFunctionRegistry ffi)
     {
         // count: collection.count() or count(collection) or collection.count(predicate)
-        ffi.RegisterEx("count", (args, evaluator, env) =>
+        ffi.RegisterExAsync("count", async (args, evaluator, env, cancellationToken) =>
         {
             if (args.Count == 0)
             {
                 return new CopInt(0);
             }
 
-            CopValue collection = Evaluator.ForceValue(args[0]);
+            CopValue collection = (await Evaluator.ForceValueAsync(args[0], cancellationToken: cancellationToken));
             if (args.Count > 1 && args[1] is ICopCallable predicate)
             {
-                IEnumerable<CopValue> items = CoerceToEnumerable(collection);
-                int count = items.Count(item => predicate.Invoke([item], evaluator, env).IsTruthy);
+                IAsyncEnumerable<CopValue> items = CoerceToEnumerableAsync(collection, cancellationToken: cancellationToken);
+                int count = (await items.CountAsync(async (item, itemCancellationToken) => (await (await predicate.InvokeAsync([item], evaluator, env, cancellationToken: itemCancellationToken)).IsTruthyAsync(itemCancellationToken)), cancellationToken: cancellationToken));
                 return new CopInt(count);
             }
             return collection switch
             {
                 CopList list => new CopInt(list.Items.Count),
-                CopLazyCollection lazy => new CopInt(lazy.Enumerate().Count()),
-                CopQueryable query => new CopInt(query.Enumerate().Count()),
+                CopLazyCollection lazy => new CopInt((await lazy.EnumerateAsync(cancellationToken: cancellationToken).CountAsync(cancellationToken: cancellationToken))),
+                CopQueryable query => new CopInt((await query.EnumerateAsync(cancellationToken: cancellationToken).CountAsync(cancellationToken: cancellationToken))),
                 _ => new CopInt(0)
             };
         });
 
         // any: collection.any() or collection.any(predicate) — returns bool
-        ffi.RegisterEx("any", (args, evaluator, env) =>
+        ffi.RegisterExAsync("any", async (args, evaluator, env, cancellationToken) =>
         {
             if (args.Count == 0)
             {
                 return CopBool.False;
             }
 
-            IEnumerable<CopValue> items = CoerceToEnumerable(args[0]);
+            IAsyncEnumerable<CopValue> items = CoerceToEnumerableAsync(args[0], cancellationToken: cancellationToken);
             if (args.Count > 1 && args[1] is ICopCallable predicate)
             {
-                return CopBool.Of(items.Any(item => predicate.Invoke([item], evaluator, env).IsTruthy));
+                return CopBool.Of((await items.AnyAsync(async (item, itemCancellationToken) => (await (await predicate.InvokeAsync([item], evaluator, env, cancellationToken: itemCancellationToken)).IsTruthyAsync(itemCancellationToken)), cancellationToken: cancellationToken)));
             }
 
-            return CopBool.Of(items.Any());
+            return CopBool.Of((await items.AnyAsync(cancellationToken: cancellationToken)));
         });
 
         // all: collection.all(predicate) — returns bool
-        ffi.RegisterEx("all", (args, evaluator, env) =>
+        ffi.RegisterExAsync("all", async (args, evaluator, env, cancellationToken) =>
         {
             if (args.Count == 0)
             {
                 return CopBool.True;
             }
 
-            IEnumerable<CopValue> items = CoerceToEnumerable(args[0]);
+            IAsyncEnumerable<CopValue> items = CoerceToEnumerableAsync(args[0], cancellationToken: cancellationToken);
             if (args.Count > 1 && args[1] is ICopCallable predicate)
             {
-                return CopBool.Of(items.All(item => predicate.Invoke([item], evaluator, env).IsTruthy));
+                return CopBool.Of((await items.AllAsync(async (item, itemCancellationToken) => (await (await predicate.InvokeAsync([item], evaluator, env, cancellationToken: itemCancellationToken)).IsTruthyAsync(itemCancellationToken)), cancellationToken: cancellationToken)));
             }
 
-            return CopBool.Of(items.All(item => item.IsTruthy));
+            return CopBool.Of((await items.AllAsync(async (item, itemCancellationToken) => (await item.IsTruthyAsync(itemCancellationToken)), cancellationToken: cancellationToken)));
         });
 
         // none: collection.none(predicate) — returns bool
-        ffi.RegisterEx("none", (args, evaluator, env) =>
+        ffi.RegisterExAsync("none", async (args, evaluator, env, cancellationToken) =>
         {
             if (args.Count == 0)
             {
                 return CopBool.True;
             }
 
-            IEnumerable<CopValue> items = CoerceToEnumerable(args[0]);
+            IAsyncEnumerable<CopValue> items = CoerceToEnumerableAsync(args[0], cancellationToken: cancellationToken);
             if (args.Count > 1 && args[1] is ICopCallable predicate)
             {
-                return CopBool.Of(!items.Any(item => predicate.Invoke([item], evaluator, env).IsTruthy));
+                return CopBool.Of(!(await items.AnyAsync(async (item, itemCancellationToken) => (await (await predicate.InvokeAsync([item], evaluator, env, cancellationToken: itemCancellationToken)).IsTruthyAsync(itemCancellationToken)), cancellationToken: cancellationToken)));
             }
 
-            return CopBool.Of(!items.Any());
+            return CopBool.Of(!(await items.AnyAsync(cancellationToken: cancellationToken)));
         });
 
         // where: collection.where(predicate) — filter
@@ -280,9 +280,9 @@ public static class StandardLibrary
                 return collection;
             }
 
-            return new CopLazyCollection(() =>
-                CoerceToEnumerable(collection).Where(item =>
-                    pred.Invoke([item], evaluator, env).IsTruthy));
+            return new CopLazyCollection((deferredCancellationToken) =>
+                CoerceToEnumerableAsync(collection, cancellationToken: deferredCancellationToken).Where(async (item, itemCancellationToken) =>
+                    (await (await pred.InvokeAsync([item], evaluator, env, cancellationToken: itemCancellationToken)).IsTruthyAsync(itemCancellationToken))));
         });
 
         // select: collection.select(transform) — map/project
@@ -300,13 +300,13 @@ public static class StandardLibrary
                 return collection;
             }
 
-            return new CopLazyCollection(() =>
-                CoerceToEnumerable(collection).Select(item =>
-                    fn.Invoke([item], evaluator, env)));
+            return new CopLazyCollection((deferredCancellationToken) =>
+                CoerceToEnumerableAsync(collection, cancellationToken: deferredCancellationToken).Select(async (item, itemCancellationToken) =>
+                    (await fn.InvokeAsync([item], evaluator, env, cancellationToken: itemCancellationToken))));
         });
 
         // orderBy: collection.orderBy(keySelector) — sort ascending
-        ffi.RegisterEx("orderBy", (args, evaluator, env) =>
+        ffi.RegisterExAsync("orderBy", async (args, evaluator, env, cancellationToken) =>
         {
             if (args.Count < 2)
             {
@@ -320,18 +320,18 @@ public static class StandardLibrary
                 return collection;
             }
 
-            List<CopValue> items = CoerceToEnumerable(collection).ToList();
-            items.Sort((a, b) =>
+            List<CopValue> items = (await CoerceToEnumerableAsync(collection, cancellationToken: cancellationToken).ToListAsync(cancellationToken: cancellationToken));
+            await items.SortAsync(async (a, b, comparisonCancellationToken) =>
             {
-                CopValue ka = keySel.Invoke([a], evaluator, env);
-                CopValue kb = keySel.Invoke([b], evaluator, env);
-                return CompareValues(ka, kb);
-            });
+                CopValue ka = (await keySel.InvokeAsync([a], evaluator, env, cancellationToken: comparisonCancellationToken));
+                CopValue kb = (await keySel.InvokeAsync([b], evaluator, env, cancellationToken: comparisonCancellationToken));
+                return (await CompareValuesAsync(ka, kb, cancellationToken: comparisonCancellationToken));
+            }, cancellationToken: cancellationToken);
             return new CopList(items);
         });
 
         // distinct: collection.distinct() — deduplicate
-        ffi.Register("distinct", (args, env) =>
+        ffi.RegisterAsync("distinct", async (args, env, cancellationToken) =>
         {
             if (args.Count == 0)
             {
@@ -340,15 +340,15 @@ public static class StandardLibrary
 
             if (args[0] is CopQueryable or CopLazyCollection)
             {
-                return new CopLazyCollection(() => CoerceToEnumerable(args[0]).DistinctBy(item => item.Display()));
+                return new CopLazyCollection((deferredCancellationToken) => CoerceToEnumerableAsync(args[0], cancellationToken: deferredCancellationToken).DistinctBy(item => item.Display()));
             }
 
-            IEnumerable<CopValue> items = CoerceToEnumerable(args[0]);
+            IAsyncEnumerable<CopValue> items = CoerceToEnumerableAsync(args[0], cancellationToken: cancellationToken);
             HashSet<string> seen = new HashSet<string>();
             List<CopValue> result = new List<CopValue>();
-            foreach (CopValue item in items)
+            await foreach (CopValue item in items)
             {
-                if (seen.Add(item.Display()))
+                if (seen.Add((await item.DisplayAsync(cancellationToken: cancellationToken))))
                 {
                     result.Add(item);
                 }
@@ -357,139 +357,143 @@ public static class StandardLibrary
         });
 
         // take: collection.take(n) — first n items
-        ffi.Register("take", (args, env) =>
+        ffi.RegisterAsync("take", async (args, env, cancellationToken) =>
         {
             if (args.Count < 2)
             {
                 return args.Count > 0 ? args[0] : CopNull.Instance;
             }
 
-            IEnumerable<CopValue> items = CoerceToEnumerable(args[0]);
+            IAsyncEnumerable<CopValue> items = CoerceToEnumerableAsync(args[0], cancellationToken);
             int n = args[1] is CopInt i ? i.Value : 0;
-            return args[0] is CopList ? new CopList(items.Take(n).ToList()) : new CopLazyCollection(() => items.Take(n));
+            return args[0] is CopList
+                ? new CopList(await items.Take(n).ToListAsync(cancellationToken))
+                : new CopLazyCollection(token => CoerceToEnumerableAsync(args[0], token).Take(n));
         });
 
         // skip: collection.skip(n) — skip first n items
-        ffi.Register("skip", (args, env) =>
+        ffi.RegisterAsync("skip", async (args, env, cancellationToken) =>
         {
             if (args.Count < 2)
             {
                 return args.Count > 0 ? args[0] : CopNull.Instance;
             }
 
-            IEnumerable<CopValue> items = CoerceToEnumerable(args[0]);
+            IAsyncEnumerable<CopValue> items = CoerceToEnumerableAsync(args[0], cancellationToken);
             int n = args[1] is CopInt i ? i.Value : 0;
-            return args[0] is CopList ? new CopList(items.Skip(n).ToList()) : new CopLazyCollection(() => items.Skip(n));
+            return args[0] is CopList
+                ? new CopList(await items.Skip(n).ToListAsync(cancellationToken))
+                : new CopLazyCollection(token => CoerceToEnumerableAsync(args[0], token).Skip(n));
         });
 
         // first: collection.first() — returns first item or null
-        ffi.Register("first", (args, env) =>
+        ffi.RegisterAsync("first", async (args, env, cancellationToken) =>
         {
             if (args.Count == 0)
             {
                 return CopNull.Instance;
             }
 
-            IEnumerable<CopValue> items = CoerceToEnumerable(args[0]);
-            return items.FirstOrDefault() ?? CopNull.Instance;
+            IAsyncEnumerable<CopValue> items = CoerceToEnumerableAsync(args[0], cancellationToken: cancellationToken);
+            return (await items.FirstOrDefaultAsync(cancellationToken: cancellationToken)) ?? CopNull.Instance;
         });
 
         // last: collection.last() — returns last item or null
-        ffi.Register("last", (args, env) =>
+        ffi.RegisterAsync("last", async (args, env, cancellationToken) =>
         {
             if (args.Count == 0)
             {
                 return CopNull.Instance;
             }
 
-            IEnumerable<CopValue> items = CoerceToEnumerable(args[0]);
-            return items.LastOrDefault() ?? CopNull.Instance;
+            IAsyncEnumerable<CopValue> items = CoerceToEnumerableAsync(args[0], cancellationToken: cancellationToken);
+            return (await items.LastOrDefaultAsync(cancellationToken: cancellationToken)) ?? CopNull.Instance;
         });
 
         // text: collection.text(separator) — join items with separator
-        ffi.Register("text", (args, env) =>
+        ffi.RegisterAsync("text", async (args, env, cancellationToken) =>
         {
             if (args.Count == 0)
             {
                 return new CopString("");
             }
 
-            string separator = args.Count > 1 ? args[1].Display() : ", ";
+            string separator = args.Count > 1 ? (await args[1].DisplayAsync(cancellationToken: cancellationToken)) : ", ";
 
-            CopValue collection = Evaluator.ForceValue(args[0]);
+            CopValue collection = (await Evaluator.ForceValueAsync(args[0], cancellationToken: cancellationToken));
             if (collection is CopList list)
             {
-                return new CopString(string.Join(separator, list.Items.Select(i => i.Display())));
+                return new CopString(string.Join(separator, (await list.Items.ToAsyncEnumerable().Select(async (i, itemCancellationToken) => (await i.DisplayAsync(cancellationToken: itemCancellationToken))).ToListAsync(cancellationToken))));
             }
 
             if (collection is CopLazyCollection lazy)
             {
-                return new CopString(string.Join(separator, lazy.Enumerate().Select(i => i.Display())));
+                return new CopString(string.Join(separator, (await lazy.EnumerateAsync(cancellationToken: cancellationToken).Select(i => i.Display()).ToListAsync(cancellationToken))));
             }
 
             if (collection is CopQueryable query)
             {
-                return new CopString(string.Join(separator, query.Enumerate().Select(i => i.Display())));
+                return new CopString(string.Join(separator, (await query.EnumerateAsync(cancellationToken: cancellationToken).Select(i => i.Display()).ToListAsync(cancellationToken))));
             }
 
-            return new CopString(collection.Display());
+            return new CopString((await collection.DisplayAsync(cancellationToken: cancellationToken)));
         });
 
         // Text(expr): documented scalar conversion to text — also usable via colon pipe (expr:Text).
         // The per-item collection form (Items.Text(template)) is intercepted earlier in the evaluator.
-        ffi.Register("Text", (args, env) =>
-            args.Count == 0 ? new CopString("") : new CopString(args[0].Display()));
+        ffi.RegisterAsync("Text", async (args, env, cancellationToken) =>
+            args.Count == 0 ? new CopString("") : new CopString((await args[0].DisplayAsync(cancellationToken: cancellationToken))));
 
         // concat: collection.concat(other) — join two collections
-        ffi.Register("concat", (args, env) =>
+        ffi.RegisterAsync("concat", async (args, env, cancellationToken) =>
         {
             if (args.Count < 2)
             {
                 return args.Count > 0 ? args[0] : CopNull.Instance;
             }
 
-            CopValue left = Evaluator.ForceValue(args[0]);
-            CopValue right = Evaluator.ForceValue(args[1]);
+            CopValue left = (await Evaluator.ForceValueAsync(args[0], cancellationToken: cancellationToken));
+            CopValue right = (await Evaluator.ForceValueAsync(args[1], cancellationToken: cancellationToken));
             return left is CopQueryable || right is CopQueryable
                 ? CopQueryable.Concat(left, right)
-                : new CopList(CoerceToEnumerable(left).Concat(CoerceToEnumerable(right)).ToList());
+                : new CopList((await CoerceToEnumerableAsync(left, cancellationToken: cancellationToken).Concat(CoerceToEnumerableAsync(right, cancellationToken: cancellationToken)).ToListAsync(cancellationToken: cancellationToken)));
         });
 
         // push: collection.push(item) — append to end
-        ffi.Register("push", (args, env) =>
+        ffi.RegisterAsync("push", async (args, env, cancellationToken) =>
         {
             if (args.Count < 2)
             {
                 return args.Count > 0 ? args[0] : CopNull.Instance;
             }
 
-            List<CopValue> items = CoerceToEnumerable(args[0]).ToList();
+            List<CopValue> items = (await CoerceToEnumerableAsync(args[0], cancellationToken: cancellationToken).ToListAsync(cancellationToken: cancellationToken));
             items.Add(args[1]);
             return new CopList(items);
         });
 
         // enqueue: collection.enqueue(item) — prepend to front
-        ffi.Register("enqueue", (args, env) =>
+        ffi.RegisterAsync("enqueue", async (args, env, cancellationToken) =>
         {
             if (args.Count < 2)
             {
                 return args.Count > 0 ? args[0] : CopNull.Instance;
             }
 
-            List<CopValue> items = CoerceToEnumerable(args[0]).ToList();
+            List<CopValue> items = (await CoerceToEnumerableAsync(args[0], cancellationToken: cancellationToken).ToListAsync(cancellationToken: cancellationToken));
             items.Insert(0, args[1]);
             return new CopList(items);
         });
 
         // pop: collection.pop() — remove last item
-        ffi.Register("pop", (args, env) =>
+        ffi.RegisterAsync("pop", async (args, env, cancellationToken) =>
         {
             if (args.Count == 0)
             {
                 return new CopList([]);
             }
 
-            List<CopValue> items = CoerceToEnumerable(args[0]).ToList();
+            List<CopValue> items = (await CoerceToEnumerableAsync(args[0], cancellationToken: cancellationToken).ToListAsync(cancellationToken: cancellationToken));
             if (items.Count <= 1)
             {
                 return new CopList([]);
@@ -500,14 +504,14 @@ public static class StandardLibrary
         });
 
         // elementAt: collection.elementAt(index) — item at zero-based index
-        ffi.Register("elementAt", (args, env) =>
+        ffi.RegisterAsync("elementAt", async (args, env, cancellationToken) =>
         {
             if (args.Count < 2)
             {
                 return CopNull.Instance;
             }
 
-            List<CopValue> items = CoerceToEnumerable(args[0]).ToList();
+            List<CopValue> items = (await CoerceToEnumerableAsync(args[0], cancellationToken: cancellationToken).ToListAsync(cancellationToken: cancellationToken));
             int index = args[1] is CopInt i ? i.Value : 0;
             if (index < 0 || index >= items.Count)
             {
@@ -518,20 +522,20 @@ public static class StandardLibrary
         });
 
         // empty: collection.empty() — true if collection has no items
-        ffi.Register("empty", (args, env) =>
+        ffi.RegisterAsync("empty", async (args, env, cancellationToken) =>
         {
             if (args.Count == 0)
             {
                 return CopBool.True;
             }
 
-            IEnumerable<CopValue> items = CoerceToEnumerable(args[0]);
-            return CopBool.Of(!items.Any());
+            IAsyncEnumerable<CopValue> items = CoerceToEnumerableAsync(args[0], cancellationToken: cancellationToken);
+            return CopBool.Of(!(await items.AnyAsync(cancellationToken: cancellationToken)));
         });
 
         // Object operations (issue #43): obj.Get('key') / obj:containsKey('key') — dynamic,
         // case-insensitive property access on object literals and provider objects.
-        ffi.Register("Get", (args, env) =>
+        ffi.RegisterAsync("Get", async (args, env, cancellationToken) =>
         {
             if (args.Count is not (2 or 3))
             {
@@ -543,58 +547,58 @@ public static class StandardLibrary
                 throw new CopEvaluationException("Get() caseSensitive argument must be a boolean");
             }
 
-            bool caseSensitive = args.Count == 3 && args[2] is CopBool { Value: true };
-            return GetObjectKey(args[0], args[1].Display(), caseSensitive);
+            bool caseSensitive = args.Count == 3 && args[2] is CopBool { IsTrue: true };
+            return (await GetObjectKeyAsync(args[0], (await args[1].DisplayAsync(cancellationToken: cancellationToken)), caseSensitive, cancellationToken: cancellationToken));
         });
-        ffi.Register("containsKey", (args, env) =>
+        ffi.RegisterAsync("containsKey", async (args, env, cancellationToken) =>
         {
             if (args.Count != 2)
             {
                 throw new CopEvaluationException("containsKey() requires an object and a key");
             }
 
-            return CopBool.Of(FindObjectKey(args[0], args[1].Display(), caseSensitive: false) is not null);
+            return CopBool.Of((await FindObjectKeyAsync(args[0], (await args[1].DisplayAsync(cancellationToken: cancellationToken)), caseSensitive: false, cancellationToken: cancellationToken)) is not null);
         });
 
         // single: collection.single(predicate?) — single matching item or null
-        ffi.RegisterEx("single", (args, evaluator, env) =>
+        ffi.RegisterExAsync("single", async (args, evaluator, env, cancellationToken) =>
         {
             if (args.Count == 0)
             {
                 return CopNull.Instance;
             }
 
-            List<CopValue> items = CoerceToEnumerable(args[0]).ToList();
+            List<CopValue> items = (await CoerceToEnumerableAsync(args[0], cancellationToken: cancellationToken).ToListAsync(cancellationToken: cancellationToken));
             if (args.Count > 1 && args[1] is ICopCallable predicate)
             {
-                items = items.Where(item => predicate.Invoke([item], evaluator, env).IsTruthy).ToList();
+                items = (await items.ToAsyncEnumerable().Where(async (item, itemCancellationToken) => (await (await predicate.InvokeAsync([item], evaluator, env, cancellationToken: itemCancellationToken)).IsTruthyAsync(itemCancellationToken))).ToListAsync(cancellationToken: cancellationToken));
             }
 
             return items.Count == 1 ? items[0] : CopNull.Instance;
         });
 
         // groupBy: collection.groupBy(keySelector) — group by key
-        ffi.RegisterEx("groupBy", (args, evaluator, env) =>
+        ffi.RegisterExAsync("groupBy", async (args, evaluator, env, cancellationToken) =>
         {
             if (args.Count < 2)
             {
                 return args.Count > 0 ? args[0] : CopNull.Instance;
             }
 
-            IEnumerable<CopValue> items = CoerceToEnumerable(args[0]);
+            IAsyncEnumerable<CopValue> items = CoerceToEnumerableAsync(args[0], cancellationToken: cancellationToken);
             ICopCallable? keySel = args[1] as ICopCallable;
             if (keySel is null)
             {
-                return new CopList(items.ToList());
+                return new CopList((await items.ToListAsync(cancellationToken: cancellationToken)));
             }
 
-            IEnumerable<IGrouping<string, CopValue>> groups = items.GroupBy(item => keySel.Invoke([item], evaluator, env).Display());
-            List<CopValue> result = groups.Select(g => new CopList(g.ToList()) as CopValue).ToList();
+            IAsyncEnumerable<IGrouping<string, CopValue>> groups = items.GroupBy(async (item, itemCancellationToken) => (await keySel.InvokeAsync([item], evaluator, env, cancellationToken: itemCancellationToken)).Display());
+            List<CopValue> result = (await groups.Select(g => new CopList(g.ToList()) as CopValue).ToListAsync(cancellationToken: cancellationToken));
             return new CopList(result);
         });
 
         // orderByDescending: collection.orderByDescending(keySelector)
-        ffi.RegisterEx("orderByDescending", (args, evaluator, env) =>
+        ffi.RegisterExAsync("orderByDescending", async (args, evaluator, env, cancellationToken) =>
         {
             if (args.Count < 2)
             {
@@ -608,25 +612,25 @@ public static class StandardLibrary
                 return collection;
             }
 
-            List<CopValue> items = CoerceToEnumerable(collection).ToList();
-            items.Sort((a, b) =>
+            List<CopValue> items = (await CoerceToEnumerableAsync(collection, cancellationToken: cancellationToken).ToListAsync(cancellationToken: cancellationToken));
+            await items.SortAsync(async (a, b, comparisonCancellationToken) =>
             {
-                CopValue ka = keySel.Invoke([a], evaluator, env);
-                CopValue kb = keySel.Invoke([b], evaluator, env);
-                return CompareValues(kb, ka); // reversed for descending
-            });
+                CopValue ka = (await keySel.InvokeAsync([a], evaluator, env, cancellationToken: comparisonCancellationToken));
+                CopValue kb = (await keySel.InvokeAsync([b], evaluator, env, cancellationToken: comparisonCancellationToken));
+                return (await CompareValuesAsync(kb, ka, cancellationToken: comparisonCancellationToken)); // reversed for descending
+            }, cancellationToken: cancellationToken);
             return new CopList(items);
         });
     }
 
-    private static int CompareValues(CopValue a, CopValue b)
+    private static async ValueTask<int> CompareValuesAsync(CopValue a, CopValue b, CancellationToken cancellationToken = default)
     {
         return (a, b) switch
         {
             (CopInt ia, CopInt ib) => ia.Value.CompareTo(ib.Value),
             (CopNumber na, CopNumber nb) => na.Value.CompareTo(nb.Value),
             (CopString sa, CopString sb) => string.Compare(sa.Value, sb.Value, StringComparison.Ordinal),
-            _ => string.Compare(a.Display(), b.Display(), StringComparison.Ordinal)
+            _ => string.Compare((await a.DisplayAsync(cancellationToken: cancellationToken)), (await b.DisplayAsync(cancellationToken: cancellationToken)), StringComparison.Ordinal)
         };
     }
 
@@ -634,14 +638,14 @@ public static class StandardLibrary
     {
         // reduce: the fundamental fold — only true intrinsic needed for aggregation
         // reduce(collection, (acc, item) => expr, initialValue)
-        ffi.RegisterEx("reduce", (args, evaluator, env) =>
+        ffi.RegisterExAsync("reduce", async (args, evaluator, env, cancellationToken) =>
         {
             if (args.Count < 3)
             {
                 return CopNull.Instance;
             }
 
-            IEnumerable<CopValue> items = CoerceToEnumerable(args[0]);
+            IAsyncEnumerable<CopValue> items = CoerceToEnumerableAsync(args[0], cancellationToken: cancellationToken);
             ICopCallable? fn = args[1] as ICopCallable;
             CopValue acc = args[2];
             if (fn is null)
@@ -649,30 +653,30 @@ public static class StandardLibrary
                 return acc;
             }
 
-            foreach (CopValue item in items)
+            await foreach (CopValue item in items)
             {
-                acc = fn.Invoke([acc, item], evaluator, env);
+                acc = (await fn.InvokeAsync([acc, item], evaluator, env, cancellationToken: cancellationToken));
             }
 
             return acc;
         });
 
         // sum: collection.sum() or sum(collection, projection)
-        ffi.RegisterEx("sum", (args, evaluator, env) =>
+        ffi.RegisterExAsync("sum", async (args, evaluator, env, cancellationToken) =>
         {
             if (args.Count == 0)
             {
                 return new CopInt(0);
             }
 
-            IEnumerable<CopValue> items = CoerceToEnumerable(args[0]);
+            IAsyncEnumerable<CopValue> items = CoerceToEnumerableAsync(args[0], cancellationToken: cancellationToken);
             ICopCallable? projection = args.Count > 1 ? args[1] as ICopCallable : null;
 
             double total = 0;
             bool hasDouble = false;
-            foreach (CopValue item in items)
+            await foreach (CopValue item in items)
             {
-                CopValue val = projection is not null ? projection.Invoke([item], evaluator, env) : item;
+                CopValue val = projection is not null ? (await projection.InvokeAsync([item], evaluator, env, cancellationToken: cancellationToken)) : item;
                 if (val is CopInt i)
                 {
                     total += i.Value;
@@ -683,21 +687,21 @@ public static class StandardLibrary
         });
 
         // min: collection.min() or min(collection, projection)
-        ffi.RegisterEx("min", (args, evaluator, env) =>
+        ffi.RegisterExAsync("min", async (args, evaluator, env, cancellationToken) =>
         {
             if (args.Count == 0)
             {
                 return CopNull.Instance;
             }
 
-            IEnumerable<CopValue> items = CoerceToEnumerable(args[0]);
+            IAsyncEnumerable<CopValue> items = CoerceToEnumerableAsync(args[0], cancellationToken: cancellationToken);
             ICopCallable? projection = args.Count > 1 ? args[1] as ICopCallable : null;
 
             CopValue? result = null;
             double? minVal = null;
-            foreach (CopValue item in items)
+            await foreach (CopValue item in items)
             {
-                CopValue val = projection is not null ? projection.Invoke([item], evaluator, env) : item;
+                CopValue val = projection is not null ? (await projection.InvokeAsync([item], evaluator, env, cancellationToken: cancellationToken)) : item;
                 double? num = ToDouble(val);
                 if (num is not null && (minVal is null || num.Value < minVal.Value))
                 {
@@ -709,21 +713,21 @@ public static class StandardLibrary
         });
 
         // max: collection.max() or max(collection, projection)
-        ffi.RegisterEx("max", (args, evaluator, env) =>
+        ffi.RegisterExAsync("max", async (args, evaluator, env, cancellationToken) =>
         {
             if (args.Count == 0)
             {
                 return CopNull.Instance;
             }
 
-            IEnumerable<CopValue> items = CoerceToEnumerable(args[0]);
+            IAsyncEnumerable<CopValue> items = CoerceToEnumerableAsync(args[0], cancellationToken: cancellationToken);
             ICopCallable? projection = args.Count > 1 ? args[1] as ICopCallable : null;
 
             CopValue? result = null;
             double? maxVal = null;
-            foreach (CopValue item in items)
+            await foreach (CopValue item in items)
             {
-                CopValue val = projection is not null ? projection.Invoke([item], evaluator, env) : item;
+                CopValue val = projection is not null ? (await projection.InvokeAsync([item], evaluator, env, cancellationToken: cancellationToken)) : item;
                 double? num = ToDouble(val);
                 if (num is not null && (maxVal is null || num.Value > maxVal.Value))
                 {
@@ -735,21 +739,21 @@ public static class StandardLibrary
         });
 
         // average: collection.average() or average(collection, projection)
-        ffi.RegisterEx("average", (args, evaluator, env) =>
+        ffi.RegisterExAsync("average", async (args, evaluator, env, cancellationToken) =>
         {
             if (args.Count == 0)
             {
                 return CopNull.Instance;
             }
 
-            IEnumerable<CopValue> items = CoerceToEnumerable(args[0]);
+            IAsyncEnumerable<CopValue> items = CoerceToEnumerableAsync(args[0], cancellationToken: cancellationToken);
             ICopCallable? projection = args.Count > 1 ? args[1] as ICopCallable : null;
 
             double total = 0;
             int count = 0;
-            foreach (CopValue item in items)
+            await foreach (CopValue item in items)
             {
-                CopValue val = projection is not null ? projection.Invoke([item], evaluator, env) : item;
+                CopValue val = projection is not null ? (await projection.InvokeAsync([item], evaluator, env, cancellationToken: cancellationToken)) : item;
                 double? num = ToDouble(val);
                 if (num is not null) { total += num.Value; count++; }
             }
@@ -766,75 +770,75 @@ public static class StandardLibrary
 
     private static void RegisterStringPredicates(ForeignFunctionRegistry ffi)
     {
-        ffi.Register("startsWith", (args, env) =>
+        ffi.RegisterAsync("startsWith", async (args, env, cancellationToken) =>
         {
             if (args.Count < 2)
             {
                 return CopBool.False;
             }
 
-            string str = args[0].Display();
-            string prefix = args[1].Display();
+            string str = (await args[0].DisplayAsync(cancellationToken: cancellationToken));
+            string prefix = (await args[1].DisplayAsync(cancellationToken: cancellationToken));
             return CopBool.Of(str.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
         });
 
-        ffi.Register("endsWith", (args, env) =>
+        ffi.RegisterAsync("endsWith", async (args, env, cancellationToken) =>
         {
             if (args.Count < 2)
             {
                 return CopBool.False;
             }
 
-            string str = args[0].Display();
-            string suffix = args[1].Display();
+            string str = (await args[0].DisplayAsync(cancellationToken: cancellationToken));
+            string suffix = (await args[1].DisplayAsync(cancellationToken: cancellationToken));
             return CopBool.Of(str.EndsWith(suffix, StringComparison.OrdinalIgnoreCase));
         });
 
-        ffi.Register("contains", (args, env) =>
+        ffi.RegisterAsync("contains", async (args, env, cancellationToken) =>
         {
             if (args.Count < 2)
             {
                 return CopBool.False;
             }
 
-            string str = args[0].Display();
-            string sub = args[1].Display();
+            string str = (await args[0].DisplayAsync(cancellationToken: cancellationToken));
+            string sub = (await args[1].DisplayAsync(cancellationToken: cancellationToken));
             return CopBool.Of(str.Contains(sub, StringComparison.OrdinalIgnoreCase));
         });
 
-        ffi.Register("equals", (args, env) =>
+        ffi.RegisterAsync("equals", async (args, env, cancellationToken) =>
         {
             if (args.Count < 2)
             {
                 return CopBool.False;
             }
 
-            string str = args[0].Display();
-            string other = args[1].Display();
+            string str = (await args[0].DisplayAsync(cancellationToken: cancellationToken));
+            string other = (await args[1].DisplayAsync(cancellationToken: cancellationToken));
             return CopBool.Of(str.Equals(other, StringComparison.OrdinalIgnoreCase));
         });
 
-        ffi.Register("notEquals", (args, env) =>
+        ffi.RegisterAsync("notEquals", async (args, env, cancellationToken) =>
         {
             if (args.Count < 2)
             {
                 return CopBool.True;
             }
 
-            string str = args[0].Display();
-            string other = args[1].Display();
+            string str = (await args[0].DisplayAsync(cancellationToken: cancellationToken));
+            string other = (await args[1].DisplayAsync(cancellationToken: cancellationToken));
             return CopBool.Of(!str.Equals(other, StringComparison.OrdinalIgnoreCase));
         });
 
-        ffi.Register("matches", (args, env) =>
+        ffi.RegisterAsync("matches", async (args, env, cancellationToken) =>
         {
             if (args.Count < 2)
             {
                 return CopBool.False;
             }
 
-            string str = args[0].Display();
-            string pattern = args[1].Display();
+            string str = (await args[0].DisplayAsync(cancellationToken: cancellationToken));
+            string pattern = (await args[1].DisplayAsync(cancellationToken: cancellationToken));
             try
             {
                 return CopBool.Of(RegexCache.IsMatch(str, pattern));
@@ -845,14 +849,14 @@ public static class StandardLibrary
             }
         });
 
-        ffi.Register("length", (args, env) =>
+        ffi.RegisterAsync("length", async (args, env, cancellationToken) =>
         {
             if (args.Count == 0)
             {
                 return new CopInt(0);
             }
 
-            return new CopInt(args[0].Display().Length);
+            return new CopInt((await args[0].DisplayAsync(cancellationToken: cancellationToken)).Length);
         });
     }
 
@@ -892,14 +896,14 @@ public static class StandardLibrary
         _ => 0
     };
 
-    private static CopValue GetObjectKey(CopValue obj, string key, bool caseSensitive)
+    private static async ValueTask<CopValue> GetObjectKeyAsync(CopValue obj, string key, bool caseSensitive, CancellationToken cancellationToken = default)
     {
         if (obj is CopThunk thunk)
         {
-            obj = thunk.Force();
+            obj = (await thunk.ForceAsync(cancellationToken: cancellationToken));
         }
 
-        string? name = FindObjectKey(obj, key, caseSensitive);
+        string? name = (await FindObjectKeyAsync(obj, key, caseSensitive, cancellationToken: cancellationToken));
         if (name is null)
         {
             return CopNull.Instance;
@@ -908,16 +912,16 @@ public static class StandardLibrary
         return obj switch
         {
             CopObject co => co.GetField(name),
-            CopDynamicObject dyn => dyn.GetField(name),
+            CopDynamicObject dyn => (await dyn.GetFieldAsync(name, cancellationToken: cancellationToken)),
             _ => CopNull.Instance
         };
     }
 
-    private static string? FindObjectKey(CopValue obj, string key, bool caseSensitive)
+    private static async ValueTask<string?> FindObjectKeyAsync(CopValue obj, string key, bool caseSensitive, CancellationToken cancellationToken = default)
     {
         if (obj is CopThunk thunk)
         {
-            obj = thunk.Force();
+            obj = (await thunk.ForceAsync(cancellationToken: cancellationToken));
         }
 
         IEnumerable<string> names = obj switch
@@ -934,7 +938,9 @@ public static class StandardLibrary
     // Helpers
     // ========================================================================
 
-    private static IEnumerable<CopValue> CoerceToEnumerable(CopValue value) => CollectionValues.Enumerate(value);
+    private static IAsyncEnumerable<CopValue> CoerceToEnumerableAsync(CopValue value,
+        CancellationToken cancellationToken = default) =>
+        CollectionValues.EnumerateAsync(value, cancellationToken);
 
     private static bool PathMatchesGlob(string path, string pattern) => PathGlob.IsMatch(path, pattern);
 }

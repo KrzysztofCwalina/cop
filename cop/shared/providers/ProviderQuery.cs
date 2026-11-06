@@ -10,6 +10,9 @@ namespace Cop.Core;
 /// </summary>
 public class ProviderQuery
 {
+    /// <summary>
+    /// Copies query context for a named collection and optional replacement filter.
+    /// </summary>
     public ProviderQuery ForCollection(string collection, FilterExpression? filter = null) => new()
     {
         RootPath = RootPath,

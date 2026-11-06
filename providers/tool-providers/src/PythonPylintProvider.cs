@@ -12,9 +12,12 @@ public class PythonPylintProvider : ToolProvider
 {
     protected override string ToolName => "pylint";
 
-    protected override List<object> RunTool(string rootPath, IReadOnlySet<string> excluded)
+    protected override async ValueTask<List<object>> RunToolAsync(
+        string rootPath, IReadOnlySet<string> excluded, CancellationToken cancellationToken)
     {
-        (string? stdout, string _, int _) = RunProcess("pylint", "--output-format=json --recursive=y .", rootPath, shell: true);
+        (string? stdout, string _, int _) = await RunProcessAsync(
+            new("pylint", "--output-format=json --recursive=y .", rootPath)
+            { Mode = ToolInvocationMode.Shell }, cancellationToken).ConfigureAwait(false);
         if (string.IsNullOrWhiteSpace(stdout))
         {
             return [];
@@ -25,16 +28,16 @@ public class PythonPylintProvider : ToolProvider
 
         foreach (JsonElement item in doc.RootElement.EnumerateArray())
         {
-            string filePath = NormalizePath(item.GetProperty("path").GetString() ?? "", rootPath);
+            string filePath = NormalizePath(item.GetProperty("path").GetString() ?? string.Empty, rootPath);
             if (string.IsNullOrEmpty(filePath) || IsExcluded(filePath, excluded))
             {
                 continue;
             }
 
             int line = item.TryGetProperty("line", out JsonElement ln) ? ln.GetInt32() : 0;
-            string? messageId = item.TryGetProperty("message-id", out JsonElement mid) ? mid.GetString() : "";
-            string? message = item.TryGetProperty("message", out JsonElement m) ? m.GetString() : "";
-            string severity = MapPylintType(item.TryGetProperty("type", out JsonElement t) ? t.GetString() : "");
+            string? messageId = item.TryGetProperty("message-id", out JsonElement mid) ? mid.GetString() : string.Empty;
+            string? message = item.TryGetProperty("message", out JsonElement m) ? m.GetString() : string.Empty;
+            string severity = MapPylintType(item.TryGetProperty("type", out JsonElement t) ? t.GetString() : string.Empty);
 
             violations.Add(new ToolViolation
             {

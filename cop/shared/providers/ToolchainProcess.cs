@@ -75,15 +75,17 @@ public static class ToolchainProcess
     /// Pass an absolute discovered path to avoid searching PATH a second time.
     /// </summary>
     public static async Task<ToolchainResult> RunAsync(
-        string executable,
-        IReadOnlyList<string> arguments,
-        string workingDirectory,
-        string? standardInput = null,
-        TimeSpan? timeout = null,
-        int maxOutputCharacters = 4_194_304,
-        CancellationToken cancellationToken = default,
-        IReadOnlyDictionary<string, string?>? environment = null)
+        ToolchainCommand command,
+        ToolchainRunOptions? options = null,
+        CancellationToken cancellationToken = default)
     {
+        string executable = command.Executable;
+        IReadOnlyList<string> arguments = command.Arguments;
+        string workingDirectory = command.WorkingDirectory;
+        IReadOnlyDictionary<string, string?>? environment = command.Environment;
+        string? standardInput = options?.StandardInput;
+        TimeSpan? timeout = options?.Timeout;
+        int maxOutputCharacters = options?.MaxOutputCharacters ?? 4_194_304;
         ArgumentNullException.ThrowIfNull(arguments);
         ArgumentException.ThrowIfNullOrWhiteSpace(workingDirectory);
         TimeSpan duration = timeout ?? TimeSpan.FromSeconds(30);
@@ -140,7 +142,7 @@ public static class ToolchainProcess
             }
         }
 
-        using ToolchainProcessContainment containment = new ToolchainProcessContainment();
+        await using ToolchainProcessContainment containment = new ToolchainProcessContainment();
         try
         {
             if (!process.Start())
@@ -222,7 +224,7 @@ public static class ToolchainProcess
             deadline.Cancel();
             try
             {
-                containment.Terminate();
+                await containment.TerminateAsync().ConfigureAwait(false);
                 if (!process.HasExited)
                 {
                     process.Kill(entireProcessTree: true);

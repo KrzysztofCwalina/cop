@@ -12,9 +12,12 @@ public class PythonRuffProvider : ToolProvider
 {
     protected override string ToolName => "ruff";
 
-    protected override List<object> RunTool(string rootPath, IReadOnlySet<string> excluded)
+    protected override async ValueTask<List<object>> RunToolAsync(
+        string rootPath, IReadOnlySet<string> excluded, CancellationToken cancellationToken)
     {
-        (string? stdout, string _, int _) = RunProcess("ruff", "check --output-format=json .", rootPath, shell: true);
+        (string? stdout, string _, int _) = await RunProcessAsync(
+            new("ruff", "check --output-format=json .", rootPath)
+            { Mode = ToolInvocationMode.Shell }, cancellationToken).ConfigureAwait(false);
         if (string.IsNullOrWhiteSpace(stdout))
         {
             return [];
@@ -25,7 +28,7 @@ public class PythonRuffProvider : ToolProvider
 
         foreach (JsonElement item in doc.RootElement.EnumerateArray())
         {
-            string filePath = NormalizePath(item.GetProperty("filename").GetString() ?? "", rootPath);
+            string filePath = NormalizePath(item.GetProperty("filename").GetString() ?? string.Empty, rootPath);
             if (string.IsNullOrEmpty(filePath) || IsExcluded(filePath, excluded))
             {
                 continue;
@@ -33,8 +36,8 @@ public class PythonRuffProvider : ToolProvider
 
             int line = item.TryGetProperty("location", out JsonElement loc) && loc.TryGetProperty("row", out JsonElement row)
                 ? row.GetInt32() : 0;
-            string? code = item.TryGetProperty("code", out JsonElement c) ? c.GetString() : "";
-            string? message = item.TryGetProperty("message", out JsonElement m) ? m.GetString() : "";
+            string? code = item.TryGetProperty("code", out JsonElement c) ? c.GetString() : string.Empty;
+            string? message = item.TryGetProperty("message", out JsonElement m) ? m.GetString() : string.Empty;
 
             violations.Add(new ToolViolation
             {

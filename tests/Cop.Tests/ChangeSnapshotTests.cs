@@ -14,18 +14,18 @@ public sealed class ChangeSnapshotTests
     private readonly ChangeCommand commands = new();
 
     [SetUp]
-    public void SetUp()
+    public async Task SetUp()
     {
         root = Path.Combine(Directory.GetCurrentDirectory(), ".change-snapshot-tests", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
-        Git("init", "--initial-branch=trunk");
-        Git("config", "user.email", "snapshot@example.invalid");
-        Git("config", "user.name", "Snapshot Test");
-        Git("config", "core.autocrlf", "false");
-        Git("config", "commit.gpgsign", "false");
+        await Git("init", "--initial-branch=trunk");
+        await Git("config", "user.email", "snapshot@example.invalid");
+        await Git("config", "user.name", "Snapshot Test");
+        await Git("config", "core.autocrlf", "false");
+        await Git("config", "commit.gpgsign", "false");
         Write("source.cs", "one\ntwo\nthree\nfour\nfive\n");
         Write("unchanged.cs", "unchanged needle\nsecond\n");
-        baseline = Commit("baseline");
+        baseline = (await Commit("baseline"));
     }
 
     [TearDown]
@@ -42,22 +42,22 @@ public sealed class ChangeSnapshotTests
     }
 
     [Test]
-    public void BranchComparisonIncludesCommittedStagedUnstagedAndUntrackedOnce()
+    public async Task BranchComparisonIncludesCommittedStagedUnstagedAndUntrackedOnce()
     {
         Write("source.cs", "one\ncommitted\nthree\nfour\nfive\n");
-        Commit("feature");
+        await Commit("feature");
         Write("source.cs", "one\ncommitted\nstaged\nfour\nfive\n");
-        Git("add", "source.cs");
+        await Git("add", "source.cs");
         Write("source.cs", "one\ncommitted\nstaged\nunstaged\nfive\n");
         Write("new file.cs", "new\ncontent\n");
 
-        var snapshot = Snapshot();
+        var snapshot = (await Snapshot());
 
         Assert.That(snapshot.BaseCommit, Is.EqualTo(baseline));
-        Assert.That(snapshot.HeadCommit, Is.EqualTo(Git("rev-parse", "HEAD").Trim()));
+        Assert.That(snapshot.HeadCommit, Is.EqualTo((await Git("rev-parse", "HEAD")).Trim()));
         Assert.That(snapshot.Files.Select(file => file.Path), Is.EqualTo(new[] { "new file.cs", "source.cs" }));
         var modified = snapshot.Files.Single(file => file.Path == "source.cs");
-        Assert.Multiple(() =>
+        await Assert.MultipleAsync(async () =>
         {
             Assert.That(modified.Status, Is.EqualTo("M"));
             Assert.That(modified.Ranges, Is.EqualTo(new[] { new ChangedRange(2, 3, 2, 3) }));
@@ -69,19 +69,19 @@ public sealed class ChangeSnapshotTests
             Assert.That(snapshot.IsChanged("source.cs", 5), Is.False);
             Assert.That(snapshot.IsChanged("new file.cs", 2), Is.True);
             Assert.That(snapshot.Files[0].Ranges, Is.EqualTo(new[] { new ChangedRange(0, 0, 1, 2) }));
-            Assert.That(snapshot.ReadSource("new file.cs", 1, 2), Is.EqualTo("1: new\n2: content"));
+            Assert.That((await snapshot.ReadSourceAsync("new file.cs", 1, 2)), Is.EqualTo("1: new\n2: content"));
         });
-        snapshot.AssertUnchanged();
+        await snapshot.AssertUnchangedAsync();
     }
 
     [Test]
-    public void StagedEditCancelledByWorkingTreeProducesZeroReview()
+    public async Task StagedEditCancelledByWorkingTreeProducesZeroReview()
     {
         Write("source.cs", "changed\n");
-        Git("add", "source.cs");
+        await Git("add", "source.cs");
         Write("source.cs", "one\ntwo\nthree\nfour\nfive\n");
         var logs = new List<string>();
-        var snapshot = new AnalysisContext(root, new ReviewOptions { Base = baseline }, logs.Add).Changes;
+        var snapshot = (await new AnalysisContext(root, new ReviewOptions { Base = baseline }, logs.Add).GetChangesAsync());
         Assert.That(snapshot.Files, Is.Empty);
         Assert.That(logs, Is.EqualTo(new[]
         {
@@ -93,18 +93,18 @@ public sealed class ChangeSnapshotTests
     }
 
     [Test]
-    public void BranchScopeSummaryIsEmittedOnlyOnceWhenLazySnapshotResolves()
+    public async Task BranchScopeSummaryIsEmittedOnlyOnceWhenLazySnapshotResolves()
     {
         Write("source.cs", "one\nstaged\nthree\nfour\nfive\n");
-        Git("add", "source.cs");
+        await Git("add", "source.cs");
         Write("source.cs", "one\nstaged\nunstaged\nfour\nfive\n");
         Write("new.cs", "untracked\n");
         var logs = new List<string>();
         var context = new AnalysisContext(root, new ReviewOptions { Scope = "branch", Base = baseline }, logs.Add);
-        context.AssertUnchanged();
+        await context.AssertUnchangedAsync();
         Assert.That(logs, Is.Empty);
 
-        var snapshot = context.Changes;
+        var snapshot = (await context.GetChangesAsync());
         Assert.That(snapshot.Files.Select(file => file.Path), Is.EqualTo(new[] { "new.cs", "source.cs" }));
         Assert.That(logs, Is.EqualTo(new[]
         {
@@ -112,18 +112,18 @@ public sealed class ChangeSnapshotTests
                 + "local edits=included (staged, unstaged, nonignored untracked); files=2; hunks=2."
         }));
 
-        Assert.That(context.Changes, Is.SameAs(snapshot));
-        context.AssertUnchanged();
+        Assert.That((await context.GetChangesAsync()), Is.SameAs(snapshot));
+        await context.AssertUnchangedAsync();
         Assert.That(logs, Has.Count.EqualTo(1));
     }
 
     [Test]
-    public void RenamesAndDeletionsPreserveOldPathsAndPureDeletionAnchors()
+    public async Task RenamesAndDeletionsPreserveOldPathsAndPureDeletionAnchors()
     {
-        Git("mv", "unchanged.cs", "renamed space.cs");
+        await Git("mv", "unchanged.cs", "renamed space.cs");
         Write("renamed space.cs", "unchanged needle\nsecond\nthird\n");
         Write("source.cs", "one\ntwo\nfour\nfive\n");
-        var snapshot = Snapshot();
+        var snapshot = (await Snapshot());
         var rename = snapshot.Files.Single(file => file.Status == "R");
         Assert.Multiple(() =>
         {
@@ -137,85 +137,85 @@ public sealed class ChangeSnapshotTests
             Assert.That(snapshot.IsChanged("source.cs", 2), Is.True);
             Assert.That(snapshot.IsChanged("source.cs", 3), Is.False);
         });
-        Git("rm", "--force", "source.cs");
-        snapshot = Snapshot();
+        await Git("rm", "--force", "source.cs");
+        snapshot = (await Snapshot());
         Assert.That(snapshot.Files.Single(file => file.Path == "source.cs").IsDeleted, Is.True);
         Assert.That(snapshot.IsChanged("source.cs", 4), Is.True);
-        Assert.That(snapshot.ReadSource("source.cs", 2, 2, "base"), Is.EqualTo("2: two\n3: three"));
-        Assert.Throws<InvalidOperationException>(() => snapshot.ReadSource("source.cs", 1, 1));
+        Assert.That((await snapshot.ReadSourceAsync("source.cs", 2, 2, "base")), Is.EqualTo("2: two\n3: three"));
+        Assert.ThrowsAsync<InvalidOperationException>(async () => await snapshot.ReadSourceAsync("source.cs", 1, 1));
     }
 
     [Test]
-    public void SubfolderPathsAreTargetRelativeWhileSourcesAreRepositoryRelative()
+    public async Task SubfolderPathsAreTargetRelativeWhileSourcesAreRepositoryRelative()
     {
         Write("nested folder/inside.cs", "inside\n");
-        Commit("nested baseline");
-        var nestedBase = Git("rev-parse", "HEAD").Trim();
+        await Commit("nested baseline");
+        var nestedBase = (await Git("rev-parse", "HEAD")).Trim();
         Write("nested folder/inside.cs", "inside changed\n");
         Write("source.cs", "outside changed\n");
         var target = Path.Combine(root, "nested folder");
-        var snapshot = new AnalysisContext(target, new ReviewOptions { Base = nestedBase }).Changes;
-        Assert.Multiple(() =>
+        var snapshot = (await new AnalysisContext(target, new ReviewOptions { Base = nestedBase }).GetChangesAsync());
+        await Assert.MultipleAsync(async () =>
         {
             Assert.That(snapshot.Files.Select(file => file.Path), Is.EqualTo(new[] { "nested folder/inside.cs" }));
             Assert.That(snapshot.ToRepositoryPath("inside.cs"), Is.EqualTo("nested folder/inside.cs"));
             Assert.That(snapshot.ToRepositoryPath(Path.Combine(target, "inside.cs")), Is.EqualTo("nested folder/inside.cs"));
             Assert.That(snapshot.IsChanged("inside.cs", 1), Is.True);
-            Assert.That(snapshot.ReadSource("nested folder/inside.cs", 1, 1), Is.EqualTo("1: inside changed"));
+            Assert.That((await snapshot.ReadSourceAsync("nested folder/inside.cs", 1, 1)), Is.EqualTo("1: inside changed"));
         });
-        Assert.Throws<InvalidOperationException>(() => snapshot.ReadSource("source.cs", 1, 1));
+        Assert.ThrowsAsync<InvalidOperationException>(async () => await snapshot.ReadSourceAsync("source.cs", 1, 1));
         Assert.Throws<InvalidOperationException>(() => snapshot.ToRepositoryPath(Path.Combine(root, "source.cs")));
-        Assert.Throws<InvalidOperationException>(() => snapshot.ReadSource("inside.cs", 1, 1));
+        Assert.ThrowsAsync<InvalidOperationException>(async () => await snapshot.ReadSourceAsync("inside.cs", 1, 1));
     }
 
     [Test]
-    public void SourceToolsReadUnchangedSourceAndBoundTheirResults()
+    public async Task SourceToolsReadUnchangedSourceAndBoundTheirResults()
     {
         Write("source.cs", "changed\n");
         Write("many.cs", string.Concat(Enumerable.Repeat("needle\n", 45)));
-        var snapshot = Snapshot();
-        Assert.That(snapshot.ReadSource("unchanged.cs", 1, 2), Is.EqualTo("1: unchanged needle\n2: second"));
-        Assert.That(snapshot.ReadSource("source.cs", 1, 1, "base"), Is.EqualTo("1: one"));
-        var matches = snapshot.SearchSource("needle", 2).Split('\n');
+        var snapshot = (await Snapshot());
+        Assert.That((await snapshot.ReadSourceAsync("unchanged.cs", 1, 2)), Is.EqualTo("1: unchanged needle\n2: second"));
+        Assert.That((await snapshot.ReadSourceAsync("source.cs", 1, 1, "base")), Is.EqualTo("1: one"));
+        var matches = (await snapshot.SearchSourceAsync("needle", 2)).Split('\n');
         Assert.That(matches, Has.Length.EqualTo(3));
-        Assert.Multiple(() =>
+        await Assert.MultipleAsync(async () =>
         {
             Assert.That(matches[0], Is.EqualTo("many.cs:1: needle"));
             Assert.That(matches[1], Is.EqualTo("many.cs:2: needle"));
             Assert.That(matches[2], Does.StartWith("[incomplete:"));
-            Assert.That(snapshot.SearchSource("no-such-token"), Is.EqualTo("No matches."));
+            Assert.That((await snapshot.SearchSourceAsync("no-such-token")), Is.EqualTo("No matches."));
         });
-        Assert.Throws<InvalidOperationException>(() => snapshot.ReadSource("source.cs", 1, 201));
-        Assert.Throws<InvalidOperationException>(() => snapshot.ReadSource("source.cs", 0, 1));
-        Assert.Throws<InvalidOperationException>(() => snapshot.ReadSource("source.cs", 2, 1));
-        Assert.Throws<InvalidOperationException>(() => snapshot.ReadSource("source.cs", 1, 1, "worktree"));
-        Assert.Throws<InvalidOperationException>(() => snapshot.SearchSource("needle", 41));
+        Assert.ThrowsAsync<InvalidOperationException>(async () => await snapshot.ReadSourceAsync("source.cs", 1, 201));
+        Assert.ThrowsAsync<InvalidOperationException>(async () => await snapshot.ReadSourceAsync("source.cs", 0, 1));
+        Assert.ThrowsAsync<InvalidOperationException>(async () => await snapshot.ReadSourceAsync("source.cs", 2, 1));
+        Assert.ThrowsAsync<InvalidOperationException>(async () => await snapshot.ReadSourceAsync("source.cs", 1, 1, "worktree"));
+        Assert.ThrowsAsync<InvalidOperationException>(async () => await snapshot.SearchSourceAsync("needle", 41));
     }
 
     [Test]
-    public void SourceByteLimitsFailExplicitlyRatherThanTruncating()
+    public async Task SourceByteLimitsFailExplicitlyRatherThanTruncating()
     {
         Write("large.cs", new string('é', 17000) + "\n");
-        var snapshot = Snapshot();
-        Assert.Throws<InvalidOperationException>(() => snapshot.ReadSource("large.cs", 1, 1));
-        var search = snapshot.SearchSource("é");
+        var snapshot = (await Snapshot());
+        Assert.ThrowsAsync<InvalidOperationException>(async () => await snapshot.ReadSourceAsync("large.cs", 1, 1));
+        var search = (await snapshot.SearchSourceAsync("é"));
         Assert.That(search, Does.Contain("[incomplete:"));
         Assert.That(Encoding.UTF8.GetByteCount(search), Is.LessThanOrEqualTo(ChangeSnapshot.MaxSourceResponseBytes));
     }
 
     [Test]
-    public void BinaryChangesAreExposedButCannotBeReadAsSource()
+    public async Task BinaryChangesAreExposedButCannotBeReadAsSource()
     {
         File.WriteAllBytes(Path.Combine(root, "binary.dat"), new byte[] { 0, 1, 2, 255 });
-        var snapshot = Snapshot();
+        var snapshot = (await Snapshot());
         Assert.That(snapshot.Files.Single().Path, Is.EqualTo("binary.dat"));
         Assert.That(snapshot.Files.Single().IsBinary, Is.True);
-        Assert.Throws<InvalidOperationException>(() => snapshot.ReadSource("binary.dat", 1, 1));
-        Assert.That(snapshot.SearchSource("needle"), Does.Contain("[incomplete:"));
+        Assert.ThrowsAsync<InvalidOperationException>(async () => await snapshot.ReadSourceAsync("binary.dat", 1, 1));
+        Assert.That((await snapshot.SearchSourceAsync("needle")), Does.Contain("[incomplete:"));
     }
 
     [Test]
-    public void UnsafeAndSensitiveSourceRequestsAreRejected()
+    public async Task UnsafeAndSensitiveSourceRequestsAreRejected()
     {
         Write(".gitignore", "ignored.cs\n");
         Write("ignored.cs", "ignored needle\n");
@@ -223,27 +223,28 @@ public sealed class ChangeSnapshotTests
         Write(".env.production", "SECRET=needle\n");
         Write("bin/generated.cs", "generated needle\n");
         Write("private.key", "secret needle\n");
-        var snapshot = Snapshot();
+        var snapshot = (await Snapshot());
         foreach (var path in new[] { "../outside", ".git/config", ".env", ".env.production", "private.key", "bin/generated.cs", "ignored.cs" })
-            Assert.Throws<InvalidOperationException>(() => snapshot.ReadSource(path, 1, 1), path);
-        Assert.That(snapshot.SearchSource("needle"), Is.EqualTo("unchanged.cs:1: unchanged needle"));
+            Assert.ThrowsAsync<InvalidOperationException>(async () => await snapshot.ReadSourceAsync(path, 1, 1), path);
+        Assert.That((await snapshot.SearchSourceAsync("needle")), Is.EqualTo("unchanged.cs:1: unchanged needle"));
         Assert.Throws<InvalidOperationException>(() => snapshot.ToRepositoryPath("../source.cs"));
-        Assert.Throws<InvalidOperationException>(() => snapshot.ReadSource(Path.Combine(root, "source.cs"), 1, 1));
+        Assert.ThrowsAsync<InvalidOperationException>(async () => await snapshot.ReadSourceAsync(Path.Combine(root, "source.cs"), 1, 1));
         if (OperatingSystem.IsWindows())
-            Assert.Throws<InvalidOperationException>(() => snapshot.ReadSource("source.cs:stream", 1, 1));
+            Assert.ThrowsAsync<InvalidOperationException>(async () => await snapshot.ReadSourceAsync("source.cs:stream", 1, 1));
     }
 
     [Test]
-    public void ReparsePointTraversalIsRejectedBeforeSourceIsRead()
+    public async Task ReparsePointTraversalIsRejectedBeforeSourceIsRead()
     {
         var linked = Path.Combine(root, "linked");
         var actual = Path.Combine(root, "actual");
         Directory.CreateDirectory(actual);
         Write("actual/linked.cs", "must not traverse\n");
-        var snapshot = Snapshot();
+        var snapshot = (await Snapshot());
         if (OperatingSystem.IsWindows())
         {
-            var junction = commands.Run(root, "cmd.exe", "/c", "mklink", "/J", linked, actual);
+            var junction = await commands.RunAsync(
+                root, "cmd.exe", ["/c", "mklink", "/J", linked, actual]);
             Assert.That(junction.ExitCode, Is.EqualTo(0), junction.Error);
         }
         else
@@ -252,10 +253,10 @@ public sealed class ChangeSnapshotTests
         }
         try
         {
-            Assert.Throws<InvalidOperationException>(() => snapshot.ReadSource("linked/linked.cs", 1, 1));
+            Assert.ThrowsAsync<InvalidOperationException>(async () => await snapshot.ReadSourceAsync("linked/linked.cs", 1, 1));
             Assert.Throws<InvalidOperationException>(() => snapshot.ToRepositoryPath("linked/linked.cs"));
-            Assert.Throws<InvalidOperationException>(() =>
-                _ = new AnalysisContext(linked, new ReviewOptions { Base = baseline }).Changes);
+            Assert.ThrowsAsync<InvalidOperationException>(async () =>
+                _ = (await new AnalysisContext(linked, new ReviewOptions { Base = baseline }).GetChangesAsync()));
         }
         finally
         {
@@ -264,16 +265,16 @@ public sealed class ChangeSnapshotTests
     }
 
     [Test]
-    public void GitPathProtocolPreservesSpacesUnicodeAndPathspecMetacharacters()
+    public async Task GitPathProtocolPreservesSpacesUnicodeAndPathspecMetacharacters()
     {
         Write("unicode λ [1].cs", "initial\n");
-        var nameBase = Commit("names");
+        var nameBase = (await Commit("names"));
         Write("unicode λ [1].cs", "modified\n");
         Write("new [2] space.cs", "untracked\n");
-        var snapshot = new AnalysisContext(root, new ReviewOptions { Base = nameBase }).Changes;
+        var snapshot = (await new AnalysisContext(root, new ReviewOptions { Base = nameBase }).GetChangesAsync());
         Assert.That(snapshot.Files.Select(file => file.Path),
             Is.EqualTo(new[] { "new [2] space.cs", "unicode λ [1].cs" }));
-        Assert.That(snapshot.ReadSource("unicode λ [1].cs", 1, 1), Is.EqualTo("1: modified"));
+        Assert.That((await snapshot.ReadSourceAsync("unicode λ [1].cs", 1, 1)), Is.EqualTo("1: modified"));
         Assert.That(snapshot.Files.Single(file => file.Status == "M").Patch, Does.Contain("+modified"));
     }
 
@@ -281,37 +282,37 @@ public sealed class ChangeSnapshotTests
     public void PatchLimitFailsExplicitlyWithoutReturningAPartialSnapshot()
     {
         Write("over-limit.cs", new string('x', ChangeSnapshot.MaxPatchBytes) + "\n");
-        var failure = Assert.Throws<InvalidOperationException>(() => _ = Snapshot());
+        var failure = Assert.ThrowsAsync<InvalidOperationException>(async () => _ = (await Snapshot()));
         Assert.That(failure!.Message, Does.Contain("no patch was truncated"));
     }
 
     [Test]
-    public void MergeBaseExcludesChangesMadeOnlyOnTheBaseBranch()
+    public async Task MergeBaseExcludesChangesMadeOnlyOnTheBaseBranch()
     {
-        Git("checkout", "--quiet", "-b", "feature");
+        await Git("checkout", "--quiet", "-b", "feature");
         Write("source.cs", "feature\n");
-        var feature = Commit("feature");
-        Git("checkout", "--quiet", "trunk");
+        var feature = (await Commit("feature"));
+        await Git("checkout", "--quiet", "trunk");
         Write("base-only.cs", "base branch\n");
-        Commit("base diverged");
-        Git("checkout", "--quiet", "feature");
-        var snapshot = new AnalysisContext(root, new ReviewOptions { Base = "trunk" }).Changes;
+        await Commit("base diverged");
+        await Git("checkout", "--quiet", "feature");
+        var snapshot = (await new AnalysisContext(root, new ReviewOptions { Base = "trunk" }).GetChangesAsync());
         Assert.That(snapshot.BaseCommit, Is.EqualTo(baseline));
         Assert.That(snapshot.HeadCommit, Is.EqualTo(feature));
         Assert.That(snapshot.Files.Select(file => file.Path), Is.EqualTo(new[] { "source.cs" }));
     }
 
     [Test]
-    public void EmptyAndNoFinalNewlineFilesHaveExactRanges()
+    public async Task EmptyAndNoFinalNewlineFilesHaveExactRanges()
     {
         Write("empty.cs", "");
         Write("no-newline.cs", "last line");
-        var snapshot = Snapshot();
+        var snapshot = (await Snapshot());
         Assert.That(snapshot.Files.Select(file => file.Path), Is.EqualTo(new[] { "empty.cs", "no-newline.cs" }));
         Assert.That(snapshot.Files[0].Ranges, Is.Empty);
         Assert.That(snapshot.Files[1].Ranges, Is.EqualTo(new[] { new ChangedRange(0, 0, 1, 1) }));
         Assert.That(snapshot.Files[1].Patch, Does.Contain("+last line\n\\ No newline at end of file\n"));
-        Assert.That(snapshot.ReadSource("no-newline.cs", 1, 1), Is.EqualTo("1: last line"));
+        Assert.That((await snapshot.ReadSourceAsync("no-newline.cs", 1, 1)), Is.EqualTo("1: last line"));
         Assert.That(snapshot.IsChanged("empty.cs", 0), Is.True);
     }
 
@@ -320,144 +321,153 @@ public sealed class ChangeSnapshotTests
     [TestCase("new")]
     [TestCase("index")]
     [TestCase("head")]
-    public void SourceAndGitChangesInvalidateTheSnapshot(string edit)
+    public async Task SourceAndGitChangesInvalidateTheSnapshot(string edit)
     {
         Write("source.cs", "initial change\n");
-        var snapshot = Snapshot();
+        var snapshot = (await Snapshot());
         switch (edit)
         {
             case "changed": Write("source.cs", "later change\n"); break;
             case "unchanged": Write("unchanged.cs", "edited unchanged\n"); break;
             case "new": Write("later.cs", "new\n"); break;
-            case "index": Git("add", "source.cs"); break;
-            case "head": Commit("moved head"); break;
+            case "index": await Git("add", "source.cs"); break;
+            case "head": await Commit("moved head"); break;
         }
-        Assert.Throws<InvalidOperationException>(snapshot.AssertUnchanged);
+        Assert.ThrowsAsync<InvalidOperationException>(
+            async () => await snapshot.AssertUnchangedAsync());
         if (edit == "unchanged")
-            Assert.Throws<InvalidOperationException>(() => snapshot.ReadSource("unchanged.cs", 1, 1));
+            Assert.ThrowsAsync<InvalidOperationException>(async () => await snapshot.ReadSourceAsync("unchanged.cs", 1, 1));
     }
 
     [Test]
-    public void FingerprintsDetectSameLengthContentChangesWithRestoredTimestamp()
+    public async Task FingerprintsDetectSameLengthContentChangesWithRestoredTimestamp()
     {
-        var snapshot = Snapshot();
+        var snapshot = (await Snapshot());
         var path = Path.Combine(root, "unchanged.cs");
         var time = File.GetLastWriteTimeUtc(path);
         Write("unchanged.cs", "UNCHANGED needle\nsecond\n");
         File.SetLastWriteTimeUtc(path, time);
-        Assert.Throws<InvalidOperationException>(snapshot.AssertUnchanged);
-        Assert.Throws<InvalidOperationException>(() => snapshot.SearchSource("needle"));
+        Assert.ThrowsAsync<InvalidOperationException>(
+            async () => await snapshot.AssertUnchangedAsync());
+        Assert.ThrowsAsync<InvalidOperationException>(async () => await snapshot.SearchSourceAsync("needle"));
     }
 
     [Test]
-    public void DefaultBaseUsesRemoteSymbolicHeadWithoutGuessingBranchNames()
+    public async Task DefaultBaseUsesRemoteSymbolicHeadWithoutGuessingBranchNames()
     {
-        Git("remote", "add", "upstream", "https://github.com/example/repository.git");
-        Git("update-ref", "refs/remotes/upstream/develop", baseline);
-        Git("symbolic-ref", "refs/remotes/upstream/HEAD", "refs/remotes/upstream/develop");
+        await Git("remote", "add", "upstream", "https://github.com/example/repository.git");
+        await Git("update-ref", "refs/remotes/upstream/develop", baseline);
+        await Git("symbolic-ref", "refs/remotes/upstream/HEAD", "refs/remotes/upstream/develop");
         Write("source.cs", "changed\n");
-        var snapshot = new AnalysisContext(root, new ReviewOptions()).Changes;
+        var snapshot = (await new AnalysisContext(root, new ReviewOptions()).GetChangesAsync());
         Assert.That(snapshot.BaseCommit, Is.EqualTo(baseline));
         Assert.That(snapshot.Files.Select(file => file.Path), Is.EqualTo(new[] { "source.cs" }));
-        Git("remote", "add", "other", "https://github.com/example/other.git");
-        Assert.Throws<InvalidOperationException>(() => _ = new AnalysisContext(root, new ReviewOptions()).Changes);
-        Git("config", "branch.trunk.remote", "upstream");
-        Assert.That(new AnalysisContext(root, new ReviewOptions()).Changes.BaseCommit, Is.EqualTo(baseline));
+        await Git("remote", "add", "other", "https://github.com/example/other.git");
+        Assert.ThrowsAsync<InvalidOperationException>(async () => _ = (await new AnalysisContext(root, new ReviewOptions()).GetChangesAsync()));
+        await Git("config", "branch.trunk.remote", "upstream");
+        Assert.That((await new AnalysisContext(root, new ReviewOptions()).GetChangesAsync()).BaseCommit, Is.EqualTo(baseline));
     }
 
     [Test]
-    public void MissingBaseAndMissingDefaultHeadFailWithActionableMessages()
+    public async Task MissingBaseAndMissingDefaultHeadFailWithActionableMessages()
     {
-        var missing = Assert.Throws<InvalidOperationException>(() =>
-            _ = new AnalysisContext(root, new ReviewOptions { Base = "not-a-real-ref" }).Changes);
+        var missing = Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            _ = (await new AnalysisContext(root, new ReviewOptions { Base = "not-a-real-ref" }).GetChangesAsync()));
         Assert.That(missing!.Message, Does.Contain("--base"));
-        Git("remote", "add", "upstream", "https://github.com/example/repository.git");
-        var missingHead = Assert.Throws<InvalidOperationException>(() => _ = new AnalysisContext(root, new ReviewOptions()).Changes);
+        await Git("remote", "add", "upstream", "https://github.com/example/repository.git");
+        var missingHead = Assert.ThrowsAsync<InvalidOperationException>(async () => _ = (await new AnalysisContext(root, new ReviewOptions()).GetChangesAsync()));
         Assert.That(missingHead!.Message, Does.Contain("git remote set-head"));
     }
 
     [Test]
-    public void LinkedWorktreeUsesItsOwnHeadAndLocalEdits()
+    public async Task LinkedWorktreeUsesItsOwnHeadAndLocalEdits()
     {
         var linked = Path.Combine(root, "linked-worktree");
-        Git("worktree", "add", "-b", "linked", linked);
+        await Git("worktree", "add", "-b", "linked", linked);
         try
         {
             File.WriteAllText(Path.Combine(linked, "source.cs"), "linked edit\n", new UTF8Encoding(false));
-            var snapshot = new AnalysisContext(linked, new ReviewOptions { Base = baseline }).Changes;
+            var snapshot = (await new AnalysisContext(linked, new ReviewOptions { Base = baseline }).GetChangesAsync());
             Assert.That(snapshot.RepositoryRoot, Is.EqualTo(linked));
             Assert.That(snapshot.Files.Select(file => file.Path), Is.EqualTo(new[] { "source.cs" }));
-            Assert.That(snapshot.ReadSource("source.cs", 1, 1), Is.EqualTo("1: linked edit"));
+            Assert.That((await snapshot.ReadSourceAsync("source.cs", 1, 1)), Is.EqualTo("1: linked edit"));
         }
-        finally { Git("worktree", "remove", "--force", linked); }
+        finally { await Git("worktree", "remove", "--force", linked); }
     }
 
     [Test]
-    public void ContextStaysLazyForNonRepositoryAndFullScope()
+    public async Task ContextStaysLazyForNonRepositoryAndFullScope()
     {
         var plain = Path.Combine(root, "plain");
         Directory.CreateDirectory(plain);
         // The Git directory itself is not a worktree even though its parent is.
         var context = new AnalysisContext(Path.Combine(root, ".git"), new ReviewOptions());
-        Assert.DoesNotThrow(context.AssertUnchanged);
-        Assert.Throws<InvalidOperationException>(() => _ = context.Changes);
+        Assert.DoesNotThrowAsync(async () => await context.AssertUnchangedAsync());
+        Assert.ThrowsAsync<InvalidOperationException>(async () => _ = (await context.GetChangesAsync()));
         var full = new AnalysisContext(plain, new ReviewOptions { Scope = "full" });
         Assert.That(full.RootPath, Is.EqualTo(plain));
-        Assert.DoesNotThrow(full.AssertUnchanged);
+        Assert.DoesNotThrowAsync(async () => await full.AssertUnchangedAsync());
     }
 
     [Test]
-    public void PullRequestIsExactCleanAndRevalidatedWithoutNetwork()
+    public async Task PullRequestIsExactCleanAndRevalidatedWithoutNetwork()
     {
         Write("source.cs", "committed pr\n");
-        var head = Commit("PR change");
-        Git("remote", "add", "origin", "https://github.com/example/repository.git");
+        var head = (await Commit("PR change"));
+        await Git("remote", "add", "origin", "https://github.com/example/repository.git");
         var runner = new PullRequestCommands(commands, Metadata(baseline, head));
         var logs = new List<string>();
-        var snapshot = new ChangeSnapshot(root, new ReviewOptions { Scope = "pr", Pr = "12" }, runner, logs.Add);
+        var snapshot = await ChangeSnapshot.CaptureAsync(
+            root, new ReviewOptions { Scope = "pr", Pr = "12" },
+            runner, logs.Add, CancellationToken.None);
         Assert.That(logs, Is.EqualTo(new[]
         {
             $"Change-scoped review: mode=pr; scope=pr; base={baseline}; head={head}; "
                 + "local edits=excluded (exact PR head; clean target required); files=1; hunks=1."
         }));
-        Assert.Multiple(() =>
+        await Assert.MultipleAsync(async () =>
         {
             Assert.That(snapshot.BaseCommit, Is.EqualTo(baseline));
             Assert.That(snapshot.HeadCommit, Is.EqualTo(head));
             Assert.That(snapshot.Files.Select(file => file.Path), Is.EqualTo(new[] { "source.cs" }));
-            Assert.That(snapshot.ReadSource("source.cs", 1, 1), Is.EqualTo("1: committed pr"));
+            Assert.That((await snapshot.ReadSourceAsync("source.cs", 1, 1)), Is.EqualTo("1: committed pr"));
             Assert.That(runner.GhCalls, Is.EqualTo(2));
             Assert.That(runner.FetchCalls, Is.EqualTo(0));
         });
         runner.Metadata = Metadata(head, head);
-        Assert.Throws<InvalidOperationException>(snapshot.AssertUnchanged);
+        Assert.ThrowsAsync<InvalidOperationException>(
+            async () => await snapshot.AssertUnchangedAsync());
     }
 
     [Test]
-    public void PullRequestRejectsWrongHeadDirtyTargetAndWrongRepository()
+    public async Task PullRequestRejectsWrongHeadDirtyTargetAndWrongRepository()
     {
-        Git("remote", "add", "origin", "https://github.com/example/repository.git");
+        await Git("remote", "add", "origin", "https://github.com/example/repository.git");
         var runner = new PullRequestCommands(commands, Metadata(baseline, new string('a', 40)));
-        Assert.That(Assert.Throws<InvalidOperationException>(() =>
-            _ = new ChangeSnapshot(root, new ReviewOptions { Scope = "pr", Pr = "12" }, runner))!.Message, Does.Contain("exact head"));
+        Assert.That(Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            await ChangeSnapshot.CaptureAsync(root, new ReviewOptions { Scope = "pr", Pr = "12" },
+                runner, null, CancellationToken.None))!.Message, Does.Contain("exact head"));
         runner.Metadata = Metadata(baseline, baseline);
         Write("untracked.cs", "local\n");
-        Assert.That(Assert.Throws<InvalidOperationException>(() =>
-            _ = new ChangeSnapshot(root, new ReviewOptions { Scope = "pr", Pr = "12" }, runner))!.Message, Does.Contain("clean target"));
+        Assert.That(Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            await ChangeSnapshot.CaptureAsync(root, new ReviewOptions { Scope = "pr", Pr = "12" },
+                runner, null, CancellationToken.None))!.Message, Does.Contain("clean target"));
         File.Delete(Path.Combine(root, "untracked.cs"));
-        Git("remote", "set-url", "origin", "https://github.com/other/repository.git");
-        Assert.That(Assert.Throws<InvalidOperationException>(() =>
-            _ = new ChangeSnapshot(root, new ReviewOptions { Scope = "pr", Pr = "12" }, runner))!.Message, Does.Contain("not a remote"));
+        await Git("remote", "set-url", "origin", "https://github.com/other/repository.git");
+        Assert.That(Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            await ChangeSnapshot.CaptureAsync(root, new ReviewOptions { Scope = "pr", Pr = "12" },
+                runner, null, CancellationToken.None))!.Message, Does.Contain("not a remote"));
         Assert.That(runner.FetchCalls, Is.EqualTo(0));
     }
 
     [Test]
-    public void PullRequestMissingBaseFetchesOnlyTheExactObjectAndFailsExplicitly()
+    public async Task PullRequestMissingBaseFetchesOnlyTheExactObjectAndFailsExplicitly()
     {
-        Git("remote", "add", "origin", "https://github.com/example/repository.git");
+        await Git("remote", "add", "origin", "https://github.com/example/repository.git");
         var runner = new PullRequestCommands(commands, Metadata(new string('a', 40), baseline));
-        Assert.That(Assert.Throws<InvalidOperationException>(() =>
-            _ = new ChangeSnapshot(root, new ReviewOptions { Scope = "pr", Pr = "12" }, runner))!.Message, Does.Contain("exact PR commit"));
+        Assert.That(Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            await ChangeSnapshot.CaptureAsync(root, new ReviewOptions { Scope = "pr", Pr = "12" },
+                runner, null, CancellationToken.None))!.Message, Does.Contain("exact PR commit"));
         Assert.That(runner.FetchCalls, Is.EqualTo(1));
         Assert.That(runner.LastFetchArguments, Is.EqualTo(new[]
         {
@@ -542,7 +552,7 @@ public sealed class ChangeSnapshotTests
             Assert.Throws<ArgumentException>(options.Validate);
     }
 
-    private ChangeSnapshot Snapshot() => new AnalysisContext(root, new ReviewOptions { Base = baseline }, _ => { }).Changes;
+    private async Task<ChangeSnapshot> Snapshot() => (await new AnalysisContext(root, new ReviewOptions { Base = baseline }, _ => { }).GetChangesAsync());
 
     private void Write(string path, string text)
     {
@@ -551,16 +561,16 @@ public sealed class ChangeSnapshotTests
         File.WriteAllText(fullPath, text, new UTF8Encoding(false));
     }
 
-    private string Commit(string message)
+    private async Task<string> Commit(string message)
     {
-        Git("add", "--all");
-        Git("commit", "--quiet", "-m", message);
-        return Git("rev-parse", "HEAD").Trim();
+        await Git("add", "--all");
+        await Git("commit", "--quiet", "-m", message);
+        return (await Git("rev-parse", "HEAD")).Trim();
     }
 
-    private string Git(params string[] arguments)
+    private async Task<string> Git(params string[] arguments)
     {
-        var result = commands.Run(root, "git", arguments);
+        var result = (await commands.RunAsync(root, "git", arguments));
         Assert.That(result.ExitCode, Is.EqualTo(0), $"git {string.Join(' ', arguments)}: {result.Error}");
         return result.Output;
     }
@@ -583,20 +593,23 @@ public sealed class ChangeSnapshotTests
         public int FetchCalls { get; private set; }
         public string[]? LastFetchArguments { get; private set; }
 
-        public override ChangeCommandResult Run(string directory, string executable, params string[] arguments)
+        public override ValueTask<ChangeCommandResult> RunAsync(
+            string directory, string executable, IReadOnlyList<string> arguments,
+            CancellationToken cancellationToken = default)
         {
             if (executable == "gh")
             {
                 GhCalls++;
-                return new(0, Metadata, "");
+                return ValueTask.FromResult(new ChangeCommandResult(0, Metadata, ""));
             }
             if (arguments.Contains("fetch"))
             {
                 FetchCalls++;
-                LastFetchArguments = arguments;
-                return new(1, "", "fixture: exact object is unavailable");
+                LastFetchArguments = arguments.ToArray();
+                return ValueTask.FromResult(
+                    new ChangeCommandResult(1, "", "fixture: exact object is unavailable"));
             }
-            return git.Run(directory, executable, arguments);
+            return git.RunAsync(directory, executable, arguments, cancellationToken);
         }
     }
 }

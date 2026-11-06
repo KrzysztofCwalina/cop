@@ -49,7 +49,7 @@ public static class AssemblyApiReader
             Language: "csharp",
             Types: types,
             Statements: [],
-            RawText: "")
+            RawText: string.Empty)
         { Namespace = fileNamespace };
     }
 

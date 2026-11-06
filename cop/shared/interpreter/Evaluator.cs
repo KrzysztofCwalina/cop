@@ -19,11 +19,29 @@ public sealed class Evaluator
     private readonly string? _filePath;
     private Action<string>? _traceLog;
 
+    /// <summary>
+    /// The root environment containing built-ins and loaded declarations.
+    /// </summary>
     public Environment GlobalEnvironment => _globalEnv;
+    /// <summary>
+    /// The registry used to resolve and invoke foreign functions.
+    /// </summary>
     public ForeignFunctionRegistry FFI => _ffi;
+    /// <summary>
+    /// An optional sink for per-expression evaluation diagnostics.
+    /// </summary>
     public Action<string>? TraceLog { get => _traceLog; set => _traceLog = value; }
+    /// <summary>
+    /// The optional registry used for runtime type resolution and validation.
+    /// </summary>
     public TypeRegistry? TypeRegistry { get; set; }
+    /// <summary>
+    /// An optional notification invoked after a let binding is evaluated.
+    /// </summary>
     public Action<LetDecl>? LetBindingEvaluated { get; set; }
+    /// <summary>
+    /// An optional notification invoked when an entry command finishes.
+    /// </summary>
     public Action? EntryCommandCompleted { get; set; }
 
     /// <summary>
@@ -51,11 +69,23 @@ public sealed class Evaluator
     /// <summary>
     /// Evaluate a module: registers all top-level declarations in the global environment.
     /// </summary>
-    public void EvalModule(ModuleNode module)
+    public async ValueTask EvalModuleAsync(ModuleNode module, CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         foreach (Declaration decl in module.Declarations)
         {
-            EvalDeclaration(decl);
+            if (decl is LetDecl ld)
+            {
+                CopValue value = ld.Value is InterpolatedStringExpr
+                    && !_globalEnv.TryLookup(ImplicitItemVariable, out _)
+                    ? CreateLetBinding(ld, _globalEnv)
+                    : (await EvalLetBindingAsync(ld, _globalEnv, cancellationToken: cancellationToken));
+                _globalEnv.Define(ld.Name, value);
+            }
+            else
+            {
+                RegisterDeclaration(decl);
+            }
         }
     }
 
@@ -72,7 +102,7 @@ public sealed class Evaluator
                 continue; // deferred to EvalLetBindings
             }
 
-            EvalDeclaration(decl);
+            RegisterDeclaration(decl);
         }
     }
 
@@ -81,8 +111,9 @@ public sealed class Evaluator
     /// Called after providers have registered their data.
     /// The bindings are only evaluated when first accessed.
     /// </summary>
-    public void EvalLetBindings(ModuleNode module, Dictionary<string, CopValue>? originalCallables = null)
+    public async ValueTask EvalLetBindingsAsync(ModuleNode module, Dictionary<string, CopValue>? originalCallables = null, CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         foreach (Declaration decl in module.Declarations)
         {
             if (decl is LetDecl ld)
@@ -108,7 +139,7 @@ public sealed class Evaluator
                         _globalEnv.Define(ld.Name, originalCallable);
                     }
 
-                    CopValue value = EvalLetBinding(ld, _globalEnv);
+                    CopValue value = (await EvalLetBindingAsync(ld, _globalEnv, cancellationToken: cancellationToken));
                     _globalEnv.Define(ld.Name, value);
                 }
                 else
@@ -119,18 +150,23 @@ public sealed class Evaluator
         }
     }
 
-    public CopValue EvalLetBinding(LetDecl declaration, Environment environment)
+    /// <summary>
+    /// Evaluates a let declaration using its declared type and supplied environment.
+    /// </summary>
+    public async ValueTask<CopValue> EvalLetBindingAsync(LetDecl declaration, Environment environment, CancellationToken cancellationToken = default)
     {
-        CopValue value = Eval(declaration.Value, environment);
+        CopValue value = (await EvalAsync(declaration.Value, environment, cancellationToken: cancellationToken));
         LetBindingEvaluated?.Invoke(declaration);
         return value;
     }
 
     internal CopThunk CreateLetBinding(LetDecl declaration, Environment environment) =>
-        CreateBinding(declaration.Value, environment, scope => EvalLetBinding(declaration, scope));
+        CreateBinding(declaration.Value, environment,
+            (scope, cancellationToken) => EvalLetBindingAsync(declaration, scope, cancellationToken));
 
     private static CopThunk CreateBinding(Expression expression, Environment environment,
-        Func<Environment, CopValue> evaluate) => new(() => evaluate(environment))
+        Func<Environment, CancellationToken, ValueTask<CopValue>> evaluate) =>
+        new(async cancellationToken => (await evaluate(environment, cancellationToken)))
     {
         ConstantExpression = expression,
         ConstantEnvironment = environment,
@@ -141,9 +177,10 @@ public sealed class Evaluator
     /// Run a named command/function from the global environment.
     /// Tries exact name first, then ALL-UPPERCASE form (since command → function uppercases names).
     /// </summary>
-    public CopValue RunCommand(string name)
+    public async ValueTask<CopValue> RunCommandAsync(string name, CancellationToken cancellationToken = default)
     {
-        if (!_globalEnv.TryLookup(name, out CopValue? value))
+        cancellationToken.ThrowIfCancellationRequested();
+        if (!_globalEnv.TryLookup(name, out CopValue value))
         {
             // Try uppercase form (command desugaring uppercases names)
             string upper = name.ToUpperInvariant();
@@ -159,21 +196,21 @@ public sealed class Evaluator
         }
 
         // Force thunks — let bindings used as runnable rules need evaluation
-        value = ForceValue(value);
+        value = (await ForceValueAsync(value, cancellationToken: cancellationToken));
 
-        _traceLog?.Invoke($"[trace] RunCommand: found '{name}' as {value?.GetType().Name}");
+        _traceLog?.Invoke($"[trace] RunCommand: found '{name}' as {value.GetType().Name}");
 
         if (value is CopFunction func && func.Declaration is not null)
         {
             _traceLog?.Invoke($"[trace] RunCommand: calling function '{func.Declaration.Name}' with body type={func.Declaration.Body?.GetType().Name}");
-            CopValue result = CallUserFunction(func, []);
+            CopValue result = (await CallUserFunctionAsync(func, [], cancellationToken: cancellationToken));
             EntryCommandCompleted?.Invoke();
             return result;
         }
 
         if (value is ICopCallable callable)
         {
-            CopValue result = callable.Invoke([], this, _globalEnv);
+            CopValue result = (await callable.InvokeAsync([], this, _globalEnv, cancellationToken: cancellationToken));
             EntryCommandCompleted?.Invoke();
             return result;
         }
@@ -186,18 +223,10 @@ public sealed class Evaluator
     // Declaration Evaluation
     // ========================================================================
 
-    private void EvalDeclaration(Declaration decl)
+    private void RegisterDeclaration(Declaration decl)
     {
         switch (decl)
         {
-            case LetDecl ld:
-                CopValue value = ld.Value is InterpolatedStringExpr
-                    && !_globalEnv.TryLookup(ImplicitItemVariable, out _)
-                    ? CreateLetBinding(ld, _globalEnv)
-                    : EvalLetBinding(ld, _globalEnv);
-                _globalEnv.Define(ld.Name, value);
-                break;
-
             case FunctionDecl fd:
                 CopFunction func = new CopFunction(fd, _globalEnv);
                 RegisterFunctionWithOverloading(fd.Name, func);
@@ -245,50 +274,51 @@ public sealed class Evaluator
     // Statement Execution
     // ========================================================================
 
-    internal void ExecStatements(List<Statement> statements, Environment env)
+    internal async ValueTask ExecStatementsAsync(List<Statement> statements, Environment env, CancellationToken cancellationToken = default)
     {
         foreach (Statement stmt in statements)
         {
-            ExecStatement(stmt, env);
+            await ExecStatementAsync(stmt, env, cancellationToken: cancellationToken);
         }
     }
 
-    internal void ExecStatement(Statement stmt, Environment env)
+    internal async ValueTask ExecStatementAsync(Statement stmt, Environment env, CancellationToken cancellationToken = default)
     {
         switch (stmt)
         {
             case LetStatement ls:
                 CopValue val = ls.Value is InterpolatedStringExpr
                     && !env.TryLookup(ImplicitItemVariable, out _)
-                    ? CreateBinding(ls.Value, env, scope => Eval(ls.Value, scope))
-                    : Eval(ls.Value, env);
+                    ? CreateBinding(ls.Value, env,
+                        (scope, cancellationToken) => EvalAsync(ls.Value, scope, cancellationToken))
+                    : (await EvalAsync(ls.Value, env, cancellationToken: cancellationToken));
                 env.Define(ls.Name, val);
                 break;
 
             case ForEachStatement fs:
-                ExecForEach(fs, env);
+                await ExecForEachAsync(fs, env, cancellationToken: cancellationToken);
                 break;
 
             case ExpressionStatement es:
-                Eval(es.Expr, env);
+                await EvalAsync(es.Expr, env, cancellationToken: cancellationToken);
                 break;
 
             case PipelineStatement ps:
-                ExecPipeline(ps, env);
+                await ExecPipelineAsync(ps, env, cancellationToken: cancellationToken);
                 break;
         }
     }
 
-    private void ExecForEach(ForEachStatement stmt, Environment env)
+    private async ValueTask ExecForEachAsync(ForEachStatement stmt, Environment env, CancellationToken cancellationToken = default)
     {
-        CopValue collection = Eval(stmt.Collection, env);
+        CopValue collection = (await EvalAsync(stmt.Collection, env, cancellationToken: cancellationToken));
         // Named subset resolution: predicate Clients(Types) used as foreach source
-        collection = TryResolveNamedSubset(collection, env);
+        collection = (await TryResolveNamedSubsetAsync(collection, env, cancellationToken: cancellationToken));
         _traceLog?.Invoke($"[trace] ExecForEach: {ExpressionRenderer.Render(stmt.Collection)}  (collection={DescribeValue(collection)}, body stmts={stmt.Body.Count})");
-        IEnumerable<CopValue> items = CoerceToEnumerable(collection);
+        IAsyncEnumerable<CopValue> items = CoerceToEnumerableAsync(collection, cancellationToken: cancellationToken);
         int count = 0;
 
-        foreach (CopValue item in items)
+        await foreach (CopValue item in items)
         {
             count++;
             Environment iterEnv = env.Extend();
@@ -300,7 +330,7 @@ public sealed class Evaluator
                 if (bodyStmt is ExpressionStatement es)
                 {
                     // In foreach, expression results are auto-printed (implicit output)
-                    CopValue? result = Eval(es.Expr, iterEnv);
+                    CopValue? result = (await EvalAsync(es.Expr, iterEnv, cancellationToken: cancellationToken));
                     if (count == 1)
                     {
                         _traceLog?.Invoke($"[trace] ExecForEach first body result: {result?.GetType().Name} = {result?.Display()?.Substring(0, Math.Min(result?.Display()?.Length ?? 0, 80))}");
@@ -308,32 +338,32 @@ public sealed class Evaluator
 
                     if (result is not CopNull && result is not null)
                     {
-                        CallPrint(result, iterEnv);
+                        await CallPrintAsync(result, iterEnv, cancellationToken: cancellationToken);
                     }
                 }
                 else
                 {
-                    ExecStatement(bodyStmt, iterEnv);
+                    await ExecStatementAsync(bodyStmt, iterEnv, cancellationToken: cancellationToken);
                 }
             }
         }
         _traceLog?.Invoke($"[trace] ExecForEach iterated {count} items");
     }
 
-    private void CallPrint(CopValue value, Environment env)
+    private async ValueTask CallPrintAsync(CopValue value, Environment env, CancellationToken cancellationToken = default)
     {
         if (env.TryLookup("print", out CopValue? printFn) && printFn is ICopCallable callable)
         {
-            callable.Invoke([value], this, env);
+            await callable.InvokeAsync([value], this, env, cancellationToken: cancellationToken);
         }
     }
 
-    private void ExecPipeline(PipelineStatement stmt, Environment env)
+    private async ValueTask ExecPipelineAsync(PipelineStatement stmt, Environment env, CancellationToken cancellationToken = default)
     {
-        CopValue source = Eval(stmt.Source, env);
-        IEnumerable<CopValue> items = CoerceToEnumerable(source);
+        CopValue source = (await EvalAsync(stmt.Source, env, cancellationToken: cancellationToken));
+        IAsyncEnumerable<CopValue> items = CoerceToEnumerableAsync(source, cancellationToken: cancellationToken);
 
-        foreach (CopValue item in items)
+        await foreach (CopValue item in items)
         {
             Environment pipeEnv = env.Extend();
             pipeEnv.Define(ImplicitItemVariable, item);
@@ -341,13 +371,13 @@ public sealed class Evaluator
             CopValue current = item;
             foreach (PipelineStage stage in stmt.Stages)
             {
-                current = Eval(stage.Expr, pipeEnv);
+                current = (await EvalAsync(stage.Expr, pipeEnv, cancellationToken: cancellationToken));
             }
 
             // Final pipeline result is auto-printed
             if (current is not CopNull && current is not null)
             {
-                CallPrint(current, pipeEnv);
+                await CallPrintAsync(current, pipeEnv, cancellationToken: cancellationToken);
             }
         }
     }
@@ -356,25 +386,29 @@ public sealed class Evaluator
     // Expression Evaluation
     // ========================================================================
 
-    public CopValue Eval(Expression expr, Environment env)
+    /// <summary>
+    /// Evaluates an expression in the supplied lexical environment.
+    /// </summary>
+    public async ValueTask<CopValue> EvalAsync(Expression expr, Environment env, CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         return expr switch
         {
             LiteralExpr lit => EvalLiteral(lit),
             IdentifierExpr id => EvalIdentifier(id, env),
-            BinaryExpr bin => EvalBinary(bin, env),
-            UnaryExpr un => EvalUnary(un, env),
-            CallExpr call => EvalCall(call, env),
-            MemberExpr mem => EvalMember(mem, env),
-            IndexExpr idx => EvalIndex(idx, env),
+            BinaryExpr bin => (await EvalBinaryAsync(bin, env, cancellationToken: cancellationToken)),
+            UnaryExpr un => (await EvalUnaryAsync(un, env, cancellationToken: cancellationToken)),
+            CallExpr call => (await EvalCallAsync(call, env, cancellationToken: cancellationToken)),
+            MemberExpr mem => (await EvalMemberAsync(mem, env, cancellationToken: cancellationToken)),
+            IndexExpr idx => (await EvalIndexAsync(idx, env, cancellationToken: cancellationToken)),
             LambdaExpr lam => new CopLambda(lam, env),
-            ConditionalExpr cond => EvalConditional(cond, env),
-            MatchExpr match => EvalMatch(match, env),
-            ListExpr list => EvalList(list, env),
-            ObjectExpr obj => EvalObject(obj, env),
-            InterpolatedStringExpr interp => EvalInterpolation(interp, env),
-            FilterExpr filter => EvalFilter(filter, env),
-            ForEachExpr fe => EvalForEachExpr(fe, env),
+            ConditionalExpr cond => (await EvalConditionalAsync(cond, env, cancellationToken: cancellationToken)),
+            MatchExpr match => (await EvalMatchAsync(match, env, cancellationToken: cancellationToken)),
+            ListExpr list => (await EvalListAsync(list, env, cancellationToken: cancellationToken)),
+            ObjectExpr obj => (await EvalObjectAsync(obj, env, cancellationToken: cancellationToken)),
+            InterpolatedStringExpr interp => (await EvalInterpolationAsync(interp, env, cancellationToken: cancellationToken)),
+            FilterExpr filter => (await EvalFilterAsync(filter, env, cancellationToken: cancellationToken)),
+            ForEachExpr fe => (await EvalForEachExprAsync(fe, env, cancellationToken: cancellationToken)),
             _ => throw new CopEvaluationException($"Unknown expression type: {expr.GetType().Name}", expr.Line, _filePath)
         };
     }
@@ -383,9 +417,9 @@ public sealed class Evaluator
     /// Evaluate a foreach used in expression position: run the loop for its side effects (the body's
     /// auto-printed results) and yield nil so it can sit as an operand of `&` or similar.
     /// </summary>
-    private CopValue EvalForEachExpr(ForEachExpr fe, Environment env)
+    private async ValueTask<CopValue> EvalForEachExprAsync(ForEachExpr fe, Environment env, CancellationToken cancellationToken = default)
     {
-        ExecForEach(fe.Loop, env);
+        await ExecForEachAsync(fe.Loop, env, cancellationToken: cancellationToken);
         return CopNull.Instance;
     }
 
@@ -410,15 +444,15 @@ public sealed class Evaluator
                 && env.TryLookup(ImplicitItemVariable, out CopValue? item)
                 && IsTemplate(thunk))
             {
-                return new CopThunk(() => thunk.ForceTemplate(() =>
+                return new CopThunk(async (forcingCancellationToken) => (await thunk.ForceTemplateAsync(async (renderCancellationToken) =>
                 {
                     Environment scope = closure.Extend();
                     // Track actual reads, so nested item scopes and constant templates stay memoized.
                     CopThunk contextualItem = new CopThunk(() => item);
                     scope.Define(ImplicitItemVariable, contextualItem);
-                    CopValue rendered = ForceValue(evaluate(scope));
+                    CopValue rendered = (await ForceValueAsync((await evaluate(scope, renderCancellationToken)), cancellationToken: renderCancellationToken));
                     return (rendered, !contextualItem.IsForced);
-                }));
+                }, cancellationToken: forcingCancellationToken)));
             }
             return value;
         }
@@ -462,30 +496,30 @@ public sealed class Evaluator
         return false;
     }
 
-    private CopValue EvalBinary(BinaryExpr bin, Environment env)
+    private async ValueTask<CopValue> EvalBinaryAsync(BinaryExpr bin, Environment env, CancellationToken cancellationToken = default)
     {
         // Short-circuit for logical operators
         if (bin.Op == BinaryOp.And)
         {
-            CopValue left = CoerceCallableToBool(ForceValue(Eval(bin.Left, env)), env);
-            return left.IsTruthy ? CoerceCallableToBool(ForceValue(Eval(bin.Right, env)), env) : left;
+            CopValue left = (await CoerceCallableToBoolAsync((await ForceValueAsync((await EvalAsync(bin.Left, env, cancellationToken: cancellationToken)), cancellationToken: cancellationToken)), env, cancellationToken: cancellationToken));
+            return (await left.IsTruthyAsync(cancellationToken)) ? (await CoerceCallableToBoolAsync((await ForceValueAsync((await EvalAsync(bin.Right, env, cancellationToken: cancellationToken)), cancellationToken: cancellationToken)), env, cancellationToken: cancellationToken)) : left;
         }
         if (bin.Op == BinaryOp.Or)
         {
-            CopValue left = CoerceCallableToBool(ForceValue(Eval(bin.Left, env)), env);
-            return left.IsTruthy ? left : CoerceCallableToBool(ForceValue(Eval(bin.Right, env)), env);
+            CopValue left = (await CoerceCallableToBoolAsync((await ForceValueAsync((await EvalAsync(bin.Left, env, cancellationToken: cancellationToken)), cancellationToken: cancellationToken)), env, cancellationToken: cancellationToken));
+            return (await left.IsTruthyAsync(cancellationToken)) ? left : (await CoerceCallableToBoolAsync((await ForceValueAsync((await EvalAsync(bin.Right, env, cancellationToken: cancellationToken)), cancellationToken: cancellationToken)), env, cancellationToken: cancellationToken));
         }
 
-        CopValue l = ForceValue(Eval(bin.Left, env));
-        CopValue r = ForceValue(Eval(bin.Right, env));
+        CopValue l = (await ForceValueAsync((await EvalAsync(bin.Left, env, cancellationToken: cancellationToken)), cancellationToken: cancellationToken));
+        CopValue r = (await ForceValueAsync((await EvalAsync(bin.Right, env, cancellationToken: cancellationToken)), cancellationToken: cancellationToken));
 
         return bin.Op switch
         {
             BinaryOp.Add => NumericOp(l, r, (a, b) => a + b, bin.Line)
-                            ?? CollectionConcat(l, r)
-                            ?? StringConcat(l, r, bin.Line),
+                            ?? (await CollectionConcatAsync(l, r, cancellationToken: cancellationToken))
+                            ?? (await StringConcatAsync(l, r, bin.Line, cancellationToken: cancellationToken)),
             BinaryOp.Subtract => NumericOp(l, r, (a, b) => a - b, bin.Line)
-                            ?? CollectionDifference(l, r)
+                            ?? (await CollectionDifferenceAsync(l, r, cancellationToken: cancellationToken))
                             ?? throw new CopEvaluationException("Cannot subtract non-numeric values", bin.Line, _filePath),
             BinaryOp.Multiply => NumericOp(l, r, (a, b) => a * b, bin.Line)
                             ?? throw new CopEvaluationException("Cannot multiply non-numeric values", bin.Line, _filePath),
@@ -507,15 +541,15 @@ public sealed class Evaluator
         };
     }
 
-    private CopValue EvalUnary(UnaryExpr un, Environment env)
+    private async ValueTask<CopValue> EvalUnaryAsync(UnaryExpr un, Environment env, CancellationToken cancellationToken = default)
     {
-        CopValue operand = ForceValue(Eval(un.Operand, env));
+        CopValue operand = (await ForceValueAsync((await EvalAsync(un.Operand, env, cancellationToken: cancellationToken)), cancellationToken: cancellationToken));
         return un.Op switch
         {
             // Coerce a bare predicate reference (a callable) to a bool by invoking it on the
             // current `item`, mirroring how `&&`/`||` handle a bare predicate. Without this,
             // `=> !somePredicate` would negate the (always-truthy) callable and yield false.
-            UnaryOp.Not => CopBool.Of(!CoerceCallableToBool(operand, env).IsTruthy),
+            UnaryOp.Not => CopBool.Of(!(await (await CoerceCallableToBoolAsync(operand, env, cancellationToken: cancellationToken)).IsTruthyAsync(cancellationToken))),
             UnaryOp.Negate => operand switch
             {
                 CopInt i => new CopInt(-i.Value),
@@ -526,7 +560,7 @@ public sealed class Evaluator
         };
     }
 
-    private CopValue EvalCall(CallExpr call, Environment env)
+    private async ValueTask<CopValue> EvalCallAsync(CallExpr call, Environment env, CancellationToken cancellationToken = default)
     {
         // `nameof(x)` is a compile-time intrinsic: it yields the NAME of its single identifier
         // argument as a string WITHOUT evaluating it. Check authors use it to stamp a violation
@@ -547,14 +581,14 @@ public sealed class Evaluator
         // Method call dispatch: obj.method(args) → try method(obj, args) via FFI
         if (call.Callee is MemberExpr mem)
         {
-            CopValue obj = ForceValue(Eval(mem.Object, env));
+            CopValue obj = (await ForceValueAsync((await EvalAsync(mem.Object, env, cancellationToken: cancellationToken)), cancellationToken: cancellationToken));
 
             // Per-item collection transforms (Select/Where/OrderBy) evaluate their
             // argument once per element with `item` bound (Cop convention), so they must
             // run before the generic eager-argument dispatch below — which evaluates args
             // in the outer environment and would fail to resolve `item`.
             if (IsCollectionValue(obj) &&
-                TryEvalPerItemTransform(obj, mem.Member, call.Args, env, out CopValue? transformResult))
+                (await FindPerItemTransformAsync(obj, mem.Member, call.Args, env, cancellationToken: cancellationToken)) is { } transformResult)
             {
                 return transformResult is CopQueryable ? transformResult : QuerySource.TrackLocal(obj, transformResult,
                     source => call with { Callee = mem with { Object = source } }, $"{mem.Member} executes locally");
@@ -564,18 +598,18 @@ public sealed class Evaluator
             // Argument-less string members (Lower/Upper/Words/...) are handled as member access in
             // EvalStringMember; these argument-taking forms must be handled here in call position.
             if (obj is CopString strSubject &&
-                TryEvalStringMethod(strSubject, mem.Member, call.Args, env, out CopValue? strResult))
+                (await FindStringMethodAsync(strSubject, mem.Member, call.Args, env, cancellationToken: cancellationToken)) is { } strResult)
             {
                 return strResult;
             }
 
-            List<CopValue> args = call.Args.Select(a => Eval(a, env)).ToList();
+            List<CopValue> args = (await call.Args.ToAsyncEnumerable().Select(async (a, itemCancellationToken) => (await EvalAsync(a, env, cancellationToken: itemCancellationToken))).ToListAsync(cancellationToken: cancellationToken));
 
             // First, try resolving as a member that is callable
-            CopValue? memberVal = TryGetMember(obj, mem.Member);
+            CopValue? memberVal = (await TryGetMemberAsync(obj, mem.Member, cancellationToken: cancellationToken));
             if (memberVal is ICopCallable memberCallable)
             {
-                return LocalCall(InvokeWithLine(memberCallable, args, env, call.Line));
+                return LocalCall((await InvokeWithLineAsync(memberCallable, args, env, call.Line, cancellationToken: cancellationToken)));
             }
 
             // Method dispatch: look up method name as an FFI/env function, pass obj as first arg
@@ -583,7 +617,7 @@ public sealed class Evaluator
             {
                 List<CopValue> methodArgs = new List<CopValue> { obj };
                 methodArgs.AddRange(args);
-                return LocalCall(InvokeWithLine(methodFn, methodArgs, env, call.Line));
+                return LocalCall((await InvokeWithLineAsync(methodFn, methodArgs, env, call.Line, cancellationToken: cancellationToken)));
             }
 
             // Try FFI registry directly
@@ -592,19 +626,19 @@ public sealed class Evaluator
             {
                 List<CopValue> methodArgs = new List<CopValue> { obj };
                 methodArgs.AddRange(args);
-                return LocalCall(InvokeWithLine(ffiFn, methodArgs, env, call.Line));
+                return LocalCall((await InvokeWithLineAsync(ffiFn, methodArgs, env, call.Line, cancellationToken: cancellationToken)));
             }
 
             throw new CopEvaluationException(
-                $"Cannot call '{mem.Member}' on a {CopTypeNameOf(obj)} value",
+                $"Cannot call '{mem.Member}' on a {(await CopTypeNameOfAsync(obj, cancellationToken: cancellationToken))} value",
                 call.Line, _filePath);
 
             CopValue LocalCall(CopValue result) => QuerySource.TrackLocal(obj, result,
                 source => call with { Callee = mem with { Object = source } }, $"{mem.Member} executes locally");
         }
 
-        CopValue callee = ForceValue(Eval(call.Callee, env));
-        List<CopValue> callArgs = call.Args.Select(a => Eval(a, env)).ToList();
+        CopValue callee = (await ForceValueAsync((await EvalAsync(call.Callee, env, cancellationToken: cancellationToken)), cancellationToken: cancellationToken));
+        List<CopValue> callArgs = (await call.Args.ToAsyncEnumerable().Select(async (a, itemCancellationToken) => (await EvalAsync(a, env, cancellationToken: itemCancellationToken))).ToListAsync(cancellationToken: cancellationToken));
 
         // Currying / partial application: a DIRECT call that extends a closure, or under-applies an
         // item-parameter function (its leading parameter is a type the filter fills per element),
@@ -636,7 +670,7 @@ public sealed class Evaluator
 
         if (callee is ICopCallable callable)
         {
-            CopValue result = InvokeWithLine(callable, callArgs, env, call.Line);
+            CopValue result = (await InvokeWithLineAsync(callable, callArgs, env, call.Line, cancellationToken: cancellationToken));
             if (call.Callee is IdentifierExpr { Name: "count" or "first" or "last" or "take" or "skip" } function
                 && callArgs.Count > 0)
             {
@@ -648,7 +682,7 @@ public sealed class Evaluator
         }
 
         throw new CopEvaluationException(
-            $"Value of type {CopTypeNameOf(callee)} is not callable",
+            $"Value of type {(await CopTypeNameOfAsync(callee, cancellationToken: cancellationToken))} is not callable",
             call.Line, _filePath);
     }
 
@@ -657,11 +691,11 @@ public sealed class Evaluator
     /// (FFI builtins such as read()/fail() throw with Line == 0). This gives users a real line number
     /// instead of "line 0".
     /// </summary>
-    private CopValue InvokeWithLine(ICopCallable callable, List<CopValue> args, Environment env, int line)
+    private async ValueTask<CopValue> InvokeWithLineAsync(ICopCallable callable, List<CopValue> args, Environment env, int line, CancellationToken cancellationToken = default)
     {
         try
         {
-            return callable.Invoke(args, this, env);
+            return (await callable.InvokeAsync(args, this, env, cancellationToken: cancellationToken));
         }
         catch (CopEvaluationException ex) when (ex.Line == 0 && line > 0)
         {
@@ -696,129 +730,135 @@ public sealed class Evaluator
     /// Supports both the implicit-item form `Select(item.Name)` and an explicit
     /// single-parameter lambda `Select((t) => t.Name)`.
     /// </summary>
-    private bool TryEvalPerItemTransform(CopValue collection, string member,
-        IReadOnlyList<Expression> argExprs, Environment env, out CopValue result)
+    private async ValueTask<CopValue?> FindPerItemTransformAsync(CopValue collection, string member,
+        IReadOnlyList<Expression> argExprs, Environment env, CancellationToken cancellationToken = default)
     {
-        CopValue Transform(Func<IEnumerable<CopValue>> factory) => collection is CopList
-            ? new CopList(factory().ToList()) : new CopLazyCollection(factory);
-        result = CopNull.Instance;
+        async ValueTask<CopValue> TransformAsync(CopLazyCollection deferred) => collection is CopList
+            ? new CopList(await deferred.EnumerateAsync(cancellationToken).ToListAsync(cancellationToken))
+            : deferred;
+        CopValue result = CopNull.Instance;
         switch (member)
         {
             case "Select" or "select":
             {
                 if (argExprs.Count != 1)
                     {
-                        return false;
+                        return null;
                     }
 
-                    result = Transform(() => CoerceToEnumerable(collection)
-                    .Select(item => ForceValue(EvalElementExpr(argExprs[0], item, env))));
-                return true;
+                    result = await TransformAsync(new CopLazyCollection(deferredCancellationToken =>
+                        CoerceToEnumerableAsync(collection, deferredCancellationToken)
+                    .Select(async (item, itemCancellationToken) =>
+                        await ForceValueAsync(await EvalElementExprAsync(argExprs[0], item, env,
+                            itemCancellationToken), itemCancellationToken))));
+                return result;
             }
             case "Where" or "where":
             {
                 if (argExprs.Count != 1)
                     {
-                        return false;
+                        return null;
                     }
 
                     if (collection is CopQueryable query)
                 {
-                        ResolvedQueryPredicate resolved = ResolvedQueryPredicate.Resolve(argExprs[0], env, query.ItemType, element: true);
-                    if (PredicateCompiler.TryCompileElement(resolved.Expression, resolved.Environment, query.ItemType) is { } compiled
+                        ResolvedQueryPredicate resolved = ResolvedQueryPredicate.Resolve(
+                            argExprs[0], env, query.ItemType, QueryPredicateContext.Element);
+                    if (PredicateCompiler.CompileElementOrDefault(resolved.Expression, resolved.Environment, query.ItemType) is { } compiled
                         && query.CanPushFilter(compiled))
                     {
                         result = query.WithFilter(compiled, new QueryStep(resolved.Expression, resolved.Definitions, Method: member));
-                        return true;
+                        return result;
                     }
                 }
-                result = Transform(() => CoerceToEnumerable(collection).Where(item =>
+                result = await TransformAsync(new CopLazyCollection(deferredCancellationToken =>
+                    CoerceToEnumerableAsync(collection, deferredCancellationToken).Where(async (item, itemCancellationToken) =>
                 {
-                    CopValue value = ForceValue(EvalElementExpr(argExprs[0], item, env));
-                    return value is ICopCallable callable ? callable.Invoke([item], this, env).IsTruthy : value.IsTruthy;
-                }));
-                return true;
+                    CopValue value = (await ForceValueAsync((await EvalElementExprAsync(argExprs[0], item, env, cancellationToken: itemCancellationToken)), cancellationToken: itemCancellationToken));
+                    return value is ICopCallable callable ? (await (await callable.InvokeAsync([item], this, env, cancellationToken: itemCancellationToken)).IsTruthyAsync(itemCancellationToken)) : (await value.IsTruthyAsync(itemCancellationToken));
+                })));
+                return result;
             }
             case "OrderBy" or "orderBy" or "OrderByDescending" or "orderByDescending":
             {
                 if (argExprs.Count != 1)
                     {
-                        return false;
+                        return null;
                     }
 
                     bool descending = member.Contains("Descending", StringComparison.OrdinalIgnoreCase);
-                result = Transform(() =>
+                result = await TransformAsync(new CopLazyCollection(async deferredCancellationToken =>
                 {
-                    List<(CopValue Item, CopValue Key)> keyed = CoerceToEnumerable(collection).Select(item =>
-                        (Item: item, Key: ForceValue(EvalElementExpr(argExprs[0], item, env)))).ToList();
-                    keyed.Sort((a, b) => CompareValues(a.Key, b.Key) * (descending ? -1 : 1));
+                    List<(CopValue Item, CopValue Key)> keyed = (await CoerceToEnumerableAsync(collection, cancellationToken: deferredCancellationToken).Select(async (item, itemCancellationToken) =>
+                        (Item: item, Key: (await ForceValueAsync((await EvalElementExprAsync(argExprs[0], item, env, cancellationToken: itemCancellationToken)), cancellationToken: itemCancellationToken)))).ToListAsync(cancellationToken: cancellationToken));
+                    await keyed.SortAsync(async (a, b, comparisonCancellationToken) => (await CompareValuesAsync(a.Key, b.Key, cancellationToken: comparisonCancellationToken)) * (descending ? -1 : 1), cancellationToken: deferredCancellationToken);
                     return keyed.Select(k => k.Item);
-                });
-                return true;
+                }));
+                return result;
             }
             case "any" or "all" or "none" or "count":
             {
                     // Aggregates over an inline element expression (e.g. items.any(item > 2)).
-                    CopValue? agg = TryEvalAggregate(member, collection, argExprs, negated: false, env);
+                    CopValue? agg = (await TryEvalAggregateAsync(member, collection, argExprs, negated: false, env, cancellationToken: cancellationToken));
                 if (agg is null)
                     {
-                        return false;
+                        return null;
                     }
 
                     result = agg;
-                return true;
+                return result;
             }
             case "ElementAt" or "elementAt":
             {
                 if (argExprs.Count != 1)
                     {
-                        return false;
+                        return null;
                     }
 
-                    List<CopValue> items = CoerceToEnumerable(collection).ToList();
-                    CopValue idxVal = ForceValue(Eval(argExprs[0], env));
+                    List<CopValue> items = (await CoerceToEnumerableAsync(collection, cancellationToken: cancellationToken).ToListAsync(cancellationToken: cancellationToken));
+                    CopValue idxVal = (await ForceValueAsync((await EvalAsync(argExprs[0], env, cancellationToken: cancellationToken)), cancellationToken: cancellationToken));
                 int idx = idxVal is CopInt ci ? ci.Value : -1;
                 result = idx >= 0 && idx < items.Count ? items[idx] : CopNull.Instance;
-                return true;
+                return result;
             }
             case "Distinct" or "distinct":
             {
                     // Distinct() dedupes by value; Distinct(expr) dedupes by a per-item key expression.
                     HashSet<string> seen = new HashSet<string>(StringComparer.Ordinal);
                     List<CopValue> outp = new List<CopValue>();
-                foreach (CopValue item in CoerceToEnumerable(collection))
+                await foreach (CopValue item in CoerceToEnumerableAsync(collection, cancellationToken: cancellationToken))
                 {
-                        CopValue key = argExprs.Count == 1 ? ForceValue(EvalElementExpr(argExprs[0], item, env)) : item;
-                    if (seen.Add(key.Display()))
+                        CopValue key = argExprs.Count == 1 ? (await ForceValueAsync((await EvalElementExprAsync(argExprs[0], item, env, cancellationToken: cancellationToken)), cancellationToken: cancellationToken)) : item;
+                    if (seen.Add((await key.DisplayAsync(cancellationToken: cancellationToken))))
                         {
                             outp.Add(item);
                         }
                     }
                 result = new CopList(outp);
-                return true;
+                return result;
             }
             case "Sum" or "sum" or "Average" or "average":
             {
                 double total = 0; int n = 0;
-                foreach (CopValue item in CoerceToEnumerable(collection))
+                await foreach (CopValue item in CoerceToEnumerableAsync(collection, cancellationToken: cancellationToken))
                 {
-                        CopValue v = argExprs.Count == 1 ? ForceValue(EvalElementExpr(argExprs[0], item, env)) : item;
+                        CopValue v = argExprs.Count == 1 ? (await ForceValueAsync((await EvalElementExprAsync(argExprs[0], item, env, cancellationToken: cancellationToken)), cancellationToken: cancellationToken)) : item;
                     total += ToNumber(v) ?? 0; n++;
                 }
                 bool isAvg = member.Equals("Average", StringComparison.OrdinalIgnoreCase) || member == "average";
                 // The average of an empty collection is undefined → null (Sum stays 0).
-                if (isAvg && n == 0) { result = CopNull.Instance; return true; }
+                if (isAvg && n == 0) { result = CopNull.Instance; return result; }
                 double val = isAvg ? total / n : total;
                 result = !isAvg && val == Math.Floor(val) ? new CopInt((int)val) : new CopNumber(val);
-                return true;
+                return result;
             }
             case "Min" or "min" or "Max" or "max":
             {
                 bool isMax = member.Equals("Max", StringComparison.OrdinalIgnoreCase) || member == "max";
                 double? best = null;
-                foreach (CopValue item in CoerceToEnumerable(collection))
+                await foreach (CopValue item in CoerceToEnumerableAsync(collection, cancellationToken: cancellationToken))
                 {
-                        CopValue v = argExprs.Count == 1 ? ForceValue(EvalElementExpr(argExprs[0], item, env)) : item;
+                        CopValue v = argExprs.Count == 1 ? (await ForceValueAsync((await EvalElementExprAsync(argExprs[0], item, env, cancellationToken: cancellationToken)), cancellationToken: cancellationToken)) : item;
                         double? num = ToNumber(v);
                     if (num is null)
                         {
@@ -827,9 +867,9 @@ public sealed class Evaluator
 
                         best = best is null ? num : (isMax ? Math.Max(best.Value, num.Value) : Math.Min(best.Value, num.Value));
                 }
-                if (best is null) { result = CopNull.Instance; return true; }
+                if (best is null) { result = CopNull.Instance; return result; }
                 result = best.Value == Math.Floor(best.Value) ? new CopInt((int)best.Value) : new CopNumber(best.Value);
-                return true;
+                return result;
             }
             case "GroupBy" or "groupBy":
             {
@@ -837,15 +877,15 @@ public sealed class Evaluator
                 // with Key, Items, and Count properties (documented in language-reference.md).
                 if (argExprs.Count != 1)
                     {
-                        return false;
+                        return null;
                     }
 
                     List<(CopValue Key, List<CopValue> Items)> order = new List<(CopValue Key, List<CopValue> Items)>();
                     Dictionary<string, int> index = new Dictionary<string, int>(StringComparer.Ordinal);
-                foreach (CopValue item in CoerceToEnumerable(collection))
+                await foreach (CopValue item in CoerceToEnumerableAsync(collection, cancellationToken: cancellationToken))
                 {
-                        CopValue key = ForceValue(EvalElementExpr(argExprs[0], item, env));
-                        string keyStr = key.Display();
+                        CopValue key = (await ForceValueAsync((await EvalElementExprAsync(argExprs[0], item, env, cancellationToken: cancellationToken)), cancellationToken: cancellationToken));
+                        string keyStr = (await key.DisplayAsync(cancellationToken: cancellationToken));
                     if (!index.TryGetValue(keyStr, out int gi))
                     {
                         gi = order.Count;
@@ -862,7 +902,7 @@ public sealed class Evaluator
                         ["Count"] = new CopInt(g.Items.Count),
                     })
                 { TypeName = "Group" }).ToList());
-                return true;
+                return result;
             }
             case "Reduce":
             {
@@ -872,19 +912,19 @@ public sealed class Evaluator
                 // FFI intrinsic and is intentionally NOT intercepted here.)
                 if (argExprs.Count is < 2 or > 3)
                     {
-                        return false;
+                        return null;
                     }
 
-                    string op = ForceValue(Eval(argExprs[0], env)).Display();
-                    string separator = argExprs.Count == 3 ? ForceValue(Eval(argExprs[2], env)).Display() : "";
+                    string op = (await (await ForceValueAsync((await EvalAsync(argExprs[0], env, cancellationToken: cancellationToken)), cancellationToken: cancellationToken)).DisplayAsync(cancellationToken: cancellationToken));
+                    string separator = argExprs.Count == 3 ? (await (await ForceValueAsync((await EvalAsync(argExprs[2], env, cancellationToken: cancellationToken)), cancellationToken: cancellationToken)).DisplayAsync(cancellationToken: cancellationToken)) : "";
                     List<CopValue> values = new List<CopValue>();
-                foreach (CopValue item in CoerceToEnumerable(collection))
+                await foreach (CopValue item in CoerceToEnumerableAsync(collection, cancellationToken: cancellationToken))
                     {
-                        values.Add(ForceValue(EvalElementExpr(argExprs[1], item, env)));
+                        values.Add((await ForceValueAsync((await EvalElementExprAsync(argExprs[1], item, env, cancellationToken: cancellationToken)), cancellationToken: cancellationToken)));
                     }
 
-                    result = ReduceValues(op, values, separator);
-                return true;
+                    result = (await ReduceValuesAsync(op, values, separator, cancellationToken: cancellationToken));
+                return result;
             }
             case "Text":
             {
@@ -892,20 +932,20 @@ public sealed class Evaluator
                 // newlines (the documented per-item form). Lowercase `text` keeps its FFI join form.
                 if (argExprs.Count != 1)
                     {
-                        return false;
+                        return null;
                     }
 
                     List<string> rendered = new List<string>();
-                foreach (CopValue item in CoerceToEnumerable(collection))
+                await foreach (CopValue item in CoerceToEnumerableAsync(collection, cancellationToken: cancellationToken))
                     {
-                        rendered.Add(ForceValue(EvalElementExpr(argExprs[0], item, env)).Display());
+                        rendered.Add((await (await ForceValueAsync((await EvalElementExprAsync(argExprs[0], item, env, cancellationToken: cancellationToken)), cancellationToken: cancellationToken)).DisplayAsync(cancellationToken: cancellationToken)));
                     }
 
                     result = new CopString(string.Join("\n", rendered));
-                return true;
+                return result;
             }
             default:
-                return false;
+                return null;
         }
     }
 
@@ -913,7 +953,7 @@ public sealed class Evaluator
     /// Evaluate a per-element transform argument with `item` bound to the element.
     /// An explicit single-parameter lambda also binds its parameter to the element.
     /// </summary>
-    private CopValue EvalElementExpr(Expression argExpr, CopValue item, Environment env)
+    private async ValueTask<CopValue> EvalElementExprAsync(Expression argExpr, CopValue item, Environment env, CancellationToken cancellationToken = default)
     {
         Environment elemEnv = env.Extend();
         elemEnv.Define(ImplicitItemVariable, item);
@@ -924,9 +964,9 @@ public sealed class Evaluator
                 elemEnv.Define(lambda.Params[0].Name, item);
             }
 
-            return Eval(lambda.Body, elemEnv);
+            return (await EvalAsync(lambda.Body, elemEnv, cancellationToken: cancellationToken));
         }
-        return Eval(argExpr, elemEnv);
+        return (await EvalAsync(argExpr, elemEnv, cancellationToken: cancellationToken));
     }
 
     /// <summary>
@@ -934,20 +974,20 @@ public sealed class Evaluator
     /// (remove a trailing suffix) and <c>Name.Replace('old','new')</c> (substring replace).
     /// Returns false for any other member so the normal dispatch can continue.
     /// </summary>
-    private bool TryEvalStringMethod(CopString str, string member,
-        IReadOnlyList<Expression> argExprs, Environment env, out CopValue result)
+    private async ValueTask<CopValue?> FindStringMethodAsync(CopString str, string member,
+        IReadOnlyList<Expression> argExprs, Environment env, CancellationToken cancellationToken = default)
     {
-        result = CopNull.Instance;
+        CopValue result = CopNull.Instance;
         switch (member)
         {
             case "Trim" or "trim":
             {
                 if (argExprs.Count != 1)
                     {
-                        return false;
+                        return null;
                     }
 
-                    string suffix = ForceValue(Eval(argExprs[0], env)).Display();
+                    string suffix = (await (await ForceValueAsync((await EvalAsync(argExprs[0], env, cancellationToken: cancellationToken)), cancellationToken: cancellationToken)).DisplayAsync(cancellationToken: cancellationToken));
                     string value = str.Value;
                 if (suffix.Length > 0 && value.EndsWith(suffix, StringComparison.Ordinal))
                     {
@@ -955,27 +995,28 @@ public sealed class Evaluator
                     }
 
                     result = new CopString(value);
-                return true;
+                return result;
             }
             case "Replace" or "replace":
             {
                 if (argExprs.Count != 2)
                     {
-                        return false;
+                        return null;
                     }
 
-                    string oldValue = ForceValue(Eval(argExprs[0], env)).Display();
-                    string newValue = ForceValue(Eval(argExprs[1], env)).Display();
+                    string oldValue = (await (await ForceValueAsync((await EvalAsync(argExprs[0], env, cancellationToken: cancellationToken)), cancellationToken: cancellationToken)).DisplayAsync(cancellationToken: cancellationToken));
+                    string newValue = (await (await ForceValueAsync((await EvalAsync(argExprs[1], env, cancellationToken: cancellationToken)), cancellationToken: cancellationToken)).DisplayAsync(cancellationToken: cancellationToken));
                 result = new CopString(oldValue.Length == 0 ? str.Value : str.Value.Replace(oldValue, newValue));
-                return true;
+                return result;
             }
             default:
-                return false;
+                return null;
         }
     }
 
     /// <summary>Folds reduced values with a string operator. '+' sums numbers or joins strings.</summary>
-    private static CopValue ReduceValues(string op, List<CopValue> values, string separator)
+    private static async ValueTask<CopValue> ReduceValuesAsync(string op, List<CopValue> values,
+        string separator, CancellationToken cancellationToken = default)
     {
         if (values.Count == 0)
         {
@@ -998,7 +1039,7 @@ public sealed class Evaluator
 
             return product == Math.Floor(product) ? new CopInt((int)product) : new CopNumber(product);
         }
-        return new CopString(string.Join(separator, values.Select(v => v.Display())));
+        return new CopString(string.Join(separator, (await values.ToAsyncEnumerable().Select(async (v, itemCancellationToken) => (await v.DisplayAsync(cancellationToken: itemCancellationToken))).ToListAsync(cancellationToken))));
     }
 
     /// <summary>
@@ -1007,8 +1048,8 @@ public sealed class Evaluator
     /// expression (<c>item:contains('x')</c>), a bare predicate name, or a lambda all work
     /// uniformly. Returns null when the argument count is not exactly one (caller falls back).
     /// </summary>
-    private CopValue? TryEvalAggregate(string methodName, CopValue collection,
-        IReadOnlyList<Expression> argExprs, bool negated, Environment env)
+    private async ValueTask<CopValue?> TryEvalAggregateAsync(string methodName, CopValue collection,
+        IReadOnlyList<Expression> argExprs, bool negated, Environment env, CancellationToken cancellationToken = default)
     {
         if (argExprs.Count != 1)
         {
@@ -1016,15 +1057,15 @@ public sealed class Evaluator
         }
 
         int matched = 0;
-        foreach (CopValue item in CoerceToEnumerable(collection))
+        await foreach (CopValue item in CoerceToEnumerableAsync(collection, cancellationToken: cancellationToken))
         {
-            CopValue v = ForceValue(EvalElementExpr(argExprs[0], item, env));
+            CopValue v = (await ForceValueAsync((await EvalElementExprAsync(argExprs[0], item, env, cancellationToken: cancellationToken)), cancellationToken: cancellationToken));
             if (v is ICopCallable callable)
             {
-                v = callable.Invoke([item], this, env);
+                v = (await callable.InvokeAsync([item], this, env, cancellationToken: cancellationToken));
             }
 
-            if (v.IsTruthy)
+            if ((await v.IsTruthyAsync(cancellationToken)))
             {
                 matched++;
                 if (methodName == "any")
@@ -1056,7 +1097,7 @@ public sealed class Evaluator
     }
 
     /// <summary>3-way compare for OrderBy: numeric when both sides are numbers, else ordinal string.</summary>
-    private static int CompareValues(CopValue a, CopValue b)
+    private static async ValueTask<int> CompareValuesAsync(CopValue a, CopValue b, CancellationToken cancellationToken = default)
     {
         (double? an, double? bn) = (ToNumber(a), ToNumber(b));
         if (an is not null && bn is not null)
@@ -1064,54 +1105,54 @@ public sealed class Evaluator
             return an.Value.CompareTo(bn.Value);
         }
 
-        return string.Compare(a.Display(), b.Display(), StringComparison.Ordinal);
+        return string.Compare((await a.DisplayAsync(cancellationToken: cancellationToken)), (await b.DisplayAsync(cancellationToken: cancellationToken)), StringComparison.Ordinal);
     }
 
-    private CopValue? TryGetMember(CopValue obj, string member)
+    private async ValueTask<CopValue?> TryGetMemberAsync(CopValue obj, string member, CancellationToken cancellationToken = default)
     {
         // Force thunks before member access
         if (obj is CopThunk thunk)
         {
-            obj = thunk.Force();
+            obj = (await thunk.ForceAsync(cancellationToken: cancellationToken));
         }
 
         return obj switch
         {
             CopObject co when co.HasField(member) => co.GetField(member),
-            CopDynamicObject dyn when dyn.HasField(member) => dyn.GetField(member),
-            CopProviderProxy proxy when proxy.HasField(member) => proxy.GetField(member),
+            CopDynamicObject dyn when (await dyn.HasFieldAsync(member, cancellationToken: cancellationToken)) => (await dyn.GetFieldAsync(member, cancellationToken: cancellationToken)),
+            CopProviderProxy proxy when proxy.HasField(member) => (await proxy.GetFieldAsync(member, cancellationToken: cancellationToken)),
             _ => null
         };
     }
 
-    private CopValue EvalMember(MemberExpr mem, Environment env)
+    private async ValueTask<CopValue> EvalMemberAsync(MemberExpr mem, Environment env, CancellationToken cancellationToken = default)
     {
-        CopValue obj = EvalMemberObject(mem.Object, env);
+        CopValue obj = (await EvalMemberObjectAsync(mem.Object, env, cancellationToken: cancellationToken));
 
         // Force thunks before member access
         if (obj is CopThunk thunk)
         {
-            obj = thunk.Force();
+            obj = (await thunk.ForceAsync(cancellationToken: cancellationToken));
         }
 
         // Named subset resolution: if obj is a predicate-as-collection, expand it
-        obj = TryResolveNamedSubset(obj, env);
+        obj = (await TryResolveNamedSubsetAsync(obj, env, cancellationToken: cancellationToken));
 
         CopValue result = obj switch
         {
             CopObject co => EvalObjectMember(co, mem.Member),
-            CopDynamicObject dyn => dyn.GetField(mem.Member),
-            CopProviderProxy proxy => proxy.GetField(mem.Member),
-            CopList list => EvalListMember(list, mem.Member, mem.Line),
-            CopLazyCollection lazy => EvalLazyMember(lazy, mem.Member, mem.Line),
-            CopQueryable query => EvalLazyMember(new CopLazyCollection(query.Enumerate), mem.Member, mem.Line),
+            CopDynamicObject dyn => (await dyn.GetFieldAsync(mem.Member, cancellationToken: cancellationToken)),
+            CopProviderProxy proxy => (await proxy.GetFieldAsync(mem.Member, cancellationToken: cancellationToken)),
+            CopList list => (await EvalListMemberAsync(list, mem.Member, mem.Line, cancellationToken: cancellationToken)),
+            CopLazyCollection lazy => (await EvalLazyMemberAsync(lazy, mem.Member, mem.Line, cancellationToken: cancellationToken)),
+            CopQueryable query => (await EvalLazyMemberAsync(new CopLazyCollection(query.EnumerateAsync), mem.Member, mem.Line, cancellationToken: cancellationToken)),
             CopString str => EvalStringMember(str, mem.Member, mem.Line),
             // Null propagation: accessing a member of a null/absent value yields null rather than
             // crashing, so checks over real-world data with missing fields (e.g. a C# type in the
             // global namespace whose `File.Namespace` is null) stay robust — `null.Length` is null,
             // and downstream predicates like `:greaterThan(0)` then simply evaluate to false.
             CopNull => CopNull.Instance,
-            _ when mem.Member == "Type" => new CopString(CopTypeNameOf(obj)),
+            _ when mem.Member == "Type" => new CopString((await CopTypeNameOfAsync(obj, cancellationToken: cancellationToken))),
             _ => throw new CopEvaluationException(
                 $"Cannot access member '{mem.Member}' on {obj.GetType().Name}",
                 mem.Line, _filePath)
@@ -1139,7 +1180,7 @@ public sealed class Evaluator
                     // Evaluate computed expression with 'item' bound to the object
                     Environment computedEnv = new Environment(env);
                     computedEnv.Define(ImplicitItemVariable, obj);
-                    result = Eval(computedExpr, computedEnv);
+                    result = (await EvalAsync(computedExpr, computedEnv, cancellationToken: cancellationToken));
                 }
             }
         }
@@ -1151,7 +1192,7 @@ public sealed class Evaluator
     /// If value is a predicate with 1 parameter matching a known collection,
     /// resolve it to the filtered collection (named subset pattern).
     /// </summary>
-    private CopValue TryResolveNamedSubset(CopValue value, Environment env)
+    private async ValueTask<CopValue> TryResolveNamedSubsetAsync(CopValue value, Environment env, CancellationToken cancellationToken = default)
     {
         if (value is CopFunction predFunc && predFunc.Declaration.Params.Count == 1)
         {
@@ -1161,20 +1202,20 @@ public sealed class Evaluator
                 // Force thunks before checking type
                 if (inputCollection is CopThunk thunk)
                 {
-                    inputCollection = thunk.Force();
+                    inputCollection = (await thunk.ForceAsync(cancellationToken: cancellationToken));
                 }
 
                 if (inputCollection is CopList || inputCollection is CopLazyCollection)
                 {
                     CopValue captured = inputCollection;
-                    return new CopLazyCollection(() =>
+                    return new CopLazyCollection(async (deferredCancellationToken) =>
                     {
-                        IEnumerable<CopValue> items = CoerceToEnumerable(captured);
+                        IAsyncEnumerable<CopValue> items = CoerceToEnumerableAsync(captured, cancellationToken: deferredCancellationToken);
                         List<CopValue> filtered = new List<CopValue>();
-                        foreach (CopValue item in items)
+                        await foreach (CopValue item in items)
                         {
-                            CopValue result = predFunc.Invoke([item], this, env);
-                            if (result.IsTruthy)
+                            CopValue result = (await predFunc.InvokeAsync([item], this, env, cancellationToken: deferredCancellationToken));
+                            if ((await result.IsTruthyAsync(deferredCancellationToken)))
                             {
                                 filtered.Add(item);
                             }
@@ -1195,20 +1236,20 @@ public sealed class Evaluator
                     // Force thunks before checking type
                     if (inputCollection is CopThunk thunk)
                     {
-                        inputCollection = thunk.Force();
+                        inputCollection = (await thunk.ForceAsync(cancellationToken: cancellationToken));
                     }
 
                     if (inputCollection is CopList || inputCollection is CopLazyCollection)
                     {
                         CopValue captured = inputCollection;
-                        return new CopLazyCollection(() =>
+                        return new CopLazyCollection(async (deferredCancellationToken) =>
                         {
-                            IEnumerable<CopValue> items = CoerceToEnumerable(captured);
+                            IAsyncEnumerable<CopValue> items = CoerceToEnumerableAsync(captured, cancellationToken: deferredCancellationToken);
                             List<CopValue> filtered = new List<CopValue>();
-                            foreach (CopValue item in items)
+                            await foreach (CopValue item in items)
                             {
-                                CopValue result = group.Invoke([item], this, env);
-                                if (result.IsTruthy)
+                                CopValue result = (await group.InvokeAsync([item], this, env, cancellationToken: deferredCancellationToken));
+                                if ((await result.IsTruthyAsync(deferredCancellationToken)))
                                 {
                                     filtered.Add(item);
                                 }
@@ -1222,9 +1263,9 @@ public sealed class Evaluator
         return value;
     }
 
-    private static string CopTypeNameOf(CopValue value) => value switch
+    private static async ValueTask<string> CopTypeNameOfAsync(CopValue value, CancellationToken cancellationToken = default) => value switch
     {
-        CopThunk thunk => CopTypeNameOf(thunk.Force()),
+        CopThunk thunk => (await CopTypeNameOfAsync((await thunk.ForceAsync(cancellationToken: cancellationToken)), cancellationToken: cancellationToken)),
         CopObject co => co.TypeName ?? "object",
         CopDynamicObject dyn => dyn.TypeName ?? "object",
         CopString => "string",
@@ -1242,7 +1283,7 @@ public sealed class Evaluator
     /// Handles the Cop convention where Type.Property means "access Property on the parameter
     /// whose type is Type" — the parameter name is the lowercase form of the type name.
     /// </summary>
-    private CopValue EvalMemberObject(Expression objExpr, Environment env)
+    private async ValueTask<CopValue> EvalMemberObjectAsync(Expression objExpr, Environment env, CancellationToken cancellationToken = default)
     {
         if (objExpr is IdentifierExpr id && id.Name.Length > 0 && char.IsUpper(id.Name[0]))
         {
@@ -1258,16 +1299,16 @@ public sealed class Evaluator
                 return paramVal;
             }
         }
-        return Eval(objExpr, env);
+        return (await EvalAsync(objExpr, env, cancellationToken: cancellationToken));
     }
 
-    private CopValue EvalListMember(CopList list, string member, int line) => member switch
+    private async ValueTask<CopValue> EvalListMemberAsync(CopList list, string member, int line, CancellationToken cancellationToken = default) => member switch
     {
         "Count" or "count" or "Length" or "length" => new CopInt(list.Items.Count),
         "First" or "first" => list.Items.Count > 0 ? list.Items[0] : CopNull.Instance,
         "Last" or "last" => list.Items.Count > 0 ? list.Items[^1] : CopNull.Instance,
         // Collection projection: list.Name → map each item's Name field
-        _ => ProjectCollection(list.Items, member)
+        _ => (await ProjectCollectionAsync(list.Items, member, cancellationToken: cancellationToken))
     };
 
     /// <summary>Object member access including dynamic operations `.Keys`, `.Values`, `.Count`
@@ -1288,13 +1329,13 @@ public sealed class Evaluator
         };
     }
 
-    private CopValue EvalLazyMember(CopLazyCollection lazy, string member, int line) => member switch
+    private async ValueTask<CopValue> EvalLazyMemberAsync(CopLazyCollection lazy, string member, int line, CancellationToken cancellationToken = default) => member switch
     {
-        "Count" or "count" or "Length" or "length" => new CopInt(lazy.Enumerate().Count()),
-        "First" or "first" => lazy.Enumerate().FirstOrDefault() ?? CopNull.Instance,
-        "Last" or "last" => lazy.Enumerate().LastOrDefault() ?? CopNull.Instance,
+        "Count" or "count" or "Length" or "length" => new CopInt((await lazy.EnumerateAsync(cancellationToken: cancellationToken).CountAsync(cancellationToken: cancellationToken))),
+        "First" or "first" => (await lazy.EnumerateAsync(cancellationToken: cancellationToken).FirstOrDefaultAsync(cancellationToken: cancellationToken)) ?? CopNull.Instance,
+        "Last" or "last" => (await lazy.EnumerateAsync(cancellationToken: cancellationToken).LastOrDefaultAsync(cancellationToken: cancellationToken)) ?? CopNull.Instance,
         // Collection projection: collection.Name → map each item's Name field
-        _ => ProjectCollection(lazy.Enumerate().ToList(), member)
+        _ => (await ProjectCollectionAsync((await lazy.EnumerateAsync(cancellationToken: cancellationToken).ToListAsync(cancellationToken: cancellationToken)), member, cancellationToken: cancellationToken))
     };
 
     private CopValue EvalStringMember(CopString str, string member, int line) => member switch
@@ -1348,20 +1389,20 @@ public sealed class Evaluator
     /// <summary>
     /// Project a member across all items in a collection: items.Name → [item1.Name, item2.Name, ...]
     /// </summary>
-    private static CopValue ProjectCollection(IReadOnlyList<CopValue> items, string member)
+    private static async ValueTask<CopValue> ProjectCollectionAsync(IReadOnlyList<CopValue> items, string member, CancellationToken cancellationToken = default)
     {
         List<CopValue> projected = new List<CopValue>(items.Count);
         foreach (CopValue item in items)
         {
             CopValue field = item switch
             {
-                CopThunk th => th.Force() switch
+                CopThunk th => (await th.ForceAsync(cancellationToken: cancellationToken)) switch
                 {
-                    CopDynamicObject d2 => d2.GetField(member),
+                    CopDynamicObject d2 => (await d2.GetFieldAsync(member, cancellationToken: cancellationToken)),
                     CopObject o2 => o2.GetField(member),
                     _ => CopNull.Instance
                 },
-                CopDynamicObject dyn => dyn.GetField(member),
+                CopDynamicObject dyn => (await dyn.GetFieldAsync(member, cancellationToken: cancellationToken)),
                 CopObject obj => obj.GetField(member),
                 _ => CopNull.Instance
             };
@@ -1375,25 +1416,25 @@ public sealed class Evaluator
             switch (field)
             {
                 case CopList fl: projected.AddRange(fl.Items); break;
-                case CopLazyCollection flz: projected.AddRange(flz.Enumerate()); break;
+                case CopLazyCollection flz: projected.AddRange((await flz.EnumerateAsync(cancellationToken: cancellationToken).ToListAsync(cancellationToken))); break;
                 default: projected.Add(field); break;
             }
         }
         return new CopList(projected);
     }
 
-    private CopValue EvalIndex(IndexExpr idx, Environment env)
+    private async ValueTask<CopValue> EvalIndexAsync(IndexExpr idx, Environment env, CancellationToken cancellationToken = default)
     {
-        CopValue obj = ForceValue(Eval(idx.Object, env));
-        CopValue index = ForceValue(Eval(idx.Index, env));
+        CopValue obj = (await ForceValueAsync((await EvalAsync(idx.Object, env, cancellationToken: cancellationToken)), cancellationToken: cancellationToken));
+        CopValue index = (await ForceValueAsync((await EvalAsync(idx.Index, env, cancellationToken: cancellationToken)), cancellationToken: cancellationToken));
 
         CopValue result = (obj, index) switch
         {
             (CopList list, CopInt i) => i.Value >= 0 && i.Value < list.Items.Count
                 ? list.Items[i.Value]
                 : CopNull.Instance,
-            (CopLazyCollection lazy, CopInt i) => i.Value < 0 ? CopNull.Instance : lazy.Enumerate().ElementAtOrDefault(i.Value) ?? CopNull.Instance,
-            (CopQueryable query, CopInt i) => i.Value < 0 ? CopNull.Instance : query.Enumerate().ElementAtOrDefault(i.Value) ?? CopNull.Instance,
+            (CopLazyCollection lazy, CopInt i) => i.Value < 0 ? CopNull.Instance : (await lazy.EnumerateAsync(cancellationToken: cancellationToken).ElementAtOrDefaultAsync(i.Value, cancellationToken: cancellationToken)) ?? CopNull.Instance,
+            (CopQueryable query, CopInt i) => i.Value < 0 ? CopNull.Instance : (await query.EnumerateAsync(cancellationToken: cancellationToken).ElementAtOrDefaultAsync(i.Value, cancellationToken: cancellationToken)) ?? CopNull.Instance,
             (CopString str, CopInt i) => i.Value >= 0 && i.Value < str.Value.Length
                 ? new CopString(str.Value[i.Value].ToString())
                 : CopNull.Instance,
@@ -1403,15 +1444,15 @@ public sealed class Evaluator
         return QuerySource.TrackLocal(obj, result, source => idx with { Object = source }, "indexing executes locally");
     }
 
-    private CopValue EvalConditional(ConditionalExpr cond, Environment env)
+    private async ValueTask<CopValue> EvalConditionalAsync(ConditionalExpr cond, Environment env, CancellationToken cancellationToken = default)
     {
-        CopValue rawCondition = ForceValue(Eval(cond.Condition, env));
+        CopValue rawCondition = (await ForceValueAsync((await EvalAsync(cond.Condition, env, cancellationToken: cancellationToken)), cancellationToken: cancellationToken));
         _traceLog?.Invoke($"[trace] EvalConditional: {ExpressionRenderer.Render(cond.Condition)}  (raw={DescribeValue(rawCondition)})");
-        CopValue? condition = CoerceCallableToBool(rawCondition, env);
-        _traceLog?.Invoke($"[trace] EvalConditional: coerced={DescribeValue(condition)}, truthy={condition?.IsTruthy}");
-        return condition.IsTruthy
-            ? Eval(cond.Then, env)
-            : Eval(cond.Else, env);
+        CopValue condition = (await CoerceCallableToBoolAsync(rawCondition, env, cancellationToken: cancellationToken));
+        _traceLog?.Invoke($"[trace] EvalConditional: coerced={DescribeValue(condition)}, truthy={(await condition.IsTruthyAsync(cancellationToken))}");
+        return (await condition.IsTruthyAsync(cancellationToken))
+            ? (await EvalAsync(cond.Then, env, cancellationToken: cancellationToken))
+            : (await EvalAsync(cond.Else, env, cancellationToken: cancellationToken));
     }
 
     /// <summary>
@@ -1428,39 +1469,40 @@ public sealed class Evaluator
         _ => value.GetType().Name
     };
 
-    private CopValue EvalMatch(MatchExpr match, Environment env)
+    private async ValueTask<CopValue> EvalMatchAsync(MatchExpr match, Environment env, CancellationToken cancellationToken = default)
     {
-        CopValue discriminant = ForceValue(Eval(match.Discriminant, env));
+        CopValue discriminant = (await ForceValueAsync((await EvalAsync(match.Discriminant, env, cancellationToken: cancellationToken)), cancellationToken: cancellationToken));
 
         foreach (MatchArm arm in match.Arms)
         {
             if (MatchPattern(arm.Pat, discriminant, env))
             {
-                return Eval(arm.Body, env);
+                return (await EvalAsync(arm.Body, env, cancellationToken: cancellationToken));
             }
         }
 
         return CopNull.Instance;
     }
 
-    private CopValue EvalList(ListExpr list, Environment env)
+    private async ValueTask<CopValue> EvalListAsync(ListExpr list, Environment env,
+        CancellationToken cancellationToken = default)
     {
-        List<CopValue> items = list.Elements.Select(e => Eval(e, env)).ToList();
+        List<CopValue> items = (await list.Elements.ToAsyncEnumerable().Select(async (e, itemCancellationToken) => (await EvalAsync(e, env, cancellationToken: itemCancellationToken))).ToListAsync(cancellationToken: cancellationToken));
         return new CopList(items);
     }
 
-    private CopValue EvalObject(ObjectExpr obj, Environment env)
+    private async ValueTask<CopValue> EvalObjectAsync(ObjectExpr obj, Environment env, CancellationToken cancellationToken = default)
     {
         Dictionary<string, CopValue> fields = new Dictionary<string, CopValue>(StringComparer.Ordinal);
         foreach (FieldInit field in obj.Fields)
         {
-            fields[field.Name] = Eval(field.Value, env);
+            fields[field.Name] = (await EvalAsync(field.Value, env, cancellationToken: cancellationToken));
         }
 
         return new CopObject(fields) { TypeName = obj.TypeHint };
     }
 
-    private CopValue EvalInterpolation(InterpolatedStringExpr interp, Environment env)
+    private async ValueTask<CopValue> EvalInterpolationAsync(InterpolatedStringExpr interp, Environment env, CancellationToken cancellationToken = default)
     {
         StringBuilder sb = new System.Text.StringBuilder();
         foreach (StringPart part in interp.Parts)
@@ -1471,14 +1513,14 @@ public sealed class Evaluator
                     sb.Append(tp.Text);
                     break;
                 case ExpressionPart ep:
-                    CopValue val = Eval(ep.Expr, env);
+                    CopValue val = (await EvalAsync(ep.Expr, env, cancellationToken: cancellationToken));
                     if (ep.Format is not null)
                     {
-                        sb.Append($"{{{val.Display()}@{ep.Format}}}");
+                        sb.Append($"{{{(await val.DisplayAsync(cancellationToken: cancellationToken))}@{ep.Format}}}");
                     }
                     else
                     {
-                        sb.Append(val.Display());
+                        sb.Append((await val.DisplayAsync(cancellationToken: cancellationToken)));
                     }
 
                     break;
@@ -1487,16 +1529,18 @@ public sealed class Evaluator
         return new CopString(sb.ToString());
     }
 
-    private CopValue EvalFilter(FilterExpr filter, Environment env)
+    private async ValueTask<CopValue> EvalFilterAsync(FilterExpr filter, Environment env, CancellationToken cancellationToken = default)
     {
         CopValue? collection = null;
         if (filter.Collection is FilterExpr { Predicate: IdentifierExpr property, Negated: false } propertyAccess
             && !ResolvesToUserPredicate(property, env))
         {
             ResolvedQueryPredicate resolved = ResolvedQueryPredicate.Resolve(filter.Predicate, env, null);
-            if (PredicateCompiler.TryCompile(resolved.Expression, filter.Negated, property.Name) is { } compound)
+            if (PredicateCompiler.CompileOrDefault(resolved.Expression,
+                filter.Negated ? PredicatePolarity.Negative : PredicatePolarity.Positive,
+                property.Name) is { } compound)
             {
-                CopValue source = ForceValue(Eval(propertyAccess.Collection, env));
+                CopValue source = (await ForceValueAsync((await EvalAsync(propertyAccess.Collection, env, cancellationToken: cancellationToken)), cancellationToken: cancellationToken));
                 if (source is CopQueryable compoundSource && compoundSource.CanPushFilter(compound))
                 {
                     return compoundSource.WithFilter(compound,
@@ -1505,11 +1549,11 @@ public sealed class Evaluator
                 // Reuse the evaluated source: expressions may have observable side effects.
                 Environment sourceEnvironment = env.Extend();
                 sourceEnvironment.Define("$query-source", source);
-                collection = ForceValue(Eval(propertyAccess with { Collection = new IdentifierExpr("$query-source") }, sourceEnvironment));
+                collection = (await ForceValueAsync((await EvalAsync(propertyAccess with { Collection = new IdentifierExpr("$query-source") }, sourceEnvironment, cancellationToken: cancellationToken)), cancellationToken: cancellationToken));
             }
         }
 
-        collection ??= ForceValue(Eval(filter.Collection, env));
+        collection ??= (await ForceValueAsync((await EvalAsync(filter.Collection, env, cancellationToken: cancellationToken)), cancellationToken: cancellationToken));
         bool negated = filter.Negated;
 
         _traceLog?.Invoke($"[trace] EvalFilter: {ExpressionRenderer.Render(filter)}  (collection={DescribeValue(collection)})");
@@ -1525,8 +1569,8 @@ public sealed class Evaluator
             && _ffi.Resolve(combinerId.Name) is { } combinerFn)
         {
             List<CopValue> combinerArgs = new List<CopValue> { collection };
-            combinerArgs.AddRange(combinerCall.Args.Select(a => ForceValue(Eval(a, env))));
-            CopValue combined = combinerFn.Invoke(combinerArgs, this, env);
+            combinerArgs.AddRange((await combinerCall.Args.ToAsyncEnumerable().Select(async (a, itemCancellationToken) => (await ForceValueAsync((await EvalAsync(a, env, cancellationToken: itemCancellationToken)), cancellationToken: itemCancellationToken))).ToListAsync(cancellationToken)));
+            CopValue combined = (await combinerFn.InvokeAsync(combinerArgs, this, env, cancellationToken: cancellationToken));
             return combined is CopQueryable ? combined : QuerySource.TrackLocal(collection, combined,
                 source => filter with { Collection = source }, $"{combinerId.Name} executes locally");
         }
@@ -1535,7 +1579,7 @@ public sealed class Evaluator
         if (collection is CopQueryable queryable)
         {
             ResolvedQueryPredicate resolved = ResolvedQueryPredicate.Resolve(filter.Predicate, env, queryable.ItemType);
-            FilterExpression? translated = PredicateCompiler.TryCompileBound(resolved.Expression, resolved.Environment, queryable.ItemType);
+            FilterExpression? translated = PredicateCompiler.CompileBoundOrDefault(resolved.Expression, resolved.Environment, queryable.ItemType);
             if (translated is not null && queryable.CanPushFilter(translated))
             {
                 return queryable.WithFilter(negated ? new Cop.Core.NotFilter(translated) : translated,
@@ -1545,12 +1589,13 @@ public sealed class Evaluator
             if (ResolvesToUserPredicate(filter.Predicate, env))
             {
                 _traceLog?.Invoke($"[trace] EvalFilter: deferring local predicate '{ExpressionRenderer.Render(filter.Predicate)}'");
-                collection = new CopLazyCollection(queryable.Enumerate) { Source = queryable.Source };
+                collection = new CopLazyCollection(queryable.EnumerateAsync) { Source = queryable.Source };
             }
             else
             {
                 // Try to compile the predicate AST to a FilterExpression for pushdown
-                FilterExpression? compiled = PredicateCompiler.TryCompile(resolved.Expression, negated);
+                FilterExpression? compiled = PredicateCompiler.CompileOrDefault(resolved.Expression,
+                    negated ? PredicatePolarity.Negative : PredicatePolarity.Positive);
                 if (compiled is not null && queryable.CanPushFilter(compiled))
                 {
                     _traceLog?.Invoke($"[trace] EvalFilter: compiled predicate '{ExpressionRenderer.Render(filter.Predicate)}' to FilterExpression, accumulating on queryable");
@@ -1558,7 +1603,7 @@ public sealed class Evaluator
                 }
 
                 // Check if this is a property access (map semantic) that could be part of a compound filter
-                string? propName = PredicateCompiler.TryExtractPropertyAccess(filter.Predicate);
+                string? propName = PredicateCompiler.GetPropertyAccessOrDefault(filter.Predicate);
                 if (propName is not null && queryable.HasScalarProperty(propName))
                 {
                     // Return a queryable with property context — next filter in chain may compile to StringOp/Comparison
@@ -1568,7 +1613,7 @@ public sealed class Evaluator
 
                 // Keep unsupported expressions deferred and evaluate them locally.
                 _traceLog?.Invoke($"[trace] EvalFilter: deferring local predicate '{ExpressionRenderer.Render(filter.Predicate)}'");
-                collection = new CopLazyCollection(queryable.Enumerate) { Source = queryable.Source };
+                collection = new CopLazyCollection(queryable.EnumerateAsync) { Source = queryable.Source };
             }
         }
 
@@ -1577,7 +1622,9 @@ public sealed class Evaluator
         {
             // Try to compile the predicate with property context
             ResolvedQueryPredicate resolved = ResolvedQueryPredicate.Resolve(filter.Predicate, env, queryProp.Source.ItemType);
-            FilterExpression? compiled = PredicateCompiler.TryCompile(resolved.Expression, negated, queryProp.PropertyName);
+            FilterExpression? compiled = PredicateCompiler.CompileOrDefault(resolved.Expression,
+                negated ? PredicatePolarity.Negative : PredicatePolarity.Positive,
+                queryProp.PropertyName);
             if (compiled is not null && queryProp.Source.CanPushFilter(compiled))
             {
                 _traceLog?.Invoke($"[trace] EvalFilter: compiled compound filter {queryProp.PropertyName}:{ExpressionRenderer.Render(filter.Predicate)}");
@@ -1587,10 +1634,10 @@ public sealed class Evaluator
 
             // Package predicates run locally but must retain the original records, just like pushdown.
             _traceLog?.Invoke($"[trace] EvalFilter: cannot compile compound, materializing");
-            return QuerySource.TrackLocal(queryProp.Source, new CopLazyCollection(() => queryProp.Source.Enumerate().Where(item =>
+            return QuerySource.TrackLocal(queryProp.Source, new CopLazyCollection((deferredCancellationToken) => queryProp.Source.EnumerateAsync(cancellationToken: deferredCancellationToken).Where(async (item, itemCancellationToken) =>
             {
-                CopValue field = GetFieldOnValue(item, queryProp.PropertyName);
-                bool matches = ForceValue(ApplyFilterPredicateValue(filter.Predicate, field, env)).IsTruthy;
+                CopValue field = (await GetFieldOnValueAsync(item, queryProp.PropertyName, cancellationToken: itemCancellationToken));
+                bool matches = (await (await ForceValueAsync((await ApplyFilterPredicateValueAsync(filter.Predicate, field, env, cancellationToken: itemCancellationToken)), cancellationToken: itemCancellationToken)).IsTruthyAsync(itemCancellationToken));
                 return negated ? !matches : matches;
             })), source => filter with
             {
@@ -1600,7 +1647,7 @@ public sealed class Evaluator
 
         // If collection resolved to a predicate/function, resolve as a "named subset":
         // predicate Clients(Types) => ... used bare as `Clients:filter` means Types:Clients:filter
-        collection = TryResolveNamedSubset(collection, env);
+        collection = (await TryResolveNamedSubsetAsync(collection, env, cancellationToken: cancellationToken));
 
         // If collection is a scalar (not a list/collection), apply the predicate/function as a
         // VALUE PIPE: `value:func` returns `func(value)` (issue #44). Member-field and string
@@ -1608,11 +1655,11 @@ public sealed class Evaluator
         // Negation (`!value:pred`) coerces to a bool.
         if (collection is not CopList and not CopLazyCollection)
         {
-            _traceLog?.Invoke($"[trace] EvalFilter: scalar branch, collection={collection?.Display()?.Substring(0, Math.Min(collection?.Display()?.Length ?? 0, 80))}");
-            CopValue raw = ApplyFilterPredicateValue(filter.Predicate, collection, env);
+            _traceLog?.Invoke($"[trace] EvalFilter: scalar branch, collection={(await collection.DisplayAsync(cancellationToken: cancellationToken)).Substring(0, Math.Min((await collection.DisplayAsync(cancellationToken: cancellationToken)).Length, 80))}");
+            CopValue raw = (await ApplyFilterPredicateValueAsync(filter.Predicate, collection, env, cancellationToken: cancellationToken));
             if (negated)
             {
-                return CopBool.Of(!raw.IsTruthy);
+                return CopBool.Of(!(await raw.IsTruthyAsync(cancellationToken)));
             }
 
             return raw;
@@ -1627,24 +1674,24 @@ public sealed class Evaluator
         // If instead a scalar overload's parameter matches the item type (e.g. files'
         // `empty(Folder)`), keep per-item filtering.
         if (filter.Predicate is IdentifierExpr bareId
-            && ShouldApplyAtCollectionLevel(bareId.Name, collection, env))
+            && (await ShouldApplyAtCollectionLevelAsync(bareId.Name, collection, env, cancellationToken: cancellationToken)))
         {
             if (env.TryLookup(bareId.Name, out CopValue? bareBinding)
                 && CollectionParamOverload(bareBinding) is { } collOverload)
             {
-                CopValue r = collOverload.Invoke([collection], this, env);
-                return QuerySource.TrackLocal(collection, negated && r is CopBool rb ? CopBool.Of(!rb.Value) : r,
+                CopValue r = (await collOverload.InvokeAsync([collection], this, env, cancellationToken: cancellationToken));
+                return QuerySource.TrackLocal(collection, negated && r is CopBool rb ? CopBool.Of(!rb.IsTrue) : r,
                     source => filter with { Collection = source }, $"{bareId.Name} executes locally");
             }
             // Builtin `:empty` with no user collection overload in scope → emptiness test.
-            bool isEmpty = IsEmpty(collection);
+            bool isEmpty = (await IsEmptyAsync(collection, cancellationToken: cancellationToken));
             return QuerySource.TrackLocal(collection, CopBool.Of(negated ? !isEmpty : isEmpty),
                 source => filter with { Collection = source }, "empty executes locally");
         }
 
         // Check for collection-level predicates (contains, any, all, none, count)
         // These operate on the collection as a whole, not per-item.
-        CopValue? collResult = TryEvalCollectionPredicate(filter.Predicate, collection, negated, env);
+        CopValue? collResult = (await TryEvalCollectionPredicateAsync(filter.Predicate, collection, negated, env, cancellationToken: cancellationToken));
         if (collResult is not null)
         {
             return QuerySource.TrackLocal(collection, collResult, source => filter with { Collection = source },
@@ -1658,18 +1705,18 @@ public sealed class Evaluator
         if (filter.Predicate is IdentifierExpr unresolvedPred
             && unresolvedPred.Name.Length > 0 && char.IsLower(unresolvedPred.Name[0])
             && unresolvedPred.Name != "empty"
-            && !IsResolvablePredicateName(unresolvedPred.Name, env))
+            && !(await IsResolvablePredicateNameAsync(unresolvedPred.Name, env, cancellationToken: cancellationToken)))
         {
-            CopValue? firstItem = CoerceToEnumerable(collection).FirstOrDefault();
+            CopValue? firstItem = (await CoerceToEnumerableAsync(collection, cancellationToken: cancellationToken).FirstOrDefaultAsync(cancellationToken: cancellationToken));
             if (firstItem is CopThunk ft)
             {
-                firstItem = ft.Force();
+                firstItem = (await ft.ForceAsync(cancellationToken: cancellationToken));
             }
 
             bool itemHasField = firstItem switch
             {
                 CopObject co => co.HasField(unresolvedPred.Name),
-                CopDynamicObject dyn => dyn.HasField(unresolvedPred.Name),
+                CopDynamicObject dyn => (await dyn.HasFieldAsync(unresolvedPred.Name, cancellationToken: cancellationToken)),
                 CopProviderProxy proxy => proxy.HasField(unresolvedPred.Name),
                 _ => false
             };
@@ -1686,20 +1733,20 @@ public sealed class Evaluator
         // If predicate returns a non-bool object (map semantic), collect those results.
         // Otherwise filter items by truthiness (filter semantic).
         string predName = filter.Predicate is IdentifierExpr pid ? pid.Name : filter.Predicate is CallExpr pcall && pcall.Callee is IdentifierExpr pcid ? pcid.Name : "?";
-        return QuerySource.TrackLocal(collection, new CopLazyCollection(() =>
+        return QuerySource.TrackLocal(collection, new CopLazyCollection(async (deferredCancellationToken) =>
         {
-            IEnumerable<CopValue> items = CoerceToEnumerable(collection);
+            IAsyncEnumerable<CopValue> items = CoerceToEnumerableAsync(collection, cancellationToken: deferredCancellationToken);
             List<CopValue> mapped = new List<CopValue>();
             bool isMap = false;
             bool firstItem = true;
             int itemCount = 0;
 
-            foreach (CopValue? item in items)
+            await foreach (CopValue item in items)
             {
                 itemCount++;
                 try
                 {
-                    CopValue? result = ApplyFilterPredicateValue(filter.Predicate, item, env);
+                    CopValue result = (await ApplyFilterPredicateValueAsync(filter.Predicate, item, env, cancellationToken: deferredCancellationToken));
 
                     // A predicate whose body is a sole bare predicate name (e.g. `=> isPublic`)
                     // evaluates to that predicate's function group instead of invoking it. Invoke
@@ -1710,22 +1757,22 @@ public sealed class Evaluator
                     {
                         Environment coerceEnv = env.Extend();
                         coerceEnv.Define(ImplicitItemVariable, item);
-                        result = CoerceCallableToBool(result, coerceEnv);
+                        result = (await CoerceCallableToBoolAsync(result, coerceEnv, cancellationToken: deferredCancellationToken));
                     }
 
                     if (firstItem)
                     {
-                        _traceLog?.Invoke($"[trace] EvalFilter({predName}): first result type={result?.GetType().Name}, value={result?.Display()?.Substring(0, Math.Min(result?.Display()?.Length ?? 0, 50))}, item={item?.Display()?.Substring(0, Math.Min(item?.Display()?.Length ?? 0, 50))}");
+                        _traceLog?.Invoke($"[trace] EvalFilter({predName}): first result type={result.GetType().Name}, value={(await result.DisplayAsync(cancellationToken: deferredCancellationToken)).Substring(0, Math.Min((await result.DisplayAsync(cancellationToken: deferredCancellationToken)).Length, 50))}, item={(await item.DisplayAsync(cancellationToken: deferredCancellationToken)).Substring(0, Math.Min((await item.DisplayAsync(cancellationToken: deferredCancellationToken)).Length, 50))}");
                         // Determine mode from first result:
                         // If it's a non-bool structured value, this is a map operation
-                        isMap = result is not CopBool && result is not CopNull && result.IsTruthy;
+                        isMap = result is not CopBool && result is not CopNull && (await result.IsTruthyAsync(deferredCancellationToken));
                         firstItem = false;
                     }
 
                     if (isMap)
                     {
                         // Map mode: collect non-null results
-                        if (result is not CopNull && result.IsTruthy)
+                        if (result is not CopNull && (await result.IsTruthyAsync(deferredCancellationToken)))
                         {
                             mapped.Add(result);
                         }
@@ -1733,7 +1780,7 @@ public sealed class Evaluator
                     else
                     {
                         // Filter mode: keep items where predicate is truthy (respecting negation)
-                        bool passes = result.IsTruthy;
+                        bool passes = (await result.IsTruthyAsync(deferredCancellationToken));
                         if (negated)
                         {
                             passes = !passes;
@@ -1750,7 +1797,8 @@ public sealed class Evaluator
                     throw new CopEvaluationException(
                         $"Predicate '{predName}' failed on item {itemCount}: {ex.Message}");
                 }
-                catch (Exception ex) when (ex is not OutOfMemoryException)
+                catch (Exception ex) when (ex is not OutOfMemoryException
+                    and not OperationCanceledException)
                 {
                     throw new CopEvaluationException(
                         $"Predicate '{predName}' failed on item {itemCount}: {ex.Message}");
@@ -1767,7 +1815,7 @@ public sealed class Evaluator
     /// Returns null if the predicate should be handled per-item.
     /// Only intercepts predicates that are unambiguously collection-level operations.
     /// </summary>
-    private CopValue? TryEvalCollectionPredicate(Expression predicateExpr, CopValue collection, bool negated, Environment env)
+    private async ValueTask<CopValue?> TryEvalCollectionPredicateAsync(Expression predicateExpr, CopValue collection, bool negated, Environment env, CancellationToken cancellationToken = default)
     {
         if (predicateExpr is not CallExpr call)
         {
@@ -1792,7 +1840,7 @@ public sealed class Evaluator
         // filter loop and returned a collection instead of a bool.
         if (methodName is "any" or "all" or "none" or "count")
         {
-            CopValue? agg = TryEvalAggregate(methodName, collection, call.Args, negated, env);
+            CopValue? agg = (await TryEvalAggregateAsync(methodName, collection, call.Args, negated, env, cancellationToken: cancellationToken));
             if (agg is not null)
             {
                 return agg;
@@ -1805,9 +1853,9 @@ public sealed class Evaluator
         // Without the latter, `coll:containsAny([...])` dispatched per item and failed with
         // "'containsAny' parameter 'items' expects [string], got string" (issue #30).
         if (HasCallableArg(call.Args, env)
-            || FirstParamIsCollectionFunction(methodName, call.Args.Count, collection, env))
+            || (await FirstParamIsCollectionFunctionAsync(methodName, call.Args.Count, collection, env, cancellationToken: cancellationToken)))
         {
-            List<CopValue> evaluatedArgs = call.Args.Select(a => Eval(a, env)).ToList();
+            List<CopValue> evaluatedArgs = (await call.Args.ToAsyncEnumerable().Select(async (a, itemCancellationToken) => (await EvalAsync(a, env, cancellationToken: itemCancellationToken))).ToListAsync(cancellationToken: cancellationToken));
             List<CopValue> allArgs = new List<CopValue> { collection };
             allArgs.AddRange(evaluatedArgs);
 
@@ -1823,10 +1871,10 @@ public sealed class Evaluator
 
             if (method is not null)
             {
-                CopValue result = method.Invoke(allArgs, this, env);
+                CopValue result = (await method.InvokeAsync(allArgs, this, env, cancellationToken: cancellationToken));
                 if (negated && result is CopBool b)
                 {
-                    return CopBool.Of(!b.Value);
+                    return CopBool.Of(!b.IsTrue);
                 }
 
                 return result;
@@ -1836,9 +1884,9 @@ public sealed class Evaluator
         // Fallback: contains(value) for collection membership test
         if (methodName == "contains")
         {
-            List<CopValue> items = CoerceToEnumerable(collection).ToList();
-            string searchVal = Eval(call.Args[0], env).Display();
-            bool found = items.Any(item => string.Equals(item.Display(), searchVal, StringComparison.OrdinalIgnoreCase));
+            List<CopValue> items = (await CoerceToEnumerableAsync(collection, cancellationToken: cancellationToken).ToListAsync(cancellationToken: cancellationToken));
+            string searchVal = (await (await EvalAsync(call.Args[0], env, cancellationToken: cancellationToken)).DisplayAsync(cancellationToken: cancellationToken));
+            bool found = (await items.ToAsyncEnumerable().AnyAsync(async (item, itemCancellationToken) => string.Equals((await item.DisplayAsync(cancellationToken: itemCancellationToken)), searchVal, StringComparison.OrdinalIgnoreCase), cancellationToken: cancellationToken));
             return CopBool.Of(negated ? !found : found);
         }
 
@@ -1889,15 +1937,15 @@ public sealed class Evaluator
     /// (N+1)-arity item-param overload rather than colliding with an N-arity item-param overload
     /// (e.g. <c>:toWarning('msg', nameof(x))</c> must pick the 3-arg overload, not the 2-arg one).
     /// </summary>
-    private CopValue? TryInvokeFreeItemFilterCall(ICopCallable callable, IReadOnlyList<CopValue> args, CopValue subject)
+    private async ValueTask<CopValue?> TryInvokeFreeItemFilterCallAsync(ICopCallable callable, IReadOnlyList<CopValue> args, CopValue subject, CancellationToken cancellationToken = default)
     {
         switch (callable)
         {
             case CopFunction f when f.Arity == args.Count && !IsItemParameterFirst(f):
-                return CallUserFunction(f, args, itemOverride: subject);
+                return (await CallUserFunctionAsync(f, args, itemOverride: subject, cancellationToken: cancellationToken));
             case CopFunctionGroup g:
                 CopFunction? overload = g.Functions.FirstOrDefault(o => o.Arity == args.Count && !IsItemParameterFirst(o));
-                return overload is not null ? CallUserFunction(overload, args, itemOverride: subject) : null;
+                return overload is not null ? (await CallUserFunctionAsync(overload, args, itemOverride: subject, cancellationToken: cancellationToken)) : null;
             default:
                 return null;
         }
@@ -1907,25 +1955,25 @@ public sealed class Evaluator
     /// Apply a filter predicate expression to a subject value, returning the raw CopValue result
     /// (not just bool). Used by EvalFilter to distinguish filter vs map semantics.
     /// </summary>
-    private CopValue ApplyFilterPredicateValue(Expression predicateExpr, CopValue subject, Environment env)
+    private async ValueTask<CopValue> ApplyFilterPredicateValueAsync(Expression predicateExpr, CopValue subject, Environment env, CancellationToken cancellationToken = default)
     {
         switch (predicateExpr)
         {
             case IdentifierExpr id:
-                if (env.TryLookup(id.Name, out CopValue? fn) && ForceValue(fn) is ICopCallable callable)
+                if (env.TryLookup(id.Name, out CopValue? fn) && (await ForceValueAsync(fn, cancellationToken: cancellationToken)) is ICopCallable callable)
                 {
-                    return callable.Invoke([subject], this, env);
+                    return (await callable.InvokeAsync([subject], this, env, cancellationToken: cancellationToken));
                 }
 
                 CopExternalFunction? ffiFn = _ffi.Resolve(id.Name);
                 if (ffiFn is ICopCallable ffiCallable)
                 {
-                    return ffiCallable.Invoke([subject], this, env);
+                    return (await ffiCallable.InvokeAsync([subject], this, env, cancellationToken: cancellationToken));
                 }
 
-                if (subject is CopDynamicObject dyn && dyn.HasField(id.Name))
+                if (subject is CopDynamicObject dyn && (await dyn.HasFieldAsync(id.Name, cancellationToken: cancellationToken)))
                 {
-                    return dyn.GetField(id.Name);
+                    return (await dyn.GetFieldAsync(id.Name, cancellationToken: cancellationToken));
                 }
 
                 if (subject is CopObject obj && obj.HasField(id.Name))
@@ -1935,7 +1983,7 @@ public sealed class Evaluator
 
                 if (id.Name == "empty")
                 {
-                    return CopBool.Of(IsEmpty(subject));
+                    return CopBool.Of((await IsEmptyAsync(subject, cancellationToken: cancellationToken)));
                 }
 
                 return CopBool.False;
@@ -1952,7 +2000,7 @@ public sealed class Evaluator
                     // Built-in :in([...]) membership test
                     if (methodName == "in" && call.Args.Count == 1)
                     {
-                        CopValue listVal = ForceValue(Eval(call.Args[0], env));
+                        CopValue listVal = (await ForceValueAsync((await EvalAsync(call.Args[0], env, cancellationToken: cancellationToken)), cancellationToken: cancellationToken));
                         if (listVal is CopList list)
                         {
                             return CopBool.Of(EvalInMembership(subject, list));
@@ -1962,33 +2010,33 @@ public sealed class Evaluator
                     // Evaluate args with item bound to subject (for template interpolation)
                     Environment argEnv = env.Extend();
                     argEnv.Define(ImplicitItemVariable, subject);
-                    List<CopValue> args = call.Args.Select(a => Eval(a, argEnv)).ToList();
+                    List<CopValue> args = (await call.Args.ToAsyncEnumerable().Select(async (a, itemCancellationToken) => (await EvalAsync(a, argEnv, cancellationToken: itemCancellationToken))).ToListAsync(cancellationToken: cancellationToken));
                     List<CopValue> allArgs = new List<CopValue> { subject };
                     allArgs.AddRange(args);
 
-                    if (env.TryLookup(methodName, out CopValue? mfn) && ForceValue(mfn) is ICopCallable mc)
+                    if (env.TryLookup(methodName, out CopValue? mfn) && (await ForceValueAsync(mfn, cancellationToken: cancellationToken)) is ICopCallable mc)
                     {
-                        CopValue? freeItem = TryInvokeFreeItemFilterCall(mc, args, subject);
-                        return freeItem ?? mc.Invoke(allArgs, this, env);
+                        CopValue? freeItem = (await TryInvokeFreeItemFilterCallAsync(mc, args, subject, cancellationToken: cancellationToken));
+                        return freeItem ?? (await mc.InvokeAsync(allArgs, this, env, cancellationToken: cancellationToken));
                     }
                     CopExternalFunction? mffi = _ffi.Resolve(methodName);
                     if (mffi is ICopCallable mfc)
                     {
-                        return mfc.Invoke(allArgs, this, env);
+                        return (await mfc.InvokeAsync(allArgs, this, env, cancellationToken: cancellationToken));
                     }
                 }
                 Environment itemEnv = env.Extend();
                 itemEnv.Define(ImplicitItemVariable, subject);
-                return Eval(call, itemEnv);
+                return (await EvalAsync(call, itemEnv, cancellationToken: cancellationToken));
 
             case MemberExpr mem2:
-                return EvalMemberOnSubject(mem2, subject, env);
+                return (await EvalMemberOnSubjectAsync(mem2, subject, env, cancellationToken: cancellationToken));
 
             default:
-                CopValue val = Eval(predicateExpr, env);
+                CopValue val = (await EvalAsync(predicateExpr, env, cancellationToken: cancellationToken));
                 if (val is ICopCallable predCallable)
                 {
-                    return predCallable.Invoke([subject], this, env);
+                    return (await predCallable.InvokeAsync([subject], this, env, cancellationToken: cancellationToken));
                 }
 
                 return val;
@@ -2001,7 +2049,7 @@ public sealed class Evaluator
     /// For `:startsWith('A')` → calls startsWith(subject, 'A')
     /// For `:empty` → tests subject.IsTruthy (inverted: empty means !truthy for collections)
     /// </summary>
-    private bool ApplyFilterPredicate(Expression predicateExpr, CopValue subject, Environment env)
+    private async ValueTask<bool> ApplyFilterPredicateAsync(Expression predicateExpr, CopValue subject, Environment env, CancellationToken cancellationToken = default)
     {
         switch (predicateExpr)
         {
@@ -2009,28 +2057,28 @@ public sealed class Evaluator
                 // :predicateName → call predicateName(subject)
                 if (env.TryLookup(id.Name, out CopValue? fn) && fn is ICopCallable callable)
                 {
-                    return callable.Invoke([subject], this, env).IsTruthy;
+                    return (await (await callable.InvokeAsync([subject], this, env, cancellationToken: cancellationToken)).IsTruthyAsync(cancellationToken));
                 }
 
                 CopExternalFunction? ffiFn = _ffi.Resolve(id.Name);
                 if (ffiFn is ICopCallable ffiCallable)
                 {
-                    return ffiCallable.Invoke([subject], this, env).IsTruthy;
+                    return (await (await ffiCallable.InvokeAsync([subject], this, env, cancellationToken: cancellationToken)).IsTruthyAsync(cancellationToken));
                 }
                 // Check if it's a bool property on the subject
-                if (subject is CopDynamicObject dyn && dyn.HasField(id.Name))
+                if (subject is CopDynamicObject dyn && (await dyn.HasFieldAsync(id.Name, cancellationToken: cancellationToken)))
                 {
-                    return dyn.GetField(id.Name).IsTruthy;
+                    return (await (await dyn.GetFieldAsync(id.Name, cancellationToken: cancellationToken)).IsTruthyAsync(cancellationToken));
                 }
 
                 if (subject is CopObject obj && obj.HasField(id.Name))
                 {
-                    return obj.GetField(id.Name).IsTruthy;
+                    return (await obj.GetField(id.Name).IsTruthyAsync(cancellationToken));
                 }
                 // "empty" pseudo-predicate: collection with 0 items
                 if (id.Name == "empty")
                 {
-                    return IsEmpty(subject);
+                    return (await IsEmptyAsync(subject, cancellationToken: cancellationToken));
                 }
 
                 return false;
@@ -2048,7 +2096,7 @@ public sealed class Evaluator
                     // Built-in :in([...]) membership test
                     if (methodName == "in" && call.Args.Count == 1)
                     {
-                        CopValue listVal = ForceValue(Eval(call.Args[0], env));
+                        CopValue listVal = (await ForceValueAsync((await EvalAsync(call.Args[0], env, cancellationToken: cancellationToken)), cancellationToken: cancellationToken));
                         if (listVal is CopList list)
                         {
                             return EvalInMembership(subject, list);
@@ -2057,39 +2105,39 @@ public sealed class Evaluator
 
                     Environment argEnv = env.Extend();
                     argEnv.Define(ImplicitItemVariable, subject);
-                    List<CopValue> args = call.Args.Select(a => Eval(a, argEnv)).ToList();
+                    List<CopValue> args = (await call.Args.ToAsyncEnumerable().Select(async (a, itemCancellationToken) => (await EvalAsync(a, argEnv, cancellationToken: itemCancellationToken))).ToListAsync(cancellationToken: cancellationToken));
                     List<CopValue> allArgs = new List<CopValue> { subject };
                     allArgs.AddRange(args);
 
                     if (env.TryLookup(methodName, out CopValue? mfn) && mfn is ICopCallable mc)
                     {
-                        CopValue? freeItem = TryInvokeFreeItemFilterCall(mc, args, subject);
-                        return (freeItem ?? mc.Invoke(allArgs, this, env)).IsTruthy;
+                        CopValue? freeItem = (await TryInvokeFreeItemFilterCallAsync(mc, args, subject, cancellationToken: cancellationToken));
+                        return (await (freeItem ?? (await mc.InvokeAsync(allArgs, this, env, cancellationToken: cancellationToken))).IsTruthyAsync(cancellationToken));
                     }
                     CopExternalFunction? mffi = _ffi.Resolve(methodName);
                     if (mffi is ICopCallable mfc)
                     {
-                        return mfc.Invoke(allArgs, this, env).IsTruthy;
+                        return (await (await mfc.InvokeAsync(allArgs, this, env, cancellationToken: cancellationToken)).IsTruthyAsync(cancellationToken));
                     }
                 }
                 // Fallback: evaluate the call expression in a context where item is bound
                 Environment itemEnv = env.Extend();
                 itemEnv.Define(ImplicitItemVariable, subject);
-                return Eval(call, itemEnv).IsTruthy;
+                return (await (await EvalAsync(call, itemEnv, cancellationToken: cancellationToken)).IsTruthyAsync(cancellationToken));
 
             case MemberExpr mem2:
                 // :Type.Property → access subject.Property (qualified filter)
                 // The member expression path represents a property chain on the subject
-                return EvalMemberOnSubject(mem2, subject, env).IsTruthy;
+                return (await (await EvalMemberOnSubjectAsync(mem2, subject, env, cancellationToken: cancellationToken)).IsTruthyAsync(cancellationToken));
 
             default:
                 // Evaluate predicate expression normally and use its truthiness
-                CopValue val = Eval(predicateExpr, env);
-                return ApplyPredicate(val, subject, env);
+                CopValue val = (await EvalAsync(predicateExpr, env, cancellationToken: cancellationToken));
+                return (await ApplyPredicateAsync(val, subject, env, cancellationToken: cancellationToken));
         }
     }
 
-    private CopValue EvalMemberOnSubject(MemberExpr mem, CopValue subject, Environment env)
+    private async ValueTask<CopValue> EvalMemberOnSubjectAsync(MemberExpr mem, CopValue subject, Environment env, CancellationToken cancellationToken = default)
     {
         // For chains like Type.Methods, resolve from the subject
         if (mem.Object is IdentifierExpr)
@@ -2098,27 +2146,27 @@ public sealed class Evaluator
             // Access the member on the subject directly
             return subject switch
             {
-                CopDynamicObject dyn when dyn.HasField(mem.Member) => dyn.GetField(mem.Member),
+                CopDynamicObject dyn when (await dyn.HasFieldAsync(mem.Member, cancellationToken: cancellationToken)) => (await dyn.GetFieldAsync(mem.Member, cancellationToken: cancellationToken)),
                 CopObject obj when obj.HasField(mem.Member) => obj.GetField(mem.Member),
                 _ => CopNull.Instance
             };
         }
         // Nested: evaluate the object part then access member
-        CopValue obj2 = Eval(mem.Object, env);
+        CopValue obj2 = (await EvalAsync(mem.Object, env, cancellationToken: cancellationToken));
         return obj2 switch
         {
-            CopDynamicObject dyn => dyn.GetField(mem.Member),
+            CopDynamicObject dyn => (await dyn.GetFieldAsync(mem.Member, cancellationToken: cancellationToken)),
             CopObject co => co.GetField(mem.Member),
             _ => CopNull.Instance
         };
     }
 
-    private static bool IsEmpty(CopValue value) => value switch
+    private static async ValueTask<bool> IsEmptyAsync(CopValue value, CancellationToken cancellationToken = default) => value switch
     {
-        CopThunk thunk => IsEmpty(thunk.Force()),
+        CopThunk thunk => (await IsEmptyAsync((await thunk.ForceAsync(cancellationToken: cancellationToken)), cancellationToken: cancellationToken)),
         CopList list => list.Items.Count == 0,
-        CopLazyCollection lazy => !lazy.Enumerate().Any(),
-        CopQueryable query => !query.Enumerate().Any(),
+        CopLazyCollection lazy => !(await lazy.EnumerateAsync(cancellationToken: cancellationToken).AnyAsync(cancellationToken: cancellationToken)),
+        CopQueryable query => !(await query.EnumerateAsync(cancellationToken: cancellationToken).AnyAsync(cancellationToken: cancellationToken)),
         CopString str => str.Value.Length == 0,
         CopNull => true,
         _ => false
@@ -2133,7 +2181,7 @@ public sealed class Evaluator
     /// inspect) the presence of any scalar overload is taken as per-item intent so that, e.g.,
     /// `folders():empty` keeps filtering and yields an empty collection instead of a bool.
     /// </summary>
-    private bool ShouldApplyAtCollectionLevel(string name, CopValue collection, Environment env)
+    private async ValueTask<bool> ShouldApplyAtCollectionLevelAsync(string name, CopValue collection, Environment env, CancellationToken cancellationToken = default)
     {
         bool isBuiltinEmpty = name == "empty";
         List<CopFunction> overloads = env.TryLookup(name, out CopValue? binding) ? OverloadsOf(binding) : [];
@@ -2152,7 +2200,7 @@ public sealed class Evaluator
             return true; // no per-item interpretation exists
         }
 
-        string? itemType = FirstItemTypeName(collection);
+        string? itemType = (await FirstItemTypeNameAsync(collection, cancellationToken: cancellationToken));
         if (itemType is null)
         {
             return false; // empty collection + a scalar overload → assume per-item
@@ -2218,11 +2266,11 @@ public sealed class Evaluator
     /// would bypass the typo guard and then silently filter every item out. Used so typo'd predicates
     /// fail loudly instead of silently filtering everything out.
     /// </summary>
-    private bool IsResolvablePredicateName(string name, Environment env)
+    private async ValueTask<bool> IsResolvablePredicateNameAsync(string name, Environment env, CancellationToken cancellationToken = default)
     {
         if (env.TryLookup(name, out CopValue? bound))
         {
-            return ForceValue(bound) is ICopCallable;
+            return (await ForceValueAsync(bound, cancellationToken: cancellationToken)) is ICopCallable;
         }
 
         return _ffi.Resolve(name) is not null;
@@ -2235,7 +2283,7 @@ public sealed class Evaluator
     /// first argument. If a same-arity overload's scalar first parameter matches the item type,
     /// per-item dispatch is preferred instead.
     /// </summary>
-    private bool FirstParamIsCollectionFunction(string name, int argCount, CopValue collection, Environment env)
+    private async ValueTask<bool> FirstParamIsCollectionFunctionAsync(string name, int argCount, CopValue collection, Environment env, CancellationToken cancellationToken = default)
     {
         if (!env.TryLookup(name, out CopValue? binding))
         {
@@ -2250,7 +2298,7 @@ public sealed class Evaluator
             return false;
         }
 
-        string? itemType = FirstItemTypeName(collection);
+        string? itemType = (await FirstItemTypeNameAsync(collection, cancellationToken: cancellationToken));
         if (itemType is null)
         {
             return true;
@@ -2289,27 +2337,27 @@ public sealed class Evaluator
     /// collection-level call. They are FFI builtins (no user declaration), so the declaration-based
     /// <see cref="FirstParamIsCollectionFunction"/> can't recognise them — hence this explicit list.
     /// </summary>
-    private static readonly HashSet<string> CollectionCombinators = IntrinsicRegistry.CollectionCombinatorNames();
+    private static readonly HashSet<string> s_collectionCombinators = IntrinsicRegistry.CollectionCombinatorNames();
 
     private static bool IsCollectionLevelBuiltin(string name, int argCount) =>
-        argCount == 1 && CollectionCombinators.Contains(name);
+        argCount == 1 && s_collectionCombinators.Contains(name);
 
     private static CopFunction? CollectionParamOverload(CopValue binding)
         => OverloadsOf(binding).FirstOrDefault(o =>
             o.Declaration.Params.Count == 1 && o.Declaration.Params[0].Type is { IsCollection: true });
 
     /// <summary>Type name of the first item in a collection, or null if empty/unknown.</summary>
-    private string? FirstItemTypeName(CopValue collection)
+    private async ValueTask<string?> FirstItemTypeNameAsync(CopValue collection, CancellationToken cancellationToken = default)
     {
         if (collection is CopQueryable { ItemType: not null } query)
         {
             return query.ItemType;
         }
 
-        CopValue? first = CoerceToEnumerable(collection).FirstOrDefault();
+        CopValue? first = (await CoerceToEnumerableAsync(collection, cancellationToken: cancellationToken).FirstOrDefaultAsync(cancellationToken: cancellationToken));
         if (first is CopThunk t)
         {
-            first = t.Force();
+            first = (await t.ForceAsync(cancellationToken: cancellationToken));
         }
 
         return first switch
@@ -2343,9 +2391,9 @@ public sealed class Evaluator
         return false;
     }
 
-    private static CopValue GetFieldOnValue(CopValue value, string fieldName) => value switch
+    private static async ValueTask<CopValue> GetFieldOnValueAsync(CopValue value, string fieldName, CancellationToken cancellationToken = default) => value switch
     {
-        CopDynamicObject dyn when dyn.HasField(fieldName) => dyn.GetField(fieldName),
+        CopDynamicObject dyn when (await dyn.HasFieldAsync(fieldName, cancellationToken: cancellationToken)) => (await dyn.GetFieldAsync(fieldName, cancellationToken: cancellationToken)),
         CopObject obj when obj.HasField(fieldName) => obj.GetField(fieldName),
         _ => CopNull.Instance
     };
@@ -2357,10 +2405,10 @@ public sealed class Evaluator
     /// <summary>
     /// Call a user-defined function with given arguments.
     /// </summary>
-    public CopValue CallUserFunction(CopFunction func, IReadOnlyList<CopValue> args, CopValue? itemOverride = null)
+    public async ValueTask<CopValue> CallUserFunctionAsync(CopFunction func, IReadOnlyList<CopValue> args, CopValue? itemOverride = null, CancellationToken cancellationToken = default)
     {
         // Validate arguments before dispatch (arity + parameter types)
-        TypeValidator.ValidateArguments(func.Declaration, args, TypeRegistry);
+        await TypeValidator.ValidateArgumentsAsync(func.Declaration, args, TypeRegistry, cancellationToken: cancellationToken);
 
         // First-parameter guard (e.g. `predicate isMissingNamespace(Type:isCSharp)`): a guarded
         // predicate only applies to arguments its guard accepts; for others it is simply false and
@@ -2372,7 +2420,7 @@ public sealed class Evaluator
             && func.Declaration.Params[0].Type?.Constraint is { } guardName)
         {
             if (func.Closure.TryLookup(guardName, out CopValue? guardVal) && guardVal is ICopCallable guard
-                && !guard.Invoke([args[0]], this, func.Closure).IsTruthy)
+                && !(await (await guard.InvokeAsync([args[0]], this, func.Closure, cancellationToken: cancellationToken)).IsTruthyAsync(cancellationToken)))
             {
                 return CopBool.False;
             }
@@ -2392,7 +2440,7 @@ public sealed class Evaluator
             CopValue lastArg = args[^1];
             if (lastArg is CopThunk t)
             {
-                lastArg = t.Force();
+                lastArg = (await t.ForceAsync(cancellationToken: cancellationToken));
             }
 
             if (lastArg is CopList or CopLazyCollection or CopQueryable)
@@ -2448,15 +2496,15 @@ public sealed class Evaluator
         // Evaluate body
         CopValue result = func.Declaration.Body switch
         {
-            ExpressionBody eb => Eval(eb.Expr, funcEnv),
-            MappingBody mb => EvalMappingBody(mb, funcEnv),
-            BlockBody bb => EvalBlockBody(bb, funcEnv),
-            IntrinsicBody => CallIntrinsicViaFFI(func.Declaration.Name, args, funcEnv),
+            ExpressionBody eb => (await EvalAsync(eb.Expr, funcEnv, cancellationToken: cancellationToken)),
+            MappingBody mb => (await EvalMappingBodyAsync(mb, funcEnv, cancellationToken: cancellationToken)),
+            BlockBody bb => (await EvalBlockBodyAsync(bb, funcEnv, cancellationToken: cancellationToken)),
+            IntrinsicBody => (await CallIntrinsicViaFFIAsync(func.Declaration.Name, args, funcEnv, cancellationToken: cancellationToken)),
             _ => CopNull.Instance
         };
 
         // Validate return type after execution
-        TypeValidator.ValidateReturn(func.Declaration, result);
+        await TypeValidator.ValidateReturnAsync(func.Declaration, result, cancellationToken: cancellationToken);
 
         return result;
     }
@@ -2464,12 +2512,12 @@ public sealed class Evaluator
     /// <summary>
     /// Dispatch an intrinsic-body function to the FFI registry.
     /// </summary>
-    private CopValue CallIntrinsicViaFFI(string name, IReadOnlyList<CopValue> args, Environment env)
+    private async ValueTask<CopValue> CallIntrinsicViaFFIAsync(string name, IReadOnlyList<CopValue> args, Environment env, CancellationToken cancellationToken = default)
     {
         CopExternalFunction? ffiFunc = _ffi.Resolve(name);
         if (ffiFunc is ICopCallable callable)
         {
-            return callable.Invoke(args, this, env);
+            return (await callable.InvokeAsync(args, this, env, cancellationToken: cancellationToken));
         }
 
         throw new CopEvaluationException(
@@ -2480,7 +2528,7 @@ public sealed class Evaluator
     /// <summary>
     /// Call a lambda with given arguments.
     /// </summary>
-    public CopValue CallLambda(CopLambda lambda, IReadOnlyList<CopValue> args)
+    public async ValueTask<CopValue> CallLambdaAsync(CopLambda lambda, IReadOnlyList<CopValue> args, CancellationToken cancellationToken = default)
     {
         Environment lamEnv = lambda.Closure.Extend();
 
@@ -2489,32 +2537,32 @@ public sealed class Evaluator
             lamEnv.Define(lambda.Expr.Params[i].Name, args[i]);
         }
 
-        return Eval(lambda.Expr.Body, lamEnv);
+        return (await EvalAsync(lambda.Expr.Body, lamEnv, cancellationToken: cancellationToken));
     }
 
-    private CopValue EvalMappingBody(MappingBody body, Environment env)
+    private async ValueTask<CopValue> EvalMappingBodyAsync(MappingBody body, Environment env, CancellationToken cancellationToken = default)
     {
         Dictionary<string, CopValue> fields = new Dictionary<string, CopValue>(StringComparer.Ordinal);
         foreach (FieldMapping mapping in body.Mappings)
         {
-            fields[mapping.FieldName] = Eval(mapping.Value, env);
+            fields[mapping.FieldName] = (await EvalAsync(mapping.Value, env, cancellationToken: cancellationToken));
         }
 
         return new CopObject(fields);
     }
 
-    private CopValue EvalBlockBody(BlockBody body, Environment env)
+    private async ValueTask<CopValue> EvalBlockBodyAsync(BlockBody body, Environment env, CancellationToken cancellationToken = default)
     {
         CopValue result = CopNull.Instance;
         foreach (Statement stmt in body.Statements)
         {
             if (stmt is ExpressionStatement es)
             {
-                result = Eval(es.Expr, env);
+                result = (await EvalAsync(es.Expr, env, cancellationToken: cancellationToken));
             }
             else
             {
-                ExecStatement(stmt, env);
+                await ExecStatementAsync(stmt, env, cancellationToken: cancellationToken);
                 result = CopNull.Instance;
             }
         }
@@ -2529,55 +2577,31 @@ public sealed class Evaluator
     /// Force a value if it is a thunk. Returns the concrete value.
     /// Non-thunks pass through unchanged.
     /// </summary>
-    public static CopValue ForceValue(CopValue value) =>
-        value is CopThunk thunk ? thunk.Force() : value;
+    public static async ValueTask<CopValue> ForceValueAsync(CopValue value, CancellationToken cancellationToken = default) =>
+        value is CopThunk thunk ? (await thunk.ForceAsync(cancellationToken: cancellationToken)) : value;
 
-    private bool ApplyPredicate(CopValue predicate, CopValue item, Environment env)
+    private async ValueTask<bool> ApplyPredicateAsync(CopValue predicate, CopValue item, Environment env, CancellationToken cancellationToken = default)
     {
         if (predicate is ICopCallable callable)
         {
-            CopValue result = callable.Invoke([item], this, env);
-            return result.IsTruthy;
+            CopValue result = (await callable.InvokeAsync([item], this, env, cancellationToken: cancellationToken));
+            return (await result.IsTruthyAsync(cancellationToken));
         }
 
         // If predicate is just a string name, look it up and call
         if (predicate is CopString name && env.TryLookup(name.Value, out CopValue? fn) && fn is ICopCallable c)
         {
-            CopValue result = c.Invoke([item], this, env);
-            return result.IsTruthy;
+            CopValue result = (await c.InvokeAsync([item], this, env, cancellationToken: cancellationToken));
+            return (await result.IsTruthyAsync(cancellationToken));
         }
 
         // Truthiness test as fallback
-        return predicate.IsTruthy;
+        return (await predicate.IsTruthyAsync(cancellationToken));
     }
 
-    private IEnumerable<CopValue> CoerceToEnumerable(CopValue value)
-    {
-        // Force thunks before coercing
-        if (value is CopThunk thunk)
-        {
-            value = thunk.Force();
-        }
-
-        // Materialize queryable collections on demand
-        if (value is CopQueryable queryable)
-        {
-            return queryable.Enumerate();
-        }
-
-        if (value is CopQueryableProperty queryProp)
-        {
-            return queryProp.Source.Enumerate();
-        }
-
-        return value switch
-        {
-            CopList list => list.Items,
-            CopLazyCollection lazy => lazy.Enumerate(),
-            CopNull => Enumerable.Empty<CopValue>(),
-            _ => [value] // Single item as collection of one
-        };
-    }
+    private IAsyncEnumerable<CopValue> CoerceToEnumerableAsync(CopValue value,
+        CancellationToken cancellationToken = default) =>
+        CollectionValues.EnumerateAsync(value, cancellationToken);
 
     private bool MatchPattern(Pattern pattern, CopValue value, Environment env)
     {
@@ -2613,11 +2637,11 @@ public sealed class Evaluator
     /// If value is a callable (bare predicate reference in boolean context), auto-invoke with "item".
     /// E.g., `isAbstract && ...` becomes `isAbstract(item) && ...`
     /// </summary>
-    private CopValue CoerceCallableToBool(CopValue value, Environment env)
+    private async ValueTask<CopValue> CoerceCallableToBoolAsync(CopValue value, Environment env, CancellationToken cancellationToken = default)
     {
         if (value is ICopCallable callable && env.TryLookup(ImplicitItemVariable, out CopValue? item))
         {
-            return callable.Invoke([item], this, env);
+            return (await callable.InvokeAsync([item], this, env, cancellationToken: cancellationToken));
         }
 
         return value;
@@ -2628,7 +2652,7 @@ public sealed class Evaluator
         return (a, b) switch
         {
             (CopNull, CopNull) => true,
-            (CopBool ba, CopBool bb) => ba.Value == bb.Value,
+            (CopBool ba, CopBool bb) => ba.IsTrue == bb.IsTrue,
             (CopInt ia, CopInt ib) => ia.Value == ib.Value,
             (CopNumber na, CopNumber nb) => Math.Abs(na.Value - nb.Value) < double.Epsilon,
             (CopInt ia, CopNumber nb) => Math.Abs(ia.Value - nb.Value) < double.Epsilon,
@@ -2661,27 +2685,27 @@ public sealed class Evaluator
         return new CopNumber(result);
     }
 
-    private CopValue StringConcat(CopValue l, CopValue r, int line)
+    private async ValueTask<CopValue> StringConcatAsync(CopValue l, CopValue r, int line, CancellationToken cancellationToken = default)
     {
         if (l is CopString || r is CopString)
         {
-            return new CopString(l.Display() + r.Display());
+            return new CopString((await l.DisplayAsync(cancellationToken: cancellationToken)) + (await r.DisplayAsync(cancellationToken: cancellationToken)));
         }
 
         throw new CopEvaluationException("Cannot add non-numeric, non-string values", line, _filePath);
     }
 
-    private CopValue? CollectionConcat(CopValue l, CopValue r)
+    private async ValueTask<CopValue?> CollectionConcatAsync(CopValue l, CopValue r, CancellationToken cancellationToken = default)
     {
         // Force thunks before collection concat
         if (l is CopThunk lt)
         {
-            l = lt.Force();
+            l = (await lt.ForceAsync(cancellationToken: cancellationToken));
         }
 
         if (r is CopThunk rt)
         {
-            r = rt.Force();
+            r = (await rt.ForceAsync(cancellationToken: cancellationToken));
         }
 
         if ((l is CopQueryable || r is CopQueryable) && IsCollectionValue(l) && IsCollectionValue(r))
@@ -2689,29 +2713,29 @@ public sealed class Evaluator
             return CopQueryable.Concat(l, r);
         }
 
-        IEnumerable<CopValue>? left = AsEnumerable(l);
-        IEnumerable<CopValue>? right = AsEnumerable(r);
+        IAsyncEnumerable<CopValue>? left = AsEnumerable(l);
+        IAsyncEnumerable<CopValue>? right = AsEnumerable(r);
         if (left is not null && right is not null)
         {
-            return new CopList(left.Concat(right).ToList());
+            return new CopList(await left.Concat(right).ToListAsync(cancellationToken));
         }
         // Append/prepend a scalar to a list — documented: `[1 2] + 3` → `[1 2 3]` (issue #45).
         if (left is not null && right is null && r is not CopNull)
         {
-            return new CopList(left.Append(r).ToList());
+            return new CopList(await left.Append(r).ToListAsync(cancellationToken));
         }
 
         if (left is null && right is not null && l is not CopNull)
         {
-            return new CopList(right.Prepend(l).ToList());
+            return new CopList(await right.Prepend(l).ToListAsync(cancellationToken));
         }
 
         return null;
 
-        static IEnumerable<CopValue>? AsEnumerable(CopValue v) => v switch
+        IAsyncEnumerable<CopValue>? AsEnumerable(CopValue v) => v switch
         {
-            CopList list => list.Items,
-            CopLazyCollection lazy => lazy.Enumerate(),
+            CopList list => list.Items.ToAsyncEnumerable(),
+            CopLazyCollection lazy => lazy.EnumerateAsync(cancellationToken: cancellationToken),
             _ => null
         };
     }
@@ -2719,28 +2743,30 @@ public sealed class Evaluator
     /// <summary>
     /// `list - list` removes every left element equal to any right element; `list - scalar`
     /// removes matching scalars. Returns null when the left is not a collection so the caller
-    /// falls through to the numeric/throw path. Mirrors <see cref="CollectionConcat"/>.
+    /// falls through to the numeric/throw path. Mirrors <see cref="CollectionConcatAsync"/>.
     /// </summary>
-    private CopValue? CollectionDifference(CopValue l, CopValue r)
+    private async ValueTask<CopValue?> CollectionDifferenceAsync(CopValue l, CopValue r, CancellationToken cancellationToken = default)
     {
         if (l is CopThunk lt)
         {
-            l = lt.Force();
+            l = (await lt.ForceAsync(cancellationToken: cancellationToken));
         }
 
         if (r is CopThunk rt)
         {
-            r = rt.Force();
+            r = (await rt.ForceAsync(cancellationToken: cancellationToken));
         }
 
-        IEnumerable<CopValue>? left = AsEnumerable(l);
+        IAsyncEnumerable<CopValue>? left = AsEnumerable(l);
         if (left is null)
         {
             return null;
         }
 
-        List<CopValue> leftItems = left.ToList();
-        List<CopValue>? rightItems = AsEnumerable(r)?.ToList();
+        List<CopValue> leftItems = await left.ToListAsync(cancellationToken);
+        IAsyncEnumerable<CopValue>? right = AsEnumerable(r);
+        List<CopValue>? rightItems = right is null ? null
+            : await right.ToListAsync(cancellationToken);
         if (rightItems is null)
         {
             // list - scalar → drop every element equal to the scalar (null right is a no-op).
@@ -2749,15 +2775,15 @@ public sealed class Evaluator
                 return new CopList(leftItems);
             }
 
-            return new CopList(leftItems.Where(x => !ElementsEqual(x, r)).ToList());
+            return new CopList((await leftItems.ToAsyncEnumerable().Where(async (x, itemCancellationToken) => !(await ElementsEqualAsync(x, r, cancellationToken: itemCancellationToken))).ToListAsync(cancellationToken: cancellationToken)));
         }
         // list - list → drop every left element equal to any right element.
-        return new CopList(leftItems.Where(x => !rightItems.Any(y => ElementsEqual(x, y))).ToList());
+        return new CopList((await leftItems.ToAsyncEnumerable().Where(async (x, itemCancellationToken) => !(await rightItems.ToAsyncEnumerable().AnyAsync(async (y, itemCancellationToken2) => (await ElementsEqualAsync(x, y, cancellationToken: itemCancellationToken2)), cancellationToken: itemCancellationToken))).ToListAsync(cancellationToken: cancellationToken)));
 
-        static IEnumerable<CopValue>? AsEnumerable(CopValue v) => v switch
+        IAsyncEnumerable<CopValue>? AsEnumerable(CopValue v) => v switch
         {
-            CopList list => list.Items,
-            CopLazyCollection lazy => lazy.Enumerate(),
+            CopList list => list.Items.ToAsyncEnumerable(),
+            CopLazyCollection lazy => lazy.EnumerateAsync(cancellationToken: cancellationToken),
             _ => null
         };
     }
@@ -2767,16 +2793,16 @@ public sealed class Evaluator
     /// are equal when they share a type name and have field-by-field equal values; everything
     /// else defers to <see cref="ValuesEqual"/> (scalars by value, other objects by reference).
     /// </summary>
-    private static bool ElementsEqual(CopValue a, CopValue b)
+    private static async ValueTask<bool> ElementsEqualAsync(CopValue a, CopValue b, CancellationToken cancellationToken = default)
     {
         if (a is CopThunk at)
         {
-            a = at.Force();
+            a = (await at.ForceAsync(cancellationToken: cancellationToken));
         }
 
         if (b is CopThunk bt)
         {
-            b = bt.Force();
+            b = (await bt.ForceAsync(cancellationToken: cancellationToken));
         }
 
         if (a is CopObject oa && b is CopObject ob)
@@ -2788,7 +2814,7 @@ public sealed class Evaluator
 
             foreach (KeyValuePair<string, CopValue> kv in oa.Fields)
             {
-                if (!ob.Fields.TryGetValue(kv.Key, out CopValue? bv) || !ElementsEqual(kv.Value, bv))
+                if (!ob.Fields.TryGetValue(kv.Key, out CopValue? bv) || !(await ElementsEqualAsync(kv.Value, bv, cancellationToken: cancellationToken)))
                 {
                     return false;
                 }

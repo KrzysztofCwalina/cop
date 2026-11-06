@@ -9,7 +9,7 @@ namespace Cop.Lang;
 /// </summary>
 public static class AnsiRenderer
 {
-    private static readonly Dictionary<string, string> ColorCodes = new(StringComparer.OrdinalIgnoreCase)
+    private static readonly Dictionary<string, string> s_colorCodes = new(StringComparer.OrdinalIgnoreCase)
     {
         ["black"] = "\x1b[30m",
         ["red"] = "\x1b[31m",
@@ -22,7 +22,7 @@ public static class AnsiRenderer
         ["gray"] = "\x1b[90m",
     };
 
-    private static readonly Dictionary<string, string> WeightCodes = new(StringComparer.OrdinalIgnoreCase)
+    private static readonly Dictionary<string, string> s_weightCodes = new(StringComparer.OrdinalIgnoreCase)
     {
         ["bold"] = "\x1b[1m",
         ["dim"] = "\x1b[2m",
@@ -61,11 +61,11 @@ public static class AnsiRenderer
                 if (string.Equals(color, "auto", StringComparison.OrdinalIgnoreCase))
                 {
                     // Use the text value itself as the color key
-                    ColorCodes.TryGetValue(span.Text, out cc);
+                    s_colorCodes.TryGetValue(span.Text, out cc);
                 }
                 else
                 {
-                    ColorCodes.TryGetValue(color, out cc);
+                    s_colorCodes.TryGetValue(color, out cc);
                 }
 
                 if (cc != null)
@@ -74,7 +74,7 @@ public static class AnsiRenderer
                     hasCode = true;
                 }
             }
-            if (span.Annotations.TryGetValue("weight", out string? weight) && WeightCodes.TryGetValue(weight, out string? wc))
+            if (span.Annotations.TryGetValue("weight", out string? weight) && s_weightCodes.TryGetValue(weight, out string? wc))
             {
                 sb.Append(wc);
                 hasCode = true;

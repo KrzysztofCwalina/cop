@@ -12,13 +12,13 @@ namespace Cop.Providers.Sql;
 public sealed class SqlProvider : DataProvider
 {
     /// <inheritdoc />
-    public override ReadOnlyMemory<byte> GetSchema() => _schema.ToJson();
+    public override ReadOnlyMemory<byte> GetSchema() => s_schema.ToJson();
     /// <inheritdoc />
     public override string QueryResultType => "SqlContent";
 
-    private static readonly ProviderSchema _schema = BuildSchema();
+    private static readonly ProviderSchema s_schema = BuildSchema();
 
-    private static readonly HashSet<string> SqlExtensions = new(StringComparer.OrdinalIgnoreCase)
+    private static readonly HashSet<string> s_sqlExtensions = new(StringComparer.OrdinalIgnoreCase)
         { ".sql" };
 
     private static ProviderSchema BuildSchema()
@@ -44,7 +44,7 @@ public sealed class SqlProvider : DataProvider
     private static ProviderPropertySchema Prop(string name, string type = "string")
         => new() { Name = name, Type = type };
     private static ProviderPropertySchema Opt(string name, string type = "string")
-        => new() { Name = name, Type = type, Optional = true };
+        => new() { Name = name, Type = type, IsOptional = true };
 
     /// <inheritdoc />
     public override RuntimeBindings GetRuntimeBindings()
@@ -65,20 +65,25 @@ public sealed class SqlProvider : DataProvider
     }
 
     /// <inheritdoc />
-    public override object? Query(ProviderQuery query)
+    public override async ValueTask<object?> QueryAsync(
+        ProviderQuery query, CancellationToken cancellationToken = default)
     {
-        DeferredProviderResult result = (DeferredProviderResult)QueryDeferred(query);
-        return result.Collections.ToDictionary(c => c.Key, c => c.Value.ToList(), StringComparer.Ordinal);
+        DeferredProviderResult result = (DeferredProviderResult)
+            (await QueryDeferredAsync(query, cancellationToken).ConfigureAwait(false))!;
+        return await ProviderCollections.MaterializeAsync(result, cancellationToken)
+            .ConfigureAwait(false);
     }
 
     private readonly Dictionary<string, DeferredFormatSnapshot> _snapshots = new(StringComparer.Ordinal);
 
     /// <inheritdoc />
-    public override object QueryDeferred(ProviderQuery query)
+    public override ValueTask<object?> QueryDeferredAsync(
+        ProviderQuery query, CancellationToken cancellationToken = default)
     {
         if (query.RootPath is null)
         {
-            return new DeferredProviderResult(new Dictionary<string, IEnumerable<object>>());
+            return ValueTask.FromResult<object?>(new DeferredProviderResult(
+                new Dictionary<string, IAsyncEnumerable<object>>()));
         }
 
         string key = DeferredFormatSnapshot.Key(query);
@@ -90,16 +95,17 @@ public sealed class SqlProvider : DataProvider
                 List<string> paths = new List<string>();
                 CollectSqlFiles(root, query.ExcludedDirectories, paths);
                 return paths;
-            }, path =>
+            }, async (path, token) =>
             {
-                string text = File.ReadAllText(path);
+                string text = await File.ReadAllTextAsync(path, token).ConfigureAwait(false);
                 SourceFile file = new SourceFile(Path.GetRelativePath(root, path).Replace('\\', '/'), "sql", [], [], text);
                 SqlParser.SqlParseResult doc = SqlParser.Parse(text);
                 return new() { ["Statements"] = doc.Statements.Select(s => (object)(s with { File = file })).ToList() };
             });
             _snapshots.Add(key, snapshot);
         }
-        return snapshot.Query(query, _schema, GetRuntimeBindings());
+        cancellationToken.ThrowIfCancellationRequested();
+        return ValueTask.FromResult<object?>(snapshot.Query(query, s_schema, GetRuntimeBindings()));
     }
 
     private static void CollectSqlFiles(string dir, IReadOnlySet<string>? excluded, List<string> result)
@@ -108,7 +114,7 @@ public sealed class SqlProvider : DataProvider
         {
             foreach (string file in Directory.GetFiles(dir))
             {
-                if (SqlExtensions.Contains(Path.GetExtension(file)))
+                if (s_sqlExtensions.Contains(Path.GetExtension(file)))
                 {
                     result.Add(file);
                 }

@@ -20,22 +20,29 @@ namespace Cop.Providers;
 public class CSharpProvider : DataProvider
 {
 
+    /// <inheritdoc />
     public override ReadOnlyMemory<byte> GetSchema() => CSharpSchema.GetJson();
 
+    /// <inheritdoc />
     public override RuntimeBindings GetRuntimeBindings() => CSharpBindings.Build();
 
+    /// <inheritdoc />
     public override IReadOnlyDictionary<string, object?> GetQueryMetadata(ProviderQuery query) =>
         CodeBindings.SourceMetadata(query, ".cs");
+    /// <inheritdoc />
     public override string QueryResultType => "Codebase";
 
     private readonly Dictionary<string, (List<SourceFile> Files, List<ProjectInfo> Projects)> _snapshots = new(StringComparer.Ordinal);
     private readonly Dictionary<string, DeferredSourceSnapshot> _deferredSnapshots = new(StringComparer.Ordinal);
 
-    public override object QueryDeferred(ProviderQuery query)
+    /// <inheritdoc />
+    public override ValueTask<object?> QueryDeferredAsync(
+        ProviderQuery query, CancellationToken cancellationToken = default)
     {
         if (query.RootPath is null)
         {
-            return new DeferredProviderResult(new Dictionary<string, IEnumerable<object>>());
+            return ValueTask.FromResult<object?>(new DeferredProviderResult(
+                new Dictionary<string, IAsyncEnumerable<object>>()));
         }
 
         string root = Path.GetFullPath(query.RootPath);
@@ -46,78 +53,132 @@ public class CSharpProvider : DataProvider
             CSharpSourceParser parser = new CSharpSourceParser();
             SourceParserRegistry parsers = new SourceParserRegistry();
             parsers.Register(parser);
-            Dictionary<string, (SyntaxTree Tree, string Text)> trees = new Dictionary<string, (SyntaxTree Tree, string Text)>(StringComparer.Ordinal);
+            ConcurrentDictionary<string, AsyncProviderValue<(SyntaxTree Tree, string Text)>> trees =
+                new(StringComparer.Ordinal);
+            int parsedCount = 0;
             CSharpSourceTextCache texts = new CSharpSourceTextCache(key);
             DeferredSourceSnapshot sources = null!;
-            (SyntaxTree Tree, string Text) Syntax(string path)
+            ValueTask<(SyntaxTree Tree, string Text)> SyntaxAsync(
+                string path, CancellationToken token)
             {
                 ExecutionStatistics.RecordInputFile(path);
-                if (trees.TryGetValue(path, out (SyntaxTree Tree, string Text) cached))
+                return trees.GetOrAdd(path, _ => new(async readToken =>
                 {
-                    return cached;
-                }
-
-                string text = texts.Read(path);
-                (SyntaxTree, string text) parsed = (CSharpSyntaxTree.ParseText(text, CSharpSourceParser.ParseOptions, path: path), text);
-                trees.Add(path, parsed);
-                if (trees.Count == sources.Paths.Count)
+                string text = await texts.ReadAsync(path, readToken).ConfigureAwait(false);
+                (SyntaxTree, string text) parsed = (CSharpSyntaxTree.ParseText(
+                    text, CSharpSourceParser.ParseOptions, path: path,
+                    cancellationToken: readToken), text);
+                if (Interlocked.Increment(ref parsedCount) == sources.Paths.Count)
                 {
                     texts.Save(sources.Paths);
                 }
 
-                if (CopDiagnostics.Timing)
+                if (CopDiagnostics.IsTimingEnabled)
                 {
                     Console.Error.WriteLine($"[provider-parse] csharp {Path.GetRelativePath(root, path)}");
                 }
 
                 return parsed;
+                })).GetValueAsync(token);
             }
-            Lazy<Dictionary<SyntaxTree, CSharpCompilation>> compilations = new Lazy<Dictionary<SyntaxTree, CSharpCompilation>>(() =>
+            Dictionary<SyntaxTree, CSharpCompilation>? readyCompilations = null;
+            AsyncProviderValue<Dictionary<SyntaxTree, CSharpCompilation>> compilations =
+                new(async token =>
             {
-                SyntaxTree[] allTrees = sources.Paths.Select(path => Syntax(path).Tree).ToArray();
-                Dictionary<SyntaxTree, CSharpCompilation> result = CSharpProjectCompilations.Create(root, allTrees, query.ExcludedDirectories, GetReferences);
-                if (CopDiagnostics.Timing)
+                List<SyntaxTree> allTrees = [];
+                foreach (string path in sources.Paths)
                 {
-                    Console.Error.WriteLine($"[provider-semantics] csharp compilation files={allTrees.Length}");
+                    allTrees.Add((await SyntaxAsync(path, token).ConfigureAwait(false)).Tree);
+                }
+                Dictionary<SyntaxTree, CSharpCompilation> result =
+                    await CSharpProjectCompilations.CreateAsync(
+                        root, allTrees.ToArray(), query.ExcludedDirectories, GetReferences, token)
+                        .ConfigureAwait(false);
+                if (CopDiagnostics.IsTimingEnabled)
+                {
+                    Console.Error.WriteLine($"[provider-semantics] csharp compilation files={allTrees.Count}");
                 }
 
-                return result;
+                return readyCompilations = result;
             });
-            sources = new(parsers, query, path =>
+            sources = new(parsers, query, async (path, token) =>
             {
-                (SyntaxTree? tree, string? text) = Syntax(path);
+                (SyntaxTree tree, string text) = await SyntaxAsync(path, token).ConfigureAwait(false);
                 SourceFile? file = parser.ParseWithSemantics(path, text, tree, model: null);
+                AsyncProviderValue<bool> preparation = new(async prepareToken =>
+                {
+                    await compilations.GetValueAsync(prepareToken).ConfigureAwait(false);
+                    return true;
+                });
                 file?.DeferSemanticAnalysis(() => CSharpSourceParser.EnrichWithSemantics(tree,
-                    compilations.Value[tree].GetSemanticModel(tree), file.Types, file.Statements));
+                    readyCompilations![tree].GetSemanticModel(tree), file.Types, file.Statements));
 #pragma warning disable RSEXPERIMENTAL001 // Nullable-analysis control is experimental in the pinned Roslyn version.
                 if (file is not null)
                 {
                     CSharpSourceParser.DeferTypeNames(tree, file.Statements,
-                        () => compilations.Value[tree].GetSemanticModel(tree, SemanticModelOptions.DisableNullableAnalysis),
-                        () => compilations.Value[tree].GetSemanticModel(tree));
+                        () => readyCompilations![tree].GetSemanticModel(tree, SemanticModelOptions.DisableNullableAnalysis),
+                        () => readyCompilations![tree].GetSemanticModel(tree));
+                    foreach (StatementInfo statement in file.Statements)
+                    {
+                        statement.DeferSemanticAnalysisAsync(preparation);
+                        if (statement is CSharpStatementInfo { RequiresTypeNameAnalysis: true })
+                        {
+                            statement.DeferTypeNamePreparationAsync(preparation);
+                        }
+                    }
+                    void Attach(TypeDeclaration type)
+                    {
+                        type.DeferSemanticAnalysisAsync(preparation);
+                        foreach (TypeDeclaration nested in type.NestedTypes)
+                        {
+                            Attach(nested);
+                        }
+                    }
+                    foreach (TypeDeclaration type in file.Types)
+                    {
+                        Attach(type);
+                    }
                 }
 #pragma warning restore RSEXPERIMENTAL001
                 return file;
-            }, () => CSharpProjectDiscovery.Discover(root, query.ExcludedDirectories, sources.Paths));
+            }, _ => ValueTask.FromResult(
+                CSharpProjectDiscovery.Discover(root, query.ExcludedDirectories, sources.Paths)));
             snapshot = sources;
             _deferredSnapshots.Add(key, snapshot);
         }
-        return snapshot.Query(query, GetRuntimeBindings());
+        cancellationToken.ThrowIfCancellationRequested();
+        return ValueTask.FromResult<object?>(snapshot.Query(query, GetRuntimeBindings()));
     }
 
-    public override Dictionary<string, Func<List<object?>, Task<object?>>>? GetFunctions() => new()
+    /// <inheritdoc />
+    public override Dictionary<string,
+        Func<List<object?>, CancellationToken, ValueTask<object?>>>? GetFunctions() => new()
     {
-        ["toCodebase"] = args => Task.FromResult<object?>(ToCodebase(args.Count > 0 ? args[0] : null))
+        ["toCodebase"] = (args, token) =>
+        {
+            token.ThrowIfCancellationRequested();
+            return ValueTask.FromResult<object?>(ToCodebase(args.Count > 0 ? args[0] : null));
+        }
     };
 
-    public override Dictionary<string, Func<List<object?>, Task<object?>>>? GetFunctions(AnalysisContext context) => new()
+    /// <inheritdoc />
+    public override Dictionary<string,
+        Func<List<object?>, CancellationToken, ValueTask<object?>>>? GetFunctions(
+        AnalysisContext context) => new()
     {
-        ["toCodebase"] = args => Task.FromResult<object?>(ToCodebase(
-            args.Count > 0 ? args[0] : null,
-            args.Count > 1 && args[1] is string path ? Path.GetFullPath(path, context.RootPath) : null))
+        ["toCodebase"] = (args, token) =>
+        {
+            token.ThrowIfCancellationRequested();
+            return ValueTask.FromResult<object?>(ToCodebase(
+                args.Count > 0 ? args[0] : null,
+                args.Count > 1 && args[1] is string path
+                    ? Path.GetFullPath(path, context.RootPath) : null));
+        }
     };
 
-    public override object? Query(ProviderQuery query)
+    /// <inheritdoc />
+    public override async ValueTask<object?> QueryAsync(
+        ProviderQuery query, CancellationToken cancellationToken = default)
     {
         if (query.RootPath is null)
         {
@@ -128,7 +189,8 @@ public class CSharpProvider : DataProvider
             string.Join("\n", (query.ExcludedDirectories ?? new HashSet<string>()).Order(StringComparer.Ordinal));
         if (!_snapshots.TryGetValue(key, out (List<SourceFile> Files, List<ProjectInfo> Projects) snapshot))
         {
-            List<SourceFile> files = LoadSourceFiles(query);
+            List<SourceFile> files = await LoadSourceFilesAsync(query, cancellationToken)
+                .ConfigureAwait(false);
             List<ProjectInfo> projects = CSharpProjectDiscovery.Discover(query.RootPath, query.ExcludedDirectories,
                 files.Select(file => file.FullPath).ToArray());
             LinkFilesToProjects(new Dictionary<string, List<object>> { ["Files"] = files.Cast<object>().ToList() },
@@ -145,14 +207,15 @@ public class CSharpProvider : DataProvider
         return ApplyQueryFilters(query, collections);
     }
 
-    private static List<SourceFile> LoadSourceFiles(ProviderQuery query)
+    private static async ValueTask<List<SourceFile>> LoadSourceFilesAsync(
+        ProviderQuery query, CancellationToken cancellationToken)
     {
         string rootPath = query.RootPath!;
         IReadOnlySet<string>? excluded = query.ExcludedDirectories;
 
-        // Optional phase timing for diagnosing slow/large analyses: enabled at -dd (CopDiagnostics.Timing).
+        // Optional phase timing for diagnosing slow analyses: enabled at -dd.
         Stopwatch _sw = System.Diagnostics.Stopwatch.StartNew();
-        bool _diag = Cop.Core.CopDiagnostics.Timing;
+        bool _diag = Cop.Core.CopDiagnostics.IsTimingEnabled;
         void Log(string m) { if (_diag) { Console.Error.WriteLine($"[csharp] {m} (+{_sw.ElapsedMilliseconds}ms)"); } }
 
         // 1. Discover source files
@@ -172,7 +235,7 @@ public class CSharpProvider : DataProvider
                 int[] delays = [200, 1000, 3000];
                 foreach (int delay in delays)
                 {
-                    Thread.Sleep(delay);
+                    await Task.Delay(delay, cancellationToken).ConfigureAwait(false);
                     CodeCollectionBuilder.CollectSourceFiles(rootPath, parsers, excluded, filePaths);
                     if (filePaths.Count > 0)
                     {
@@ -205,22 +268,24 @@ public class CSharpProvider : DataProvider
 
         (SyntaxTree Tree, string FilePath, string Text)?[] parsedTrees = new (SyntaxTree Tree, string FilePath, string Text)?[csFiles.Count];
         ConcurrentBag<string> fileErrors = new ConcurrentBag<string>();
-        Parallel.For(0, csFiles.Count, i =>
+        await Parallel.ForEachAsync(Enumerable.Range(0, csFiles.Count),
+            cancellationToken, async (i, token) =>
         {
             string filePath = csFiles[i];
             try
             {
                 using FileStream stream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
                 using StreamReader reader = new StreamReader(stream);
-                string text = reader.ReadToEnd();
-                SyntaxTree tree = CSharpSyntaxTree.ParseText(text, CSharpSourceParser.ParseOptions, path: filePath);
+                string text = await reader.ReadToEndAsync(token).ConfigureAwait(false);
+                SyntaxTree tree = CSharpSyntaxTree.ParseText(
+                    text, CSharpSourceParser.ParseOptions, path: filePath, cancellationToken: token);
                 parsedTrees[i] = (tree, filePath, text);
             }
-            catch (Exception ex) when (ex is not OutOfMemoryException)
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
                 fileErrors.Add($"Failed to read '{filePath}': {ex.Message}");
             }
-        });
+        }).ConfigureAwait(false);
 
         List<(SyntaxTree Tree, string FilePath, string Text)> syntaxTrees = new List<(SyntaxTree Tree, string FilePath, string Text)>(csFiles.Count);
         foreach ((SyntaxTree Tree, string FilePath, string Text)? p in parsedTrees)
@@ -247,8 +312,10 @@ public class CSharpProvider : DataProvider
         Log($"parsed {syntaxTrees.Count} syntax trees");
 
         // 3. Create Roslyn compilation with framework + project references
-        Dictionary<SyntaxTree, CSharpCompilation> compilations = CSharpProjectCompilations.Create(rootPath,
-            syntaxTrees.Select(t => t.Tree), excluded, GetReferences);
+        Dictionary<SyntaxTree, CSharpCompilation> compilations =
+            await CSharpProjectCompilations.CreateAsync(rootPath,
+                syntaxTrees.Select(t => t.Tree), excluded, GetReferences, cancellationToken)
+                .ConfigureAwait(false);
         Log("created compilation");
 
         // 4. Parse each file using its semantic model.
@@ -264,11 +331,15 @@ public class CSharpProvider : DataProvider
         int _n = 0;
         foreach ((SyntaxTree? tree, string? filePath, string? text) in syntaxTrees)
         {
-            SemanticModel? model = null;
-            try { model = compilations[tree].GetSemanticModel(tree); }
-            catch (Exception ex) when (ex is not OutOfMemoryException)
+            SemanticModel model;
+            try
             {
-                Console.Error.WriteLine($"Warning: Semantic analysis failed for '{filePath}': {ex.Message}");
+                model = compilations[tree].GetSemanticModel(tree);
+            }
+            catch (ArgumentException ex)
+            {
+                throw new InvalidOperationException(
+                    $"Semantic analysis failed for '{filePath}': {ex.Message}", ex);
             }
 
             SourceFile? sourceFile = parser.ParseWithSemantics(filePath, text, tree, model);
@@ -312,7 +383,7 @@ public class CSharpProvider : DataProvider
         }
 
         Dictionary<string, object?> fields = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
-        foreach (string collection in CodebaseCollectionNames)
+        foreach (string collection in s_codebaseCollectionNames)
         {
             fields[collection] = value is DataObject data ? WrapProviderValue(data.GetField(collection)) ?? new List<object>() : new List<object>();
         }
@@ -352,14 +423,15 @@ public class CSharpProvider : DataProvider
         }
 
         Type clrType = value.GetType();
-        if (!ProviderBindings.ClrTypeMappings.TryGetValue(clrType, out string? typeName)
-            || !ProviderBindings.Accessors.TryGetValue(typeName, out Dictionary<string, Func<object, object?>>? accessors))
+        if (!s_providerBindings.ClrTypeMappings.TryGetValue(clrType, out string? typeName)
+            || !s_providerBindings.Accessors.TryGetValue(typeName, out Dictionary<string, Func<object, object?>>? accessors))
         {
             return value;
         }
 
-        return new DataObject(typeName).WithFieldResolver(fieldName =>
+        return new DataObject(typeName).WithAsyncFieldResolver(async (fieldName, token) =>
         {
+            string resolvedName = fieldName;
             if (!accessors.TryGetValue(fieldName, out Func<object, object?>? accessor))
             {
                 foreach (KeyValuePair<string, Func<object, object?>> candidate in accessors)
@@ -370,14 +442,22 @@ public class CSharpProvider : DataProvider
                     }
 
                     accessor = candidate.Value;
+                    resolvedName = candidate.Key;
                     break;
                 }
+            }
+            if (s_providerBindings.AsyncAccessors.TryGetValue(typeName, out Dictionary<string,
+                    Func<object, CancellationToken, ValueTask<object?>>>? asyncFields)
+                && asyncFields.TryGetValue(resolvedName,
+                    out Func<object, CancellationToken, ValueTask<object?>>? asyncRead))
+            {
+                return WrapProviderValue(await asyncRead(value, token).ConfigureAwait(false));
             }
             return accessor is null ? null : WrapProviderValue(accessor(value));
         });
     }
 
-    private static readonly string[] CodebaseCollectionNames =
+    private static readonly string[] s_codebaseCollectionNames =
     [
         "Files",
         "Types",
@@ -389,8 +469,9 @@ public class CSharpProvider : DataProvider
         "Projects"
     ];
 
-    private static readonly RuntimeBindings ProviderBindings = CSharpBindings.Build();
+    private static readonly RuntimeBindings s_providerBindings = CSharpBindings.Build();
 
+    /// <inheritdoc />
     public override void RegisterCapabilities(TypeRegistry registry, string rootPath)
     {
         registry.RegisterDocumentLoader(path =>
@@ -653,7 +734,7 @@ public class CSharpProvider : DataProvider
                 string relDir = Path.GetRelativePath(rootPath, projDir).Replace('\\', '/');
                if (relDir == ".")
                 {
-                    relDir = "";
+                    relDir = string.Empty;
                 }
                 else if (!relDir.EndsWith('/'))
                 {

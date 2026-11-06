@@ -3,6 +3,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Security;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -173,7 +174,8 @@ namespace Cop.Core
                             ));
                         }
                     }
-                    catch (Exception ex)
+                    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException
+                        or SecurityException or CryptographicException)
                     {
                         violations.Add(new ChecksumViolation(
                             FilePath: relativePath,

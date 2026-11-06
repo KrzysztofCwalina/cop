@@ -13,7 +13,7 @@ public static class RustProjectDiscovery
     private sealed class Dependency
     {
         /// <summary>Names the dependency in the declaring manifest.</summary>
-        public string Alias = "";
+        public string Alias = string.Empty;
         /// <summary>Names the actual package when an alias is used.</summary>
         public string? Package;
         /// <summary>Marks a dependency inherited from the workspace.</summary>

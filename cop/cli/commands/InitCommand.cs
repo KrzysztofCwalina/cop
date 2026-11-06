@@ -41,18 +41,28 @@ public static class InitCommand
             copCmdOption
         };
 
-        command.SetAction(ctx => Execute(
-            ctx.GetValue(claudeOption) || ctx.GetValue(localHookOption) || ctx.GetValue(globalHookOption),
-            ctx.GetValue(localHookOption),
-            ctx.GetValue(globalHookOption),
-            ctx.GetValue(copilotHookOption),
-            ctx.GetValue(copCmdOption)));
+        command.SetAction(ctx => Execute(new InitializationOptions
+        {
+            Agent = ctx.GetValue(claudeOption) || ctx.GetValue(localHookOption) ||
+                ctx.GetValue(globalHookOption) ? InstructionAgent.Claude : InstructionAgent.Copilot,
+            IsLocalHookEnabled = ctx.GetValue(localHookOption),
+            IsGlobalHookEnabled = ctx.GetValue(globalHookOption),
+            IsCopilotHookEnabled = ctx.GetValue(copilotHookOption),
+            CopCommand = ctx.GetValue(copCmdOption)
+        }));
 
         return command;
     }
 
-    public static int Execute(bool claude = false, bool localHook = false, bool globalHook = false, bool copilotHook = false, string? copCmd = null)
+    /// <summary>Generates agent instructions and the requested repository hooks.</summary>
+    public static int Execute(InitializationOptions? options = null)
     {
+        options ??= new InitializationOptions();
+        bool claude = options.Agent == InstructionAgent.Claude;
+        bool localHook = options.IsLocalHookEnabled;
+        bool globalHook = options.IsGlobalHookEnabled;
+        bool copilotHook = options.IsCopilotHookEnabled;
+        string? copCmd = options.CopCommand;
         string cwd = Directory.GetCurrentDirectory();
         int filesUpdated = 0;
 
@@ -216,7 +226,7 @@ public static class InitCommand
             {
                 existingJson = File.ReadAllText(settingsPath);
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
                 Console.Error.WriteLine($"Error: Cannot read {fullPath}: {ex.Message}");
                 return -1;
@@ -224,7 +234,7 @@ public static class InitCommand
 
             try
             {
-                root = JsonNode.Parse(existingJson)?.AsObject()
+                root = JsonNode.Parse(existingJson) as JsonObject
                     ?? throw new JsonException("File is not a JSON object");
             }
             catch (JsonException ex)
@@ -248,7 +258,7 @@ public static class InitCommand
             {
                 Directory.CreateDirectory(claudeDir);
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
                 Console.Error.WriteLine($"Error: Cannot create directory {claudeDir}: {ex.Message}");
                 return -1;
@@ -261,7 +271,7 @@ public static class InitCommand
         {
             WriteJson(settingsPath, root);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             Console.Error.WriteLine($"Error: Cannot write {fullPath}: {ex.Message}");
             return -1;
@@ -278,7 +288,8 @@ public static class InitCommand
                 return -1;
             }
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or
+            JsonException or InvalidOperationException)
         {
             Console.Error.WriteLine($"Error: Verification failed — cannot read back {fullPath}: {ex.Message}");
             return -1;
@@ -300,10 +311,11 @@ public static class InitCommand
                 UseShellExecute = false,
                 CreateNoWindow = true
             };
-            Process? proc = System.Diagnostics.Process.Start(psi);
+            using Process? proc = System.Diagnostics.Process.Start(psi);
             proc?.WaitForExit(5000);
         }
-        catch
+        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or
+            IOException or InvalidOperationException)
         {
             Console.Error.WriteLine($"Warning: '{copCmd}' could not be run. The hook will fail unless cop is accessible.");
         }
@@ -454,7 +466,7 @@ public static class InitCommand
             {
                 existingJson = File.ReadAllText(hookPath);
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
                 Console.Error.WriteLine($"Error: Cannot read {fullPath}: {ex.Message}");
                 return -1;
@@ -462,7 +474,7 @@ public static class InitCommand
 
             try
             {
-                root = JsonNode.Parse(existingJson)?.AsObject()
+                root = JsonNode.Parse(existingJson) as JsonObject
                     ?? throw new JsonException("File is not a JSON object");
             }
             catch (JsonException ex)
@@ -481,7 +493,7 @@ public static class InitCommand
             {
                 Directory.CreateDirectory(hooksDir);
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
                 Console.Error.WriteLine($"Error: Cannot create directory {hooksDir}: {ex.Message}");
                 return -1;
@@ -494,7 +506,7 @@ public static class InitCommand
             WriteJson(hookPath, root);
             File.WriteAllText(scriptPath, GetCopilotHookScriptContent(copCmd));
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             Console.Error.WriteLine($"Error: Cannot write GitHub Copilot hook files under {hooksDir}: {ex.Message}");
             return -1;
@@ -516,7 +528,8 @@ public static class InitCommand
                 return -1;
             }
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or
+            JsonException or InvalidOperationException)
         {
             Console.Error.WriteLine($"Error: Verification failed — cannot read back GitHub Copilot hook files: {ex.Message}");
             return -1;

@@ -33,7 +33,7 @@ public class LanguageQueryReuseTests
     public void TearDown() => Directory.Delete(_root, recursive: true);
 
     [Test]
-    public void JavaChecks_PreserveNestedReceiversSuppressionAndDiagnostics()
+    public async Task JavaChecks_PreserveNestedReceiversSuppressionAndDiagnostics()
     {
         Write("Sample.java", """
             class Sample {
@@ -51,7 +51,7 @@ public class LanguageQueryReuseTests
             }
             """);
 
-        AssertChecks("java-checks",
+        await AssertChecks("java-checks",
         [
             "Sample.java(3): warning: Avoid System.out.println() — " +
                 "use a logging framework instead [console-output]",
@@ -65,7 +65,7 @@ public class LanguageQueryReuseTests
     }
 
     [Test]
-    public void JavaScriptChecks_PreserveCallKindsReceiversHandlersAndSuppression()
+    public async Task JavaScriptChecks_PreserveCallKindsReceiversHandlersAndSuppression()
     {
         Write("sample.js", """
             function run() {
@@ -84,7 +84,7 @@ public class LanguageQueryReuseTests
             }
             """);
 
-        AssertChecks("javascript-checks",
+        await AssertChecks("javascript-checks",
         [
             "sample.js(2): warning: Avoid console.log in production code [console-calls]",
             "sample.js(3): warning: Avoid console.warn in production code [console-calls]",
@@ -100,7 +100,7 @@ public class LanguageQueryReuseTests
     }
 
     [Test]
-    public void PythonChecks_PreserveHandlerRethrowsTypeNamesAndSuppression()
+    public async Task PythonChecks_PreserveHandlerRethrowsTypeNamesAndSuppression()
     {
         Write("sample.py", """"
             class Sample:
@@ -124,7 +124,7 @@ public class LanguageQueryReuseTests
                     raise ValueError('specific')
             """");
 
-        AssertChecks("python-checks",
+        await AssertChecks("python-checks",
         [
             "sample.py(5): warning: Avoid print() — use logging instead [print-calls]",
             "sample.py(12): warning: Do not silence Exception — " +
@@ -138,7 +138,7 @@ public class LanguageQueryReuseTests
     }
 
     [Test]
-    public void GoChecks_PreserveThrowKindTypeNamesSuppressionAndProductionScope()
+    public async Task GoChecks_PreserveThrowKindTypeNamesSuppressionAndProductionScope()
     {
         Write("sample.go", """
             package lib
@@ -159,7 +159,7 @@ public class LanguageQueryReuseTests
         Write("ignored_test.go", excluded);
         Write(Path.Combine("vendor", "ignored.go"), excluded);
 
-        AssertChecks("go-checks",
+        await AssertChecks("go-checks",
         [
             "sample.go(3): warning: Avoid panic() in library code — return an error instead",
             "sample.go(4): warning: Avoid os.Exit() outside main — " +
@@ -176,7 +176,7 @@ public class LanguageQueryReuseTests
     }
 
     [Test]
-    public void RustChecks_PreserveMemberSetsMacroKindsSuppressionAndProductionScope()
+    public async Task RustChecks_PreserveMemberSetsMacroKindsSuppressionAndProductionScope()
     {
         Write("sample.rs", """
             fn run() {
@@ -231,12 +231,12 @@ public class LanguageQueryReuseTests
                 "use a logging framework (log/tracing) [console-output]");
         expected.Add("sample.rs(19): info: Review .clone() — it allocates; " +
             "borrow or move if the clone is unnecessary [needless-clone]");
-        AssertChecks("rust-checks", expected.ToArray());
+        await AssertChecks("rust-checks", expected.ToArray());
     }
 
     [TestCase("go")]
     [TestCase("rust")]
-    public void ComplexityChecks_PreserveExclusiveParameterAndStatementLimits(string language)
+    public async Task ComplexityChecks_PreserveExclusiveParameterAndStatementLimits(string language)
     {
         var parameters = Enumerable.Range(0, 8).Select(index =>
             language == "go" ? $"p{index} int" : $"p{index}: i32").ToArray();
@@ -252,7 +252,7 @@ public class LanguageQueryReuseTests
         var checkSuffix = language == "go" ? "" : " [too-many-arguments]";
         var largeSuffix = language == "go" ? "" : " [large-function]";
 
-        AssertChecks(language + "-checks",
+        await AssertChecks(language + "-checks",
         [
             $"{file}({line}): warning: above has more than 7 parameters — " +
                 "group them into a struct" + checkSuffix,
@@ -266,7 +266,7 @@ public class LanguageQueryReuseTests
     [TestCase("python-library-checks", "too-many-positional-params",
         "LimitClient has a method with more than 5 positional parameters — " +
         "use keyword arguments")]
-    public void PythonParameterChecks_PreserveExclusiveLimitAndSelectedType(
+    public async Task PythonParameterChecks_PreserveExclusiveLimitAndSelectedType(
         string package, string check, string message)
     {
         Write("sample.py", """
@@ -280,7 +280,7 @@ public class LanguageQueryReuseTests
                     pass
             """);
 
-        AssertChecks(package, [$"sample.py(1): warning: {message}"], check);
+        await AssertChecks(package, [$"sample.py(1): warning: {message}"], check);
     }
 
     [TestCase("python-checks", "sample.py", "no-six-import",
@@ -296,11 +296,11 @@ public class LanguageQueryReuseTests
         "    // cop-ignore: eq-to-none\n    value == None;\n}\n",
         "sample.rs(2): warning: Use .is_none()/.is_some() " +
         "instead of == None / != None [eq-to-none]")]
-    public void LineSuppression_PreservesExistingRuleSelection(
+    public async Task LineSuppression_PreservesExistingRuleSelection(
         string package, string file, string check, string source, string expected)
     {
         Write(file, source);
-        AssertChecks(package, [expected], check);
+        await AssertChecks(package, [expected], check);
     }
 
     [TestCase("java-checks", "Sample.java",
@@ -316,11 +316,11 @@ public class LanguageQueryReuseTests
     [TestCase("rust-checks", "sample.rs",
         "fn run() { value.Unwrap(); value.Expect(\"safe\"); " +
         "value.Clone(); Transmute(value); }")]
-    public void MemberAndReceiverQueries_PreserveCaseSensitivePolicy(
+    public async Task MemberAndReceiverQueries_PreserveCaseSensitivePolicy(
         string package, string file, string source)
     {
         Write(file, source);
-        AssertChecks(package, []);
+        await AssertChecks(package, []);
     }
 
     private void Write(string path, string content)
@@ -330,7 +330,7 @@ public class LanguageQueryReuseTests
         File.WriteAllText(fullPath, content);
     }
 
-    private void AssertChecks(string package, string[] expected, string? checks = null)
+    private async Task AssertChecks(string package, string[] expected, string? checks = null)
     {
         List<string> commands = [];
         string[] scripts = [];
@@ -343,8 +343,8 @@ public class LanguageQueryReuseTests
             scripts = [script];
         }
 
-        var result = Engine.RunProject([Path.Combine(RepoRoot, "packages")],
-            [package], _root, commands, additionalScriptFiles: scripts);
+        var result = (await Engine.RunProjectAsync([Path.Combine(RepoRoot, "packages")],
+            [package], _root, commands, new EngineRunOptions { ScriptFiles = scripts }));
         Assert.That(result.HasFatalErrors, Is.False, string.Join("; ", result.Errors));
         Assert.That(result.Outputs.Select(output => output.Message), Is.EqualTo(expected));
         Assert.That(result.ExitCode, Is.EqualTo(expected.Length));

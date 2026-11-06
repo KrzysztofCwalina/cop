@@ -15,7 +15,7 @@ public static class BashParser
     /// </summary>
     public record BashParseResult(List<ShellCommandInfo> Commands, ShellScriptInfo Script);
 
-    private static readonly HashSet<string> ShellKeywords = new(StringComparer.Ordinal)
+    private static readonly HashSet<string> s_shellKeywords = new(StringComparer.Ordinal)
     {
         "!", "[", "[[", "{", "}", "case", "do", "done", "elif", "else", "esac", "fi",
         "for", "function", "if", "in", "select", "then", "time", "until", "while"
@@ -92,7 +92,7 @@ public static class BashParser
         foreach (string segment in SplitSimpleCommands(text))
         {
             string name = GetCommandName(segment);
-            if (name.Length == 0 || ShellKeywords.Contains(name))
+            if (name.Length == 0 || s_shellKeywords.Contains(name))
             {
                 continue;
             }
@@ -270,13 +270,13 @@ public static class BashParser
 
         if (i >= tokens.Count)
         {
-            return "";
+            return string.Empty;
         }
 
         string name = tokens[i];
         if (name.EndsWith("()", StringComparison.Ordinal))
         {
-            return "";
+            return string.Empty;
         }
 
         return name;

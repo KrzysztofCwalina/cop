@@ -9,11 +9,11 @@ namespace Cop.Providers.SourceParsers;
 
 internal static class GoSemanticAnalysis
 {
-    private static readonly JsonSerializerOptions Json = new() { PropertyNameCaseInsensitive = true };
-    private static readonly Dictionary<string, string?> EnvironmentOverrides = new()
+    private static readonly JsonSerializerOptions s_json = new() { PropertyNameCaseInsensitive = true };
+    private static readonly Dictionary<string, string?> s_environmentOverrides = new()
     {
         ["GOTOOLCHAIN"] = "local",
-        ["GOFLAGS"] = "",
+        ["GOFLAGS"] = string.Empty,
         ["GOPROXY"] = "off",
         ["GOSUMDB"] = "off",
         ["GONOPROXY"] = "none",
@@ -33,11 +33,11 @@ internal static class GoSemanticAnalysis
     /// <summary>Defers Go helper analysis until semantic facts are requested.</summary>
     public static void Attach(SourceFile file, string go, string helper)
     {
-        Lazy<bool> analysis = new Lazy<bool>(() =>
+        AsyncProviderValue<bool> analysis = new(async cancellationToken =>
         {
             string path = Path.GetFullPath(string.IsNullOrEmpty(file.FullPath) ? file.Path : file.FullPath);
             string directory = Path.GetDirectoryName(path)!;
-            Dictionary<string, string?> environment = new Dictionary<string, string?>(EnvironmentOverrides);
+            Dictionary<string, string?> environment = new Dictionary<string, string?>(s_environmentOverrides);
             bool module = false;
             bool vendor = false;
             for (string? ancestor = directory; ancestor is not null; ancestor = Path.GetDirectoryName(ancestor))
@@ -66,8 +66,12 @@ internal static class GoSemanticAnalysis
                 arguments = arguments[..^1].Concat(new[] { "-test", "." }).ToArray();
             }
 
-            ToolchainResult listing = ToolchainProcess.RunAsync(go, arguments, directory,
-                timeout: TimeSpan.FromMinutes(2), maxOutputCharacters: 16_777_216, environment: environment).GetAwaiter().GetResult();
+            ToolchainResult listing = await ToolchainProcess.RunAsync(
+                new ToolchainCommand(go, arguments, directory, environment),
+                new ToolchainRunOptions
+                {
+                    Timeout = TimeSpan.FromMinutes(2), MaxOutputCharacters = 16_777_216
+                }, cancellationToken).ConfigureAwait(false);
             if (listing.Status != ToolchainStatus.Success)
             {
                 throw new InvalidOperationException($"Go semantic package discovery {listing.Status}: {listing.Diagnostic ?? listing.StandardError}");
@@ -86,14 +90,18 @@ internal static class GoSemanticAnalysis
                 Semantic = true,
                 Packages = packages
             });
-            ToolchainResult result = ToolchainExecutionScope.RequestAsync(helper, [], Path.GetDirectoryName(helper)!, request,
-                timeout: TimeSpan.FromMinutes(2), maxOutputCharacters: 16_777_216).GetAwaiter().GetResult();
+            ToolchainResult result = await ToolchainExecutionScope.RequestAsync(
+                new ToolchainCommand(helper, [], Path.GetDirectoryName(helper)!), request,
+                new ToolchainRunOptions
+                {
+                    Timeout = TimeSpan.FromMinutes(2), MaxOutputCharacters = 16_777_216
+                }, cancellationToken).ConfigureAwait(false);
             if (result.Status != ToolchainStatus.Success)
             {
                 throw new InvalidOperationException($"Go semantic analysis {result.Status}: {result.Diagnostic ?? result.StandardError}");
             }
 
-            SemanticResponse response = JsonSerializer.Deserialize<SemanticResponse>(result.StandardOutput, Json)
+            SemanticResponse response = JsonSerializer.Deserialize<SemanticResponse>(result.StandardOutput, s_json)
                 ?? throw new InvalidOperationException("Go semantic analysis returned null.");
             if (response.Facts is null || response.Errors is null)
             {
@@ -122,7 +130,7 @@ internal static class GoSemanticAnalysis
         });
         foreach (StatementInfo statement in file.Statements)
         {
-            statement.DeferSemanticAnalysis(analysis);
+            statement.DeferSemanticAnalysisAsync(analysis);
         }
     }
 

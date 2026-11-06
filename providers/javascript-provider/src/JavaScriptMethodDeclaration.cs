@@ -61,16 +61,3 @@ public sealed record JavaScriptMethodDeclaration : MethodDeclaration
             isGetter: flags.TryGetValue("IsGetter", out bool getter) && getter,
             isSetter: flags.TryGetValue("IsSetter", out bool setter) && setter));
 }
-
-/// <summary>Converts shared methods to JavaScript-specific declarations.</summary>
-public static class JavaScriptMethodDeclarationExtensions
-{
-    /// <summary>Wraps a shared method with JavaScript function-form facts.</summary>
-    public static JavaScriptMethodDeclaration AsJavaScript(
-        this MethodDeclaration source,
-        bool isGenerator = false,
-        bool isArrow = false,
-        bool isGetter = false,
-        bool isSetter = false)
-        => new(source, isGenerator, isArrow, isGetter, isSetter);
-}

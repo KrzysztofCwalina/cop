@@ -294,7 +294,8 @@ public class StructuralCheckPolicyTests
         {
             using var output = new StringWriter();
             Console.SetOut(output);
-            Assert.That(VerifyCommand.Execute(file, json: true), Is.EqualTo(0));
+            Assert.That(VerifyCommand.Execute(file,
+                new VerificationOptions { IsJsonOutputEnabled = true }), Is.EqualTo(0));
             output.GetStringBuilder().Clear();
             var command = VerifyCommand.Create();
             Assert.That(command.Parse([file, "--strict-structure", "--json"]).Invoke(), Is.EqualTo(1));
@@ -318,11 +319,12 @@ public class StructuralCheckPolicyTests
     [Test]
     public void VerifyRejectsApprovalWithoutStrictMode()
     {
-        Assert.That(VerifyCommand.Execute(null, allowTextChecks: ["bad"]), Is.EqualTo(1));
+        Assert.That(VerifyCommand.Execute(null,
+            new VerificationOptions { AllowedTextChecks = ["bad"] }), Is.EqualTo(1));
     }
 
     [Test]
-    public void PackagedStructuralExampleVerifiesAndRunsWithoutMatchingTextDecoys()
+    public async Task PackagedStructuralExampleVerifiesAndRunsWithoutMatchingTextDecoys()
     {
         var repo = new DirectoryInfo(TestContext.CurrentContext.TestDirectory);
         while (repo is not null && !File.Exists(Path.Combine(repo.FullName, "cop.sln")))
@@ -361,10 +363,10 @@ public class StructuralCheckPolicyTests
                 """);
             var diagnostics = VerifyCommand.CollectDiagnostics([main], scripts, File.ReadAllText, strictStructure: true);
             Assert.That(diagnostics, Is.Empty);
-            var result = Engine.Run(scripts, target, new EngineRunOptions
+            var result = (await Engine.RunAsync(scripts, target, new EngineRunOptions
             {
                 AdditionalFeedPaths = [packages],
-            });
+            }));
             Assert.That(result.HasParseErrors, Is.False, string.Join("\n", result.ParseErrors));
             Assert.That(result.HasFatalErrors, Is.False, string.Join("\n", result.Errors));
             Assert.That(result.Outputs.Select(o => o.Message), Is.EqualTo(new[]

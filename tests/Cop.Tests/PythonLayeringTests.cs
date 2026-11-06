@@ -60,19 +60,19 @@ public class PythonLayeringTests
         return root;
     }
 
-    private static EngineResult RunLayering(string workspaceRoot)
+    private static async Task<EngineResult> RunLayering(string workspaceRoot)
     {
         var feedPaths = new List<string> { Path.Combine(RepoRoot, "packages") };
         var scriptPath = Path.Combine(Path.GetTempPath(), "cop-pythonlayer-check-" + Guid.NewGuid().ToString("N")[..8] + ".cop");
         File.WriteAllText(scriptPath, LayeringCheck);
         try
         {
-            return Engine.Run(Path.GetDirectoryName(scriptPath)!, workspaceRoot, new EngineRunOptions
+            return (await Engine.RunAsync(Path.GetDirectoryName(scriptPath)!, workspaceRoot, new EngineRunOptions
             {
                 CommandName = "LAYERING",
                 AdditionalFeedPaths = feedPaths.ToArray(),
                 ScriptFiles = [scriptPath],
-            });
+            }));
         }
         finally
         {
@@ -81,12 +81,12 @@ public class PythonLayeringTests
     }
 
     [Test]
-    public void Layering_DetectsForbiddenPackageDependency()
+    public async Task Layering_DetectsForbiddenPackageDependency()
     {
         var workspace = MakeWorkspace(foundationDependsOnService: true);
         try
         {
-            var result = RunLayering(workspace);
+            var result = (await RunLayering(workspace));
 
             Assert.That(result.HasFatalErrors, Is.False,
                 "Layering check should run cleanly. Errors: " + string.Join("; ", result.Errors));
@@ -102,12 +102,12 @@ public class PythonLayeringTests
     }
 
     [Test]
-    public void Layering_CleanArchitecture_NoViolations()
+    public async Task Layering_CleanArchitecture_NoViolations()
     {
         var workspace = MakeWorkspace(foundationDependsOnService: false);
         try
         {
-            var result = RunLayering(workspace);
+            var result = (await RunLayering(workspace));
 
             Assert.That(result.HasFatalErrors, Is.False,
                 "Layering check should run cleanly. Errors: " + string.Join("; ", result.Errors));

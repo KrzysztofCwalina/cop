@@ -44,7 +44,7 @@ public class ImportedPredicateTests
     /// when used as a filter on a collection registered in the global environment.
     /// </summary>
     [Test]
-    public void ExportedPredicateFilter_MatchesLocalPredicate()
+    public async Task ExportedPredicateFilter_MatchesLocalPredicate()
     {
         // Package exports a predicate that checks a field
         CreatePackage("checks", @"
@@ -70,12 +70,12 @@ export predicate isPublic(t) => t.Visibility == 'public'
         Assert.That(errors, Is.Empty, "Deferred let errors: " + string.Join(", ", errors));
 
         // Use the imported predicate as a filter
-        bridge.LoadSource(@"
+        await bridge.LoadSourceAsync(@"
 command main = {
     let filtered = Types:isPublic
     print(filtered.Count)
-}", "<test>");
-        bridge.RunCommand("main");
+}", "<test>", cancellationToken: CancellationToken.None);
+        await bridge.RunCommandAsync("main", cancellationToken: CancellationToken.None);
 
         Assert.That(bridge.Outputs, Has.Count.EqualTo(1));
         Assert.That(bridge.Outputs[0], Is.EqualTo("2"),
@@ -88,7 +88,7 @@ command main = {
     /// This reproduces the csharp-checks isVarDeclaration bug.
     /// </summary>
     [Test]
-    public void ExportedPredicateWithContains_WorksWhenImported()
+    public async Task ExportedPredicateWithContains_WorksWhenImported()
     {
         // Package exports a predicate checking Keywords:contains
         CreatePackage("checks", @"
@@ -113,12 +113,12 @@ export predicate isVarDecl(s) => s.Kind == 'declaration' && s.Keywords:contains(
         loader.EvalDeferredLetBindings(bridge.Evaluator, errors);
         Assert.That(errors, Is.Empty);
 
-        bridge.LoadSource(@"
+        await bridge.LoadSourceAsync(@"
 command main = {
     let filtered = Statements:isVarDecl
     print(filtered.Count)
-}", "<test>");
-        bridge.RunCommand("main");
+}", "<test>", cancellationToken: CancellationToken.None);
+        await bridge.RunCommandAsync("main", cancellationToken: CancellationToken.None);
 
         Assert.That(bridge.Outputs[0], Is.EqualTo("2"),
             "Imported predicate with :contains should match 2 var declarations");
@@ -129,7 +129,7 @@ command main = {
     /// should produce identical results on the same data.
     /// </summary>
     [Test]
-    public void ImportedVsLocalPredicate_SameResults()
+    public async Task ImportedVsLocalPredicate_SameResults()
     {
         CreatePackage("checks", @"
 export predicate isHigh(item) => item.Score > 10
@@ -151,15 +151,15 @@ export predicate isHigh(item) => item.Score > 10
         loader.EvalDeferredLetBindings(bridge.Evaluator, errors);
         Assert.That(errors, Is.Empty);
 
-        bridge.LoadSource(@"
+        await bridge.LoadSourceAsync(@"
 predicate localHigh(item) => item.Score > 10
 command main = {
     let imported = items:isHigh
     let local = items:localHigh
     print(imported.Count)
     print(local.Count)
-}", "<test>");
-        bridge.RunCommand("main");
+}", "<test>", cancellationToken: CancellationToken.None);
+        await bridge.RunCommandAsync("main", cancellationToken: CancellationToken.None);
 
         Assert.That(bridge.Outputs[0], Is.EqualTo("2"), "Imported predicate");
         Assert.That(bridge.Outputs[1], Is.EqualTo("2"), "Local predicate");
@@ -172,7 +172,7 @@ command main = {
     // ========================================================================
 
     [Test]
-    public void ImportedFunction_RuntimeIntrinsicRegisteredLater_UsesRuntimeImplementation()
+    public async Task ImportedFunction_RuntimeIntrinsicRegisteredLater_UsesRuntimeImplementation()
     {
         CreatePackage("model", @"
 export function getValue() => provider('example', 'data')
@@ -184,15 +184,15 @@ export function getValue() => provider('example', 'data')
         Assert.That(loader.Errors, Is.Empty);
 
         bridge.RegisterFunction("provider", (args, env) => new CopInt(2), 2);
-        bridge.LoadSource("command main = print(getValue())", "<test>");
-        bridge.RunCommand("main");
+        await bridge.LoadSourceAsync("command main = print(getValue())", "<test>", cancellationToken: CancellationToken.None);
+        await bridge.RunCommandAsync("main", cancellationToken: CancellationToken.None);
 
         Assert.That(bridge.Errors, Is.Empty);
         Assert.That(bridge.Outputs, Is.EqualTo(new[] { "2" }));
     }
 
     [Test]
-    public void ImportedLet_CallerShadowsImportedFunction_UsesPackageFunction()
+    public async Task ImportedLet_CallerShadowsImportedFunction_UsesPackageFunction()
     {
         CreatePackage("model", @"
 export function codebase(value) => { Count: value }
@@ -211,13 +211,13 @@ export let findings = [cb.Count]
         Assert.That(loader.Errors, Is.Empty);
         Assert.That(errors, Is.Empty);
 
-        bridge.LoadSource(@"
+        await bridge.LoadSourceAsync(@"
 let codebase = codebase(3)
 command main = {
     print(codebase.Count)
     print(findings[0])
-}", "<test>");
-        bridge.RunCommand("main");
+}", "<test>", cancellationToken: CancellationToken.None);
+        await bridge.RunCommandAsync("main", cancellationToken: CancellationToken.None);
 
         Assert.That(bridge.Errors, Is.Empty);
         Assert.That(bridge.Outputs, Is.EqualTo(new[] { "3", "2" }));
@@ -229,7 +229,7 @@ command main = {
     /// This reproduces the csharp-checks var-declarations bug.
     /// </summary>
     [Test]
-    public void ExportedLetBinding_FilteringGlobalCollection_ResolvesCorrectly()
+    public async Task ExportedLetBinding_FilteringGlobalCollection_ResolvesCorrectly()
     {
         // Package defines a let that filters a global collection
         CreatePackage("checks", @"
@@ -253,9 +253,9 @@ export let public-types = Types:isPublic
         loader.EvalDeferredLetBindings(bridge.Evaluator, errors);
         Assert.That(errors, Is.Empty, "Deferred let errors: " + string.Join(", ", errors));
 
-        bridge.LoadSource(@"
-command main = print(public-types.Count)", "<test>");
-        bridge.RunCommand("main");
+        await bridge.LoadSourceAsync(@"
+command main = print(public-types.Count)", "<test>", cancellationToken: CancellationToken.None);
+        await bridge.RunCommandAsync("main", cancellationToken: CancellationToken.None);
 
         Assert.That(bridge.Outputs[0], Is.EqualTo("2"),
             "Exported let binding should resolve to filtered collection with 2 items");
@@ -267,7 +267,7 @@ command main = print(public-types.Count)", "<test>");
     /// This simulates: csharp.cop exports statements(), csharp-checks uses it.
     /// </summary>
     [Test]
-    public void ExportedLetBinding_ViaTransitiveFunction_ResolvesCorrectly()
+    public async Task ExportedLetBinding_ViaTransitiveFunction_ResolvesCorrectly()
     {
         // Package "provider-pkg" exports a function that returns a collection
         CreatePackage("provider-pkg", @"
@@ -297,9 +297,9 @@ export let active-items = getItems():isActive
         loader.EvalDeferredLetBindings(bridge.Evaluator, errors);
         Assert.That(errors, Is.Empty);
 
-        bridge.LoadSource(@"
-command main = print(active-items.Count)", "<test>");
-        bridge.RunCommand("main");
+        await bridge.LoadSourceAsync(@"
+command main = print(active-items.Count)", "<test>", cancellationToken: CancellationToken.None);
+        await bridge.RunCommandAsync("main", cancellationToken: CancellationToken.None);
 
         Assert.That(bridge.Outputs[0], Is.EqualTo("2"),
             "Exported let via transitive function should see 2 active items");
@@ -310,7 +310,7 @@ command main = print(active-items.Count)", "<test>");
     /// predicates should all resolve correctly.
     /// </summary>
     [Test]
-    public void MultipleExportedLetBindings_AllResolveCorrectly()
+    public async Task MultipleExportedLetBindings_AllResolveCorrectly()
     {
         CreatePackage("checks", @"
 predicate isPublic(t) => t.Visibility == 'public'
@@ -336,13 +336,13 @@ export let all-checks = public-types + class-types
         loader.EvalDeferredLetBindings(bridge.Evaluator, errors);
         Assert.That(errors, Is.Empty);
 
-        bridge.LoadSource(@"
+        await bridge.LoadSourceAsync(@"
 command main = {
     print(public-types.Count)
     print(class-types.Count)
     print(all-checks.Count)
-}", "<test>");
-        bridge.RunCommand("main");
+}", "<test>", cancellationToken: CancellationToken.None);
+        await bridge.RunCommandAsync("main", cancellationToken: CancellationToken.None);
 
         Assert.That(bridge.Outputs[0], Is.EqualTo("2"), "public-types should have 2");
         Assert.That(bridge.Outputs[1], Is.EqualTo("2"), "class-types should have 2");
@@ -358,7 +358,7 @@ command main = {
     /// when called from an importing file.
     /// </summary>
     [Test]
-    public void ExportedFunction_ReturningFilteredCollection_Works()
+    public async Task ExportedFunction_ReturningFilteredCollection_Works()
     {
         CreatePackage("provider-pkg", @"
 predicate isPublic(t) => t.Visibility == 'public'
@@ -380,12 +380,12 @@ export function publicTypes() = Types:isPublic
         loader.EvalDeferredLetBindings(bridge.Evaluator, errors);
         Assert.That(errors, Is.Empty);
 
-        bridge.LoadSource(@"
+        await bridge.LoadSourceAsync(@"
 command main = {
     let result = publicTypes()
     print(result.Count)
-}", "<test>");
-        bridge.RunCommand("main");
+}", "<test>", cancellationToken: CancellationToken.None);
+        await bridge.RunCommandAsync("main", cancellationToken: CancellationToken.None);
 
         Assert.That(bridge.Outputs[0], Is.EqualTo("1"),
             "Exported function should return 1 public type");
@@ -400,7 +400,7 @@ command main = {
     /// should work through transitive imports.
     /// </summary>
     [Test]
-    public void ExportedPredicate_ChainedContainsFilter_ViaTransitiveImport()
+    public async Task ExportedPredicate_ChainedContainsFilter_ViaTransitiveImport()
     {
         // Simulates csharp package exporting statements()
         CreatePackage("lang-pkg", @"
@@ -430,11 +430,11 @@ export let var-decls = statements():isVarDecl
         loader.EvalDeferredLetBindings(bridge.Evaluator, errors);
         Assert.That(errors, Is.Empty);
 
-        bridge.LoadSource(@"
+        await bridge.LoadSourceAsync(@"
 command main = {
     print(var-decls.Count)
-}", "<test>");
-        bridge.RunCommand("main");
+}", "<test>", cancellationToken: CancellationToken.None);
+        await bridge.RunCommandAsync("main", cancellationToken: CancellationToken.None);
 
         Assert.That(bridge.Outputs[0], Is.EqualTo("1"),
             "Exported let via transitive function + chained filter should find 1 var declaration");
@@ -449,7 +449,7 @@ command main = {
     /// predicates with different names that operate on the same data.
     /// </summary>
     [Test]
-    public void ImportingPackage_DoesNotBreak_LocalPredicates()
+    public async Task ImportingPackage_DoesNotBreak_LocalPredicates()
     {
         CreatePackage("checks", @"
 export predicate isPublic(t) => t.Visibility == 'public'
@@ -471,13 +471,13 @@ export let public-types = Types:isPublic
         loader.EvalDeferredLetBindings(bridge.Evaluator, errors);
         Assert.That(errors, Is.Empty);
 
-        bridge.LoadSource(@"
+        await bridge.LoadSourceAsync(@"
 predicate isClass(t) => t.Kind == 'class'
 command main = {
     let classes = Types:isClass
     print(classes.Count)
-}", "<test>");
-        bridge.RunCommand("main");
+}", "<test>", cancellationToken: CancellationToken.None);
+        await bridge.RunCommandAsync("main", cancellationToken: CancellationToken.None);
 
         Assert.That(bridge.Outputs[0], Is.EqualTo("1"),
             "Local predicate should still work after importing a package");

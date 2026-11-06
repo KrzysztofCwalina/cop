@@ -9,7 +9,7 @@ namespace Cop.Repl;
 /// <summary>
 /// Main REPL session: prompt, read, eval, print loop.
 /// </summary>
-public class ReplSession
+public class ReplSession : IAsyncDisposable
 {
     private readonly string _scriptsDir;
     private readonly string _rootPath;
@@ -21,6 +21,7 @@ public class ReplSession
 
     private const string Prompt = "cop> ";
 
+    /// <summary>Initializes an interactive session from scripts and an analysis target.</summary>
     public ReplSession(string scriptsDir, string rootPath)
     {
         _scriptsDir = scriptsDir;
@@ -36,12 +37,13 @@ public class ReplSession
     /// <summary>
     /// Runs the REPL loop until the user exits.
     /// </summary>
-    public int Run()
+    public async Task<int> RunAsync(CancellationToken cancellationToken = default)
     {
         PrintBanner();
 
         while (true)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             string? input = _editor.ReadLine(Prompt);
 
             if (input is null)
@@ -57,7 +59,7 @@ public class ReplSession
             }
 
             // Handle built-in REPL commands
-            BangResult bangResult = HandleBuiltinCommand(input);
+            BangResult bangResult = await HandleBuiltinCommandAsync(input);
             if (bangResult == BangResult.Exit)
             {
                 Console.WriteLine("Bye!");
@@ -69,18 +71,22 @@ public class ReplSession
             }
 
             // Auto-reload if .cop files changed on disk
-            AutoReloadIfNeeded();
+            await AutoReloadIfNeededAsync();
 
             // Evaluate the input
             try
             {
-                List<string> outputs = _evaluator.Evaluate(input);
+                List<string> outputs = await _evaluator.EvaluateAsync(input, cancellationToken);
                 foreach (string line in outputs)
                 {
                     Console.WriteLine(line);
                 }
             }
-            catch (Exception ex) when (ex is not OutOfMemoryException)
+            catch (Exception ex) when (ex is Cop.Lang.Interpreter.CopEvaluationException or
+                ParseException or IOException or UnauthorizedAccessException or
+                System.Security.SecurityException or HttpRequestException or TimeoutException or
+                ArgumentException or InvalidOperationException or NotSupportedException or
+                FormatException or System.Text.Json.JsonException)
             {
                 Console.Error.WriteLine($"\x1b[31mError: {ex.Message}\x1b[0m");
             }
@@ -122,7 +128,7 @@ public class ReplSession
     /// Handles built-in REPL commands. All commands require a trailing '!' suffix.
     /// Returns Exit to quit, Handled to continue loop, NotHandled if not a built-in command.
     /// </summary>
-    private BangResult HandleBuiltinCommand(string input)
+    private async ValueTask<BangResult> HandleBuiltinCommandAsync(string input)
     {
         if (!input.EndsWith('!'))
         {
@@ -142,7 +148,7 @@ public class ReplSession
                 return BangResult.Handled;
 
             case "reload" or "r":
-                ForceReload();
+                await ForceReloadAsync();
                 return BangResult.Handled;
 
             case "help" or "h":
@@ -162,31 +168,36 @@ public class ReplSession
         }
     }
 
-    private void AutoReloadIfNeeded()
+    private async ValueTask AutoReloadIfNeededAsync()
     {
         if (!FilesChanged())
         {
             return;
         }
 
-        ReloadContext();
+        await ReloadContextAsync();
     }
 
-    private void ForceReload()
+    private async ValueTask ForceReloadAsync()
     {
-        ReloadContext();
+        await ReloadContextAsync();
         Console.WriteLine("Reloaded.");
     }
 
-    private void ReloadContext()
+    private async ValueTask ReloadContextAsync()
     {
+        ReplContext previousContext = _context;
         _context = InitializeContext();
         _evaluator = new ReplEvaluator(_context);
         _completer = new ReplCompleter(_evaluator);
         _editor = new LineEditor(_completer);
         _editor.SetPrompt(Prompt);
         _fileTimestamps = SnapshotTimestamps();
+        await previousContext.DisposeAsync();
     }
+
+    /// <summary>Releases external providers retained by the interactive session.</summary>
+    public ValueTask DisposeAsync() => _context.DisposeAsync();
 
     private Dictionary<string, DateTime> SnapshotTimestamps()
     {
@@ -198,7 +209,10 @@ public class ReplSession
                 timestamps[file] = File.GetLastWriteTimeUtc(file);
             }
         }
-        catch { }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            Console.Error.WriteLine($"Cannot inspect REPL scripts: {ex.Message}");
+        }
         return timestamps;
     }
 
@@ -225,7 +239,11 @@ public class ReplSession
                 }
             }
         }
-        catch { return true; }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            Console.Error.WriteLine($"Cannot inspect REPL scripts: {ex.Message}");
+            return true;
+        }
         return false;
     }
 

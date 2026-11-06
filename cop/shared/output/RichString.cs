@@ -10,6 +10,9 @@ namespace Cop.Lang;
 /// </summary>
 public class RichString
 {
+    /// <summary>
+    /// The ordered text segments and formatting metadata comprising this value.
+    /// </summary>
     public IReadOnlyList<TextSpan> Spans { get; }
 
     public RichString(IReadOnlyList<TextSpan> spans) => Spans = spans;
@@ -81,5 +84,6 @@ public class RichString
         return result.Count > 0 ? result : null;
     }
 
+    /// <inheritdoc/>
     public override string ToString() => ToPlainText();
 }

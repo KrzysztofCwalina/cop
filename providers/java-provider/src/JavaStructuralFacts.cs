@@ -49,7 +49,7 @@ internal static class JavaStructuralFacts
             if (token.Kind == JavaTokenKind.Keyword &&
                 token.Value is "if" or "while" or "return" or "switch" or "else" or "do" or "break" or "continue")
             {
-                JavaStatementInfo statement = new JavaStatementInfo(token.Value, [], null, null, [], token.Line, inMethod)
+                JavaStatementInfo statement = new JavaStatementInfo(new StatementInfo(token.Value, [], null, null, [], token.Line, inMethod))
                 { IsBraced = i + 1 < end && tokens[i + 1].Value == "{" };
                 Attach(statement, parent);
                 statements.Add(statement);
@@ -125,8 +125,8 @@ internal static class JavaStructuralFacts
             string member = constructor ? "<init>" : tokens[targetEnd - 1].Value;
             string? receiver = constructor ? Text(tokens, first, open)
                 : targetEnd > first + 1 ? Text(tokens, first, targetEnd - 2) : null;
-            JavaStatementInfo call = new JavaStatementInfo("call", [], receiver, member,
-                args.Select(a => Text(tokens, a.Start, a.End)).ToList(), token.Line, inMethod)
+            JavaStatementInfo call = new JavaStatementInfo(new StatementInfo("call", [], receiver, member,
+                args.Select(a => Text(tokens, a.Start, a.End)).ToList(), token.Line, inMethod))
             {
                 CallTarget = constructor ? new("memberAccess") { Name = "<init>", Target = target } : target,
                 ArgumentExpressions = args.Select(a => Expression(tokens, a.Start, a.End)).ToList()
@@ -142,9 +142,9 @@ internal static class JavaStructuralFacts
     private static void Attach(StatementInfo statement, StatementInfo? parent)
     {
         statement.Parent = parent;
-        if (parent is not null && !parent._children.Contains(statement))
+        if (parent is not null && !parent.MutableChildren.Contains(statement))
         {
-            parent._children.Add(statement);
+            parent.MutableChildren.Add(statement);
         }
     }
 

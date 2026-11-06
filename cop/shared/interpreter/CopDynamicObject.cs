@@ -19,8 +19,17 @@ public sealed class CopDynamicObject : CopValue
         _adapter = adapter;
     }
 
+    /// <summary>
+    /// The provider or CLR object wrapped without copying its members.
+    /// </summary>
     public object Underlying => _underlying;
+    /// <summary>
+    /// The adapter's Cop type name, falling back to the data object's declared type.
+    /// </summary>
     public string? TypeName => _adapter.TypeName ?? (_underlying is DataObject dao ? dao.TypeName : null);
+    /// <summary>
+    /// The member names exposed by the adapter or wrapped data object.
+    /// </summary>
     public IEnumerable<string> FieldNames
     {
         get
@@ -37,6 +46,9 @@ public sealed class CopDynamicObject : CopValue
         }
     }
 
+    /// <summary>
+    /// Tests whether the wrapped object exposes a member with the supplied name.
+    /// </summary>
     public bool HasField(string name)
     {
         CopValue val = _adapter.GetField(_underlying, name);
@@ -48,6 +60,9 @@ public sealed class CopDynamicObject : CopValue
         return name == "Type" && _adapter.TypeName is not null;
     }
 
+    /// <summary>
+    /// Resolves a wrapped member and converts its value into a language value.
+    /// </summary>
     public CopValue GetField(string name)
     {
         CopValue val = _adapter.GetField(_underlying, name);
@@ -59,6 +74,27 @@ public sealed class CopDynamicObject : CopValue
         return val;
     }
 
+    /// <summary>Reads a member after awaiting provider preparation for that member.</summary>
+    public async ValueTask<CopValue> GetFieldAsync(string name,
+        CancellationToken cancellationToken = default)
+    {
+        CopValue value = await _adapter.GetFieldAsync(_underlying, name, cancellationToken)
+            .ConfigureAwait(false);
+        return value is CopNull && name == "Type" && _adapter.TypeName is not null
+            ? new CopString(_adapter.TypeName) : value;
+    }
+
+    /// <summary>Tests member availability after any demand-driven asynchronous preparation.</summary>
+    public async ValueTask<bool> HasFieldAsync(string name,
+        CancellationToken cancellationToken = default) =>
+        await GetFieldAsync(name, cancellationToken).ConfigureAwait(false) is not CopNull;
+
+    /// <inheritdoc/>
     public override string Display() => _adapter.Display(_underlying);
+    /// <inheritdoc/>
+    public override ValueTask<string> DisplayAsync(
+        CancellationToken cancellationToken = default) =>
+        _adapter.DisplayAsync(_underlying, cancellationToken);
+    /// <inheritdoc/>
     public override string ToString() => Display();
 }

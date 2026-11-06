@@ -16,23 +16,36 @@ public sealed partial class ChangeSnapshot
     public const int MaxSearchResults = 40;
     public const int MaxSourceFileBytes = 16 * 1024 * 1024;
 
-    private static readonly StringComparison PathComparison = OperatingSystem.IsWindows()
+    private static readonly StringComparison s_pathComparison = OperatingSystem.IsWindows()
         ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
-    private static readonly StringComparer PathComparer = OperatingSystem.IsWindows()
+    private static readonly StringComparer s_pathComparer = OperatingSystem.IsWindows()
         ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
-    private static readonly UTF8Encoding StrictUtf8 = new(false, true);
-    private readonly ChangeCommandRunner command;
-    private readonly Action<string> logger;
-    private readonly ReviewOptions options;
-    private readonly Dictionary<string, string> fingerprints = new(PathComparer);
-    private readonly string targetPrefix;
-    private readonly string initialGitState;
-    private readonly PullRequestMetadata? pullRequest;
+    private static readonly UTF8Encoding s_strictUtf8 = new(false, true);
+    private readonly ChangeCommandRunner _command;
+    private readonly Action<string> _logger;
+    private readonly ReviewOptions _options;
+    private readonly Dictionary<string, string> _fingerprints = new(s_pathComparer);
+    private string _targetPrefix = "";
+    private string _initialGitState = "";
+    private PullRequestMetadata? _pullRequest;
 
-    internal ChangeSnapshot(string rootPath, ReviewOptions options, Action<string>? log = null)
-        : this(rootPath, options, new ChangeCommand(), log) { }
+    /// <summary>Asynchronously captures a complete, validated change snapshot.</summary>
+    public static ValueTask<ChangeSnapshot> CaptureAsync(string rootPath, ReviewOptions options,
+        Action<string>? log = null, CancellationToken cancellationToken = default) =>
+        CaptureAsync(rootPath, options, new ChangeCommand(), log, cancellationToken);
 
-    internal ChangeSnapshot(string rootPath, ReviewOptions options, ChangeCommandRunner command, Action<string>? log = null)
+    internal static async ValueTask<ChangeSnapshot> CaptureAsync(string rootPath, ReviewOptions options,
+        ChangeCommandRunner command, Action<string>? log = null,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        ChangeSnapshot snapshot = new(rootPath, options, command, log);
+        await snapshot.InitializeAsync(cancellationToken).ConfigureAwait(false);
+        return snapshot;
+    }
+
+    private ChangeSnapshot(string rootPath, ReviewOptions options, ChangeCommandRunner command,
+        Action<string>? log)
     {
         options.Validate();
         if (options.Scope == "full")
@@ -40,9 +53,9 @@ public sealed partial class ChangeSnapshot
             throw new InvalidOperationException("Full-scope reviews do not have a change snapshot.");
         }
 
-        this.options = options;
-        this.command = command;
-        logger = log ?? (_ => { });
+        this._options = options;
+        this._command = command;
+        _logger = log ?? (_ => { });
         RootPath = Path.GetFullPath(rootPath);
         if (!Directory.Exists(RootPath))
         {
@@ -50,50 +63,55 @@ public sealed partial class ChangeSnapshot
         }
 
         RejectReparsePoints(RootPath);
-        RepositoryRoot = Path.GetFullPath(RequireGitAt(RootPath, "rev-parse", "--show-toplevel").TrimEnd('\r', '\n'));
+    }
+
+    private async ValueTask InitializeAsync(CancellationToken cancellationToken = default)
+    {
+        ReviewOptions options = _options;
+        RepositoryRoot = Path.GetFullPath((await RequireGitAtAsync(cancellationToken, RootPath, "rev-parse", "--show-toplevel")).TrimEnd('\r', '\n'));
         if (!IsWithin(RootPath, RepositoryRoot))
         {
             throw new InvalidOperationException("The review target must be inside the Git worktree.");
         }
 
-        targetPrefix = Normalize(Path.GetRelativePath(RepositoryRoot, RootPath));
-        if (targetPrefix == ".")
+        _targetPrefix = Normalize(Path.GetRelativePath(RepositoryRoot, RootPath));
+        if (_targetPrefix == ".")
         {
-            targetPrefix = "";
+            _targetPrefix = "";
         }
 
-        if (Git("rev-parse", "--is-shallow-repository").Trim() == "true")
+        if ((await GitAsync(cancellationToken, "rev-parse", "--is-shallow-repository")).Trim() == "true")
         {
             throw new InvalidOperationException("Change-scoped review requires complete history. Run git fetch --unshallow, then retry.");
         }
 
-        HeadCommit = ResolveCommit("HEAD");
-        initialGitState = CaptureGitState();
+        HeadCommit = (await ResolveCommitAsync("HEAD", cancellationToken: cancellationToken));
+        _initialGitState = (await CaptureGitStateAsync(cancellationToken: cancellationToken));
         if (options.Pr is not null)
         {
-            pullRequest = LoadPullRequest();
-            if (!string.Equals(HeadCommit, pullRequest.Head, StringComparison.OrdinalIgnoreCase))
+            _pullRequest = (await LoadPullRequestAsync(cancellationToken: cancellationToken));
+            if (!string.Equals(HeadCommit, _pullRequest.Head, StringComparison.OrdinalIgnoreCase))
             {
                 throw new InvalidOperationException(
-                    $"PR review requires its exact head {pullRequest.Head}; the current HEAD is {HeadCommit}. Check out the PR explicitly, then retry.");
+                    $"PR review requires its exact head {_pullRequest.Head}; the current HEAD is {HeadCommit}. Check out the PR explicitly, then retry.");
             }
 
-            if (Git("status", "--porcelain=v1", "-z", "--untracked-files=all", "--", TargetPathspec).Length != 0)
+            if ((await GitAsync(cancellationToken, "status", "--porcelain=v1", "-z", "--untracked-files=all", "--", TargetPathspec)).Length != 0)
             {
                 throw new InvalidOperationException("PR review requires a clean target, including nonignored untracked files. Commit or move local edits; no checkout or stash was performed.");
             }
 
-            string remote = FindPullRequestRemote(pullRequest);
-            EnsurePullRequestCommit(pullRequest.Base, remote, pullRequest.Base);
-            EnsurePullRequestCommit(pullRequest.Head, remote, $"refs/pull/{pullRequest.Number}/head");
-            BaseCommit = MergeBase(pullRequest.Base, pullRequest.Head);
+            string remote = (await FindPullRequestRemoteAsync(_pullRequest, cancellationToken: cancellationToken));
+            await EnsurePullRequestCommitAsync(_pullRequest.Base, remote, _pullRequest.Base, cancellationToken: cancellationToken);
+            await EnsurePullRequestCommitAsync(_pullRequest.Head, remote, $"refs/pull/{_pullRequest.Number}/head", cancellationToken: cancellationToken);
+            BaseCommit = (await MergeBaseAsync(_pullRequest.Base, _pullRequest.Head, cancellationToken: cancellationToken));
         }
         else
         {
-            BaseCommit = MergeBase(ResolveCommit(options.Base ?? DiscoverDefaultBase()), HeadCommit);
+            BaseCommit = (await MergeBaseAsync((await ResolveCommitAsync(options.Base ?? (await DiscoverDefaultBaseAsync(cancellationToken: cancellationToken)), cancellationToken: cancellationToken)), HeadCommit, cancellationToken: cancellationToken));
         }
 
-        foreach (string path in CandidatePaths())
+        foreach (string path in (await CandidatePathsAsync(cancellationToken: cancellationToken)))
         {
             if (!IsEligible(path))
             {
@@ -102,12 +120,12 @@ public sealed partial class ChangeSnapshot
 
             string fullPath = ResolveRepositoryPath(path);
             RejectReparsePoints(fullPath);
-            fingerprints[path] = Fingerprint(fullPath);
+            _fingerprints[path] = (await FingerprintAsync(fullPath, cancellationToken: cancellationToken));
         }
-        Files = Array.AsReadOnly(BuildChanges().ToArray());
-        AssertUnchanged();
-        string mode = pullRequest is null ? "branch" : "pr";
-        string localEditPolicy = pullRequest is null
+        Files = Array.AsReadOnly((await BuildChangesAsync(cancellationToken: cancellationToken)).ToArray());
+        await AssertUnchangedAsync(cancellationToken: cancellationToken);
+        string mode = _pullRequest is null ? "branch" : "pr";
+        string localEditPolicy = _pullRequest is null
             ? "included (staged, unstaged, nonignored untracked)"
             : "excluded (exact PR head; clean target required)";
         Log($"Change-scoped review: mode={mode}; scope={options.Scope}; base={BaseCommit}; head={HeadCommit}; "
@@ -118,13 +136,31 @@ public sealed partial class ChangeSnapshot
         }
     }
 
-    public string RepositoryRoot { get; }
+    /// <summary>
+    /// The absolute root directory of the Git repository being compared.
+    /// </summary>
+    public string RepositoryRoot { get; private set; } = "";
+    /// <summary>
+    /// The analyzed target directory within the repository.
+    /// </summary>
     public string RootPath { get; }
-    public string BaseCommit { get; }
-    public string HeadCommit { get; }
-    public IReadOnlyList<ChangedFile> Files { get; }
+    /// <summary>
+    /// The resolved commit used as the left side of the comparison.
+    /// </summary>
+    public string BaseCommit { get; private set; } = "";
+    /// <summary>
+    /// The resolved commit used as the right side of the comparison.
+    /// </summary>
+    public string HeadCommit { get; private set; } = "";
+    /// <summary>
+    /// The files changed within the selected analysis scope.
+    /// </summary>
+    public IReadOnlyList<ChangedFile> Files { get; private set; } = [];
 
-    public void Log(string message) => logger(message);
+    /// <summary>
+    /// Sends a change-discovery diagnostic to the configured logger.
+    /// </summary>
+    public void Log(string message) => _logger(message);
 
     /// <summary>Finding paths are target-relative; absolute finding paths must remain in the target.</summary>
     public string ToRepositoryPath(string path)
@@ -147,12 +183,15 @@ public sealed partial class ChangeSnapshot
         return relative;
     }
 
+    /// <summary>
+    /// Tests whether a path and source line fall within the selected changes.
+    /// </summary>
     public bool IsChanged(string path, int line)
     {
         string relative = ToRepositoryPath(path);
         foreach (ChangedFile file in Files)
         {
-            if (!PathComparer.Equals(file.Path, relative) && !PathComparer.Equals(file.OldPath, relative))
+            if (!s_pathComparer.Equals(file.Path, relative) && !s_pathComparer.Equals(file.OldPath, relative))
             {
                 continue;
             }
@@ -172,46 +211,49 @@ public sealed partial class ChangeSnapshot
         return false;
     }
 
-    public void AssertUnchanged()
+    /// <summary>
+    /// Rejects a snapshot if the repository state no longer matches its capture.
+    /// </summary>
+    public async ValueTask AssertUnchangedAsync(CancellationToken cancellationToken = default)
     {
-        if (!string.Equals(ResolveCommit("HEAD"), HeadCommit, StringComparison.Ordinal)
-            || CaptureGitState() != initialGitState)
+        if (!string.Equals((await ResolveCommitAsync("HEAD", cancellationToken: cancellationToken)), HeadCommit, StringComparison.Ordinal)
+            || (await CaptureGitStateAsync(cancellationToken: cancellationToken)) != _initialGitState)
         {
             throw Stale();
         }
 
-        HashSet<string> paths = CandidatePaths().Where(IsEligible).ToHashSet(PathComparer);
-        if (!paths.SetEquals(fingerprints.Keys))
+        HashSet<string> paths = (await CandidatePathsAsync(cancellationToken: cancellationToken)).Where(IsEligible).ToHashSet(s_pathComparer);
+        if (!paths.SetEquals(_fingerprints.Keys))
         {
             throw Stale();
         }
 
-        foreach ((string? path, string? fingerprint) in fingerprints)
+        foreach ((string? path, string? fingerprint) in _fingerprints)
         {
             string fullPath = ResolveRepositoryPath(path);
             RejectReparsePoints(fullPath);
-            if (Fingerprint(fullPath) != fingerprint)
+            if ((await FingerprintAsync(fullPath, cancellationToken: cancellationToken)) != fingerprint)
             {
                 throw Stale();
             }
         }
-        if (pullRequest is not null && LoadPullRequest() != pullRequest)
+        if (_pullRequest is not null && (await LoadPullRequestAsync(cancellationToken: cancellationToken)) != _pullRequest)
         {
             throw new InvalidOperationException("The PR base/head metadata changed during review. Discard the review and retry.");
         }
     }
 
-    private string TargetPathspec => targetPrefix.Length == 0 ? "." : $":(literal){targetPrefix}";
+    private string TargetPathspec => _targetPrefix.Length == 0 ? "." : $":(literal){_targetPrefix}";
 
-    private IEnumerable<string> CandidatePaths() =>
-        SplitNull(Git("ls-files", "-z", "--cached", "--others", "--exclude-standard", "--", TargetPathspec))
-            .Distinct(PathComparer);
+    private async ValueTask<IEnumerable<string>> CandidatePathsAsync(CancellationToken cancellationToken = default) =>
+        SplitNull((await GitAsync(cancellationToken, "ls-files", "-z", "--cached", "--others", "--exclude-standard", "--", TargetPathspec)))
+            .Distinct(s_pathComparer);
 
-    private List<ChangedFile> BuildChanges()
+    private async ValueTask<List<ChangedFile>> BuildChangesAsync(CancellationToken cancellationToken = default)
     {
         List<ChangedFile> result = new List<ChangedFile>();
-        string[] tokens = SplitNull(Git("diff", "--no-ext-diff", "--no-textconv", "--name-status", "-z",
-            "--find-renames", BaseCommit, "--", TargetPathspec));
+        string[] tokens = SplitNull((await GitAsync(cancellationToken, "diff", "--no-ext-diff", "--no-textconv", "--name-status", "-z",
+            "--find-renames", BaseCommit, "--", TargetPathspec)));
         long patchBytes = 0;
         int excluded = 0;
         for (int index = 0; index < tokens.Length;)
@@ -248,11 +290,11 @@ public sealed partial class ChangeSnapshot
 
             string[] paths = oldPath is null ? new[] { path } : new[] { oldPath, path };
             // Zero-context hunks define exact ranges; the separately retained patch includes context.
-            string patch = DiffWithContext(3, paths);
-            IReadOnlyList<ChangedRange> ranges = ParseRanges(DiffWithContext(0, paths));
+            string patch = (await DiffWithContextAsync(3, paths, cancellationToken: cancellationToken));
+            IReadOnlyList<ChangedRange> ranges = ParseRanges((await DiffWithContextAsync(0, paths, cancellationToken: cancellationToken)));
             Add(new(path, oldPath, status, patch, ranges, IsBinaryPatch(patch)));
         }
-        foreach (string path in SplitNull(Git("ls-files", "-z", "--others", "--exclude-standard", "--", TargetPathspec)))
+        foreach (string path in SplitNull((await GitAsync(cancellationToken, "ls-files", "-z", "--others", "--exclude-standard", "--", TargetPathspec))))
         {
             if (!IsEligible(path))
             {
@@ -261,7 +303,7 @@ public sealed partial class ChangeSnapshot
             }
             string fullPath = ResolveRepositoryPath(path);
             RejectReparsePoints(fullPath);
-            byte[] bytes = ReadFileBounded(fullPath);
+            byte[] bytes = (await ReadFileBoundedAsync(fullPath, cancellationToken: cancellationToken));
             EnsureFingerprint(path, bytes);
             bool binary = !TryText(bytes, out string? source);
             if (binary)
@@ -270,7 +312,7 @@ public sealed partial class ChangeSnapshot
                 continue;
             }
             // A patch retains original CRs/BOMs and missing-final-newline information.
-            source = StrictUtf8.GetString(bytes);
+            source = s_strictUtf8.GetString(bytes);
             string[] lines = source.Length == 0 ? Array.Empty<string>() : source.Split('\n');
             if (lines.Length != 0 && lines[^1].Length == 0)
             {
@@ -311,9 +353,9 @@ public sealed partial class ChangeSnapshot
         }
     }
 
-    private string DiffWithContext(int context, string[] paths) =>
-        Git(new[] { "diff", "--no-ext-diff", "--no-textconv", "--no-color", "--find-renames",
-            $"--unified={context}", BaseCommit, "--" }.Concat(paths.Select(path => $":(literal){path}")).ToArray());
+    private async ValueTask<string> DiffWithContextAsync(int context, string[] paths, CancellationToken cancellationToken = default) =>
+        (await GitAsync(cancellationToken, new[] { "diff", "--no-ext-diff", "--no-textconv", "--no-color", "--find-renames",
+            $"--unified={context}", BaseCommit, "--" }.Concat(paths.Select(path => $":(literal){path}")).ToArray()));
 
     internal static IReadOnlyList<ChangedRange> ParseRanges(string patch)
     {
@@ -375,16 +417,16 @@ public sealed partial class ChangeSnapshot
                 .Replace("\r", "\\r", StringComparison.Ordinal) + "\""
             : path;
 
-    private string CaptureGitState() => Hash(Encoding.UTF8.GetBytes(
-        Git("status", "--porcelain=v1", "-z", "--untracked-files=all", "--", TargetPathspec)
-        + "\0" + Git("diff", "--no-ext-diff", "--no-textconv", "--binary", "--cached", "--", TargetPathspec)));
+    private async ValueTask<string> CaptureGitStateAsync(CancellationToken cancellationToken = default) => Hash(Encoding.UTF8.GetBytes(
+        (await GitAsync(cancellationToken, "status", "--porcelain=v1", "-z", "--untracked-files=all", "--", TargetPathspec))
+        + "\0" + (await GitAsync(cancellationToken, "diff", "--no-ext-diff", "--no-textconv", "--binary", "--cached", "--", TargetPathspec))));
 
-    private string ResolveCommit(string revision) =>
-        RequireGit("rev-parse", "--verify", "--end-of-options", revision + "^{commit}").Trim();
+    private async ValueTask<string> ResolveCommitAsync(string revision, CancellationToken cancellationToken = default) =>
+        (await RequireGitAsync(cancellationToken, "rev-parse", "--verify", "--end-of-options", revision + "^{commit}")).Trim();
 
-    private string MergeBase(string first, string second)
+    private async ValueTask<string> MergeBaseAsync(string first, string second, CancellationToken cancellationToken = default)
     {
-        string[] bases = RequireGit("merge-base", "--all", first, second).Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        string[] bases = (await RequireGitAsync(cancellationToken, "merge-base", "--all", first, second)).Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         if (bases.Length != 1)
         {
             throw new InvalidOperationException("The comparison has no unique merge base. Fetch complete history or choose an unambiguous --base.");
@@ -393,14 +435,14 @@ public sealed partial class ChangeSnapshot
         return bases[0];
     }
 
-    private string DiscoverDefaultBase()
+    private async ValueTask<string> DiscoverDefaultBaseAsync(CancellationToken cancellationToken = default)
     {
-        string[] remotes = Git("remote").Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-        ChangeCommandResult branch = RunGit("symbolic-ref", "--quiet", "--short", "HEAD");
+        string[] remotes = (await GitAsync(cancellationToken, "remote")).Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        ChangeCommandResult branch = (await RunGitAsync(cancellationToken, "symbolic-ref", "--quiet", "--short", "HEAD"));
         string? remote = null;
         if (branch.ExitCode == 0)
         {
-            ChangeCommandResult configured = RunGit("config", "--get", $"branch.{branch.Output.Trim()}.remote");
+            ChangeCommandResult configured = (await RunGitAsync(cancellationToken, "config", "--get", $"branch.{branch.Output.Trim()}.remote"));
             if (configured.ExitCode == 0 && remotes.Contains(configured.Output.Trim(), StringComparer.Ordinal))
             {
                 remote = configured.Output.Trim();
@@ -416,7 +458,7 @@ public sealed partial class ChangeSnapshot
             throw new InvalidOperationException("Cannot determine the branch's default remote unambiguously. Configure its upstream or pass --base explicitly.");
         }
 
-        ChangeCommandResult symbolicHead = RunGit("symbolic-ref", "--quiet", $"refs/remotes/{remote}/HEAD");
+        ChangeCommandResult symbolicHead = (await RunGitAsync(cancellationToken, "symbolic-ref", "--quiet", $"refs/remotes/{remote}/HEAD"));
         if (symbolicHead.ExitCode != 0)
         {
             throw new InvalidOperationException(
@@ -426,14 +468,14 @@ public sealed partial class ChangeSnapshot
         return symbolicHead.Output.Trim();
     }
 
-    private ChangeCommandResult RunGit(params string[] arguments) =>
-        command.Run(RepositoryRoot, "git", new[] { "--no-pager", "-c", "core.fsmonitor=false" }.Concat(arguments).ToArray());
+    private async ValueTask<ChangeCommandResult> RunGitAsync(CancellationToken cancellationToken, params string[] arguments) =>
+        (await _command.RunAsync(RepositoryRoot, "git", new[] { "--no-pager", "-c", "core.fsmonitor=false" }.Concat(arguments).ToArray(), cancellationToken: cancellationToken));
 
-    private string Git(params string[] arguments) => RequireGit(arguments);
+    private async ValueTask<string> GitAsync(CancellationToken cancellationToken, params string[] arguments) => (await RequireGitAsync(cancellationToken, arguments));
 
-    private string RequireGit(params string[] arguments)
+    private async ValueTask<string> RequireGitAsync(CancellationToken cancellationToken, params string[] arguments)
     {
-        ChangeCommandResult result = RunGit(arguments);
+        ChangeCommandResult result = (await RunGitAsync(cancellationToken, arguments));
         if (result.ExitCode != 0)
         {
             throw new InvalidOperationException(
@@ -443,9 +485,9 @@ public sealed partial class ChangeSnapshot
         return result.Output;
     }
 
-    private string RequireGitAt(string directory, params string[] arguments)
+    private async ValueTask<string> RequireGitAtAsync(CancellationToken cancellationToken, string directory, params string[] arguments)
     {
-        ChangeCommandResult result = command.Run(directory, "git", arguments);
+        ChangeCommandResult result = (await _command.RunAsync(directory, "git", arguments, cancellationToken: cancellationToken));
         if (result.ExitCode != 0)
         {
             throw new InvalidOperationException(

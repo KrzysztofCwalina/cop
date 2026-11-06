@@ -15,6 +15,90 @@ namespace Cop.Tests;
 [TestFixture]
 public class LanguageServerTests
 {
+    [TestCase("textDocument/hover")]
+    [TestCase("textDocument/completion")]
+    [TestCase("textDocument/definition")]
+    public void Server_MalformedPosition_ReturnsInvalidParamsError(string method)
+    {
+        using MemoryStream input = new MemoryStream(Frame(new JsonObject
+        {
+            ["jsonrpc"] = "2.0",
+            ["id"] = 17,
+            ["method"] = method,
+            ["params"] = new JsonObject
+            {
+                ["textDocument"] = new JsonObject { ["uri"] = "file:///input.cop" },
+                ["position"] = new JsonObject { ["line"] = "invalid", ["character"] = 0 }
+            }
+        }));
+        using MemoryStream output = new MemoryStream();
+
+        Assert.That(new CopLanguageServer(input, output).Run(), Is.EqualTo(1));
+
+        List<JsonObject> responses = ParseFrames(output.ToArray());
+        Assert.That(responses.Count, Is.EqualTo(1));
+        Assert.That(responses[0]["id"]?.GetValue<int>(), Is.EqualTo(17));
+        Assert.That(responses[0]["error"]?["code"]?.GetValue<int>(), Is.EqualTo(-32602));
+        Assert.That(responses[0].ContainsKey("result"), Is.False);
+    }
+
+    [TestCase("textDocument/hover")]
+    [TestCase("textDocument/completion")]
+    [TestCase("textDocument/definition")]
+    public void Server_FileReadFailure_ReturnsInternalError(string method)
+    {
+        string directory = Path.Combine(Path.GetTempPath(), "cop-lsp-locked-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        string file = Path.Combine(directory, "input.cop");
+        try
+        {
+            File.WriteAllText(file, "let greeting = 'hello'\n");
+            using FileStream locked = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.None);
+            using MemoryStream input = new MemoryStream(Frame(new JsonObject
+            {
+                ["jsonrpc"] = "2.0",
+                ["id"] = 23,
+                ["method"] = method,
+                ["params"] = new JsonObject
+                {
+                    ["textDocument"] = new JsonObject { ["uri"] = PathToUri(file) },
+                    ["position"] = new JsonObject { ["line"] = 0, ["character"] = 5 }
+                }
+            }));
+            using MemoryStream output = new MemoryStream();
+
+            Assert.That(new CopLanguageServer(input, output).Run(), Is.EqualTo(1));
+
+            List<JsonObject> responses = ParseFrames(output.ToArray());
+            Assert.That(responses.Count, Is.EqualTo(1));
+            Assert.That(responses[0]["id"]?.GetValue<int>(), Is.EqualTo(23));
+            Assert.That(responses[0]["error"]?["code"]?.GetValue<int>(), Is.EqualTo(-32603));
+            Assert.That(responses[0].ContainsKey("result"), Is.False);
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Test]
+    public void Server_MalformedJson_ReturnsParseErrorAndContinues()
+    {
+        byte[] malformed = Encoding.UTF8.GetBytes("Content-Length: 1\r\n\r\n{");
+        byte[] shutdown = Frame(new JsonObject { ["jsonrpc"] = "2.0", ["id"] = 2, ["method"] = "shutdown" });
+        byte[] exit = Frame(new JsonObject { ["jsonrpc"] = "2.0", ["method"] = "exit" });
+        using MemoryStream input = new MemoryStream([.. malformed, .. shutdown, .. exit]);
+        using MemoryStream output = new MemoryStream();
+
+        Assert.That(new CopLanguageServer(input, output).Run(), Is.EqualTo(0));
+
+        List<JsonObject> responses = ParseFrames(output.ToArray());
+        Assert.That(responses.Count, Is.EqualTo(2));
+        Assert.That(responses[0]["id"], Is.Null);
+        Assert.That(responses[0]["error"]?["code"]?.GetValue<int>(), Is.EqualTo(-32700));
+        Assert.That(responses[1]["id"]?.GetValue<int>(), Is.EqualTo(2));
+    }
+
     private static byte[] Frame(JsonObject message)
     {
         var body = Encoding.UTF8.GetBytes(message.ToJsonString());

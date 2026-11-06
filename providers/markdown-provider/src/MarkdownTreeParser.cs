@@ -11,7 +11,7 @@ internal sealed class MarkdownTreeParser(string source)
     public MarkdownNodeInfo Parse()
     {
         List<Line> lines = _original.Select((text, i) => new Line(text, i + 1)).ToList();
-        MarkdownNodeInfo root = Node("document", "", 0, 1, lines.Count);
+        MarkdownNodeInfo root = Node("document", string.Empty, 0, 1, lines.Count);
         root.Children.AddRange(Blocks(lines, 0));
         return root;
     }
@@ -94,7 +94,7 @@ internal sealed class MarkdownTreeParser(string source)
             }
             else if (!Thematic(text) && ListMarker(text, out int indent, out _, out _))
             {
-                MarkdownNodeInfo list = Node("list", "", 0, lines[i].Number, lines[i].Number);
+                MarkdownNodeInfo list = Node("list", string.Empty, 0, lines[i].Number, lines[i].Number);
                 while (i < lines.Count && ListMarker(lines[i].Text, out int nextIndent, out int bodyStart, out _)
                     && nextIndent == indent)
                 {
@@ -127,7 +127,7 @@ internal sealed class MarkdownTreeParser(string source)
                         afterBlank = false;
                         i++;
                     }
-                    MarkdownNodeInfo item = Node("listItem", "", 0, lines[itemStart].Number, lines[i - 1].Number);
+                    MarkdownNodeInfo item = Node("listItem", string.Empty, 0, lines[itemStart].Number, lines[i - 1].Number);
                     item.Children.AddRange(Blocks(childLines, depth + 1));
                     list.Children.Add(item);
                 }
@@ -148,7 +148,7 @@ internal sealed class MarkdownTreeParser(string source)
 
                     quoted.Add(new Line(value, lines[i++].Number));
                 }
-                MarkdownNodeInfo quote = Node("quote", "", 0, lines[start].Number, lines[i - 1].Number);
+                MarkdownNodeInfo quote = Node("quote", string.Empty, 0, lines[start].Number, lines[i - 1].Number);
                 quote.Children.AddRange(Blocks(quoted, depth + 1));
                 Add(quote);
             }
@@ -210,7 +210,7 @@ internal sealed class MarkdownTreeParser(string source)
     private static bool Heading(List<Line> lines, int index, out int level, out string title, out int count)
     {
         level = 0;
-        title = "";
+        title = string.Empty;
         count = 1;
         string text = lines[index].Text;
         if (IsIndentedCode(text))
@@ -330,7 +330,7 @@ internal sealed class MarkdownTreeParser(string source)
 
     private static bool Thematic(string text)
     {
-        string compact = text.Trim().Replace(" ", "").Replace("\t", "");
+        string compact = text.Trim().Replace(" ", string.Empty).Replace("\t", string.Empty);
         return compact.Length >= 3 && compact[0] is '-' or '*' or '_' && compact.All(c => c == compact[0]);
     }
 

@@ -13,7 +13,8 @@ public class SpectralProvider : ToolProvider
 {
     protected override string ToolName => "spectral";
 
-    protected override List<object> RunTool(string rootPath, IReadOnlySet<string> excluded)
+    protected override async ValueTask<List<object>> RunToolAsync(
+        string rootPath, IReadOnlySet<string> excluded, CancellationToken cancellationToken)
     {
         // Create temporary .spectral.json if none exists
         string configPath = Path.Combine(rootPath, ".spectral.json");
@@ -22,17 +23,15 @@ public class SpectralProvider : ToolProvider
             !File.Exists(Path.Combine(rootPath, ".spectral.yaml")) &&
             !File.Exists(Path.Combine(rootPath, ".spectral.yml")))
         {
-            File.WriteAllText(configPath, """{"extends":["spectral:oas"]}""");
+            await File.WriteAllTextAsync(configPath, """{"extends":["spectral:oas"]}""",
+                cancellationToken).ConfigureAwait(false);
             createdConfig = true;
         }
 
         try
         {
-            string? stdout = TryRunSpectral(rootPath);
-            if (stdout == null)
-            {
-                return [];
-            }
+            string stdout = await RunSpectralAsync(rootPath, cancellationToken)
+                .ConfigureAwait(false);
 
             if (string.IsNullOrWhiteSpace(stdout))
             {
@@ -50,7 +49,7 @@ public class SpectralProvider : ToolProvider
             foreach (JsonElement item in doc.RootElement.EnumerateArray())
             {
                 string filePath = NormalizePath(
-                    item.TryGetProperty("source", out JsonElement s) ? s.GetString() ?? "" : "", rootPath);
+                    item.TryGetProperty("source", out JsonElement s) ? s.GetString() ?? string.Empty : string.Empty, rootPath);
                 if (string.IsNullOrEmpty(filePath) || IsExcluded(filePath, excluded))
                 {
                     continue;
@@ -64,8 +63,8 @@ public class SpectralProvider : ToolProvider
                     line = ln.GetInt32() + 1; // Spectral uses 0-based lines
                 }
 
-                string? ruleId = item.TryGetProperty("code", out JsonElement code) ? code.GetString() : "";
-                string? message = item.TryGetProperty("message", out JsonElement m) ? m.GetString() : "";
+                string? ruleId = item.TryGetProperty("code", out JsonElement code) ? code.GetString() : string.Empty;
+                string? message = item.TryGetProperty("message", out JsonElement m) ? m.GetString() : string.Empty;
                 string severity = MapSeverity(item.TryGetProperty("severity", out JsonElement sev) ? sev.GetInt32() : 2);
 
                 violations.Add(new ToolViolation
@@ -73,7 +72,7 @@ public class SpectralProvider : ToolProvider
                     File = filePath,
                     Line = line,
                     Severity = severity,
-                    Message = !string.IsNullOrEmpty(ruleId) ? $"{ruleId}: {message}" : message ?? "",
+                    Message = !string.IsNullOrEmpty(ruleId) ? $"{ruleId}: {message}" : message ?? string.Empty,
                     Source = "spectral"
                 });
             }
@@ -83,12 +82,13 @@ public class SpectralProvider : ToolProvider
         {
             if (createdConfig)
             {
-                try { File.Delete(configPath); } catch { }
+                File.Delete(configPath);
             }
         }
     }
 
-    private static string? TryRunSpectral(string rootPath)
+    private static async ValueTask<string> RunSpectralAsync(
+        string rootPath, CancellationToken cancellationToken)
     {
         bool isWindows = OperatingSystem.IsWindows();
         (string, string)[] attempts = isWindows
@@ -101,18 +101,27 @@ public class SpectralProvider : ToolProvider
         {
             try
             {
-                (string? stdout, string _, int _) = RunProcess(cmd, args, rootPath, shell: isWindows);
+                (string stdout, string _, int _) = await RunProcessAsync(
+                    new(cmd, args, rootPath)
+                    {
+                        Mode = isWindows ? ToolInvocationMode.Shell : ToolInvocationMode.Direct
+                    }, cancellationToken).ConfigureAwait(false);
                 return stdout;
             }
-            catch (Exception ex) when (ex.InnerException is System.ComponentModel.Win32Exception ||
-                                       ex is InvalidOperationException)
+            catch (System.ComponentModel.Win32Exception ex) when (ex.NativeErrorCode is 2 or 3)
             {
-                continue;
+                ProviderWarnings.ReportOnce("spectral", cmd,
+                    $"Spectral launcher '{cmd}' is unavailable: {ex.Message}");
+            }
+            catch (FileNotFoundException ex)
+            {
+                ProviderWarnings.ReportOnce("spectral", cmd,
+                    $"Spectral launcher '{cmd}' is unavailable: {ex.Message}");
             }
         }
 
-        Console.Error.WriteLine("Spectral not found. Install with: npm install -g @stoplight/spectral-cli");
-        return null;
+        throw new FileNotFoundException(
+            "Spectral not found. Install with: npm install -g @stoplight/spectral-cli");
     }
 
     private static string MapSeverity(int severity) => severity switch

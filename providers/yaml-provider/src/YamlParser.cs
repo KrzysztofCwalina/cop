@@ -88,7 +88,7 @@ public static class YamlParser
                 // The dash introduces a sequence element; nested keys align past the dash.
                 stack.Add(new Frame(indent, "[]"));
 
-                string itemContent = work.Length <= 2 ? "" : work[2..].TrimStart(' ');
+                string itemContent = work.Length <= 2 ? string.Empty : work[2..].TrimStart(' ');
                 if (itemContent.Length == 0)
                 {
                     continue;
@@ -106,7 +106,7 @@ public static class YamlParser
                 else
                 {
                     // Scalar sequence item.
-                    entries.Add(new YamlEntryInfo(seqPath, "", Unquote(itemContent), lineNo, docIndex));
+                    entries.Add(new YamlEntryInfo(seqPath, string.Empty, Unquote(itemContent), lineNo, docIndex));
                 }
                 continue;
             }
@@ -139,7 +139,7 @@ public static class YamlParser
     {
         if (stack.Count == 0)
         {
-            return "";
+            return string.Empty;
         }
 
         StringBuilder sb = new System.Text.StringBuilder();
@@ -170,8 +170,8 @@ public static class YamlParser
     // mapping colon (a colon followed by a space, or a trailing colon).
     private static bool TrySplitKeyValue(string s, out string key, out string value)
     {
-        key = "";
-        value = "";
+        key = string.Empty;
+        value = string.Empty;
         int colon = FindMappingColon(s);
         if (colon < 0)
         {

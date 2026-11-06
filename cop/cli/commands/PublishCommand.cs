@@ -3,7 +3,6 @@
 using System;
 using System.CommandLine;
 using System.CommandLine.Parsing;
-using System.Diagnostics;
 using System.IO;
 using System.Collections.Generic;
 using System.Linq;
@@ -63,7 +62,8 @@ public static class PublishCommand
             nameArgument
         };
 
-        command.SetAction(parseResult => Execute(parseResult.GetValue(nameArgument)));
+        command.SetAction(parseResult => ExecuteAsync(parseResult.GetValue(nameArgument)
+            ?? throw new InvalidOperationException("The required package name is missing.")));
 
         return command;
     }
@@ -71,7 +71,7 @@ public static class PublishCommand
     /// <summary>
     /// Executes the publish command: validates package and creates git tag.
     /// </summary>
-    private static int Execute(string name)
+    private static async Task<int> ExecuteAsync(string name)
     {
         string packagePath = LocalPackageSource.FindPackagePath("packages", name)
             ?? Path.Combine("packages", name);
@@ -99,7 +99,8 @@ public static class PublishCommand
             string content = File.ReadAllText(metadataFile);
             metadata = PackageMetadata.ParseFromJson(content);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or
+            System.Text.Json.JsonException)
         {
             Console.Error.WriteLine($"Error: Failed to parse metadata: {ex.Message}");
             return 1;
@@ -162,7 +163,7 @@ public static class PublishCommand
                         return 1;
                     }
                 }
-                catch (Exception ex)
+                catch (Exception ex) when (ex is FormatException or ArgumentException)
                 {
                     Console.Error.WriteLine($"Error: Invalid dependency '{dep}': {ex.Message}");
                     return 1;
@@ -172,26 +173,32 @@ public static class PublishCommand
 
         string tagName = $"{name}/{metadata.Version}";
 
-        // Check if tag already exists
-        if (TagExists(tagName))
+        string? git = ToolchainProcess.FindExecutable("git");
+        if (git is null)
+        {
+            Console.Error.WriteLine("Error: Cannot publish because git is not installed.");
+            return 1;
+        }
+
+        string workingDirectory = Directory.GetCurrentDirectory();
+        ToolchainResult inspection = await ToolchainProcess.RunAsync(
+            new ToolchainCommand(git, ["tag", "-l", tagName], workingDirectory));
+        if (inspection.Status != ToolchainStatus.Success)
+        {
+            Console.Error.WriteLine($"Error: Cannot inspect existing git tags: {inspection.Diagnostic} {inspection.StandardError}".TrimEnd());
+            return 1;
+        }
+        if (!string.IsNullOrWhiteSpace(inspection.StandardOutput))
         {
             Console.Error.WriteLine($"Error: Version {metadata.Version} already published (tag '{tagName}' exists).");
             return 1;
         }
 
-        // Create git tag
-        try
+        ToolchainResult creation = await ToolchainProcess.RunAsync(
+            new ToolchainCommand(git, ["tag", tagName], workingDirectory));
+        if (creation.Status != ToolchainStatus.Success)
         {
-            int result = RunGitCommand($"tag {tagName}");
-            if (result != 0)
-            {
-                Console.Error.WriteLine($"Error: Failed to create git tag '{tagName}'.");
-                return 1;
-            }
-        }
-        catch (Exception ex)
-        {
-            Console.Error.WriteLine($"Error: Failed to create git tag: {ex.Message}");
+            Console.Error.WriteLine($"Error: Failed to create git tag '{tagName}': {creation.Diagnostic} {creation.StandardError}".TrimEnd());
             return 1;
         }
 
@@ -201,59 +208,4 @@ public static class PublishCommand
         return 0;
     }
 
-    /// <summary>
-    /// Tests if a git tag exists.
-    /// </summary>
-    private static bool TagExists(string tagName)
-    {
-        try
-        {
-            Process process = new Process
-            {
-                StartInfo = new ProcessStartInfo
-                {
-                    FileName = "git",
-                    Arguments = $"tag -l \"{tagName}\"",
-                    UseShellExecute = false,
-                    RedirectStandardOutput = true,
-                    RedirectStandardError = true,
-                    CreateNoWindow = true
-                }
-            };
-
-            process.Start();
-            string output = process.StandardOutput.ReadToEnd();
-            process.WaitForExit();
-
-            return !string.IsNullOrWhiteSpace(output);
-        }
-        catch
-        {
-            return false;
-        }
-    }
-
-    /// <summary>
-    /// Runs a git command and returns the exit code.
-    /// </summary>
-    private static int RunGitCommand(string arguments)
-    {
-        Process process = new Process
-        {
-            StartInfo = new ProcessStartInfo
-            {
-                FileName = "git",
-                Arguments = arguments,
-                UseShellExecute = false,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                CreateNoWindow = true
-            }
-        };
-
-        process.Start();
-        process.WaitForExit();
-
-        return process.ExitCode;
-    }
 }

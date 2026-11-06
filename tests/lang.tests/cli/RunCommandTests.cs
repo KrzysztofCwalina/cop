@@ -14,7 +14,8 @@ public class RunCommandTests
         return dir;
     }
 
-    private static (int ExitCode, string Stdout, string Stderr) RunProgram(string source, string? format = null)
+    private static async Task<(int ExitCode, string Stdout, string Stderr)> RunProgramAsync(
+        string source, string? format = null)
     {
         var dir = NewTempDir();
         var previousCwd = Directory.GetCurrentDirectory();
@@ -31,7 +32,11 @@ public class RunCommandTests
             Console.SetOut(stdout);
             Console.SetError(stderr);
 
-            var exitCode = RunCommand.Execute(file, target: dir, format: format);
+            var exitCode = await RunCommand.ExecuteAsync(file, new RunOptions
+            {
+                Target = dir,
+                OutputFormat = format
+            });
             return (exitCode, stdout.ToString(), stderr.ToString());
         }
         finally
@@ -44,18 +49,18 @@ public class RunCommandTests
     }
 
     [Test]
-    public void ForeachReportOutput_ExitsZero()
+    public async Task ForeachReportOutput_ExitsZero()
     {
-        var result = RunProgram("foreach [1 2] => 'n={item}'");
+        var result = await RunProgramAsync("foreach [1 2] => 'n={item}'");
 
         Assert.That(result.ExitCode, Is.EqualTo(0), Describe(result));
         Assert.That(NormalizeLines(result.Stdout).Trim(), Is.EqualTo("n=1\nn=2"));
     }
 
     [Test]
-    public void JsonReportOutput_ExitsZero()
+    public async Task JsonReportOutput_ExitsZero()
     {
-        var result = RunProgram("foreach [1 2] => 'n={item}'", format: "json");
+        var result = await RunProgramAsync("foreach [1 2] => 'n={item}'", format: "json");
 
         Assert.That(result.ExitCode, Is.EqualTo(0), Describe(result));
         Assert.That(result.Stdout, Does.Contain("\"message\": \"n=1\""));
@@ -63,9 +68,9 @@ public class RunCommandTests
     }
 
     [Test]
-    public void CheckWithViolations_ExitsOne()
+    public async Task CheckWithViolations_ExitsOne()
     {
-        var result = RunProgram("""
+        var result = await RunProgramAsync("""
             import code
             let violations = [Violation { Severity = 1.0, Certainty = 1.0, Message = 'bad', File = 'program.cop', Line = 1, Source = 'x' }]
             command MAIN = CHECK(violations)
@@ -76,9 +81,9 @@ public class RunCommandTests
     }
 
     [Test]
-    public void FatalRuntimeError_ExitsTwo()
+    public async Task FatalRuntimeError_ExitsTwo()
     {
-        var result = RunProgram("command MAIN = noSuchFunction()");
+        var result = await RunProgramAsync("command MAIN = noSuchFunction()");
 
         Assert.That(result.ExitCode, Is.EqualTo(2), Describe(result));
         Assert.That(result.Stderr, Does.Contain("noSuchFunction"));
@@ -86,9 +91,10 @@ public class RunCommandTests
 
     [TestCase("1 + 2", "3")]
     [TestCase("'Hello World'", "Hello World")]
-    public void BareTopLevelExpression_PrintsAndExitsZero(string source, string expectedOutput)
+    public async Task BareTopLevelExpression_PrintsAndExitsZero(
+        string source, string expectedOutput)
     {
-        var result = RunProgram(source);
+        var result = await RunProgramAsync(source);
 
         Assert.That(result.ExitCode, Is.EqualTo(0), Describe(result));
         Assert.That(result.Stdout.Trim(), Is.EqualTo(expectedOutput));

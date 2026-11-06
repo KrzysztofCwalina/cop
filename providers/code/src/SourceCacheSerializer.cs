@@ -10,9 +10,12 @@ namespace Cop.Providers;
 
 internal static class SourceCacheSerializer
 {
-    private static readonly byte[] Magic = [(byte)'C', (byte)'O', (byte)'P', (byte)'C'];
+    private static readonly byte[] s_magic = [(byte)'C', (byte)'O', (byte)'P', (byte)'C'];
     private const int FormatVersion = 12;
 
+    /// <summary>
+    /// Writes a parsed source graph in the versioned binary format.
+    /// </summary>
     public static void Save(string cachePath, byte[] fingerprint, List<SourceFile> sourceFiles)
     {
         string? directory = Path.GetDirectoryName(cachePath);
@@ -30,17 +33,23 @@ internal static class SourceCacheSerializer
         using GZipStream gzip = new GZipStream(stream, CompressionLevel.SmallestSize, leaveOpen: true);
         using CacheWriter writer = new CacheWriter(gzip);
 
-        writer.Write(Magic);
+        writer.Write(s_magic);
         writer.Write(FormatVersion);
         writer.Write(fingerprint.Length);
         writer.Write(fingerprint);
         WriteList(writer, sourceFiles, WriteSourceFile);
     }
 
-    public static List<SourceFile>? TryLoad(string cachePath, byte[] fingerprint)
-        => TryLoad(cachePath, fingerprint, typeof(SourceCacheSerializer).Assembly);
+    /// <summary>
+    /// Restores a valid cached source graph, or returns null when it cannot be reused.
+    /// </summary>
+    public static List<SourceFile>? LoadOrDefault(string cachePath, byte[] fingerprint)
+        => LoadOrDefault(cachePath, fingerprint, typeof(SourceCacheSerializer).Assembly);
 
-    public static List<SourceFile>? TryLoad(string cachePath, byte[] fingerprint, Assembly parserAssembly)
+    /// <summary>
+    /// Restores a valid cached source graph, or returns null when it cannot be reused.
+    /// </summary>
+    public static List<SourceFile>? LoadOrDefault(string cachePath, byte[] fingerprint, Assembly parserAssembly)
     {
         if (!File.Exists(cachePath))
         {
@@ -50,7 +59,7 @@ internal static class SourceCacheSerializer
         try
         {
             using FileStream fileStream = new FileStream(cachePath, FileMode.Open, FileAccess.Read, FileShare.Read);
-            return TryLoad(fileStream, fingerprint, parserAssembly);
+            return LoadOrDefault(fileStream, fingerprint, parserAssembly);
         }
         catch (IOException)
         {
@@ -58,7 +67,7 @@ internal static class SourceCacheSerializer
         }
     }
 
-    internal static List<SourceFile>? TryLoad(Stream stream, byte[] fingerprint, Assembly parserAssembly)
+    internal static List<SourceFile>? LoadOrDefault(Stream stream, byte[] fingerprint, Assembly parserAssembly)
     {
         try
         {
@@ -66,8 +75,8 @@ internal static class SourceCacheSerializer
             using CacheReader reader = new CacheReader(gzip,
                 AssemblyLoadContext.GetLoadContext(parserAssembly) ?? AssemblyLoadContext.Default);
 
-            byte[] magic = reader.ReadBytes(Magic.Length);
-            if (magic.Length != Magic.Length || !magic.SequenceEqual(Magic))
+            byte[] magic = reader.ReadBytes(s_magic.Length);
+            if (magic.Length != s_magic.Length || !magic.SequenceEqual(s_magic))
             {
                 return null;
             }
@@ -103,18 +112,41 @@ internal static class SourceCacheSerializer
     private sealed class CacheReader(Stream input, AssemblyLoadContext context)
         : BinaryReader(input, Encoding.UTF8, leaveOpen: false)
     {
+        /// <summary>
+        /// The assembly-load context used to reconstruct language-specific model types.
+        /// </summary>
         public AssemblyLoadContext Context { get; } = context;
+        /// <summary>
+        /// The statement objects already restored for each cached graph identity.
+        /// </summary>
         public Dictionary<int, StatementInfo> Statements { get; } = [];
+        /// <summary>
+        /// The method objects already restored for each cached graph identity.
+        /// </summary>
         public Dictionary<int, MethodDeclaration> Methods { get; } = [];
+        /// <summary>The type objects already restored for each graph identity.</summary>
         public Dictionary<int, TypeDeclaration> Types { get; } = [];
+        /// <summary>
+        /// The expression objects already restored for each cached graph identity.
+        /// </summary>
         public Dictionary<int, ExpressionInfo> Expressions { get; } = [];
     }
 
     private sealed class CacheWriter(Stream output) : BinaryWriter(output, Encoding.UTF8, leaveOpen: false)
     {
+        /// <summary>
+        /// The graph identities assigned to statement objects while writing the cache.
+        /// </summary>
         public Dictionary<StatementInfo, int> Statements { get; } = new(ReferenceEqualityComparer.Instance);
+        /// <summary>
+        /// The graph identities assigned to method objects while writing the cache.
+        /// </summary>
         public Dictionary<MethodDeclaration, int> Methods { get; } = new(ReferenceEqualityComparer.Instance);
+        /// <summary>The graph identities assigned to type objects while writing.</summary>
         public Dictionary<TypeDeclaration, int> Types { get; } = new(ReferenceEqualityComparer.Instance);
+        /// <summary>
+        /// The expression identities tracked while serializing this graph.
+        /// </summary>
         public Dictionary<ExpressionInfo, int> Expressions { get; } = new(ReferenceEqualityComparer.Instance);
     }
 
@@ -457,7 +489,7 @@ internal static class SourceCacheSerializer
         WriteList(writer, statement.ArgumentExpressions, WriteExpression);
         WriteSpan(writer, statement.Column, statement.EndLine, statement.EndColumn);
         WriteList(writer, statement.CachedConstructedTypeInterfaces, static (w, value) => w.Write(value));
-        WriteList(writer, statement._children, WriteStatementInfo);
+        WriteList(writer, statement.MutableChildren, WriteStatementInfo);
         WriteLanguageSubtype(writer, statement.LanguageTag, statement.LanguageFlags);
     }
 
@@ -496,7 +528,7 @@ internal static class SourceCacheSerializer
             EndLine = ReadNullableInt(reader),
             EndColumn = ReadNullableInt(reader),
             ConstructedTypeInterfaces = ReadList(reader, static r => r.ReadString(), "StatementInfo.ConstructedTypeInterfaces"),
-            _children = ReadList(reader, ReadStatementInfo, "StatementInfo.Children")
+            MutableChildren = ReadList(reader, ReadStatementInfo, "StatementInfo.Children")
         };
         (string? tag, Dictionary<string, bool>? flags) = ReadLanguageSubtype(reader, "StatementInfo");
         StatementInfo result = tag is not null ? StatementTypeRegistry.Reconstruct(tag, statement, flags, graph.Context) : statement;
@@ -511,7 +543,7 @@ internal static class SourceCacheSerializer
         result.Expression = statement.Expression;
         result.CopIgnore = statement.CopIgnore;
         result.ConstructedTypeInterfaces = statement.CachedConstructedTypeInterfaces;
-        result._children = statement._children;
+        result.MutableChildren = statement.MutableChildren;
         if (!graph.Statements.TryAdd(id, result))
         {
             throw new InvalidDataException("Duplicate statement identity.");

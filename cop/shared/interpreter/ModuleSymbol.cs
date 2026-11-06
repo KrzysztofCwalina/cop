@@ -9,6 +9,9 @@ using Cop.Lang.Ast;
 /// </summary>
 public sealed class ModuleSymbol : Symbol
 {
+    /// <summary>
+    /// The symbols made visible to importers of this module.
+    /// </summary>
     public IReadOnlyDictionary<string, Symbol> Exports { get; }
 
     public ModuleSymbol(string name, IReadOnlyDictionary<string, Symbol> exports)

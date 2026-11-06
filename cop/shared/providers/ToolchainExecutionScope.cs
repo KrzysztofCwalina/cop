@@ -8,17 +8,17 @@ using System.Text.Json;
 namespace Cop.Core;
 
 /// <summary>Owns optional toolchain workers for one execution, including deferred enumeration.</summary>
-public sealed class ToolchainExecutionScope : IDisposable
+public sealed class ToolchainExecutionScope : IAsyncDisposable
 {
-    private static readonly AsyncLocal<ToolchainExecutionScope?> Ambient = new();
+    private static readonly AsyncLocal<ToolchainExecutionScope?> s_ambient = new();
     private readonly ToolchainExecutionScope? _previous;
     private readonly Dictionary<string, ToolchainJsonWorker> _workers = new(StringComparer.Ordinal);
     private bool _disposed;
 
     public ToolchainExecutionScope()
     {
-        _previous = Ambient.Value;
-        Ambient.Value = this;
+        _previous = s_ambient.Value;
+        s_ambient.Value = this;
     }
 
     /// <summary>
@@ -27,15 +27,22 @@ public sealed class ToolchainExecutionScope : IDisposable
     /// errors; interpreting that language-specific payload is the provider's responsibility.
     /// </summary>
     public static async Task<ToolchainResult> RequestAsync(
-        string executable, IReadOnlyList<string> arguments, string workingDirectory, string request,
-        TimeSpan? timeout = null, int maxOutputCharacters = 4_194_304,
-        CancellationToken cancellationToken = default,
-        IReadOnlyDictionary<string, string?>? environment = null)
+        ToolchainCommand command,
+        string request,
+        ToolchainRunOptions? options = null,
+        CancellationToken cancellationToken = default)
     {
-        ToolchainExecutionScope? scope = Ambient.Value;
+        string executable = command.Executable;
+        IReadOnlyList<string> arguments = command.Arguments;
+        string workingDirectory = command.WorkingDirectory;
+        IReadOnlyDictionary<string, string?>? environment = command.Environment;
+        TimeSpan? timeout = options?.Timeout;
+        int maxOutputCharacters = options?.MaxOutputCharacters ?? 4_194_304;
+        ToolchainExecutionScope? scope = s_ambient.Value;
         if (scope is null)
         {
-            using ToolchainJsonWorker worker = new ToolchainJsonWorker(executable, arguments, workingDirectory, environment);
+            await using ToolchainJsonWorker worker =
+                new ToolchainJsonWorker(executable, arguments, workingDirectory, environment);
             return await worker.RequestAsync(request, timeout, maxOutputCharacters, cancellationToken).ConfigureAwait(false);
         }
         ToolchainJsonWorker shared;
@@ -53,23 +60,33 @@ public sealed class ToolchainExecutionScope : IDisposable
         return await shared.RequestAsync(request, timeout, maxOutputCharacters, cancellationToken).ConfigureAwait(false);
     }
 
-    public void Dispose()
+    /// <summary>
+    /// Disposes owned workers and restores the previous ambient execution scope.
+    /// </summary>
+    public ValueTask DisposeAsync()
     {
+        ToolchainJsonWorker[] workers;
         lock (_workers)
         {
             if (_disposed)
             {
-                return;
+                return ValueTask.CompletedTask;
             }
 
             _disposed = true;
-            foreach (ToolchainJsonWorker worker in _workers.Values)
-            {
-                worker.Dispose();
-            }
-
+            workers = _workers.Values.ToArray();
             _workers.Clear();
         }
-        Ambient.Value = _previous;
+        // Restore in the caller's context; changes inside async methods do not flow back.
+        s_ambient.Value = _previous;
+        return DisposeWorkersAsync(workers);
+    }
+
+    private static async ValueTask DisposeWorkersAsync(IEnumerable<ToolchainJsonWorker> workers)
+    {
+        foreach (ToolchainJsonWorker worker in workers)
+        {
+            await worker.DisposeAsync().ConfigureAwait(false);
+        }
     }
 }

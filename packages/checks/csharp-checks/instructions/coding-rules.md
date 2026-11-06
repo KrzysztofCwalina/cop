@@ -11,6 +11,9 @@
 - Use **camelCase** for local variables and method parameters
 - Example: `var userName = GetName(userId);`
 - Enhances readability and distinguishes scope immediately
+- Boolean parameters are fine when their names describe their meaning, such as
+  `isEnabled`, `hasChanges`, `includeTests`, or `recursive`; `value` is appropriate
+  for boolean data. Avoid vague names such as `flag`, `b`, and `arg`.
 
 ### Private Fields
 - Use **_camelCase** with leading underscore for private instance fields

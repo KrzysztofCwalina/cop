@@ -17,6 +17,9 @@ using CallExpr = Cop.Lang.Ast.CallExpr;
 internal sealed record QueryStep(Expression Predicate, IReadOnlyList<FunctionDecl> Definitions,
     bool Negated = false, string? Property = null, string? Method = null)
 {
+    /// <summary>
+    /// Applies this query transformation to a source and resolved predicate expression.
+    /// </summary>
     public Expression Apply(Expression source, Expression predicate) => Method is not null
         ? new CallExpr(new MemberExpr(source, Method), [predicate])
         : new FilterExpr(Property is null ? source : new FilterExpr(source, new IdentifierExpr(Property)),

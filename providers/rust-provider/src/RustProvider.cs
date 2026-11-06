@@ -11,6 +11,11 @@ namespace Cop.Providers;
 /// </summary>
 public class RustProvider : DataProvider
 {
+    /// <summary>
+    /// Overrides Rust toolchain inputs; null entries remove inherited values.
+    /// A null dictionary retains inherited Cargo environment behavior.
+    /// </summary>
+    public IReadOnlyDictionary<string, string?>? ToolchainEnvironment { get; init; }
 
     /// <inheritdoc />
     public override ReadOnlyMemory<byte> GetSchema() => RustSchema.GetJson();
@@ -25,43 +30,32 @@ public class RustProvider : DataProvider
     public override string QueryResultType => "Codebase";
 
     /// <inheritdoc />
-    public override object QueryDeferred(ProviderQuery query)
+    public override ValueTask<object?> QueryDeferredAsync(
+        ProviderQuery query, CancellationToken cancellationToken = default)
     {
         ReportAnalysisLimits(query);
         RustTypeDeclaration.RegisterCacheFactory();
         RustMethodDeclaration.RegisterCacheFactory();
         RustStatementInfo.RegisterCacheFactory();
         SourceParserRegistry parsers = new SourceParserRegistry();
-        parsers.Register(new RustSourceParser(projectRoot: query.RootPath));
-        return CodeCollectionBuilder.CollectDeferred(parsers, query, this,
-            () => RustProjectDiscovery.Discover(query.RootPath!, query.ExcludedDirectories));
+        parsers.Register(new RustSourceParser(projectRoot: query.RootPath)
+        {
+            ToolchainEnvironment = ToolchainEnvironment
+        });
+        cancellationToken.ThrowIfCancellationRequested();
+        return ValueTask.FromResult<object?>(CodeCollectionBuilder.CollectDeferred(
+            parsers, query, this, _ => ValueTask.FromResult(
+                RustProjectDiscovery.Discover(query.RootPath!, query.ExcludedDirectories))));
     }
 
     /// <inheritdoc />
-    public override object? Query(ProviderQuery query)
+    public override async ValueTask<object?> QueryAsync(
+        ProviderQuery query, CancellationToken cancellationToken = default)
     {
-        ReportAnalysisLimits(query);
-        // Ensure cached Rust types reconstruct as RustTypeDeclaration (not the plain base)
-        // before the source cache is read in CollectAndParse.
-        RustTypeDeclaration.RegisterCacheFactory();
-        RustMethodDeclaration.RegisterCacheFactory();
-        RustStatementInfo.RegisterCacheFactory();
-
-        SourceParserRegistry parsers = new SourceParserRegistry();
-        parsers.Register(new RustSourceParser(projectRoot: query.RootPath));
-        Dictionary<string, List<object>> collections = CodeCollectionBuilder.CollectAndParse(parsers, query, this);
-
-        // Discover projects from Cargo.toml
-        if (query.RootPath is not null)
-        {
-            List<ProjectInfo> projects = RustProjectDiscovery.Discover(query.RootPath, query.ExcludedDirectories);
-            if (query.Collection == null || query.Collection == "Projects")
-            {
-                collections["Projects"] = projects.Cast<object>().ToList();
-            }
-        }
-
-        return ApplyQueryFilters(query, collections);
+        DeferredProviderResult result = (DeferredProviderResult)
+            (await QueryDeferredAsync(query, cancellationToken).ConfigureAwait(false))!;
+        return await ProviderCollections.MaterializeAsync(result, cancellationToken)
+            .ConfigureAwait(false);
     }
 
     private static void ReportAnalysisLimits(ProviderQuery query)
@@ -71,7 +65,7 @@ public class RustProvider : DataProvider
             return;
         }
 
-        ProviderWarnings.ReportOnce("rust", query.RootPath ?? "",
+        ProviderWarnings.ReportOnce("rust", query.RootPath ?? string.Empty,
             "Rust analysis is syntax-only because Cop's maintained Rust frontend is unavailable. " +
             "Install the optional cop-rust-<rid>.zip language bundle beside cop to enable it. " +
             "Using the built-in structural parser; macro expansion, name/type resolution, and cfg evaluation are unavailable. " +

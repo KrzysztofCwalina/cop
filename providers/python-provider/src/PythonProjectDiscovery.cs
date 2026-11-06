@@ -13,18 +13,24 @@ public static class PythonProjectDiscovery
     /// <summary>
     /// Discovers Python projects and optionally resolves toolchain context.
     /// </summary>
-    public static List<ProjectInfo> Discover(string rootPath, IReadOnlySet<string>? excludedDirs, bool useToolchain = true)
+    public static async ValueTask<List<ProjectInfo>> DiscoverAsync(
+        string rootPath, IReadOnlySet<string>? excludedDirs,
+        PythonAnalysisBackend backend = PythonAnalysisBackend.PreferNative,
+        CancellationToken cancellationToken = default)
     {
-        PythonToolchain toolchain = new PythonToolchain(useToolchain);
+        PythonToolchain toolchain = new PythonToolchain(backend);
         List<ProjectInfo> result = new List<ProjectInfo>();
         foreach (string manifest in CollectManifests(rootPath, excludedDirs))
         {
             try
             {
-                string source = File.ReadAllText(manifest);
+                string source = await File.ReadAllTextAsync(manifest, cancellationToken)
+                    .ConfigureAwait(false);
                 string relative = Path.GetRelativePath(rootPath, manifest).Replace('\\', '/');
                 bool toml = Path.GetFileName(manifest) == "pyproject.toml";
-                using JsonDocument? document = toolchain.Analyze(manifest, source, toml ? "toml" : "setup");
+                using JsonDocument? document = await toolchain.AnalyzeAsync(
+                    new(manifest, source) { Mode = toml ? "toml" : "setup" }, cancellationToken)
+                    .ConfigureAwait(false);
                 ProjectInfo? project;
                 if (document is null)
                 {
@@ -107,7 +113,7 @@ public static class PythonProjectDiscovery
                     continue;
                 }
                 int equal = line.IndexOf('=');
-                string key = equal >= 0 ? line[..equal].Trim() : "";
+                string key = equal >= 0 ? line[..equal].Trim() : string.Empty;
                 string value = equal >= 0 ? line[(equal + 1)..].Trim() : line;
                 if (inProject && key == "name")
                 {

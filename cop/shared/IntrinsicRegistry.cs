@@ -129,7 +129,7 @@ public static class IntrinsicRegistry
         All.SelectMany(o => o.Aliases.Select(a => (o.Name, a)))
            .Distinct();
 
-    private static readonly IntrinsicKind[] PredicateKinds =
+    private static readonly IntrinsicKind[] s_predicateKinds =
     [
         IntrinsicKind.StringPredicate, IntrinsicKind.NumericPredicate, IntrinsicKind.CollectionPredicate,
         IntrinsicKind.UniversalPredicate, IntrinsicKind.ObjectPredicate,
@@ -137,7 +137,7 @@ public static class IntrinsicRegistry
 
     /// <summary>Distinct canonical names of every built-in predicate (no aliases). For completion.</summary>
     public static IReadOnlyList<string> PredicateNames() =>
-        All.Where(o => PredicateKinds.Contains(o.Kind)).Select(o => o.Name).Distinct().ToList();
+        All.Where(o => s_predicateKinds.Contains(o.Kind)).Select(o => o.Name).Distinct().ToList();
 
     /// <summary>Distinct canonical names of string/collection transforms plus utility functions. For completion.</summary>
     public static IReadOnlyList<string> TransformNames() =>

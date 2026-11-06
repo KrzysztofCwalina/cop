@@ -11,22 +11,28 @@ namespace Cop.Providers;
 /// </summary>
 public static class CodeSchema
 {
-    private static readonly ProviderSchema _schema = BuildSchema();
-    private static readonly ProviderSchema _typesOnly = BuildTypesOnlySchema();
+    private static readonly ProviderSchema s_schema = BuildSchema();
+    private static readonly ProviderSchema s_typesOnly = BuildTypesOnlySchema();
 
-    public static ProviderSchema Get() => _schema;
+    /// <summary>
+    /// Builds the provider schema for language-independent source facts.
+    /// </summary>
+    public static ProviderSchema Get() => s_schema;
 
-    public static ReadOnlyMemory<byte> GetJson() => _schema.ToJson();
+    /// <summary>
+    /// Serializes the shared source-model provider schema.
+    /// </summary>
+    public static ReadOnlyMemory<byte> GetJson() => s_schema.ToJson();
 
     /// <summary>
     /// Returns schema with only type definitions (no collections).
     /// Used by CodeSchemaProvider which registers types but has no data.
     /// </summary>
-    public static ReadOnlyMemory<byte> GetTypesOnlyJson() => _typesOnly.ToJson();
+    public static ReadOnlyMemory<byte> GetTypesOnlyJson() => s_typesOnly.ToJson();
 
     private static ProviderSchema BuildTypesOnlySchema() => new()
     {
-        Types = _schema.Types,
+        Types = s_schema.Types,
         Collections = []
     };
 
@@ -151,7 +157,7 @@ public static class CodeSchema
                 TypeDef("Project", null,
                     Prop("Name"), Prop("Path"), Opt("Language"),
                     Coll("References"), Coll("Packages"), Coll("Frameworks"),
-                    new ProviderPropertySchema { Name = "SourceFiles", Type = "string", Collection = true, Optional = true },
+                    new ProviderPropertySchema { Name = "SourceFiles", Type = "string", IsCollection = true, IsOptional = true },
                     Coll("Properties", "ProjectProperty")),
 
                 TypeDef("ProjectProperty", null,
@@ -178,9 +184,9 @@ public static class CodeSchema
     private static ProviderPropertySchema Prop(string name, string type = "string")
         => new() { Name = name, Type = type };
     private static ProviderPropertySchema Opt(string name, string type = "string")
-        => new() { Name = name, Type = type, Optional = true };
+        => new() { Name = name, Type = type, IsOptional = true };
     private static ProviderPropertySchema Bool(string name)
         => new() { Name = name, Type = "bool" };
     private static ProviderPropertySchema Coll(string name, string type = "string")
-        => new() { Name = name, Type = type, Collection = true };
+        => new() { Name = name, Type = type, IsCollection = true };
 }

@@ -13,18 +13,10 @@ namespace Cop.Providers.SourceModel;
 /// </summary>
 public sealed record GoTypeDeclaration : TypeDeclaration
 {
-    /// <summary>Copies shared type facts and adds Go type-category flags.</summary>
-    public GoTypeDeclaration(TypeDeclaration source, bool isInterface, bool isStruct,
-        bool isTypeAlias = false, bool hasStructTags = false,
-        bool hasUnionTypeSet = false, bool hasUnderlyingTypeTerms = false)
+    /// <summary>Copies a shared type before Go-specific facts are initialized.</summary>
+    public GoTypeDeclaration(TypeDeclaration source)
         : base(source)
     {
-        IsInterface = isInterface;
-        IsStruct = isStruct;
-        IsTypeAlias = isTypeAlias;
-        HasStructTags = hasStructTags;
-        HasUnionTypeSet = hasUnionTypeSet;
-        HasUnderlyingTypeTerms = hasUnderlyingTypeTerms;
     }
 
     /// <summary>True for Go <c>interface</c> types.</summary>
@@ -63,22 +55,13 @@ public sealed record GoTypeDeclaration : TypeDeclaration
     /// Registers reconstruction of Go type flags from cached declarations.
     /// </summary>
     public static void RegisterCacheFactory() =>
-        LanguageTypeRegistry.Register("go", (baseDecl, flags) => new GoTypeDeclaration(
-            baseDecl,
-            isInterface: flags.TryGetValue("IsInterface", out bool i) && i,
-            isStruct: flags.TryGetValue("IsStruct", out bool s) && s,
-            isTypeAlias: flags.TryGetValue("IsTypeAlias", out bool a) && a,
-            hasStructTags: flags.TryGetValue("HasStructTags", out bool t) && t,
-            hasUnionTypeSet: flags.TryGetValue("HasUnionTypeSet", out bool u) && u,
-            hasUnderlyingTypeTerms: flags.TryGetValue("HasUnderlyingTypeTerms", out bool h) && h));
-}
-
-/// <summary>Converts shared type declarations to Go-specific declarations.</summary>
-public static class GoTypeDeclarationExtensions
-{
-    /// <summary>Wraps a shared type with Go type-category facts.</summary>
-    public static GoTypeDeclaration AsGo(this TypeDeclaration source, bool isInterface = false, bool isStruct = false,
-        bool isTypeAlias = false, bool hasStructTags = false,
-        bool hasUnionTypeSet = false, bool hasUnderlyingTypeTerms = false)
-        => new(source, isInterface, isStruct, isTypeAlias, hasStructTags, hasUnionTypeSet, hasUnderlyingTypeTerms);
+        LanguageTypeRegistry.Register("go", (baseDecl, flags) => new GoTypeDeclaration(baseDecl)
+        {
+            IsInterface = flags.TryGetValue("IsInterface", out bool i) && i,
+            IsStruct = flags.TryGetValue("IsStruct", out bool s) && s,
+            IsTypeAlias = flags.TryGetValue("IsTypeAlias", out bool a) && a,
+            HasStructTags = flags.TryGetValue("HasStructTags", out bool t) && t,
+            HasUnionTypeSet = flags.TryGetValue("HasUnionTypeSet", out bool u) && u,
+            HasUnderlyingTypeTerms = flags.TryGetValue("HasUnderlyingTypeTerms", out bool h) && h
+        });
 }

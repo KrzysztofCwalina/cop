@@ -179,9 +179,9 @@ public class CommonSourceModelParityTests
     }
 
     [Test]
-    public void DeferredReceiverMembers_AreDemandedOnce_PreserveFile_AndNeverPolluteCache()
+    public async Task DeferredReceiverMembers_AreDemandedOnce_PreserveFile_AndNeverPolluteCache()
     {
-        WithRoot(root =>
+        await WithRootAsync(async root =>
         {
             File.WriteAllText(Path.Combine(root, "a.fake"), "owner");
             File.WriteAllText(Path.Combine(root, "b.fake"), "member");
@@ -190,21 +190,23 @@ public class CommonSourceModelParityTests
             var registry = new SourceParserRegistry();
             registry.Register(parser);
             var snapshot = new DeferredSourceSnapshot(registry, new() { RootPath = root });
-            var type = snapshot.Query(new() { Collection = "Types" }).Collections["Types"].Cast<TypeDeclaration>().First();
+            var type = (TypeDeclaration)await snapshot.Query(
+                new() { Collection = "Types" }).Collections["Types"].FirstAsync();
             Assert.That(type.Name, Is.EqualTo("Value"));
             Assert.That(parser.Reads, Is.EqualTo(new[] { "a.fake" }));
+            await type.EnsureMembersAsync();
             Assert.That(type.Methods.Select(m => m.Name), Is.EqualTo(new[] { "Run" }));
             Assert.That(parser.Reads, Is.EqualTo(new[] { "a.fake", "b.fake", "c.fake" }));
             var method = type.Methods.Single();
             Assert.That(method.File?.Path, Is.EqualTo("b.fake"));
-            var files = snapshot.Query(new() { Collection = "Files" }).Collections["Files"].Cast<SourceFile>().ToList();
+            var files = await ReadCollectionAsync<SourceFile>(snapshot, "Files");
             Assert.That(files[0].Methods, Is.Empty);
             Assert.That(files[1].Methods.Single(), Is.SameAs(method));
-            var flattened = snapshot.Query(new() { Collection = "Methods" }).Collections["Methods"].Cast<MethodDeclaration>().ToList();
+            var flattened = await ReadCollectionAsync<MethodDeclaration>(snapshot, "Methods");
             Assert.That(flattened.Select(m => m.Name), Is.EqualTo(new[] { "Run", "WrongScope" }));
             Assert.That(flattened[0], Is.SameAs(method));
-            var apiMethod = snapshot.Query(new() { Collection = "Api" }).Collections["Api"]
-                .Cast<ApiEntry>().Single(entry => entry.Kind == "method");
+            var apiMethod = (await ReadCollectionAsync<ApiEntry>(snapshot, "Api"))
+                .Single(entry => entry.Kind == "method");
             Assert.That(apiMethod.File, Is.SameAs(method.File));
             Assert.That(apiMethod.File?.Path, Is.EqualTo("b.fake"));
             var intrinsic = SourceGraphIdentityTests.RoundTrip(files[0]);
@@ -215,7 +217,8 @@ public class CommonSourceModelParityTests
             parser.Reads.Clear();
             for (int execution = 0; execution < 2; execution++)
             {
-                var eager = CodeCollectionBuilder.CollectAndParse(registry, new() { RootPath = root });
+                var eager = await CodeCollectionBuilder.CollectAndParseAsync(
+                    registry, new() { RootPath = root });
                 var eagerOwner = (TypeDeclaration)eager["Types"].Single();
                 Assert.That(eagerOwner.Methods.Select(m => m.Name), Is.EqualTo(new[] { "Run" }));
                 Assert.That(eagerOwner.Methods[0].File?.Path, Is.EqualTo("b.fake"));
@@ -226,9 +229,9 @@ public class CommonSourceModelParityTests
     }
 
     [Test]
-    public void DeferredReceiverMembers_RefusesAmbiguousTypeNames()
+    public async Task DeferredReceiverMembers_RefusesAmbiguousTypeNames()
     {
-        WithRoot(root =>
+        await WithRootAsync(async root =>
         {
             File.WriteAllText(Path.Combine(root, "a.fake"), "owner");
             File.WriteAllText(Path.Combine(root, "b.fake"), "ambiguous-owner");
@@ -236,61 +239,68 @@ public class CommonSourceModelParityTests
             var registry = new SourceParserRegistry();
             registry.Register(new ModelParser());
             var snapshot = new DeferredSourceSnapshot(registry, new() { RootPath = root });
-            var types = snapshot.Query(new() { Collection = "Types" }).Collections["Types"].Cast<TypeDeclaration>().ToList();
+            var types = await ReadCollectionAsync<TypeDeclaration>(snapshot, "Types");
+            foreach (var type in types)
+                await type.EnsureMembersAsync();
             Assert.That(types, Has.Count.EqualTo(2));
             Assert.That(types[0].Methods, Is.Empty);
             Assert.That(types[1].Methods, Is.Empty);
-            Assert.That(snapshot.Query(new() { Collection = "Methods" }).Collections["Methods"]
-                .Cast<MethodDeclaration>().Select(method => method.Name), Is.EqualTo(new[] { "Run" }));
+            Assert.That((await ReadCollectionAsync<MethodDeclaration>(snapshot, "Methods"))
+                .Select(method => method.Name), Is.EqualTo(new[] { "Run" }));
         });
     }
 
     [TestCase(null, new[] { "a.fake", "b.fake", "c.fake" })]
     [TestCase("b.fake", new[] { "b.fake" })]
     [TestCase("", new string[0])]
-    public void ExplicitProjectMembership_DistinguishesUnspecifiedAndEmpty(string? member, string[] expected)
+    public async Task ExplicitProjectMembership_DistinguishesUnspecifiedAndEmpty(
+        string? member, string[] expected)
     {
-        WithRoot(root =>
+        await WithRootAsync(async root =>
         {
             foreach (var name in new[] { "a.fake", "b.fake", "c.fake" })
                 File.WriteAllText(Path.Combine(root, name), "owner");
             var registry = new SourceParserRegistry();
             registry.Register(new ModelParser());
-            var snapshot = new DeferredSourceSnapshot(registry, new() { RootPath = root }, discoverProjects: () =>
+            var snapshot = new DeferredSourceSnapshot(
+                registry, new() { RootPath = root }, discoverProjects: _ =>
+                ValueTask.FromResult<List<ProjectInfo>>(
                 [new ProjectInfo("project", Path.Combine(root, "project.json"), "test", [], [], [])
                 {
                     SourceFiles = member is null ? null : member.Length == 0 ? [] : [Path.Combine(root, member)]
-                }]);
-            var files = snapshot.Query(new() { Collection = "Files" }).Collections["Files"].Cast<SourceFile>();
+                }]));
+            var files = await ReadCollectionAsync<SourceFile>(snapshot, "Files");
+            foreach (var file in files)
+                await file.EnsureProjectsAsync();
             Assert.That(files.Where(file => file.Projects.Contains("project")).Select(file => file.Path), Is.EqualTo(expected));
         });
     }
 
     [Test]
-    public void ParserCacheIdentity_IsDemandedBeforeLookup_AndInvalidatesBackendChanges()
+    public async Task ParserCacheIdentity_IsDemandedBeforeLookup_AndInvalidatesBackendChanges()
     {
-        WithRoot(root =>
+        await WithRootAsync(async root =>
         {
             File.WriteAllText(Path.Combine(root, "a.fake"), "owner");
             var parser = new ModelParser();
-            SourceFile Read()
+            async Task<SourceFile> ReadAsync()
             {
                 var registry = new SourceParserRegistry();
                 registry.Register(parser);
                 var snapshot = new DeferredSourceSnapshot(registry, new() { RootPath = root });
                 Assert.That(parser.IdentityReads, Is.EqualTo(parser.ExpectedIdentityReads));
                 parser.ExpectedIdentityReads++;
-                return snapshot.Query(new() { Collection = "Files" }).Collections["Files"].Cast<SourceFile>().Single();
+                return (await ReadCollectionAsync<SourceFile>(snapshot, "Files")).Single();
             }
-            Assert.That(Read().Namespace, Is.EqualTo("first"));
-            Assert.That(Read().Namespace, Is.EqualTo("first"));
+            Assert.That((await ReadAsync()).Namespace, Is.EqualTo("first"));
+            Assert.That((await ReadAsync()).Namespace, Is.EqualTo("first"));
             Assert.That(parser.Reads, Has.Count.EqualTo(1), "Stable backend must use the persisted cache.");
             parser.Identity = "second";
-            Assert.That(Read().Namespace, Is.EqualTo("second"));
+            Assert.That((await ReadAsync()).Namespace, Is.EqualTo("second"));
             Assert.That(parser.Reads, Has.Count.EqualTo(2), "Changed backend must not reuse old facts.");
             parser.Cacheable = false;
-            Assert.That(Read().Namespace, Is.EqualTo("second"));
-            Assert.That(Read().Namespace, Is.EqualTo("second"));
+            Assert.That((await ReadAsync()).Namespace, Is.EqualTo("second"));
+            Assert.That((await ReadAsync()).Namespace, Is.EqualTo("second"));
             Assert.That(parser.Reads, Has.Count.EqualTo(4), "Non-cacheable semantic projection must parse every execution.");
             Assert.That(parser.IdentityReads, Is.EqualTo(5), "Cache hits must still execute the provider preflight.");
         });
@@ -309,16 +319,24 @@ public class CommonSourceModelParityTests
             writer.Write(version);
         }
         buffer.Position = 0;
-        var result = serializer.GetMethod("TryLoad", BindingFlags.Static | BindingFlags.NonPublic, null,
+        var result = serializer.GetMethod("LoadOrDefault", BindingFlags.Static | BindingFlags.NonPublic, null,
             [typeof(Stream), typeof(byte[]), typeof(Assembly)], null)!.Invoke(null, [buffer, new byte[] { 1 }, typeof(CodeCollectionBuilder).Assembly]);
         Assert.That(result, Is.Null);
     }
 
-    private static void WithRoot(Action<string> run)
+    private static async Task<List<T>> ReadCollectionAsync<T>(
+        DeferredSourceSnapshot snapshot, string collection)
+    {
+        var collections = await ProviderCollections.MaterializeAsync(
+            snapshot.Query(new() { Collection = collection }));
+        return collections[collection].Cast<T>().ToList();
+    }
+
+    private static async Task WithRootAsync(Func<string, Task> run)
     {
         var root = Path.Combine(TestContext.CurrentContext.WorkDirectory, "model-scope-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
-        try { run(root); }
+        try { await run(root); }
         finally { Directory.Delete(root, true); }
     }
 
@@ -334,18 +352,19 @@ public class CommonSourceModelParityTests
         public int ExpectedIdentityReads { get; set; }
         public override bool CanCache(string filePath) => Cacheable;
         public override string GetCacheIdentity(string filePath) { IdentityReads++; return Identity; }
-        public override SourceFile Parse(string filePath, string sourceText)
+        public override ValueTask<SourceFile?> ParseAsync(
+            string filePath, string sourceText, CancellationToken cancellationToken = default)
         {
             lock (Reads) Reads.Add(Path.GetFileName(filePath));
             var member = sourceText is not ("owner" or "ambiguous-owner");
             var wrongScope = sourceText == "different-namespace";
-            return new(filePath, Language,
+            return ValueTask.FromResult<SourceFile?>(new(filePath, Language,
                 member ? [] : [new("Value", TypeKind.Struct, Modifier.Public, [], [], [], [], [], [], 1)],
                 [], sourceText)
             {
                 Namespace = wrongScope ? "other" : Identity,
                 Methods = member ? [new(wrongScope ? "WrongScope" : "Run", Modifier.Public, [], null, [], 1) { ReceiverType = "Value" }] : []
-            };
+            });
         }
     }
 

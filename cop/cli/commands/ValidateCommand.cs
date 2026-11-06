@@ -66,7 +66,8 @@ public static class ValidateCommand
             pathArgument
         };
 
-        command.SetAction(parseResult => Execute(parseResult.GetValue(pathArgument)));
+        command.SetAction(parseResult => ExecuteAsync(parseResult.GetValue(pathArgument)
+            ?? throw new InvalidOperationException("The required package path is missing.")));
 
         return command;
     }
@@ -74,7 +75,7 @@ public static class ValidateCommand
     /// <summary>
     /// Executes validations on a package.
     /// </summary>
-    public static int Execute(string path)
+    public static async Task<int> ExecuteAsync(string path)
     {
         // Resolve path: if it's an existing directory use it directly,
         // otherwise try name-based lookup for backward compatibility
@@ -123,7 +124,8 @@ public static class ValidateCommand
                 metadata = PackageMetadata.ParseFromJson(content);
                 results.Add(new ValidationResult("Metadata parses successfully", true));
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is System.Text.Json.JsonException or IOException or
+                UnauthorizedAccessException)
             {
                 results.Add(new ValidationResult("Metadata parses successfully", false, ex.Message));
                 metadata = null;
@@ -210,19 +212,19 @@ public static class ValidateCommand
         // Step 11: Dependencies are valid package reference format
         bool dependenciesValid = true;
         string? dependencyError = null;
+        List<(string Source, PackageReference Reference)> parsedDependencies = [];
         if (metadata != null && metadata.Dependencies.Count > 0)
         {
             foreach (string dep in metadata.Dependencies)
             {
                 try
                 {
-                    PackageReference.Parse(dep);
+                    parsedDependencies.Add((dep, PackageReference.Parse(dep)));
                 }
-                catch (Exception ex)
+                catch (Exception ex) when (ex is FormatException or ArgumentException)
                 {
                     dependenciesValid = false;
-                    dependencyError = $"Invalid dependency '{dep}': {ex.Message}";
-                    break;
+                    dependencyError ??= $"Invalid dependency '{dep}': {ex.Message}";
                 }
             }
         }
@@ -235,24 +237,13 @@ public static class ValidateCommand
         // Step 12: No circular dependencies (self-reference validation)
         bool noCircularDeps = true;
         string? circularError = null;
-        if (metadata != null && metadata.Dependencies.Count > 0)
+        foreach ((string dependency, PackageReference packageRef) in parsedDependencies)
         {
-            foreach (string dep in metadata.Dependencies)
+            if (packageRef.PackageName == name)
             {
-                try
-                {
-                    PackageReference packageRef = PackageReference.Parse(dep);
-                    if (packageRef.PackageName == name)
-                    {
-                        noCircularDeps = false;
-                        circularError = $"Package has circular dependency on itself: {dep}";
-                        break;
-                    }
-                }
-                catch
-                {
-                    // Already caught in step 11
-                }
+                noCircularDeps = false;
+                circularError = $"Package has circular dependency on itself: {dependency}";
+                break;
             }
         }
         results.Add(new ValidationResult(
@@ -277,7 +268,7 @@ public static class ValidateCommand
                 {
                     srcErrors.Add(ex.Message);
                 }
-                catch (Exception ex) when (ex is not OutOfMemoryException)
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
                 {
                     srcErrors.Add($"{file}: {ex.Message}");
                 }
@@ -303,7 +294,7 @@ public static class ValidateCommand
             {
                 string sampleSource = File.ReadAllText(file);
 
-                string? sampleResult = ValidateSample(file, sampleSource, packagesDir);
+                string? sampleResult = await ValidateSampleAsync(file, sampleSource, packagesDir);
                 if (sampleResult != null)
                 {
                     sampleErrors.Add(sampleResult);
@@ -366,7 +357,8 @@ public static class ValidateCommand
     /// Validates a single sample file by running it through the engine.
     /// Returns an error message or null if valid.
     /// </summary>
-    private static string? ValidateSample(string filePath, string source, string? packagesDir)
+    private static async Task<string?> ValidateSampleAsync(
+        string filePath, string source, string? packagesDir)
     {
         // First check if it parses
         try
@@ -379,12 +371,8 @@ public static class ValidateCommand
         }
 
         // Run through engine to validate imports and bindings
-        string tempDir = Path.Combine(Path.GetTempPath(), "cop-validate", Path.GetFileNameWithoutExtension(filePath));
-        if (Directory.Exists(tempDir))
-        {
-            Directory.Delete(tempDir, true);
-        }
-
+        string tempDir = Path.Combine(Path.GetTempPath(), "cop-validate",
+            Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(tempDir);
         try
         {
@@ -396,7 +384,7 @@ public static class ValidateCommand
             }
 
             string[]? feedPaths = packagesDir != null ? new[] { packagesDir } : null;
-            EngineResult result = Engine.Run(tempDir, tempDir, new EngineRunOptions
+            EngineResult result = await Engine.RunAsync(tempDir, tempDir, new EngineRunOptions
             {
                 AdditionalFeedPaths = feedPaths,
             });
@@ -422,7 +410,14 @@ public static class ValidateCommand
         }
         finally
         {
-            try { Directory.Delete(tempDir, true); } catch { }
+            try
+            {
+                Directory.Delete(tempDir, true);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                Console.Error.WriteLine($"Warning: Cannot remove sample directory '{tempDir}': {ex.Message}");
+            }
         }
     }
 

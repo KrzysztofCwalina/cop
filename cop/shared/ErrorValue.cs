@@ -6,7 +6,7 @@ namespace Cop.Lang;
 /// Represents an operational error value flowing through a pipeline.
 /// ErrorValue is a DataObject so it participates in the normal data flow —
 /// field access (.Message, .Source) works, and it flows through collections.
-/// 
+///
 /// Errors are NOT code bugs (those use FAIL). Errors represent external failures
 /// that code cannot prevent: network timeouts, I/O failures, malformed external input.
 /// </summary>

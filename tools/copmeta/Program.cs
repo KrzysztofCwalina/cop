@@ -1,6 +1,6 @@
 // Command-line entry point for regenerating or checking editor grammar metadata.
 
-using CopMeta;
+using Cop.Tools.Metadata;
 
 // copmeta - regenerates the data-driven keyword lists of the TextMate grammar
 // (install/vscode-cop/syntaxes/cop.tmLanguage.json) from cop's own C# definitions (tokenizer,
@@ -40,9 +40,10 @@ if (repoRoot is null || !File.Exists(Path.Combine(repoRoot, MetadataGenerator.Gr
 
 try
 {
-    return MetadataGenerator.Run(repoRoot, check);
+    return check ? MetadataGenerator.Check(repoRoot) : MetadataGenerator.Write(repoRoot);
 }
-catch (Exception ex)
+catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or
+    System.Text.Json.JsonException or InvalidOperationException)
 {
     Console.Error.WriteLine($"copmeta failed: {ex.Message}");
     return 2;

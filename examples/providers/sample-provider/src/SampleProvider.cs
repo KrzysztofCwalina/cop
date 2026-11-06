@@ -1,4 +1,5 @@
 using Cop.Core;
+using Cop.Lang;
 
 namespace SampleProvider;
 
@@ -9,8 +10,7 @@ namespace SampleProvider;
 ///
 /// To use in a .cop file:
 ///   import sample
-///   foreach Widgets   # Widgets is explicitly exported by the sample package
-///       '{Widget.Name} ({Widget.Category})'
+///   foreach Widgets => '{item.Name} ({item.Category})'
 /// </summary>
 public class SampleProvider : DataProvider
 {
@@ -37,8 +37,10 @@ public class SampleProvider : DataProvider
         return schema.ToJson();
     }
 
-    public override object? Query(ProviderQuery query)
+    public override async ValueTask<object?> QueryAsync(
+        ProviderQuery query, CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         // Skip if the engine doesn't need Widgets
         if (query.Collection != null &&
             query.Collection != "Widgets")
@@ -53,20 +55,20 @@ public class SampleProvider : DataProvider
             {
                 // Read the file — each line is "key=value"
                 var props = new Dictionary<string, string>();
-                foreach (var line in File.ReadAllLines(file))
+                foreach (var line in await File.ReadAllLinesAsync(file, cancellationToken))
                 {
                     var parts = line.Split('=', 2);
                     if (parts.Length == 2)
                         props[parts[0].Trim()] = parts[1].Trim();
                 }
 
-                widgets.Add(new Dictionary<string, object?>
+                widgets.Add(new DataObject("Widget", new Dictionary<string, object?>
                 {
                     ["Name"] = props.GetValueOrDefault("name", Path.GetFileNameWithoutExtension(file)),
                     ["Category"] = props.GetValueOrDefault("category", "uncategorized"),
                     ["Size"] = int.TryParse(props.GetValueOrDefault("size", "0"), out var s) ? (long)s : 0L,
                     ["FilePath"] = Path.GetRelativePath(rootPath, file).Replace('\\', '/'),
-                });
+                }));
             }
         }
 

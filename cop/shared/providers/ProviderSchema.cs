@@ -11,7 +11,13 @@ namespace Cop.Core;
 /// </summary>
 public class ProviderSchema
 {
+    /// <summary>
+    /// The object type definitions exposed by the provider.
+    /// </summary>
     public List<ProviderTypeSchema> Types { get; set; } = [];
+    /// <summary>
+    /// The named collections exposed by the provider.
+    /// </summary>
     public List<ProviderCollectionSchema> Collections { get; set; } = [];
 
     /// <summary>
@@ -29,7 +35,7 @@ public class ProviderSchema
     /// </summary>
     public ReadOnlyMemory<byte> ToJson()
     {
-        MemoryStream buffer = new System.IO.MemoryStream();
+        using MemoryStream buffer = new System.IO.MemoryStream();
         using Utf8JsonWriter w = new System.Text.Json.Utf8JsonWriter(buffer);
         w.WriteStartObject();
 
@@ -53,12 +59,12 @@ public class ProviderSchema
                     w.WriteString("type"u8, prop.Type);
                 }
 
-                if (prop.Optional)
+                if (prop.IsOptional)
                 {
                     w.WriteBoolean("optional"u8, true);
                 }
 
-                if (prop.Collection)
+                if (prop.IsCollection)
                 {
                     w.WriteBoolean("collection"u8, true);
                 }

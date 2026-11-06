@@ -17,7 +17,7 @@ public class SourceGraphIdentityTests
         var second = new StatementInfo("call", [], null, "Run", [], 1, true);
         var parent = new StatementInfo("if", [], null, null, [], 1, true)
         {
-            _children = [first, second]
+            MutableChildren = [first, second]
         };
         var method = new MethodDeclaration("Execute", Modifier.Public, [], null, [], 1)
         {
@@ -81,7 +81,7 @@ public class SourceGraphIdentityTests
         {
             serializer.GetMethod("Save", [typeof(string), typeof(byte[]), typeof(List<SourceFile>)])!
                 .Invoke(null, [path, new byte[] { 1, 2 }, new List<SourceFile> { file }]);
-            var loaded = (List<SourceFile>?)serializer.GetMethod("TryLoad", [typeof(string), typeof(byte[])])!
+            var loaded = (List<SourceFile>?)serializer.GetMethod("LoadOrDefault", [typeof(string), typeof(byte[])])!
                 .Invoke(null, [path, new byte[] { 1, 2 }]);
             Assert.That(loaded, Has.Count.EqualTo(1));
             return loaded![0];

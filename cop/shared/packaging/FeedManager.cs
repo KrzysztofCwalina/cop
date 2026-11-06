@@ -18,7 +18,7 @@ namespace Cop.Core
     {
         private const string DefaultFeed = "github.com/KrzysztofCwalina/cop";
         private const string FeedsFileName = "feeds.json";
-        
+
         private List<string> _feeds;
         private string _feedsFilePath;
 
@@ -45,7 +45,7 @@ namespace Cop.Core
                         // Load feeds from file, ensuring default feed is always first and not duplicated
                         _feeds.Clear();
                         _feeds.Add(DefaultFeed);
-                        
+
                         foreach (string feed in data.Feeds)
                         {
                             if (feed != DefaultFeed && !_feeds.Contains(feed))
@@ -57,7 +57,8 @@ namespace Cop.Core
                 }
                 catch (Exception ex) when (ex is JsonException or IOException)
                 {
-                    // If JSON is corrupt or file can't be read, just use defaults
+                    ProviderWarnings.ReportOnce("package", _feedsFilePath,
+                        $"Cannot read feed configuration; using the default feed: {ex.Message}");
                     _feeds = new List<string> { DefaultFeed };
                 }
             }
@@ -72,7 +73,7 @@ namespace Cop.Core
         }
 
         /// <summary>
-        /// Adds a feed URL or local directory path. 
+        /// Adds a feed URL or local directory path.
         /// GitHub feeds must be github.com/{owner}/{repo}. Local feeds must be existing directory paths.
         /// Throws if feed already exists or format is invalid.
         /// </summary>
@@ -212,6 +213,9 @@ namespace Cop.Core
         /// </summary>
         private class FeedsData
         {
+            /// <summary>
+            /// The package source locations persisted in the feeds configuration.
+            /// </summary>
             [JsonPropertyName("feeds")]
             public List<string> Feeds { get; set; } = new List<string>();
         }

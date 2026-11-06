@@ -15,11 +15,12 @@ public class ProcessProviderTests
         TestContext.CurrentContext.TestDirectory, "..", "..", "..", "testdata");
 
     [Test]
-    public void NodeProvider_GetSchema_ReturnsValidSchema()
+    public async Task NodeProvider_GetSchema_ReturnsValidSchema()
     {
         if (!IsNodeAvailable()) Assert.Ignore("Node.js not available on this machine");
 
-        using var provider = new ProcessObjectProvider("node", "mock-provider.js", TestDataDir);
+        await using var provider = new ProcessObjectProvider("node", "mock-provider.js", TestDataDir);
+        await provider.InitializeAsync();
         var schemaBytes = provider.GetSchema();
         var schema = ProviderSchema.FromJson(schemaBytes);
 
@@ -32,13 +33,13 @@ public class ProcessProviderTests
     }
 
     [Test]
-    public void NodeProvider_Query_ReturnsCollectionData()
+    public async Task NodeProvider_Query_ReturnsCollectionData()
     {
         if (!IsNodeAvailable()) Assert.Ignore("Node.js not available on this machine");
 
-        using var provider = new ProcessObjectProvider("node", "mock-provider.js", TestDataDir);
+        await using var provider = new ProcessObjectProvider("node", "mock-provider.js", TestDataDir);
         var query = new ProviderQuery { RootPath = TestDataDir };
-        var resultJson = provider.Query(query) as byte[];
+        var resultJson = await provider.QueryAsync(query) as byte[];
 
         Assert.That(resultJson, Is.Not.Null);
         Assert.That(resultJson!.Length, Is.GreaterThan(0));
@@ -51,11 +52,12 @@ public class ProcessProviderTests
     }
 
     [Test]
-    public void NodeProvider_FullIntegration_SchemaAndQuery()
+    public async Task NodeProvider_FullIntegration_SchemaAndQuery()
     {
         if (!IsNodeAvailable()) Assert.Ignore("Node.js not available on this machine");
 
-        using var provider = new ProcessObjectProvider("node", "mock-provider.js", TestDataDir);
+        await using var provider = new ProcessObjectProvider("node", "mock-provider.js", TestDataDir);
+        await provider.InitializeAsync();
 
         // Get schema
         var schemaBytes = provider.GetSchema();
@@ -63,7 +65,7 @@ public class ProcessProviderTests
 
         // Query data
         var query = new ProviderQuery { RootPath = TestDataDir };
-        var resultJson = provider.Query(query) as byte[];
+        var resultJson = await provider.QueryAsync(query) as byte[];
 
         // Deserialize using the standard path
         var collections = JsonCollectionDeserializer.Deserialize(resultJson!, schema);
@@ -72,11 +74,12 @@ public class ProcessProviderTests
     }
 
     [Test]
-    public void PythonProvider_GetSchema_ReturnsValidSchema()
+    public async Task PythonProvider_GetSchema_ReturnsValidSchema()
     {
         if (!IsPythonAvailable()) Assert.Ignore("Python not available on this machine");
 
-        using var provider = new ProcessObjectProvider("python", "mock-provider.py", TestDataDir);
+        await using var provider = new ProcessObjectProvider("python", "mock-provider.py", TestDataDir);
+        await provider.InitializeAsync();
         var schemaBytes = provider.GetSchema();
         var schema = ProviderSchema.FromJson(schemaBytes);
 
@@ -87,13 +90,13 @@ public class ProcessProviderTests
     }
 
     [Test]
-    public void PythonProvider_Query_ReturnsCollectionData()
+    public async Task PythonProvider_Query_ReturnsCollectionData()
     {
         if (!IsPythonAvailable()) Assert.Ignore("Python not available on this machine");
 
-        using var provider = new ProcessObjectProvider("python", "mock-provider.py", TestDataDir);
+        await using var provider = new ProcessObjectProvider("python", "mock-provider.py", TestDataDir);
         var query = new ProviderQuery { RootPath = TestDataDir };
-        var resultJson = provider.Query(query) as byte[];
+        var resultJson = await provider.QueryAsync(query) as byte[];
 
         var text = System.Text.Encoding.UTF8.GetString(resultJson!);
         Assert.That(text, Does.Contain("one"));
@@ -101,28 +104,117 @@ public class ProcessProviderTests
     }
 
     [Test]
-    public void ProcessProvider_InvalidRuntime_ThrowsOnGetSchema()
+    public async Task ProcessProvider_InvalidRuntime_ThrowsOnGetSchema()
     {
-        using var provider = new ProcessObjectProvider("nonexistent-runtime-xyz", "script.js", TestDataDir);
-        Assert.Throws<InvalidOperationException>(() => provider.GetSchema());
+        await using var provider = new ProcessObjectProvider("nonexistent-runtime-xyz", "script.js", TestDataDir);
+        Assert.ThrowsAsync<InvalidOperationException>(
+            async () => await provider.InitializeAsync());
     }
 
     [Test]
-    public void ProcessProvider_MissingScript_ThrowsOnGetSchema()
+    public async Task ProcessProvider_MissingScript_ThrowsOnGetSchema()
     {
         if (!IsNodeAvailable()) Assert.Ignore("Node.js not available on this machine");
 
-        using var provider = new ProcessObjectProvider("node", "nonexistent-script.js", TestDataDir);
+        await using var provider = new ProcessObjectProvider("node", "nonexistent-script.js", TestDataDir);
         // Node will exit with error when script doesn't exist
-        Assert.Throws<InvalidOperationException>(() => provider.GetSchema());
+        Assert.ThrowsAsync<InvalidOperationException>(
+            async () => await provider.InitializeAsync());
     }
 
     [Test]
-    public void ProcessProvider_Query_ReturnsJsonBytes()
+    public async Task ProcessProvider_Query_ReturnsJsonBytes()
     {
-        using var provider = new ProcessObjectProvider("node", "mock-provider.js", TestDataDir);
-        var result = provider.Query(new ProviderQuery { RootPath = TestDataDir });
+        if (!IsNodeAvailable()) Assert.Ignore("Node.js not available on this machine");
+        await using var provider = new ProcessObjectProvider("node", "mock-provider.js", TestDataDir);
+        var result = await provider.QueryAsync(new ProviderQuery { RootPath = TestDataDir });
         Assert.That(result, Is.TypeOf<byte[]>());
+    }
+
+    [Test]
+    public async Task ProcessProvider_Utf8FramesPreserveUnicodeAcrossRequests()
+    {
+        if (!IsNodeAvailable()) Assert.Ignore("Node.js not available on this machine");
+        await using var provider = new ProcessObjectProvider(
+            "node", "framing-provider.js", TestDataDir)
+        {
+            Timeout = TimeSpan.FromSeconds(5)
+        };
+        var query = new ProviderQuery();
+        for (int request = 0; request < 2; request++)
+        {
+            var bytes = await provider.QueryAsync(query) as byte[];
+            Assert.That(bytes, Is.Not.Null);
+            Assert.That(System.Text.Encoding.UTF8.GetString(bytes!),
+                Is.EqualTo("{\"Value\":\"Za\u017c\u00f3\u0142\u0107 \ud83d\ude00\"}"));
+        }
+    }
+
+    [Test]
+    public async Task ProcessProvider_TimeoutCoversIncompleteBodyAndTerminatesChild()
+    {
+        if (!IsNodeAvailable()) Assert.Ignore("Node.js not available on this machine");
+        await using var provider = new ProcessObjectProvider(
+            "node", "framing-provider.js", TestDataDir);
+        await provider.InitializeAsync();
+        using var schema = System.Text.Json.JsonDocument.Parse(provider.GetSchema());
+        using var child = System.Diagnostics.Process.GetProcessById(
+            schema.RootElement.GetProperty("pid").GetInt32());
+        provider.Timeout = TimeSpan.FromMilliseconds(200);
+        var query = new ProviderQuery
+        {
+            Options = new Dictionary<string, string> { ["mode"] = "stall" }
+        };
+
+        Assert.ThrowsAsync<TimeoutException>(async () =>
+            await provider.QueryAsync(query).AsTask().WaitAsync(TimeSpan.FromSeconds(5)));
+        Assert.That(child.HasExited, Is.True);
+    }
+
+    [Test]
+    public async Task ProcessProvider_CallerCancellationTerminatesChildAndKeepsCallerToken()
+    {
+        if (!IsNodeAvailable()) Assert.Ignore("Node.js not available on this machine");
+        await using var provider = new ProcessObjectProvider(
+            "node", "framing-provider.js", TestDataDir);
+        await provider.InitializeAsync();
+        using var schema = System.Text.Json.JsonDocument.Parse(provider.GetSchema());
+        using var child = System.Diagnostics.Process.GetProcessById(
+            schema.RootElement.GetProperty("pid").GetInt32());
+        using var cancellation = new CancellationTokenSource(TimeSpan.FromMilliseconds(200));
+        var query = new ProviderQuery
+        {
+            Options = new Dictionary<string, string> { ["mode"] = "stall" }
+        };
+
+        var error = Assert.ThrowsAsync<OperationCanceledException>(async () =>
+            await provider.QueryAsync(query, cancellation.Token).AsTask()
+                .WaitAsync(TimeSpan.FromSeconds(5)));
+        Assert.That(error!.CancellationToken, Is.EqualTo(cancellation.Token));
+        Assert.That(child.HasExited, Is.True);
+    }
+
+    [Test]
+    public async Task ProcessProvider_OverlappingDisposalsBothWaitForChildExit()
+    {
+        if (!IsNodeAvailable()) Assert.Ignore("Node.js not available on this machine");
+        await using var provider = new ProcessObjectProvider(
+            "node", "framing-provider.js", TestDataDir);
+        await provider.InitializeAsync();
+        using var schema = System.Text.Json.JsonDocument.Parse(provider.GetSchema());
+        using var child = System.Diagnostics.Process.GetProcessById(
+            schema.RootElement.GetProperty("pid").GetInt32());
+
+        Task first = provider.DisposeAsync().AsTask();
+        try
+        {
+            await provider.DisposeAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(5));
+            Assert.That(child.HasExited, Is.True);
+        }
+        finally
+        {
+            await first.WaitAsync(TimeSpan.FromSeconds(5));
+        }
     }
 
     [Test]

@@ -10,6 +10,9 @@ namespace Cop.Lang;
 /// </summary>
 public class DataObject
 {
+    /// <summary>
+    /// The provider-declared Cop type used for member binding and type tests.
+    /// </summary>
     public string TypeName { get; internal set; }
     private readonly Dictionary<string, object?> _fields;
 
@@ -19,6 +22,10 @@ public class DataObject
     /// This enables Haskell-style lazy evaluation: fields are thunks forced on first access.
     /// </summary>
     private Func<string, object?>? _fieldResolver;
+    private Func<string, CancellationToken, ValueTask<object?>>? _asyncFieldResolver;
+    private readonly System.Threading.Lock _fieldGate = new();
+    private readonly Dictionary<string, Lazy<Task<object?>>> _pendingFields =
+        new(StringComparer.OrdinalIgnoreCase);
 
     public DataObject(string typeName, Dictionary<string, object?> fields)
     {
@@ -45,30 +52,126 @@ public class DataObject
     /// </summary>
     public DataObject WithFieldResolver(Func<string, object?> resolver)
     {
+        ArgumentNullException.ThrowIfNull(resolver);
         _fieldResolver = resolver;
+        _asyncFieldResolver = null;
         return this;
     }
 
-    public void Set(string name, object? value) => _fields[name] = value;
+    /// <summary>Sets an awaited, memoized resolver without preparing any members eagerly.</summary>
+    public DataObject WithAsyncFieldResolver(
+        Func<string, CancellationToken, ValueTask<object?>> resolver)
+    {
+        ArgumentNullException.ThrowIfNull(resolver);
+        _asyncFieldResolver = resolver;
+        _fieldResolver = null;
+        return this;
+    }
 
+    /// <summary>
+    /// Stores or replaces a provider member value by name.
+    /// </summary>
+    public void Set(string name, object? value)
+    {
+        lock (_fieldGate)
+        {
+            _fields[name] = value;
+        }
+    }
+
+    /// <summary>
+    /// Reads a stored member or resolves it through the optional lazy field resolver.
+    /// </summary>
     public object? GetField(string name)
     {
-        if (_fields.TryGetValue(name, out object? value))
+        lock (_fieldGate)
         {
-            return value;
+            if (_fields.TryGetValue(name, out object? value))
+            {
+                return value;
+            }
+        }
+        if (_asyncFieldResolver is not null)
+        {
+            throw new InvalidOperationException($"Member '{name}' requires GetFieldAsync.");
         }
 
         if (_fieldResolver is not null)
         {
             object? resolved = _fieldResolver(name);
-            _fields[name] = resolved; // memoize
+            Set(name, resolved);
             return resolved;
         }
         return null;
     }
 
-    public bool HasField(string name) => _fields.ContainsKey(name) || _fieldResolver is not null;
+    /// <summary>Awaits one demanded field, sharing in-flight resolution with concurrent readers.</summary>
+    public async ValueTask<object?> GetFieldAsync(string name,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        Lazy<Task<object?>>? pending = null;
+        lock (_fieldGate)
+        {
+            if (_fields.TryGetValue(name, out object? value))
+            {
+                return value;
+            }
+            if (_asyncFieldResolver is not null)
+            {
+                if (!_pendingFields.TryGetValue(name, out pending))
+                {
+                    Func<string, CancellationToken, ValueTask<object?>> resolver = _asyncFieldResolver;
+                    pending = new(() => ResolveFieldAsync(name, resolver, cancellationToken));
+                    _pendingFields.Add(name, pending);
+                }
+            }
+        }
+        return pending is null ? GetField(name)
+            : await pending.Value.WaitAsync(cancellationToken).ConfigureAwait(false);
+    }
 
+    private async Task<object?> ResolveFieldAsync(string name,
+        Func<string, CancellationToken, ValueTask<object?>> resolver,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            object? resolved = await resolver(name, cancellationToken).ConfigureAwait(false);
+            lock (_fieldGate)
+            {
+                if (_fields.TryGetValue(name, out object? existing))
+                {
+                    return existing;
+                }
+                _fields[name] = resolved;
+            }
+            return resolved;
+        }
+        finally
+        {
+            lock (_fieldGate)
+            {
+                _pendingFields.Remove(name);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Tests whether a stored member or lazy resolver can provide the named field.
+    /// </summary>
+    public bool HasField(string name)
+    {
+        lock (_fieldGate)
+        {
+            return _fields.ContainsKey(name) || _fieldResolver is not null
+                || _asyncFieldResolver is not null;
+        }
+    }
+
+    /// <summary>
+    /// The stored provider member values, excluding lazily resolved members.
+    /// </summary>
     public IReadOnlyDictionary<string, object?> Fields => _fields;
 
     /// <summary>
@@ -144,5 +247,6 @@ public class DataObject
         .Replace("\r", "\\r")
         .Replace("\t", "\\t");
 
+    /// <inheritdoc/>
     public override string ToString() => $"{TypeName} {{ {string.Join(", ", _fields.Select(kv => $"{kv.Key} = {kv.Value}"))} }}";
 }

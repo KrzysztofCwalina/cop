@@ -22,12 +22,13 @@ public static class ChecksCommand
     /// <summary>
     /// Generates repository checks with the selected coding agent and verifies them.
     /// </summary>
-    public static int Execute(bool claude = false)
-        => Execute(claude, Directory.GetCurrentDirectory(), RunAgent);
+    public static Task<int> ExecuteAsync(InstructionAgent agent = InstructionAgent.Copilot)
+        => ExecuteAsync(agent == InstructionAgent.Claude,
+            Directory.GetCurrentDirectory(), RunAgent);
 
     // Testable core: process execution is injected so the orchestration (guideline discovery,
     // prompt building, launch, final verify gate) can be unit-tested offline.
-    internal static int Execute(
+    internal static async Task<int> ExecuteAsync(
         bool claude,
         string cwd,
         Func<ProcessStartInfo, int> runAgent)
@@ -73,7 +74,8 @@ public static class ChecksCommand
 
             return 1;
         }
-        catch (Exception ex) when (ex is not OutOfMemoryException)
+        catch (Exception ex) when (ex is IOException or InvalidOperationException or
+            UnauthorizedAccessException)
         {
             Console.Error.WriteLine($"cop init --checks: failed to launch '{agent}': {ex.Message}");
             return 1;
@@ -95,7 +97,8 @@ public static class ChecksCommand
         }
 
         Console.WriteLine("Verifying generated checks: cop verify cop-checks/ --strict-structure");
-        int verifyExit = VerifyCommand.Execute(checksDir, strictStructure: true);
+        int verifyExit = VerifyCommand.Execute(checksDir,
+            new VerificationOptions { IsStrictStructureEnabled = true });
         if (verifyExit != 0)
         {
             Console.Error.WriteLine();
@@ -114,7 +117,8 @@ public static class ChecksCommand
         {
             Console.WriteLine();
             Console.WriteLine("Running generated checks: cop cop-checks/main.cop -t .");
-            int runExit = RunCommand.Execute(mainCop, target: cwd);
+            int runExit = await RunCommand.ExecuteAsync(
+                mainCop, new RunOptions { Target = cwd });
             if (runExit == 2)
             {
                 Console.Error.WriteLine();

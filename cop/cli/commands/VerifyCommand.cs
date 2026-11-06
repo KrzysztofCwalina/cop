@@ -17,6 +17,7 @@ namespace Cop.Cli.Commands;
 /// </summary>
 public static class VerifyCommand
 {
+    /// <summary>Creates verification arguments and structural-policy options.</summary>
     public static Command Create()
     {
         Argument<string> pathArg = new Argument<string>("path")
@@ -43,13 +44,23 @@ public static class VerifyCommand
             structuralOption,
             textCheckOption
         };
-        command.SetAction(parseResult => Execute(parseResult.GetValue(pathArg), parseResult.GetValue(jsonOption),
-            parseResult.GetValue(structuralOption), parseResult.GetValue(textCheckOption)));
+        command.SetAction(parseResult => Execute(parseResult.GetValue(pathArg),
+            new VerificationOptions
+            {
+                IsJsonOutputEnabled = parseResult.GetValue(jsonOption),
+                IsStrictStructureEnabled = parseResult.GetValue(structuralOption),
+                AllowedTextChecks = parseResult.GetValue(textCheckOption)
+            }));
         return command;
     }
 
-    public static int Execute(string? path, bool json = false, bool strictStructure = false, string[]? allowTextChecks = null)
+    /// <summary>Reports syntax, binding, type, and optional structural-policy diagnostics.</summary>
+    public static int Execute(string? path, VerificationOptions? options = null)
     {
+        options ??= new VerificationOptions();
+        bool json = options.IsJsonOutputEnabled;
+        bool strictStructure = options.IsStrictStructureEnabled;
+        string[]? allowTextChecks = options.AllowedTextChecks?.ToArray();
         if (!strictStructure && allowTextChecks is { Length: > 0 })
         {
             Console.Error.WriteLine("--allow-text-check requires --strict-structure.");
@@ -153,7 +164,8 @@ public static class VerifyCommand
             {
                 diagnostics.Add(ex.ToDiagnostic());
             }
-            catch (Exception ex) when (ex is not OutOfMemoryException)
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or
+                System.Security.SecurityException)
             {
                 diagnostics.Add(new CopDiagnostic(
                     CopDiagnosticSeverity.Error,
@@ -285,20 +297,9 @@ public static class VerifyCommand
 
         // Phase 5: Static type checking — argument types against declared signatures.
         // Conservative: only confident, concrete incompatibilities are reported.
-        try
-        {
-            IEnumerable<ModuleNode> typeModel = modules.Select(m => m.Module).Concat(moduleLoader.LoadedModules);
-            IEnumerable<(ModuleNode Module, string FilePath, string Source)> toCheck = modules.Select(m => (m.Module, m.FilePath, m.Source));
-            diagnostics.AddRange(TypeChecker.Check(typeModel, toCheck));
-        }
-        catch (Exception ex) when (ex is not OutOfMemoryException)
-        {
-            // The type checker must never make verification crash; fall back to the other phases.
-            if (Cop.Core.CopDiagnostics.Level >= 1)
-            {
-                Console.Error.WriteLine($"[diag] type checker skipped: {ex.Message}");
-            }
-        }
+        IEnumerable<ModuleNode> typeModel = modules.Select(m => m.Module).Concat(moduleLoader.LoadedModules);
+        IEnumerable<(ModuleNode Module, string FilePath, string Source)> toCheck = modules.Select(m => (m.Module, m.FilePath, m.Source));
+        diagnostics.AddRange(TypeChecker.Check(typeModel, toCheck));
 
         if (strictStructure)
         {
@@ -312,9 +313,10 @@ public static class VerifyCommand
     /// Assembles every <see cref="ModuleNode"/> that forms a program: the local <c>.cop</c> files
     /// plus the modules of all imported packages. This is the same module set the type checker uses
     /// (<see cref="CollectDiagnostics"/>'s Phase 5), exposed for the editor's <c>SemanticModel</c> so
-    /// hover/completion resolve provider/package types (e.g. <c>Violation</c>). Unparseable files are
-    /// skipped (the editor still gets a best-effort model). <paramref name="readSource"/> supplies
-    /// each file's text so an in-memory buffer can stand in for a file on disk.
+    /// hover/completion resolve provider/package types (e.g. <c>Violation</c>). Parse recovery keeps
+    /// declarations from incomplete files; unreadable files are logged and skipped. Unexpected
+    /// compiler failures propagate. <paramref name="readSource"/> supplies each file's text so an
+    /// in-memory buffer can stand in for a file on disk.
     /// </summary>
     internal static List<ModuleNode> LoadProgramModules(string[] files, string scriptsDir, Func<string, string> readSource)
         => LoadProgramModules(files, scriptsDir, readSource, out _);
@@ -328,11 +330,15 @@ public static class VerifyCommand
         {
             string source;
             try { source = readSource(file); }
-            catch { continue; }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or
+                System.Security.SecurityException)
+            {
+                Console.Error.WriteLine($"[cop-editor] Could not read '{file}': {ex.Message}");
+                continue;
+            }
             // Parse with recovery so a file with a syntax error still contributes its other
             // declarations to the editor model (hover/completion/go-to-def stay useful mid-edit).
-            try { local.Add((CopParser.ParseWithRecovery(source, file, out _), file, source)); }
-            catch { /* a catastrophically broken file contributes nothing to the model */ }
+            local.Add((CopParser.ParseWithRecovery(source, file, out _), file, source));
         }
 
         List<string> feedPaths = FindFeedPaths(scriptsDir);
@@ -364,8 +370,11 @@ public static class VerifyCommand
         Evaluator evaluator = new Evaluator();
         foreach (string import in imports)
         {
-            try { moduleLoader.LoadPackage(import, evaluator); }
-            catch { /* a broken import must not crash the editor */ }
+            moduleLoader.LoadPackage(import, evaluator);
+        }
+        foreach (string error in moduleLoader.Errors)
+        {
+            Console.Error.WriteLine($"[cop-editor] {error}");
         }
 
         List<ModuleNode> all = new List<ModuleNode>(local.Count + 8);
@@ -478,7 +487,7 @@ public static class VerifyCommand
                     if (seen.Add(type.Name))
                     {
                         List<PropertySymbol> props = type.Properties.Select(p =>
-                            new PropertySymbol(p.Name, new TypeRef(p.Type), p.Optional)).ToList();
+                            new PropertySymbol(p.Name, new TypeRef(p.Type), p.IsOptional)).ToList();
                         symbols.Add(new TypeSymbol(type.Name, type.Base, props));
                     }
                 }

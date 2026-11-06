@@ -95,13 +95,13 @@ public class ChecksCommandTests
     // ── Execute guards ───────────────────────────────────────────────
 
     [Test]
-    public void Execute_MissingInstructions_ReturnsErrorWithoutLaunchingAgent()
+    public async Task Execute_MissingInstructions_ReturnsErrorWithoutLaunchingAgent()
     {
         var cwd = NewTempDir();
         try
         {
             bool launched = false;
-            int rc = ChecksCommand.Execute(
+            int rc = await ChecksCommand.ExecuteAsync(
                 claude: false,
                 cwd: cwd,
                 runAgent: _ => { launched = true; return 0; });
@@ -113,14 +113,14 @@ public class ChecksCommandTests
     }
 
     [Test]
-    public void Execute_AgentNotInstalled_ReturnsError()
+    public async Task Execute_AgentNotInstalled_ReturnsError()
     {
         var cwd = NewTempDir();
         try
         {
             WriteInstructions(cwd);
             // Process.Start throws Win32Exception when the agent executable is not on PATH.
-            int rc = ChecksCommand.Execute(
+            int rc = await ChecksCommand.ExecuteAsync(
                 claude: false,
                 cwd: cwd,
                 runAgent: _ => throw new Win32Exception(2));
@@ -131,14 +131,14 @@ public class ChecksCommandTests
     }
 
     [Test]
-    public void Execute_NoChecksProduced_ReturnsError()
+    public async Task Execute_NoChecksProduced_ReturnsError()
     {
         var cwd = NewTempDir();
         try
         {
             WriteInstructions(cwd);
             // Agent "runs" but writes nothing.
-            int rc = ChecksCommand.Execute(
+            int rc = await ChecksCommand.ExecuteAsync(
                 claude: false,
                 cwd: cwd,
                 runAgent: _ => 0);
@@ -149,7 +149,7 @@ public class ChecksCommandTests
     }
 
     [Test]
-    public void Execute_AgentWritesVerifiableChecks_ReturnsZero()
+    public async Task Execute_AgentWritesVerifiableChecks_ReturnsZero()
     {
         var cwd = NewTempDir();
         try
@@ -167,7 +167,7 @@ public class ChecksCommandTests
                 return 0;
             }
 
-            int rc = ChecksCommand.Execute(
+            int rc = await ChecksCommand.ExecuteAsync(
                 claude: false,
                 cwd: cwd,
                 runAgent: Fake);
@@ -179,7 +179,7 @@ public class ChecksCommandTests
     }
 
     [Test]
-    public void Execute_AgentWritesTextBasedCheck_RejectsBeforeRunning()
+    public async Task Execute_AgentWritesTextBasedCheck_RejectsBeforeRunning()
     {
         var cwd = NewTempDir();
         var original = Console.Out;
@@ -188,7 +188,7 @@ public class ChecksCommandTests
             WriteInstructions(cwd);
             using var output = new StringWriter();
             Console.SetOut(output);
-            int rc = ChecksCommand.Execute(false, cwd, psi =>
+            int rc = await ChecksCommand.ExecuteAsync(false, cwd, psi =>
             {
                 var checks = Path.Combine(psi.WorkingDirectory, "cop-checks");
                 Directory.CreateDirectory(checks);

@@ -10,5 +10,9 @@ namespace Cop.Core;
 /// </summary>
 internal abstract class ChangeCommandRunner
 {
-    public abstract ChangeCommandResult Run(string directory, string executable, params string[] arguments);
+    /// <summary>
+    /// Runs a command in the given directory and captures its exit code and streams.
+    /// </summary>
+    public abstract ValueTask<ChangeCommandResult> RunAsync(string directory, string executable,
+        IReadOnlyList<string> arguments, CancellationToken cancellationToken = default);
 }

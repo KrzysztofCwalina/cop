@@ -191,7 +191,7 @@ namespace Cop.Core
         private static (int Major, int Minor, int Patch) ParseVersion(string version)
         {
             string[] parts = version.Split('.');
-            
+
             int major = 0, minor = 0, patch = 0;
 
             if (parts.Length > 0 && int.TryParse(parts[0], out int m))

@@ -18,16 +18,18 @@ internal static class CopCompletion
     private const int Keyword = 14, Property = 10, Function = 3, Method = 2, Variable = 6,
                       Class = 7, Module = 9, Struct = 22;
 
-    private static readonly string[] DeclarationKeywordNames =
+    private static readonly string[] s_declarationKeywordNames =
         ["predicate", "function", "type", "let", "command", "flags", "enum", "collection"];
 
     /// <summary>
     /// Suggests declarations, members, and keywords visible at the editor position.
     /// </summary>
     public static IReadOnlyList<CompletionEntry> Complete(
-        SemanticModel model, ModuleNode? fileModule, string text, int line, int character,
+        SemanticModel model, ModuleNode? fileModule, string text,
+        (int Line, int Character) position,
         IReadOnlyCollection<string> importablePackages)
     {
+        (int line, int character) = position;
         string[] lines = CopEditorContext.SplitLines(text);
         if (line < 0 || line >= lines.Length)
         {
@@ -204,7 +206,7 @@ internal static class CopCompletion
         Dedupe(packages.Select(p => new CompletionEntry(p, "package", Module)));
 
     private static IReadOnlyList<CompletionEntry> DeclarationKeywords() =>
-        DeclarationKeywordNames.Select(k => new CompletionEntry(k, "declaration", Keyword)).ToList();
+        s_declarationKeywordNames.Select(k => new CompletionEntry(k, "declaration", Keyword)).ToList();
 
     // ── Helpers ────────────────────────────────────────────────────────────
 

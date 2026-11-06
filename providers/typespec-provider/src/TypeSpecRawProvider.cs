@@ -3,7 +3,7 @@
 using Cop.Core;
 using Cop.Lang;
 
-namespace TypeSpecProvider;
+namespace Cop.Providers.TypeSpec;
 
 /// <summary>
 /// DataProvider for raw TypeSpec type graph.
@@ -15,9 +15,9 @@ public class TypeSpecRawProvider : DataProvider
 {
 
     /// <inheritdoc />
-    public override ReadOnlyMemory<byte> GetSchema() => _schema.ToJson();
+    public override ReadOnlyMemory<byte> GetSchema() => s_schema.ToJson();
 
-    private static readonly ProviderSchema _schema = BuildSchema();
+    private static readonly ProviderSchema s_schema = BuildSchema();
 
     private static ProviderSchema BuildSchema()
     {
@@ -28,59 +28,59 @@ public class TypeSpecRawProvider : DataProvider
                 new() { Name = "TspDecorator", Properties =
                 [
                     new() { Name = "Name" },
-                    new() { Name = "Arguments", Collection = true },
+                    new() { Name = "Arguments", IsCollection = true },
                 ]},
                 new() { Name = "TspProperty", Properties =
                 [
                     new() { Name = "Name" },
                     new() { Name = "Type" },
                     new() { Name = "Optional", Type = "bool" },
-                    new() { Name = "Default", Optional = true },
-                    new() { Name = "Decorators", Type = "TspDecorator", Collection = true },
+                    new() { Name = "Default", IsOptional = true },
+                    new() { Name = "Decorators", Type = "TspDecorator", IsCollection = true },
                 ]},
                 new() { Name = "TspModel", Properties =
                 [
                     new() { Name = "Name" },
-                    new() { Name = "Namespace", Optional = true },
-                    new() { Name = "Properties", Type = "TspProperty", Collection = true },
-                    new() { Name = "BaseModel", Optional = true },
-                    new() { Name = "Decorators", Type = "TspDecorator", Collection = true },
+                    new() { Name = "Namespace", IsOptional = true },
+                    new() { Name = "Properties", Type = "TspProperty", IsCollection = true },
+                    new() { Name = "BaseModel", IsOptional = true },
+                    new() { Name = "Decorators", Type = "TspDecorator", IsCollection = true },
                 ]},
                 new() { Name = "TspOperation", Properties =
                 [
                     new() { Name = "Name" },
-                    new() { Name = "Namespace", Optional = true },
-                    new() { Name = "Interface", Optional = true },
-                    new() { Name = "Parameters", Type = "TspProperty", Collection = true },
+                    new() { Name = "Namespace", IsOptional = true },
+                    new() { Name = "Interface", IsOptional = true },
+                    new() { Name = "Parameters", Type = "TspProperty", IsCollection = true },
                     new() { Name = "ReturnType" },
-                    new() { Name = "Decorators", Type = "TspDecorator", Collection = true },
+                    new() { Name = "Decorators", Type = "TspDecorator", IsCollection = true },
                 ]},
                 new() { Name = "TspInterface", Properties =
                 [
                     new() { Name = "Name" },
-                    new() { Name = "Namespace", Optional = true },
-                    new() { Name = "Operations", Type = "TspOperation", Collection = true },
-                    new() { Name = "Decorators", Type = "TspDecorator", Collection = true },
+                    new() { Name = "Namespace", IsOptional = true },
+                    new() { Name = "Operations", Type = "TspOperation", IsCollection = true },
+                    new() { Name = "Decorators", Type = "TspDecorator", IsCollection = true },
                 ]},
                 new() { Name = "TspEnum", Properties =
                 [
                     new() { Name = "Name" },
-                    new() { Name = "Namespace", Optional = true },
-                    new() { Name = "Members", Type = "TspEnumMember", Collection = true },
-                    new() { Name = "Decorators", Type = "TspDecorator", Collection = true },
+                    new() { Name = "Namespace", IsOptional = true },
+                    new() { Name = "Members", Type = "TspEnumMember", IsCollection = true },
+                    new() { Name = "Decorators", Type = "TspDecorator", IsCollection = true },
                 ]},
                 new() { Name = "TspEnumMember", Properties =
                 [
                     new() { Name = "Name" },
-                    new() { Name = "Value", Optional = true },
-                    new() { Name = "Decorators", Type = "TspDecorator", Collection = true },
+                    new() { Name = "Value", IsOptional = true },
+                    new() { Name = "Decorators", Type = "TspDecorator", IsCollection = true },
                 ]},
                 new() { Name = "TspUnion", Properties =
                 [
                     new() { Name = "Name" },
-                    new() { Name = "Namespace", Optional = true },
-                    new() { Name = "Variants", Type = "TspUnionVariant", Collection = true },
-                    new() { Name = "Decorators", Type = "TspDecorator", Collection = true },
+                    new() { Name = "Namespace", IsOptional = true },
+                    new() { Name = "Variants", Type = "TspUnionVariant", IsCollection = true },
+                    new() { Name = "Decorators", Type = "TspDecorator", IsCollection = true },
                 ]},
                 new() { Name = "TspUnionVariant", Properties =
                 [
@@ -90,15 +90,15 @@ public class TypeSpecRawProvider : DataProvider
                 new() { Name = "TspScalar", Properties =
                 [
                     new() { Name = "Name" },
-                    new() { Name = "Namespace", Optional = true },
-                    new() { Name = "BaseScalar", Optional = true },
-                    new() { Name = "Decorators", Type = "TspDecorator", Collection = true },
+                    new() { Name = "Namespace", IsOptional = true },
+                    new() { Name = "BaseScalar", IsOptional = true },
+                    new() { Name = "Decorators", Type = "TspDecorator", IsCollection = true },
                 ]},
                 new() { Name = "TspNamespace", Properties =
                 [
                     new() { Name = "Name" },
                     new() { Name = "FullName" },
-                    new() { Name = "Decorators", Type = "TspDecorator", Collection = true },
+                    new() { Name = "Decorators", Type = "TspDecorator", IsCollection = true },
                 ]},
             ],
             Collections =
@@ -115,12 +115,14 @@ public class TypeSpecRawProvider : DataProvider
     }
 
     /// <inheritdoc />
-    public override object? Query(ProviderQuery query)
+    public override async ValueTask<object?> QueryAsync(
+        ProviderQuery query, CancellationToken cancellationToken = default)
     {
         TspSpec spec = new TspSpec();
         if (query.RootPath is not null && Directory.Exists(query.RootPath))
         {
-            spec = TspParser.ParseFiles(query.RootPath);
+            spec = await TspParser.ParseFilesAsync(
+                query.RootPath, cancellationToken: cancellationToken).ConfigureAwait(false);
         }
 
         string? requested = query.Collection;
@@ -340,7 +342,7 @@ public class TypeSpecRawProvider : DataProvider
             int row = properties.AddRow();
             properties.SetString(row, 0, p.Name);
             properties.SetString(row, 1, p.Type);
-            properties.SetBool(row, 2, p.Optional);
+            properties.SetBool(row, 2, p.IsOptional);
             properties.SetString(row, 3, p.Default);
             properties.SetRange(row, 4, AddDecorators(decorators, decArgs, p.Decorators));
         }

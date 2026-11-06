@@ -14,11 +14,11 @@ namespace Cop.Providers.Yaml;
 public sealed class YamlProvider : DataProvider
 {
     /// <inheritdoc />
-    public override ReadOnlyMemory<byte> GetSchema() => _schema.ToJson();
+    public override ReadOnlyMemory<byte> GetSchema() => s_schema.ToJson();
 
-    private static readonly ProviderSchema _schema = BuildSchema();
+    private static readonly ProviderSchema s_schema = BuildSchema();
 
-    private static readonly HashSet<string> YamlExtensions = new(StringComparer.OrdinalIgnoreCase)
+    private static readonly HashSet<string> s_yamlExtensions = new(StringComparer.OrdinalIgnoreCase)
         { ".yaml", ".yml" };
 
     private static ProviderSchema BuildSchema()
@@ -49,7 +49,7 @@ public sealed class YamlProvider : DataProvider
     private static ProviderPropertySchema Prop(string name, string type = "string")
         => new() { Name = name, Type = type };
     private static ProviderPropertySchema Opt(string name, string type = "string")
-        => new() { Name = name, Type = type, Optional = true };
+        => new() { Name = name, Type = type, IsOptional = true };
 
     /// <inheritdoc />
     public override RuntimeBindings GetRuntimeBindings()
@@ -71,8 +71,10 @@ public sealed class YamlProvider : DataProvider
     }
 
     /// <inheritdoc />
-    public override object? Query(ProviderQuery query)
+    public override async ValueTask<object?> QueryAsync(
+        ProviderQuery query, CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         if (query.RootPath is null)
         {
             return new Dictionary<string, List<object>>();
@@ -85,21 +87,28 @@ public sealed class YamlProvider : DataProvider
         CollectYamlFiles(rootPath, excluded, filePaths);
 
         ConcurrentBag<(SourceFile File, YamlParser.YamlParseResult Doc)> parsed = new ConcurrentBag<(SourceFile File, YamlParser.YamlParseResult Doc)>();
-        Parallel.ForEach(filePaths,
-            new ParallelOptions { MaxDegreeOfParallelism = Environment.ProcessorCount },
-            filePath =>
+        await Parallel.ForEachAsync(filePaths,
+            new ParallelOptions
+            {
+                MaxDegreeOfParallelism = Environment.ProcessorCount,
+                CancellationToken = cancellationToken
+            }, async (filePath, token) =>
             {
                 try
                 {
-                    string text = File.ReadAllText(filePath);
+                    string text = await File.ReadAllTextAsync(filePath, token).ConfigureAwait(false);
                     string relativePath = Path.GetRelativePath(rootPath, filePath).Replace('\\', '/');
                     SourceFile sourceFile = new SourceFile(relativePath, "yaml", [], [], text);
                     YamlParser.YamlParseResult doc = YamlParser.Parse(text);
                     ExecutionStatistics.RecordInputFile(filePath);
                     parsed.Add((sourceFile, doc));
                 }
-                catch { }
-            });
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                    throw new IOException(
+                        $"Cannot read YAML file '{filePath}': {ex.Message}", ex);
+                }
+            }).ConfigureAwait(false);
 
         List<(SourceFile File, YamlParser.YamlParseResult Doc)> sorted = parsed.OrderBy(p => p.File.Path, StringComparer.Ordinal).ToList();
 
@@ -132,7 +141,7 @@ public sealed class YamlProvider : DataProvider
         {
             foreach (string file in Directory.GetFiles(dir))
             {
-                if (YamlExtensions.Contains(Path.GetExtension(file)))
+                if (s_yamlExtensions.Contains(Path.GetExtension(file)))
                 {
                     result.Add(file);
                 }
@@ -148,8 +157,11 @@ public sealed class YamlProvider : DataProvider
                 CollectYamlFiles(subDir, excluded, result);
             }
         }
-        catch (UnauthorizedAccessException) { }
-        catch (IOException) { }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            throw new IOException(
+                $"Cannot enumerate YAML files in '{dir}': {ex.Message}", ex);
+        }
     }
 
     private static Dictionary<string, Dictionary<string, Func<object, object?>>> BuildAccessors()

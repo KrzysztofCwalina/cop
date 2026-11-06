@@ -142,9 +142,10 @@ public class MarkdownTreeTests
             var path = Path.Combine(directory, "policy.md");
             File.WriteAllText(path, "# Rules\n## First\nSee [guide](guide.md).\n\n```cs\nclass Example {}\n```\n");
             var provider = new MarkdownProvider();
-            var collections = (Dictionary<string, List<object>>)provider.Query(new ProviderQuery { RootPath = path })!;
+            var collections = (Dictionary<string, List<object>>)(await provider.QueryAsync(new ProviderQuery { RootPath = path }, cancellationToken: CancellationToken.None))!;
             var raw = new DataObject("Object", collections.ToDictionary(pair => pair.Key, pair => (object?)pair.Value));
-            var parsed = (DataObject)(await provider.GetFunctions()!["toContent"]([new List<object?> { raw }]))!;
+            var parsed = (DataObject)(await provider.GetFunctions()!["toContent"](
+                [new List<object?> { raw }], CancellationToken.None))!;
 
             Assert.That(parsed.TypeName, Is.EqualTo("MarkdownContent"));
             var documents = (List<object?>)parsed.GetField("Documents")!;
@@ -169,7 +170,7 @@ public class MarkdownTreeTests
     public void Provider_MissingFileFailsRatherThanReturningAnEmptyTree()
     {
         var path = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N") + ".md");
-        Assert.That(() => new MarkdownProvider().Query(new ProviderQuery { RootPath = path }),
+        Assert.That(async () => await new MarkdownProvider().QueryAsync(new ProviderQuery { RootPath = path }, cancellationToken: CancellationToken.None),
             Throws.TypeOf<FileNotFoundException>().With.Message.Contains("Markdown path not found"));
     }
 }

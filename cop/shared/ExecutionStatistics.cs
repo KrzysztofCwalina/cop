@@ -8,7 +8,7 @@ namespace Cop.Core;
 /// <summary>Execution-scoped counters shared by the engine and its providers without forcing deferred work.</summary>
 public sealed class ExecutionStatistics : IDisposable
 {
-    private static readonly AsyncLocal<ExecutionStatistics?> Current = new();
+    private static readonly AsyncLocal<ExecutionStatistics?> s_current = new();
     private readonly ExecutionStatistics? _previous;
     private readonly ConcurrentDictionary<string, byte> _files = new(
         OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
@@ -18,14 +18,14 @@ public sealed class ExecutionStatistics : IDisposable
     /// <summary>Starts a statistics scope and saves the previous ambient scope.</summary>
     public ExecutionStatistics()
     {
-        _previous = Current.Value;
-        Current.Value = this;
+        _previous = s_current.Value;
+        s_current.Value = this;
     }
 
     /// <summary>Reports a demanded input file, including cache hits. Repeated reports count once per run.</summary>
     public static void RecordInputFile(string path)
     {
-        if (Current.Value is { } current)
+        if (s_current.Value is { } current)
         {
             current._files.TryAdd(Path.GetFullPath(path), 0);
         }
@@ -42,5 +42,5 @@ public sealed class ExecutionStatistics : IDisposable
     /// <summary>
     /// Restores the ambient statistics scope that preceded this instance.
     /// </summary>
-    public void Dispose() => Current.Value = _previous;
+    public void Dispose() => s_current.Value = _previous;
 }

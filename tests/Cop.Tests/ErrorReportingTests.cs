@@ -36,7 +36,7 @@ public class ErrorReportingTests
         public string AllErrors => string.Join(" | ", ParseErrors.Concat(Errors));
     }
 
-    private static RunResult Run(string program)
+    private static async Task<RunResult> Run(string program)
     {
         var root = Path.Combine(TestContext.CurrentContext.WorkDirectory,
             "error-reporting", Guid.NewGuid().ToString("N"));
@@ -47,10 +47,10 @@ public class ErrorReportingTests
         try
         {
             File.WriteAllText(Path.Combine(scripts, "program.cop"), program);
-            var r = Engine.Run(scripts, target, new EngineRunOptions
+            var r = (await Engine.RunAsync(scripts, target, new EngineRunOptions
             {
                 AdditionalFeedPaths = [PackagesDir],
-            });
+            }));
             return new RunResult(
                 r.HasParseErrors, r.ParseErrors.ToArray(),
                 r.HasFatalErrors, r.Errors.ToArray(),
@@ -102,47 +102,47 @@ public class ErrorReportingTests
     // ---- Parse / syntax errors ------------------------------------------------------------------
 
     [Test]
-    public void ParseError_UnterminatedString_IsReportedWithLine()
+    public async Task ParseError_UnterminatedString_IsReportedWithLine()
     {
-        var r = Run("command main = print('hello");
+        var r = (await Run("command main = print('hello"));
         Assert.That(r.HasParseErrors, Is.True);
         Assert.That(r.AllErrors, Does.Contain("Unterminated string"));
         Assert.That(r.AllErrors, Does.Contain("(1)"), "the error must cite line 1");
     }
 
     [Test]
-    public void ParseError_UnexpectedToken_IsReportedWithLine()
+    public async Task ParseError_UnexpectedToken_IsReportedWithLine()
     {
-        var r = Run("command main = print(1 +)");
+        var r = (await Run("command main = print(1 +)"));
         Assert.That(r.HasParseErrors, Is.True);
         Assert.That(r.AllErrors, Does.Contain("Unexpected token"));
         Assert.That(r.AllErrors, Does.Contain("(1)"));
     }
 
     [Test]
-    public void ParseError_CommandMissingEquals_IsReported()
+    public async Task ParseError_CommandMissingEquals_IsReported()
     {
         // `command main print('x')` — the '=' is missing; previously this silently "verified".
-        var r = Run("command main print('x')");
+        var r = (await Run("command main print('x')"));
         Assert.That(r.HasParseErrors, Is.True, "a command without '=' must be a parse error");
         Assert.That(r.AllErrors, Does.Contain("'='"));
         Assert.That(r.AllErrors, Does.Contain("(1)"));
     }
 
     [Test]
-    public void ParseError_EmptyFilter_IsReported()
+    public async Task ParseError_EmptyFilter_IsReported()
     {
         // `[1 2]:` with no predicate leaves a dangling ':' that previously verified silently.
-        var r = Run("command main = foreach [1 2]: => '{item}'");
+        var r = (await Run("command main = foreach [1 2]: => '{item}'"));
         Assert.That(r.HasParseErrors, Is.True, "an empty filter must be a parse error");
         Assert.That(r.AllErrors, Does.Contain("Unexpected token ':'"));
     }
 
     [Test]
-    public void ParseError_StrayClosingBrace_IsReported()
+    public async Task ParseError_StrayClosingBrace_IsReported()
     {
         // A stray '}' previously verified silently.
-        var r = Run("command main = print('x') }");
+        var r = (await Run("command main = print('x') }"));
         Assert.That(r.HasParseErrors, Is.True, "a stray '}' must be a parse error");
         Assert.That(r.AllErrors, Does.Contain("Unexpected token '}'"));
     }
@@ -150,9 +150,9 @@ public class ErrorReportingTests
     // ---- Binding / name errors ------------------------------------------------------------------
 
     [Test]
-    public void BindError_UndefinedVariable_IsFatalAndNamesTheSymbol()
+    public async Task BindError_UndefinedVariable_IsFatalAndNamesTheSymbol()
     {
-        var r = Run("command main = print(undefinedThing)");
+        var r = (await Run("command main = print(undefinedThing)"));
         Assert.That(r.HasFatalErrors, Is.True);
         Assert.That(r.Outputs, Is.Empty);
         Assert.That(r.AllErrors, Does.Contain("Undefined variable 'undefinedThing'"));
@@ -161,10 +161,10 @@ public class ErrorReportingTests
     }
 
     [Test]
-    public void UnknownPredicate_IsFatal_NotSilentlyEmpty()
+    public async Task UnknownPredicate_IsFatal_NotSilentlyEmpty()
     {
         // A typo'd predicate must FAIL LOUDLY, not silently filter everything out (false-green).
-        var r = Run("command main = foreach [1 2 3]:notARealPredicate => '{item}'");
+        var r = (await Run("command main = foreach [1 2 3]:notARealPredicate => '{item}'"));
         Assert.That(r.HasFatalErrors, Is.True,
             "an unknown predicate must be a fatal error, not a silent empty result");
         Assert.That(r.Outputs, Is.Empty);
@@ -173,22 +173,22 @@ public class ErrorReportingTests
     }
 
     [Test]
-    public void UnknownNegatedPredicate_IsFatal_NotSilentlyPassThrough()
+    public async Task UnknownNegatedPredicate_IsFatal_NotSilentlyPassThrough()
     {
         // `:!typo` must also error rather than silently treating every item as "not false" → keep-all.
-        var r = Run("command main = foreach [1 2 3]:!alsoNotReal => '{item}'");
+        var r = (await Run("command main = foreach [1 2 3]:!alsoNotReal => '{item}'"));
         Assert.That(r.HasFatalErrors, Is.True);
         Assert.That(r.AllErrors, Does.Contain("Unknown predicate 'alsoNotReal'"));
     }
 
     [Test]
-    public void KnownPredicate_StillFiltersCorrectly_NoFalsePositiveError()
+    public async Task KnownPredicate_StillFiltersCorrectly_NoFalsePositiveError()
     {
         // Positive control: the unknown-predicate guard must NOT break a legitimate predicate.
-        var r = Run("""
+        var r = (await Run("""
             predicate isBig(int) => item > 1
             command main = foreach [1 2 3]:isBig => '{item}'
-            """);
+            """));
         Assert.That(r.HasFatalErrors, Is.False, r.AllErrors);
         Assert.That(r.Outputs, Is.EqualTo(new[] { "2", "3" }));
     }
@@ -196,12 +196,12 @@ public class ErrorReportingTests
     // ---- Runtime errors -------------------------------------------------------------------------
 
     [Test]
-    public void Runtime_CallingNonCallable_UsesFriendlyTypeName_NotInternalClassName()
+    public async Task Runtime_CallingNonCallable_UsesFriendlyTypeName_NotInternalClassName()
     {
-        var r = Run("""
+        var r = (await Run("""
             let x = 5
             command main = print(x(1))
-            """);
+            """));
         Assert.That(r.HasFatalErrors, Is.True);
         Assert.That(r.AllErrors, Does.Contain("Value of type int is not callable"));
         Assert.That(r.AllErrors, Does.Not.Contain("CopInt"),
@@ -210,22 +210,22 @@ public class ErrorReportingTests
     }
 
     [Test]
-    public void Runtime_UnknownStringMember_IsFatalWithName()
+    public async Task Runtime_UnknownStringMember_IsFatalWithName()
     {
-        var r = Run("command main = print('text'.NotAMember)");
+        var r = (await Run("command main = print('text'.NotAMember)"));
         Assert.That(r.HasFatalErrors, Is.True);
         Assert.That(r.AllErrors, Does.Contain("Unknown string member 'NotAMember'"));
     }
 
     [Test]
-    public void Runtime_Error_IsRenderedLikeAParseError_WithFileLineAndSourceSnippet()
+    public async Task Runtime_Error_IsRenderedLikeAParseError_WithFileLineAndSourceSnippet()
     {
         // A runtime failure should read as nicely as a syntax error: "file(line): error: message"
         // followed by the offending source line.
-        var r = Run("""
+        var r = (await Run("""
             command main =
                 print(missingThing)
-            """);
+            """));
         Assert.That(r.HasFatalErrors, Is.True);
         var err = r.AllErrors;
         Assert.That(err, Does.Contain("(2): error:"), "expected file(line): error: form on line 2");
@@ -235,9 +235,9 @@ public class ErrorReportingTests
     }
 
     [Test]
-    public void Runtime_ReadMissingFile_ReportsRealLine_NotLineZero()
+    public async Task Runtime_ReadMissingFile_ReportsRealLine_NotLineZero()
     {
-        var r = Run("command main = print(read('definitely-missing-file.txt'))");
+        var r = (await Run("command main = print(read('definitely-missing-file.txt'))"));
         Assert.That(r.HasFatalErrors, Is.True);
         Assert.That(r.AllErrors, Does.Contain("read("));
         Assert.That(r.AllErrors, Does.Contain("(1)"));
@@ -246,12 +246,12 @@ public class ErrorReportingTests
     }
 
     [Test]
-    public void Runtime_Fail_ReportsMessageAndRealLine_NotLineZero()
+    public async Task Runtime_Fail_ReportsMessageAndRealLine_NotLineZero()
     {
-        var r = Run("""
+        var r = (await Run("""
             command main =
                 fail('something broke')
-            """);
+            """));
         Assert.That(r.HasFatalErrors, Is.True);
         Assert.That(r.AllErrors, Does.Contain("something broke"));
         Assert.That(r.AllErrors, Does.Contain("(2)"));
@@ -377,13 +377,13 @@ public class ErrorReportingTests
     // ---- Binder: command bodies are validated (arity) -------------------------------------------
 
     [Test]
-    public void Binder_TooManyArgumentsInCommandBody_IsFatal()
+    public async Task Binder_TooManyArgumentsInCommandBody_IsFatal()
     {
         // Command bodies were not Pass-3 validated, so a too-many-args call silently passed.
-        var r = Run("""
+        var r = (await Run("""
             function f(a) => a
             command main = print(f(1, 2, 3))
-            """);
+            """));
         Assert.That(r.HasFatalErrors, Is.True, "an arity error in a command body must be reported");
         Assert.That(r.AllErrors, Does.Contain("expects 1 argument(s) but got 3"));
     }
@@ -391,7 +391,7 @@ public class ErrorReportingTests
     // ---- Loader: a broken imported package is fatal, not silently ignored -----------------------
 
     [Test]
-    public void Loader_BrokenImportedPackage_IsFatalWithParseError()
+    public async Task Loader_BrokenImportedPackage_IsFatalWithParseError()
     {
         var root = Path.Combine(TestContext.CurrentContext.WorkDirectory,
             "loader-error", Guid.NewGuid().ToString("N"));
@@ -410,10 +410,10 @@ public class ErrorReportingTests
             // The program imports the broken package but does NOT use its exports — it must still fail.
             File.WriteAllText(Path.Combine(scripts, "program.cop"), "import brokenpkg\ncommand main = print('ok')");
 
-            var r = Engine.Run(scripts, target, new EngineRunOptions
+            var r = (await Engine.RunAsync(scripts, target, new EngineRunOptions
             {
                 AdditionalFeedPaths = [feed],
-            });
+            }));
 
             Assert.That(r.HasFatalErrors, Is.True, "importing a package that fails to parse must be fatal");
             Assert.That(string.Join(" | ", r.Errors), Does.Contain("Unexpected token"));
@@ -428,7 +428,7 @@ public class ErrorReportingTests
     // ---- Providers: malformed source files surface, never silently hidden -----------------------
 
     [Test]
-    public void Provider_MalformedCSharp_SurfacesIncompleteAnalysis_NotSilentlyHidden()
+    public async Task Provider_MalformedCSharp_SurfacesIncompleteAnalysis_NotSilentlyHidden()
     {
         var root = Path.Combine(TestContext.CurrentContext.WorkDirectory,
             "provider-error", Guid.NewGuid().ToString("N"));
@@ -450,10 +450,10 @@ public class ErrorReportingTests
                 command main = foreach cb.Types => '{item.Name}'
                 """);
 
-            var r = Engine.Run(scripts, target, new EngineRunOptions
+            var r = (await Engine.RunAsync(scripts, target, new EngineRunOptions
             {
                 AdditionalFeedPaths = [PackagesDir],
-            });
+            }));
 
             Assert.That(r.HasFatalErrors, Is.False,
                 "a malformed source file must surface but not abort the whole analysis: "
@@ -483,7 +483,7 @@ public class ErrorReportingTests
     }
 
     [Test]
-    public void Provider_ValidCSharp_ProducesNoSpuriousParseWarnings()
+    public async Task Provider_ValidCSharp_ProducesNoSpuriousParseWarnings()
     {
         // Positive control: the error-surfacing guard must not cry wolf on well-formed code.
         var root = Path.Combine(TestContext.CurrentContext.WorkDirectory,
@@ -504,10 +504,10 @@ public class ErrorReportingTests
                 command main = foreach cb.Types => '{item.Name}'
                 """);
 
-            var r = Engine.Run(scripts, target, new EngineRunOptions
+            var r = (await Engine.RunAsync(scripts, target, new EngineRunOptions
             {
                 AdditionalFeedPaths = [PackagesDir],
-            });
+            }));
 
             Assert.That(r.HasFatalErrors, Is.False, string.Join(" | ", r.Errors));
             var warnings = (r.Warnings ?? new List<string>()).Where(w => w.Contains("parse error")).ToArray();

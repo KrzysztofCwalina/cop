@@ -24,7 +24,7 @@ internal static class CliHelp
 
     // ── main command list (`cop -h`) ─────────────────────────────────────────
 
-    private static readonly (string Listing, string Summary)[] MainListing =
+    private static readonly (string Listing, string Summary)[] s_mainListing =
     {
         ("cop run <package> [-t <target>]", "run a package from a feed (auto-restores)"),
         ("cop <file.cop> [-t <target>]", "run a local .cop file"),
@@ -39,11 +39,12 @@ internal static class CliHelp
         ("cop repl", "interactive repl"),
     };
 
+    /// <summary>Prints the command overview and common invocation forms.</summary>
     public static void PrintMainHelp()
     {
         Title();
         Section("usage");
-        CommandRows(MainListing);
+        CommandRows(s_mainListing);
         Console.WriteLine();
         WriteLine("run 'cop <command> -h' for command details, 'cop -v' for the version", Label);
     }
@@ -57,7 +58,7 @@ internal static class CliHelp
         string[] Examples,
         string OptionsLabel = "options");
 
-    private static readonly Dictionary<string, CommandHelp> Commands = new(StringComparer.OrdinalIgnoreCase)
+    private static readonly Dictionary<string, CommandHelp> s_commands = new(StringComparer.OrdinalIgnoreCase)
     {
         ["run"] = new(
             "cop run <package|file.cop|url> [args] [-t <dir>] [-c <commands>] [-f <format>]",
@@ -168,11 +169,12 @@ internal static class CliHelp
     };
 
     /// <summary>True when <paramref name="verb"/> has detailed per-command help.</summary>
-    public static bool HasCommandHelp(string verb) => Commands.ContainsKey(verb);
+    public static bool HasCommandHelp(string verb) => s_commands.ContainsKey(verb);
 
+    /// <summary>Prints options and examples for a supported command.</summary>
     public static void PrintCommandHelp(string verb)
     {
-        if (!Commands.TryGetValue(verb, out CommandHelp? c))
+        if (!s_commands.TryGetValue(verb, out CommandHelp? c))
         {
             PrintMainHelp();
             return;

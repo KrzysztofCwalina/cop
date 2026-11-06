@@ -27,6 +27,14 @@ and `fdgChecks(cb)`. Each rule also has a caller-codebase function, such as
 `varDeclarations(cb)`, `requiredBraces(cb)`, and `uninstantiatedInternal(cb)`.
 Use `cop help csharp-checks` for the complete API.
 
+`boolParameterNaming(cb)` allows boolean parameters with affirmative or descriptive
+names, such as `isEnabled`, `hasChanges`, `includeTests`, and `recursive`. The
+conventional data name `value` is also allowed. Vague names such as `flag`, `b`, and
+`arg` are reported; boolean inputs do not need to be replaced with option enums.
+The older `avoidBoolParams(cb)` entry point now delegates to this naming check.
+Boolean data properties may use `Value` or `BooleanValue`; they do not have to
+pretend to be state predicates such as `IsEnabled`.
+
 The existing exported lists, including `csharp-checks`, `csharp-style-checks`,
 and `var-declarations`, remain available. These aliases use the package's own
 `codebase(csharp.parse())` model, as does `cop run csharp-checks`.
@@ -52,6 +60,10 @@ C# cannot spell those types explicitly.
 The unused-internal-class check compares constructor result types with declarations
 by namespace, name, and generic arity. Reflection, external callers, and construction
 in unparsed source are not visible; a finding is not proof that removal is safe.
+
+Static-class suggestions account for inheritance and instance members in other
+partial declarations, matched by namespace, name, and generic arity. Only the
+declarations in the supplied model are visible.
 
 The disposal check recognizes constructors directly initializing `using` and
 `await using` resources. A surrounding using body does not dispose unrelated allocations.

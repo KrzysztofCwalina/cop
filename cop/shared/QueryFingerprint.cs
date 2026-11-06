@@ -13,7 +13,7 @@ namespace Cop.Lang;
 /// </summary>
 public static class QueryFingerprint
 {
-    private static readonly HashSet<string> BarrierFunctions = new(StringComparer.OrdinalIgnoreCase)
+    private static readonly HashSet<string> s_barrierFunctions = new(StringComparer.OrdinalIgnoreCase)
     {
         "Select", "text"
     };
@@ -43,7 +43,7 @@ public static class QueryFingerprint
             {
                 FlushPredicates(sb, pendingPredicates);
                 // Built-in transforms (Select, Text) use '.' separator; user functions use ':'
-                bool isTransform = filter is CallExpr { Target: null } fc2 && BarrierFunctions.Contains(fc2.Name);
+                bool isTransform = filter is CallExpr { Target: null } fc2 && s_barrierFunctions.Contains(fc2.Name);
                 sb.Append(isTransform ? '.' : ':');
                 sb.Append(Serialize(filter));
             }
@@ -75,7 +75,7 @@ public static class QueryFingerprint
         if (filter is CallExpr { Target: null } fc)
         {
             // Built-in barriers: select, text
-            if (BarrierFunctions.Contains(fc.Name))
+            if (s_barrierFunctions.Contains(fc.Name))
             {
                 return true;
             }

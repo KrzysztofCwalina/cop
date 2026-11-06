@@ -35,7 +35,7 @@ public class CopNarrowingTests
     public void TearDown() => Directory.Delete(_workspace, recursive: true);
 
     [Test]
-    public void AsCop_ExposesFunctionFacts_WithoutIncludingCSharpMethods()
+    public async Task AsCop_ExposesFunctionFacts_WithoutIncludingCSharpMethods()
     {
         File.WriteAllText(Path.Combine(_targetDir, "sample.cop"), """
             ## Native function.
@@ -63,14 +63,14 @@ public class CopNarrowingTests
             "positive:false:true:false:false:sample.cop",
             "MAIN:false:false:true:false:sample.cop"
         ];
-        Assert.That(Run(program), Is.EqualTo(expected));
-        Assert.That(Run(program), Is.EqualTo(expected), "Facts must survive a source-cache hit.");
-        Assert.That(Run(program.Replace("cb.Methods", "cb.Files.Methods", StringComparison.Ordinal)),
+        Assert.That((await RunAsync(program, cancellationToken: CancellationToken.None)), Is.EqualTo(expected));
+        Assert.That((await RunAsync(program, cancellationToken: CancellationToken.None)), Is.EqualTo(expected), "Facts must survive a source-cache hit.");
+        Assert.That((await RunAsync(program.Replace("cb.Methods", "cb.Files.Methods", StringComparison.Ordinal), cancellationToken: CancellationToken.None)),
             Is.EqualTo(expected), "Top-level functions must also be accessible through their source files.");
     }
 
     [Test]
-    public void IntrinsicPlacementRule_FlagsOnlyMisplacedCopIntrinsics()
+    public async Task IntrinsicPlacementRule_FlagsOnlyMisplacedCopIntrinsics()
     {
         File.WriteAllText(Path.Combine(_targetDir, "wrong.cop"), """
             export function misplaced(value : string) : string => intrinsic
@@ -97,12 +97,12 @@ public class CopNarrowingTests
             "wrong.cop(1): error: Intrinsic declaration must be in intrinsics.cop, not wrong.cop",
             "wrong.cop(3): error: Intrinsic declaration must be in intrinsics.cop, not wrong.cop"
         ];
-        Assert.That(Run(program), Is.EqualTo(expected));
-        Assert.That(Run(program), Is.EqualTo(expected));
+        Assert.That((await RunAsync(program, cancellationToken: CancellationToken.None)), Is.EqualTo(expected));
+        Assert.That((await RunAsync(program, cancellationToken: CancellationToken.None)), Is.EqualTo(expected));
     }
 
     [Test]
-    public void IntrinsicPlacementRule_AcceptsOrdinaryFunctionsAndAllowedIntrinsics()
+    public async Task IntrinsicPlacementRule_AcceptsOrdinaryFunctionsAndAllowedIntrinsics()
     {
         File.WriteAllText(Path.Combine(_targetDir, "ordinary.cop"),
             "function ordinary() : string => 'intrinsic'");
@@ -111,21 +111,21 @@ public class CopNarrowingTests
         File.Copy(Path.Combine(RepoRoot, "cop-checks", "cop", "intrinsic-declaration-location.cop"),
             Path.Combine(_programDir, "intrinsic-declaration-location.cop"));
 
-        Assert.That(Run("""
+        Assert.That((await RunAsync("""
             import code
             import cop
             let codebase = cop.parse()
             command MAIN = CHECK(intrinsics-in-wrong-file)
-            """), Is.Empty);
+            """, cancellationToken: CancellationToken.None)), Is.Empty);
     }
 
-    private string[] Run(string program)
+    private async Task<string[]> RunAsync(string program, CancellationToken cancellationToken = default)
     {
         File.WriteAllText(Path.Combine(_programDir, "main.cop"), program);
-        var result = Engine.Run(_programDir, _targetDir, new EngineRunOptions
+        var result = (await Engine.RunAsync(_programDir, _targetDir, new EngineRunOptions
         {
             AdditionalFeedPaths = [Path.Combine(RepoRoot, "packages")],
-        });
+        }));
         Assert.That(result.HasFatalErrors, Is.False, string.Join("; ", result.Errors));
         return result.Outputs.Select(o => o.Message).ToArray();
     }

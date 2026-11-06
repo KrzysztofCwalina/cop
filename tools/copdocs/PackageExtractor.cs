@@ -462,7 +462,13 @@ public class PackageExtractor
                     metadata.Language,
                     metadata.Tags.Count > 0 ? metadata.Tags : null);
             }
-            catch { /* fall through to legacy */ }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or
+                System.Text.Json.JsonException or InvalidOperationException)
+            {
+                Console.Error.WriteLine(
+                    $"Warning: Could not read '{jsonFile}'; trying legacy manifest: " +
+                    ex.Message);
+            }
         }
 
         // Legacy fallback: <dirname>.md with YAML frontmatter

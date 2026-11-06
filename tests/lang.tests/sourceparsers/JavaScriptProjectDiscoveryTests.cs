@@ -22,7 +22,7 @@ public class JavaScriptProjectDiscoveryTests
     }
 
     [Test]
-    public void Discover_SinglePackage_ExtractsNameAndDeps()
+    public async Task Discover_SinglePackage_ExtractsNameAndDeps()
     {
         File.WriteAllText(Path.Combine(_tempDir, "package.json"), """
             {
@@ -38,7 +38,7 @@ public class JavaScriptProjectDiscoveryTests
             }
             """);
 
-        var projects = JavaScriptProjectDiscovery.Discover(_tempDir, null);
+        var projects = (await JavaScriptProjectDiscovery.DiscoverAsync(_tempDir, null, cancellationToken: CancellationToken.None));
 
         Assert.That(projects, Has.Count.EqualTo(1));
         Assert.That(projects[0].Name, Is.EqualTo("my-app"));
@@ -49,7 +49,7 @@ public class JavaScriptProjectDiscoveryTests
     }
 
     [Test]
-    public void Discover_MonorepoWorkspaces()
+    public async Task Discover_MonorepoWorkspaces()
     {
         // Root package
         File.WriteAllText(Path.Combine(_tempDir, "package.json"), """
@@ -80,7 +80,7 @@ public class JavaScriptProjectDiscoveryTests
             }
             """);
 
-        var projects = JavaScriptProjectDiscovery.Discover(_tempDir, null);
+        var projects = (await JavaScriptProjectDiscovery.DiscoverAsync(_tempDir, null, cancellationToken: CancellationToken.None));
 
         Assert.That(projects, Has.Count.EqualTo(3));
         var pkgAProject = projects.First(p => p.Name == "@mono/pkg-a");
@@ -88,7 +88,7 @@ public class JavaScriptProjectDiscoveryTests
     }
 
     [Test]
-    public void Discover_SkipsNodeModules()
+    public async Task Discover_SkipsNodeModules()
     {
         File.WriteAllText(Path.Combine(_tempDir, "package.json"), """
             { "name": "my-app", "dependencies": {} }
@@ -100,26 +100,26 @@ public class JavaScriptProjectDiscoveryTests
             { "name": "some-dep", "version": "1.0.0" }
             """);
 
-        var projects = JavaScriptProjectDiscovery.Discover(_tempDir, null);
+        var projects = (await JavaScriptProjectDiscovery.DiscoverAsync(_tempDir, null, cancellationToken: CancellationToken.None));
 
         Assert.That(projects, Has.Count.EqualTo(1));
         Assert.That(projects[0].Name, Is.EqualTo("my-app"));
     }
 
     [Test]
-    public void Discover_NoNameField_Skipped()
+    public async Task Discover_NoNameField_Skipped()
     {
         File.WriteAllText(Path.Combine(_tempDir, "package.json"), """
             { "version": "1.0.0", "dependencies": {} }
             """);
 
-        var projects = JavaScriptProjectDiscovery.Discover(_tempDir, null);
+        var projects = (await JavaScriptProjectDiscovery.DiscoverAsync(_tempDir, null, cancellationToken: CancellationToken.None));
 
         Assert.That(projects, Is.Empty);
     }
 
     [Test]
-    public void Discover_AllDependencyKinds_DeduplicatesWithExplicitScope()
+    public async Task Discover_AllDependencyKinds_DeduplicatesWithExplicitScope()
     {
         File.WriteAllText(Path.Combine(_tempDir, "package.json"), """
             {
@@ -130,7 +130,7 @@ public class JavaScriptProjectDiscoveryTests
                 "optionalDependencies": { "optional": "*" }
             }
             """);
-        var project = JavaScriptProjectDiscovery.Discover(_tempDir, null).Single();
+        var project = (await JavaScriptProjectDiscovery.DiscoverAsync(_tempDir, null, cancellationToken: CancellationToken.None)).Single();
         Assert.That(project.References, Is.EqualTo(new[] { "optional", "peer", "shared", "test" }));
         Assert.That(project.Packages, Is.EqualTo(project.References));
         Assert.That(project.Properties["DiscoveryScope"], Does.Contain("no lockfile resolution"));
@@ -138,7 +138,7 @@ public class JavaScriptProjectDiscoveryTests
     }
 
     [Test]
-    public void Discover_WorkspaceObjectAndExclusion_DoesNotAssumeEveryNestedPackageIsAMember()
+    public async Task Discover_WorkspaceObjectAndExclusion_DoesNotAssumeEveryNestedPackageIsAMember()
     {
         File.WriteAllText(Path.Combine(_tempDir, "package.json"), """
             { "name": "root", "workspaces": { "packages": ["packages/*", "!packages/excluded"] } }
@@ -149,14 +149,14 @@ public class JavaScriptProjectDiscoveryTests
             Directory.CreateDirectory(directory);
             File.WriteAllText(Path.Combine(directory, "package.json"), """{"name":""" + "\"" + name + "\"}");
         }
-        var projects = JavaScriptProjectDiscovery.Discover(_tempDir, null);
+        var projects = (await JavaScriptProjectDiscovery.DiscoverAsync(_tempDir, null, cancellationToken: CancellationToken.None));
         Assert.That(projects, Has.Count.EqualTo(3));
         Assert.That(projects.Single(p => p.Name == "member").Properties["WorkspaceRoot"], Is.EqualTo("root"));
         Assert.That(projects.Single(p => p.Name == "excluded").Properties.ContainsKey("WorkspaceRoot"), Is.False);
     }
 
     [Test]
-    public void Discover_TypeScriptConfig_UsesCompilerMembershipExtendsAliasesAndReferences()
+    public async System.Threading.Tasks.Task Discover_TypeScriptConfig_UsesCompilerMembershipExtendsAliasesAndReferences()
     {
         if (Cop.Providers.SourceParsers.JavaScriptToolchain.Discover(Path.Combine(_tempDir, "source.ts")) is null)
             Assert.Ignore("Native configuration tests require an installed TypeScript compiler.");
@@ -178,8 +178,8 @@ public class JavaScriptProjectDiscoveryTests
         File.WriteAllText(Path.Combine(_tempDir, "referenced", "library.ts"), "export class Library {}");
         File.WriteAllText(Path.Combine(_tempDir, "src", "included.ts"), "export class Included {}");
         File.WriteAllText(Path.Combine(_tempDir, "src", "ignored.ts"), "export class Ignored {}");
-        using var scope = new Cop.Core.ToolchainExecutionScope();
-        var projects = JavaScriptProjectDiscovery.Discover(_tempDir, null);
+        await using var scope = new Cop.Core.ToolchainExecutionScope();
+        var projects = (await JavaScriptProjectDiscovery.DiscoverAsync(_tempDir, null, cancellationToken: CancellationToken.None));
         Assert.That(projects, Has.Count.EqualTo(2));
         var project = projects.Single(p => p.Path == "tsconfig.json");
         Assert.That(project.SourceFiles, Is.EqualTo(new[] { Path.Combine(_tempDir, "src", "included.ts") }));
@@ -201,7 +201,7 @@ public class JavaScriptProjectDiscoveryTests
     [TestCase("packages/**", "packages/nested/member", true)]
     [TestCase("packages/[literal]", "packages/[literal]", true)]
     [TestCase("packages/[literal]", "packages/l", false)]
-    public void Discover_WorkspaceGlob_HonorsSegmentsRecursiveDirectoriesAndLiteralCharacters(
+    public async Task Discover_WorkspaceGlob_HonorsSegmentsRecursiveDirectoriesAndLiteralCharacters(
         string pattern, string member, bool expected)
     {
         File.WriteAllText(Path.Combine(_tempDir, "package.json"),
@@ -209,25 +209,25 @@ public class JavaScriptProjectDiscoveryTests
         var directory = Path.Combine(_tempDir, member.Replace('/', Path.DirectorySeparatorChar));
         Directory.CreateDirectory(directory);
         File.WriteAllText(Path.Combine(directory, "package.json"), """{ "name": "member" }""");
-        var project = JavaScriptProjectDiscovery.Discover(_tempDir, null).Single(p => p.Name == "member");
+        var project = (await JavaScriptProjectDiscovery.DiscoverAsync(_tempDir, null, cancellationToken: CancellationToken.None)).Single(p => p.Name == "member");
         Assert.That(project.Properties.ContainsKey("WorkspaceRoot"), Is.EqualTo(expected));
     }
 
     [Test]
-    public void Discover_MalformedManifest_ReportsErrorInsteadOfSilentlyDroppingIt()
+    public async Task Discover_MalformedManifest_ReportsErrorInsteadOfSilentlyDroppingIt()
     {
         Cop.Core.ProviderErrors.Clear();
         File.WriteAllText(Path.Combine(_tempDir, "package.json"), """{ "name": "bad", "dependencies": [] }""");
-        Assert.That(JavaScriptProjectDiscovery.Discover(_tempDir, null), Is.Empty);
+        Assert.That((await JavaScriptProjectDiscovery.DiscoverAsync(_tempDir, null, cancellationToken: CancellationToken.None)), Is.Empty);
         Assert.That(Cop.Core.ProviderErrors.Drain().Single(), Does.Contain("'dependencies' must be an object"));
     }
 
     [Test]
-    public void Discover_MissingCompiler_ReportsUnknownConfigMembership()
+    public async Task Discover_MissingCompiler_ReportsUnknownConfigMembership()
     {
         Cop.Core.ProviderWarnings.Clear();
         File.WriteAllText(Path.Combine(_tempDir, "tsconfig.json"), """{ "files": [] }""");
-        Assert.That(JavaScriptProjectDiscovery.Discover(_tempDir, null, toolchainSearchPath: ""), Is.Empty);
+        Assert.That((await JavaScriptProjectDiscovery.DiscoverAsync(_tempDir, null, toolchainSearchPath: "", cancellationToken: CancellationToken.None)), Is.Empty);
         Assert.That(Cop.Core.ProviderWarnings.Drain().Single(), Does.Contain("membership").And.Contain("unknown"));
     }
 }

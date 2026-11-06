@@ -10,6 +10,12 @@ namespace Cop.Core;
 /// </summary>
 public class ProviderCollectionSchema
 {
+    /// <summary>
+    /// The collection name exposed within the provider namespace.
+    /// </summary>
     public string Name { get; set; } = "";
+    /// <summary>
+    /// The declared Cop type of elements in this collection.
+    /// </summary>
     public string ItemType { get; set; } = "";
 }

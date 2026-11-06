@@ -1,4 +1,5 @@
 using System.IO.Compression;
+using System.Diagnostics;
 using Cop.Core;
 using Cop.Providers;
 using Cop.Providers.SourceModel;
@@ -51,13 +52,13 @@ public class RustFrontendTests
         return path;
     }
 
-    private SourceFile Parse(string path) => new RustSourceParser(_frontend, _root,
-        Path.Combine(_root, "no-standard-library")).Parse(path, File.ReadAllText(path))!;
-    private static CallableReference Bound(SourceFile file, string name) =>
-        file.Statements.Single(s => s.MemberName == name).ReferencedCallable!;
+    private async Task<SourceFile> ParseAsync(string path, CancellationToken cancellationToken = default) => (await new RustSourceParser(_frontend, _root,
+        Path.Combine(_root, "no-standard-library")).ParseAsync(path, File.ReadAllText(path), cancellationToken: cancellationToken))!;
+    private static async Task<CallableReference> Bound(SourceFile file, string name) =>
+        (await AsyncSourceFacts.SemanticAsync(file.Statements.Single(s => s.MemberName == name), CancellationToken.None)).ReferencedCallable!;
 
     [Test]
-    public void MissingRustCompiler_BindsLocalCallsWithoutPreparingUnusableStandardLibrary()
+    public async System.Threading.Tasks.Task MissingRustCompiler_BindsLocalCallsWithoutPreparingUnusableStandardLibrary()
     {
         string path = Write("src/lib.rs",
             "pub struct Alpha; impl Alpha { pub fn get(&self, value: u32) -> u32 { value } } pub fn run() { let a = Alpha; a.get(1); }");
@@ -67,17 +68,17 @@ public class RustFrontendTests
         try
         {
             Environment.SetEnvironmentVariable("PATH", "");
-            using var scope = new ToolchainExecutionScope();
+            await using var scope = new ToolchainExecutionScope();
             var frontend = new RustFrontend(_frontend, _root, prepareStandardLibrary: () =>
             {
                 preparations++;
                 throw new AssertionException("Sources cannot be used without a compatible compiler identity.");
             });
-            var file = frontend.Parse(path, File.ReadAllText(path));
+            var file = (await frontend.ParseAsync(path, File.ReadAllText(path), cancellationToken: CancellationToken.None));
             var call = file.Statements.Single(s => s.MemberName == "get");
-            Assert.That(call.ReceiverType?.Name, Is.EqualTo("Alpha"));
-            Assert.That(call.ValueType?.Name, Is.EqualTo("u32"));
-            Assert.That(call.ReferencedCallable?.Signature, Is.EqualTo("pub fn get(&self, value: u32) -> u32"));
+            Assert.That((await AsyncSourceFacts.SemanticAsync(call, CancellationToken.None)).ReceiverType?.Name, Is.EqualTo("Alpha"));
+            Assert.That((await AsyncSourceFacts.SemanticAsync(call, CancellationToken.None)).ValueType?.Name, Is.EqualTo("u32"));
+            Assert.That((await AsyncSourceFacts.SemanticAsync(call, CancellationToken.None)).ReferencedCallable?.Signature, Is.EqualTo("pub fn get(&self, value: u32) -> u32"));
             Assert.That(preparations, Is.Zero);
             Assert.That(ProviderWarnings.Drain(), Has.Some.Contains("compiler identity is unavailable"));
             Assert.That(ProviderErrors.Drain(), Is.Empty);
@@ -86,7 +87,7 @@ public class RustFrontendTests
     }
 
     [Test]
-    public void MaintainedAst_DeclarationSpansExcludeDocumentationAndRetainAttributes()
+    public async System.Threading.Tasks.Task MaintainedAst_DeclarationSpansExcludeDocumentationAndRetainAttributes()
     {
         string path = Write("src/lib.rs", """
             /// Type docs.
@@ -99,12 +100,12 @@ public class RustFrontendTests
             /// Run docs.
             pub fn run() { Alpha.get(1); }
             """);
-        using var scope = new ToolchainExecutionScope();
-        var file = Parse(path);
+        await using var scope = new ToolchainExecutionScope();
+        var file = (await ParseAsync(path, cancellationToken: CancellationToken.None));
         Assert.That(file.ParseErrors, Is.Empty);
         var type = file.Types.Single(t => t.Name == "Alpha");
-        var method = type.Methods.Single(m => m.Name == "get");
-        var run = file.Types.SelectMany(t => t.Methods).Single(m => m.Name == "run");
+        var method = (await AsyncSourceFacts.MembersAsync(type, CancellationToken.None)).Methods.Single(m => m.Name == "get");
+        var run = await file.Types.ToAsyncEnumerable().SelectMany(AsyncSourceFacts.MethodsAsync).SingleAsync(m => m.Name == "run");
         Assert.Multiple(() =>
         {
             Assert.That((type.Line, type.Column), Is.EqualTo((2, 1)));
@@ -117,14 +118,14 @@ public class RustFrontendTests
             Assert.That((run.Line, run.Column), Is.EqualTo((9, 1)));
             Assert.That(run.HasDocComment, Is.True);
         });
-        var callable = Bound(file, "get");
+        var callable = (await Bound(file, "get"));
         Assert.That(callable, Is.Not.Null);
         Assert.That((callable.Line, callable.Column, callable.EndLine), Is.EqualTo((5, 5, 6)));
         Assert.That(callable.Signature, Is.EqualTo("pub fn get(&self, value: u32) -> u32"));
     }
 
     [Test]
-    public void MaintainedAstAndHir_BindAliasesFactoriesTraitMethodsAndGenericSignaturesAcrossFiles()
+    public async System.Threading.Tasks.Task MaintainedAstAndHir_BindAliasesFactoriesTraitMethodsAndGenericSignaturesAcrossFiles()
     {
         Write("Cargo.toml", "[package]\nname='app'\nversion='1.0.0'\nedition='2024'");
         string modelPath = Write("src/model.rs", """
@@ -151,35 +152,35 @@ public class RustFrontendTests
                 other().inspect();
             }
             """);
-        using var scope = new ToolchainExecutionScope();
-        var file = Parse(path);
+        await using var scope = new ToolchainExecutionScope();
+        var file = (await ParseAsync(path, cancellationToken: CancellationToken.None));
         Assert.That(file.ParseErrors, Is.Empty);
         Assert.That(file.Statements.Where(s => s.Kind == "call").Select(s => s.MemberName),
             Is.EqualTo(new[] { "make", "inspect", "value", "inspect", "other" }));
-        var factory = Bound(file, "make");
+        var factory = (await Bound(file, "make"));
         Assert.That(factory, Is.Not.Null);
         Assert.That(factory.Name, Is.EqualTo("factory"));
         Assert.That(factory.Namespace, Is.EqualTo("app::model"));
         Assert.That(factory.ReturnType?.OriginalText, Is.EqualTo("Packet<u32>"));
         var inspections = file.Statements.Where(s => s.MemberName == "inspect").ToList();
-        Assert.That(inspections.Select(s => s.ReceiverType?.OriginalText),
+        Assert.That((await inspections.ToAsyncEnumerable().Select(async (Cop.Providers.SourceModel.StatementInfo s, CancellationToken cancellationToken) => (await AsyncSourceFacts.SemanticAsync(s, CancellationToken.None)).ReceiverType?.OriginalText).ToArrayAsync()),
             Is.EqualTo(new[] { "Packet<u32>", "Packet" }));
-        Assert.That(inspections.Select(s => s.ValueType?.OriginalText), Is.EqualTo(new[] { "u32", "bool" }));
-        Assert.That(inspections.Select(s => s.ReferencedCallable?.Namespace),
+        Assert.That((await inspections.ToAsyncEnumerable().Select(async (Cop.Providers.SourceModel.StatementInfo s, CancellationToken cancellationToken) => (await AsyncSourceFacts.SemanticAsync(s, CancellationToken.None)).ValueType?.OriginalText).ToArrayAsync()), Is.EqualTo(new[] { "u32", "bool" }));
+        Assert.That((await inspections.ToAsyncEnumerable().Select(async (Cop.Providers.SourceModel.StatementInfo s, CancellationToken cancellationToken) => (await AsyncSourceFacts.SemanticAsync(s, CancellationToken.None)).ReferencedCallable?.Namespace).ToArrayAsync()),
             Is.EqualTo(new[] { "app::model", "app::unrelated" }));
-        Assert.That(inspections.Select(s => s.ReferencedCallable?.SourceFile),
+        Assert.That((await inspections.ToAsyncEnumerable().Select(async (Cop.Providers.SourceModel.StatementInfo s, CancellationToken cancellationToken) => (await AsyncSourceFacts.SemanticAsync(s, CancellationToken.None)).ReferencedCallable?.SourceFile).ToArrayAsync()),
             Is.EqualTo(new[] { Path.Combine(_root, "src", "model.rs"), Path.Combine(_root, "src", "unrelated.rs") }));
-        Assert.That(inspections[0].ReferencedCallable?.Line, Is.EqualTo(3), "select the impl, not merely the trait declaration on line 2");
-        Assert.That(inspections[0].ReferencedCallable?.DeclaringType, Is.EqualTo("Packet<T>"));
-        Assert.That(Bound(file, "value").Signature, Is.EqualTo("pub fn value(&self) -> &T"));
-        Assert.That(Bound(file, "value").DeclaringType, Is.EqualTo("Packet<T>"));
-        Assert.That(Parse(modelPath).Types.Single(t => t.Kind == TypeKind.Struct && t.Name == "Packet")
+        Assert.That((await AsyncSourceFacts.SemanticAsync(inspections[0], CancellationToken.None)).ReferencedCallable?.Line, Is.EqualTo(3), "select the impl, not merely the trait declaration on line 2");
+        Assert.That((await AsyncSourceFacts.SemanticAsync(inspections[0], CancellationToken.None)).ReferencedCallable?.DeclaringType, Is.EqualTo("Packet<T>"));
+        Assert.That((await Bound(file, "value")).Signature, Is.EqualTo("pub fn value(&self) -> &T"));
+        Assert.That((await Bound(file, "value")).DeclaringType, Is.EqualTo("Packet<T>"));
+        Assert.That((await AsyncSourceFacts.MembersAsync((await ParseAsync(modelPath, cancellationToken: CancellationToken.None)).Types.Single(t => t.Kind == TypeKind.Struct && t.Name == "Packet"), CancellationToken.None))
             .Methods.Select(m => m.Name), Is.EqualTo(new[] { "inspect", "value" }));
         Assert.That(ProviderErrors.Drain(), Is.Empty);
     }
 
     [Test]
-    public void DependencyEditsInvalidateSemanticContextWithoutRunningBuildScriptsOrApplications()
+    public async System.Threading.Tasks.Task DependencyEditsInvalidateSemanticContextWithoutRunningBuildScriptsOrApplications()
     {
         Write("Cargo.toml", """
             [package]
@@ -197,53 +198,53 @@ public class RustFrontendTests
             pub fn create()->Item { Item }
             """);
         string path = Write("src/lib.rs", "fn run() { let item=renamed::create(); item.result(); }\n");
-        using var scope = new ToolchainExecutionScope();
-        var cold = Parse(path);
-        Assert.That(Bound(cold, "result").ReturnType?.Name, Is.EqualTo("u32"));
-        Assert.That(Bound(cold, "result").Namespace, Is.EqualTo("dependency"));
+        await using var scope = new ToolchainExecutionScope();
+        var cold = (await ParseAsync(path, cancellationToken: CancellationToken.None));
+        Assert.That((await Bound(cold, "result")).ReturnType?.Name, Is.EqualTo("u32"));
+        Assert.That((await Bound(cold, "result")).Namespace, Is.EqualTo("dependency"));
         File.WriteAllText(dependency, File.ReadAllText(dependency).Replace("->u32 { 1 }", "->bool { true }"));
-        var warm = Parse(path);
-        Assert.That(Bound(warm, "result").ReturnType?.Name, Is.EqualTo("bool"));
-        Assert.That(warm.Statements.Single(s => s.MemberName == "result").ValueType?.Name, Is.EqualTo("bool"));
+        var warm = (await ParseAsync(path, cancellationToken: CancellationToken.None));
+        Assert.That((await Bound(warm, "result")).ReturnType?.Name, Is.EqualTo("bool"));
+        Assert.That((await AsyncSourceFacts.SemanticAsync(warm.Statements.Single(s => s.MemberName == "result"), CancellationToken.None)).ValueType?.Name, Is.EqualTo("bool"));
         Assert.That(Directory.Exists(Path.Combine(_root, "target")), Is.False);
         Assert.That(ProviderErrors.Drain(), Is.Empty);
         Assert.That(ProviderWarnings.Drain(), Has.Some.Contains("build script is disabled"));
     }
 
     [Test]
-    public void MissingDependencyAndMalformedSyntaxAreExplicitWithoutInventingBindings()
+    public async System.Threading.Tasks.Task MissingDependencyAndMalformedSyntaxAreExplicitWithoutInventingBindings()
     {
         Write("Cargo.toml", "[package]\nname='app'\nversion='1.0.0'\nedition='2024'\n[dependencies]\nmissing='1.0'");
         string path = Write("src/lib.rs", "fn run(){ missing::create().inspect(); }\n");
-        using var scope = new ToolchainExecutionScope();
-        var file = Parse(path);
+        await using var scope = new ToolchainExecutionScope();
+        var file = (await ParseAsync(path, cancellationToken: CancellationToken.None));
         Assert.That(file.Statements.Select(s => s.MemberName), Is.EqualTo(new[] { "inspect", "create" }));
-        Assert.That(file.Statements.Select(s => s.ReferencedCallable), Is.EqualTo(new CallableReference?[] { null, null }));
+        Assert.That((await file.Statements.ToAsyncEnumerable().Select(async (Cop.Providers.SourceModel.StatementInfo s, CancellationToken cancellationToken) => (await AsyncSourceFacts.SemanticAsync(s, CancellationToken.None)).ReferencedCallable).ToArrayAsync()), Is.EqualTo(new CallableReference?[] { null, null }));
         Assert.That(ProviderWarnings.Drain(), Has.Some.Contains("missing unavailable on disk"));
         File.WriteAllText(path, "fn run( { let x = ; }");
-        Assert.That(Parse(path).ParseErrors, Is.Not.Empty);
+        Assert.That((await ParseAsync(path, cancellationToken: CancellationToken.None)).ParseErrors, Is.Not.Empty);
     }
 
     [Test]
-    public void StructureIsDemandDrivenAndBackendFailuresDoNotMasqueradeAsFallbackSuccess()
+    public async System.Threading.Tasks.Task StructureIsDemandDrivenAndBackendFailuresDoNotMasqueradeAsFallbackSuccess()
     {
         Write("Cargo.toml", "invalid TOML");
         string path = Write("src/lib.rs", "fn run(){ work(\"line\\nvalue\"); }");
-        using var scope = new ToolchainExecutionScope();
-        var file = Parse(path);
+        await using var scope = new ToolchainExecutionScope();
+        var file = (await ParseAsync(path, cancellationToken: CancellationToken.None));
         Assert.That(file.ParseErrors, Is.Empty);
         Assert.That(file.Statements.Single().ArgumentExpressions.Single().StringValue, Is.EqualTo("line\nvalue"));
         Assert.That(ProviderErrors.Drain(), Is.Empty, "structural demand must not load a semantic project");
-        Assert.That(file.Statements.Single().ReferencedCallable, Is.Null);
+        Assert.That((await AsyncSourceFacts.SemanticAsync(file.Statements.Single(), CancellationToken.None)).ReferencedCallable, Is.Null);
         Assert.That(ProviderErrors.Drain(), Has.Count.EqualTo(1));
-        var unavailable = new RustSourceParser(Path.Combine(_root, "missing-frontend"), _root)
-            .Parse(path, File.ReadAllText(path))!;
+        var unavailable = (await new RustSourceParser(Path.Combine(_root, "missing-frontend"), _root)
+            .ParseAsync(path, File.ReadAllText(path), cancellationToken: CancellationToken.None))!;
         Assert.That(unavailable.ParseErrors.Single(), Does.Contain("Rust frontend Unavailable"));
         Assert.That(unavailable.Types, Is.Empty, "configured failed backend is not silent fallback");
     }
 
     [Test]
-    public void CargoDefaultFeaturesAndCompilerCfgSelectRealDeclarations()
+    public async System.Threading.Tasks.Task CargoDefaultFeaturesAndCompilerCfgSelectRealDeclarations()
     {
         Write("Cargo.toml", """
             [package]
@@ -265,21 +266,21 @@ public class RustFrontendTests
             fn platform()->u64 { 1 }
             fn run(){ choose(); platform(); }
             """);
-        using var scope = new ToolchainExecutionScope();
-        var file = Parse(path);
-        Assert.That(Bound(file, "choose").ReturnType?.Name, Is.EqualTo("u32"));
-        Assert.That(Bound(file, "choose").Line, Is.EqualTo(1), "declaration span includes its cfg attribute, not the disabled declaration on line 3");
-        Assert.That(Bound(file, "platform").ReturnType?.Name,
+        await using var scope = new ToolchainExecutionScope();
+        var file = (await ParseAsync(path, cancellationToken: CancellationToken.None));
+        Assert.That((await Bound(file, "choose")).ReturnType?.Name, Is.EqualTo("u32"));
+        Assert.That((await Bound(file, "choose")).Line, Is.EqualTo(1), "declaration span includes its cfg attribute, not the disabled declaration on line 3");
+        Assert.That((await Bound(file, "platform")).ReturnType?.Name,
             Is.EqualTo(OperatingSystem.IsWindows() ? "u16" : "u64"));
         Write(".cargo/config.toml", "[build]\ntarget='unsupported-custom-target'");
-        var unsupported = Parse(path);
-        Assert.That(unsupported.Statements.Select(s => s.ReferencedCallable),
+        var unsupported = (await ParseAsync(path, cancellationToken: CancellationToken.None));
+        Assert.That((await unsupported.Statements.ToAsyncEnumerable().Select(async (Cop.Providers.SourceModel.StatementInfo s, CancellationToken cancellationToken) => (await AsyncSourceFacts.SemanticAsync(s, CancellationToken.None)).ReferencedCallable).ToArrayAsync()),
             Is.EqualTo(new CallableReference?[] { null, null }));
         Assert.That(ProviderWarnings.Drain(), Has.Some.Contains("rather than assuming host defaults"));
     }
 
     [Test]
-    public void LockedRenamedRegistrySourceAlreadyOnDiskIsBoundWithoutCargoOrNetwork()
+    public async System.Threading.Tasks.Task LockedRenamedRegistrySourceAlreadyOnDiskIsBoundWithoutCargoOrNetwork()
     {
         Write("Cargo.toml", """
             [package]
@@ -311,10 +312,10 @@ public class RustFrontendTests
         try
         {
             Environment.SetEnvironmentVariable("CARGO_HOME", Path.Combine(_root, "cargo-home"));
-            using var scope = new ToolchainExecutionScope();
-            var file = Parse(path);
-            Assert.That(Bound(file, "answer").Namespace, Is.EqualTo("cached"));
-            Assert.That(Bound(file, "answer").ReturnType?.Name, Is.EqualTo("u64"));
+            await using var scope = new ToolchainExecutionScope();
+            var file = (await ParseAsync(path, cancellationToken: CancellationToken.None));
+            Assert.That((await Bound(file, "answer")).Namespace, Is.EqualTo("cached"));
+            Assert.That((await Bound(file, "answer")).ReturnType?.Name, Is.EqualTo("u64"));
             Assert.That(ProviderErrors.Drain(), Is.Empty);
             Assert.That(Directory.Exists(Path.Combine(_root, "target")), Is.False);
             Assert.That(File.ReadAllText(Path.Combine(_root, "Cargo.lock")), Does.Contain("known-package-identity"));
@@ -323,7 +324,7 @@ public class RustFrontendTests
     }
 
     [Test]
-    public void UnknownParameterSlotIsNotDroppedAndUnicodeSpansMatchTheSelectedCall()
+    public async System.Threading.Tasks.Task UnknownParameterSlotIsNotDroppedAndUnicodeSpansMatchTheSelectedCall()
     {
         Write("Cargo.toml", "[package]\nname='app'\nversion='1.0.0'\nedition='2024'");
         string path = Write("src/lib.rs", """
@@ -331,17 +332,17 @@ public class RustFrontendTests
             fn known()->u32 { 1 }
             fn run(){ let text="😀"; known(); partial(unknown()); }
             """);
-        using var scope = new ToolchainExecutionScope();
-        var file = Parse(path);
-        Assert.That(Bound(file, "known").Line, Is.EqualTo(2));
-        Assert.That(file.Statements.Single(s => s.MemberName == "known").ValueType?.Name, Is.EqualTo("u32"));
-        Assert.That(file.Statements.Single(s => s.MemberName == "partial").ReferencedCallable, Is.Null);
+        await using var scope = new ToolchainExecutionScope();
+        var file = (await ParseAsync(path, cancellationToken: CancellationToken.None));
+        Assert.That((await Bound(file, "known")).Line, Is.EqualTo(2));
+        Assert.That((await AsyncSourceFacts.SemanticAsync(file.Statements.Single(s => s.MemberName == "known"), CancellationToken.None)).ValueType?.Name, Is.EqualTo("u32"));
+        Assert.That((await AsyncSourceFacts.SemanticAsync(file.Statements.Single(s => s.MemberName == "partial"), CancellationToken.None)).ReferencedCallable, Is.Null);
         Assert.That(ProviderWarnings.Drain(), Has.Some.Contains("parameter type unavailable"));
         Assert.That(ProviderErrors.Drain(), Is.Empty);
     }
 
     [Test]
-    public void PublicSemanticQueriesHaveExactColdAndWarmResultsAndPreserveNegativeControls()
+    public async Task PublicSemanticQueriesHaveExactColdAndWarmResultsAndPreserveNegativeControls()
     {
         Write("Cargo.toml", "[package]\nname='app'\nversion='1.0.0'\nedition='2024'");
         Write("src/model.rs", """
@@ -375,39 +376,71 @@ public class RustFrontendTests
         try
         {
             if (copied) File.Copy(_frontend, deployed);
-            for (int pass = 0; pass < 2; pass++)
+            await using (ToolchainExecutionScope execution = new())
             {
-                var result = Engine.Run(program, _root, new EngineRunOptions
+                for (int pass = 0; pass < 2; pass++)
                 {
-                    AdditionalFeedPaths = [_packages],
-                });
-                Assert.That(result.HasFatalErrors, Is.False, string.Join("; ", result.Errors));
-                Assert.That(result.Outputs.Select(o => o.Message), Is.EqualTo(new[]
-                {
-                    "model:1;shadow:1;app::model:Packet:1:u32:fn inspect(&self) -> u32",
-                    "model:1;shadow:1;app::shadow:Packet:0:bool:pub fn inspect(&self) -> bool"
-                }), $"execution {pass}: public semantic fields must survive repeat queries without stale binding");
+                    var result = (await Engine.RunAsync(program, _root, new EngineRunOptions
+                    {
+                        AdditionalFeedPaths = [_packages],
+                    }));
+                    Assert.That(result.HasFatalErrors, Is.False, string.Join("; ", result.Errors));
+                    Assert.That(result.Outputs.Select(o => o.Message), Is.EqualTo(new[]
+                    {
+                        "model:1;shadow:1;app::model:Packet:1:u32:fn inspect(&self) -> u32",
+                        "model:1;shadow:1;app::shadow:Packet:0:bool:pub fn inspect(&self) -> bool"
+                    }), $"execution {pass}: public semantic fields must survive repeat queries without stale binding");
+                }
             }
         }
-        finally { if (copied) File.Delete(deployed); }
+        finally
+        {
+            if (copied)
+            {
+                await DeleteOwnedFrontendAsync(deployed);
+            }
+        }
+    }
+
+    private static async Task DeleteOwnedFrontendAsync(string path)
+    {
+        Stopwatch elapsed = Stopwatch.StartNew();
+        while (true)
+        {
+            try
+            {
+                File.Delete(path);
+                Assert.That(File.Exists(path), Is.False, "The fixture-owned frontend must be removed.");
+                return;
+            }
+            catch (Exception ex) when (OperatingSystem.IsWindows()
+                && (ex is UnauthorizedAccessException
+                    || ex is IOException && (ex.HResult & 0xFFFF) is 32 or 33)
+                && elapsed.Elapsed < TimeSpan.FromSeconds(5)
+                && (File.GetAttributes(path) & FileAttributes.ReadOnly) == 0)
+            {
+                // Windows may briefly retain the image mapping after worker termination.
+                await Task.Delay(25).ConfigureAwait(false);
+            }
+        }
     }
 
     [Test]
-    public void BinaryTargetBindsSamePackageLibraryWithoutRunningItsMain()
+    public async System.Threading.Tasks.Task BinaryTargetBindsSamePackageLibraryWithoutRunningItsMain()
     {
         Write("Cargo.toml", "[package]\nname='app'\nversion='1.0.0'\nedition='2024'");
         Write("src/lib.rs", "pub fn answer()->u16 { 7 }");
         string path = Write("src/main.rs", "fn main(){ app::answer(); panic!(\"MUST NOT RUN\"); }");
-        using var scope = new ToolchainExecutionScope();
-        var file = Parse(path);
-        Assert.That(Bound(file, "answer").Namespace, Is.EqualTo("app"));
-        Assert.That(Bound(file, "answer").ReturnType?.Name, Is.EqualTo("u16"));
+        await using var scope = new ToolchainExecutionScope();
+        var file = (await ParseAsync(path, cancellationToken: CancellationToken.None));
+        Assert.That((await Bound(file, "answer")).Namespace, Is.EqualTo("app"));
+        Assert.That((await Bound(file, "answer")).ReturnType?.Name, Is.EqualTo("u16"));
         Assert.That(Directory.Exists(Path.Combine(_root, "target")), Is.False);
         Assert.That(ProviderErrors.Drain(), Is.Empty);
     }
 
     [Test]
-    public void LockedGitSourceRequiresExactCheckoutRevisionAndNeverRunsGit()
+    public async System.Threading.Tasks.Task LockedGitSourceRequiresExactCheckoutRevisionAndNeverRunsGit()
     {
         const string revision = "1234567890123456789012345678901234567890";
         Write("Cargo.toml", """
@@ -438,10 +471,10 @@ public class RustFrontendTests
         try
         {
             Environment.SetEnvironmentVariable("CARGO_HOME", Path.Combine(_root, "cargo-home"));
-            using var scope = new ToolchainExecutionScope();
-            Assert.That(Bound(Parse(path), "answer").ReturnType?.Name, Is.EqualTo("u64"));
+            await using var scope = new ToolchainExecutionScope();
+            Assert.That((await Bound((await ParseAsync(path, cancellationToken: CancellationToken.None)), "answer")).ReturnType?.Name, Is.EqualTo("u64"));
             File.WriteAllText(head, "0000000000000000000000000000000000000000");
-            Assert.That(Parse(path).Statements.Single(s => s.MemberName == "answer").ReferencedCallable, Is.Null);
+            Assert.That((await AsyncSourceFacts.SemanticAsync((await ParseAsync(path, cancellationToken: CancellationToken.None)).Statements.Single(s => s.MemberName == "answer"), CancellationToken.None)).ReferencedCallable, Is.Null);
             Assert.That(ProviderWarnings.Drain(), Has.Some.Contains("renamed unavailable on disk"));
             Assert.That(ProviderErrors.Drain(), Is.Empty);
         }
@@ -449,7 +482,7 @@ public class RustFrontendTests
     }
 
     [Test]
-    public void BundledStandardLibraryBindsGenericPreludeFactoriesAndMethods()
+    public async System.Threading.Tasks.Task BundledStandardLibraryBindsGenericPreludeFactoriesAndMethods()
     {
         string sources = Path.Combine(Path.GetDirectoryName(_frontend)!, "rust-stdlib");
         if (!File.Exists(Path.Combine(sources, "manifest.json")))
@@ -462,24 +495,24 @@ public class RustFrontendTests
                 values.len();
             }
             """);
-        using var scope = new ToolchainExecutionScope();
+        await using var scope = new ToolchainExecutionScope();
         for (int pass = 0; pass < 2; pass++)
         {
-            var file = new RustSourceParser(_frontend, _root, sources).Parse(path, File.ReadAllText(path))!;
-            Assert.That(file.Statements.Single(s => s.MemberName == "new").ValueType?.OriginalText, Is.EqualTo("Vec<u32, Global>"));
+            var file = (await new RustSourceParser(_frontend, _root, sources).ParseAsync(path, File.ReadAllText(path), cancellationToken: CancellationToken.None))!;
+            Assert.That((await AsyncSourceFacts.SemanticAsync(file.Statements.Single(s => s.MemberName == "new"), CancellationToken.None)).ValueType?.OriginalText, Is.EqualTo("Vec<u32, Global>"));
             var count = file.Statements.Single(s => s.MemberName == "len");
-            Assert.That(count.ReceiverType?.OriginalText, Is.EqualTo("Vec<u32, Global>"));
-            Assert.That(count.ValueType?.Name, Is.EqualTo("usize"));
-            Assert.That(count.ReferencedCallable?.Namespace, Is.EqualTo("alloc::vec"));
-            Assert.That(count.ReferencedCallable?.Signature, Is.EqualTo("pub const fn len(&self) -> usize"));
-            Assert.That(count.ReferencedCallable?.SourceFile, Does.EndWith(Path.Combine("alloc", "src", "vec", "mod.rs")));
-            Assert.That(file.Statements.Single(s => s.MemberName == "push").ReferencedCallable?.Name, Is.EqualTo("push"));
+            Assert.That((await AsyncSourceFacts.SemanticAsync(count, CancellationToken.None)).ReceiverType?.OriginalText, Is.EqualTo("Vec<u32, Global>"));
+            Assert.That((await AsyncSourceFacts.SemanticAsync(count, CancellationToken.None)).ValueType?.Name, Is.EqualTo("usize"));
+            Assert.That((await AsyncSourceFacts.SemanticAsync(count, CancellationToken.None)).ReferencedCallable?.Namespace, Is.EqualTo("alloc::vec"));
+            Assert.That((await AsyncSourceFacts.SemanticAsync(count, CancellationToken.None)).ReferencedCallable?.Signature, Is.EqualTo("pub const fn len(&self) -> usize"));
+            Assert.That((await AsyncSourceFacts.SemanticAsync(count, CancellationToken.None)).ReferencedCallable?.SourceFile, Does.EndWith(Path.Combine("alloc", "src", "vec", "mod.rs")));
+            Assert.That((await AsyncSourceFacts.SemanticAsync(file.Statements.Single(s => s.MemberName == "push"), CancellationToken.None)).ReferencedCallable?.Name, Is.EqualTo("push"));
         }
         Assert.That(ProviderErrors.Drain(), Is.Empty);
     }
 
     [Test]
-    public void Issue091_ArchiveSourcesRemainDeferredUntilRealSemanticDemand()
+    public async System.Threading.Tasks.Task Issue091_ArchiveSourcesRemainDeferredUntilRealSemanticDemand()
     {
         string sources = Path.Combine(Path.GetDirectoryName(_frontend)!, "rust-stdlib");
         if (!File.Exists(Path.Combine(sources, "manifest.json")))
@@ -498,13 +531,13 @@ public class RustFrontendTests
         string cache = Path.Combine(_root, ".cop", "frontend-cache");
         Write("Cargo.toml", "[package]\nname='app'\nversion='1.0.0'\nedition='2024'");
         string path = Write("src/lib.rs", "fn run(){ let mut values=Vec::<u32>::new(); values.push(7); values.len(); }");
-        using var scope = new ToolchainExecutionScope();
+        await using var scope = new ToolchainExecutionScope();
         for (int pass = 0; pass < 2; pass++)
         {
             int opened = 0;
             var parser = new RustSourceParser(projectRoot: _root,
                 bundleFactory: () => { opened++; return new MemoryStream(bytes); }, cacheDirectory: cache);
-            var file = parser.Parse(path, File.ReadAllText(path))!;
+            var file = (await parser.ParseAsync(path, File.ReadAllText(path), cancellationToken: CancellationToken.None))!;
             Assert.That(file.ParseErrors, Is.Empty);
             Assert.That(file.Statements.Where(s => s.Kind == "call").Select(s => s.MemberName),
                 Is.EqualTo(new[] { "new", "push", "len" }));
@@ -512,10 +545,10 @@ public class RustFrontendTests
                 Assert.That(Directory.GetFiles(cache, "lib.rs", SearchOption.AllDirectories), Is.Empty,
                     "structural demand must not deploy the bundled source tree");
             var count = file.Statements.Single(s => s.MemberName == "len");
-            Assert.That(count.ReceiverType?.OriginalText, Is.EqualTo("Vec<u32, Global>"));
-            Assert.That(count.ValueType?.Name, Is.EqualTo("usize"));
-            Assert.That(count.ReferencedCallable?.Signature, Is.EqualTo("pub const fn len(&self) -> usize"));
-            string declaration = count.ReferencedCallable!.SourceFile!;
+            Assert.That((await AsyncSourceFacts.SemanticAsync(count, CancellationToken.None)).ReceiverType?.OriginalText, Is.EqualTo("Vec<u32, Global>"));
+            Assert.That((await AsyncSourceFacts.SemanticAsync(count, CancellationToken.None)).ValueType?.Name, Is.EqualTo("usize"));
+            Assert.That((await AsyncSourceFacts.SemanticAsync(count, CancellationToken.None)).ReferencedCallable?.Signature, Is.EqualTo("pub const fn len(&self) -> usize"));
+            string declaration = (await AsyncSourceFacts.SemanticAsync(count, CancellationToken.None)).ReferencedCallable!.SourceFile!;
             if (declaration.StartsWith(cache, StringComparison.Ordinal))
             {
                 Assert.That(File.ReadAllText(declaration),
@@ -535,52 +568,78 @@ public class RustFrontendTests
     }
 
     [Test]
-    public void Issue091_LocalMethodWithFullStandardLibraryKeepsExactSelectedDeclaration()
+    public async System.Threading.Tasks.Task Issue091_LocalMethodWithFullStandardLibraryKeepsExactSelectedDeclaration()
     {
         string sources = Path.Combine(Path.GetDirectoryName(_frontend)!, "rust-stdlib");
         if (!File.Exists(Path.Combine(sources, "manifest.json")))
             Assert.Ignore("Prepare the checksum-pinned standard library beside the test frontend with native/prepare-stdlib.ps1.");
         Write("Cargo.toml", "[package]\nname='cop-publish-smoke'\nversion='0.1.0'\nedition='2024'\n[lib]\npath='sample.rs'");
         string path = Write("sample.rs", "pub struct Alpha; impl Alpha { pub fn get(&self, value: u32) -> u32 { value } } pub fn run() { let a = Alpha; a.get(1); }");
-        using var scope = new ToolchainExecutionScope();
+        await using var scope = new ToolchainExecutionScope();
         for (int pass = 0; pass < 2; pass++)
         {
-            var file = new RustSourceParser(_frontend, _root, sources).Parse(path, File.ReadAllText(path))!;
+            var file = (await new RustSourceParser(_frontend, _root, sources).ParseAsync(path, File.ReadAllText(path), cancellationToken: CancellationToken.None))!;
             var call = file.Statements.Single(statement => statement.MemberName == "get");
-            Assert.That(call.ReceiverType?.OriginalText, Is.EqualTo("Alpha"));
-            Assert.That(call.ValueType?.Name, Is.EqualTo("u32"));
-            Assert.That(call.ReferencedCallable?.Signature, Is.EqualTo("pub fn get(&self, value: u32) -> u32"));
-            Assert.That(call.ReferencedCallable?.Parameters.Select(type => type.Name), Is.EqualTo(new[] { "u32" }));
-            Assert.That(call.ReferencedCallable?.SourceFile, Is.EqualTo(path));
-            Assert.That(call.ReferencedCallable?.Line, Is.EqualTo(1));
-            Assert.That(call.ReferencedCallable?.Column, Is.EqualTo(32));
+            Assert.That((await AsyncSourceFacts.SemanticAsync(call, CancellationToken.None)).ReceiverType?.OriginalText, Is.EqualTo("Alpha"));
+            Assert.That((await AsyncSourceFacts.SemanticAsync(call, CancellationToken.None)).ValueType?.Name, Is.EqualTo("u32"));
+            Assert.That((await AsyncSourceFacts.SemanticAsync(call, CancellationToken.None)).ReferencedCallable?.Signature, Is.EqualTo("pub fn get(&self, value: u32) -> u32"));
+            Assert.That((await AsyncSourceFacts.SemanticAsync(call, CancellationToken.None)).ReferencedCallable?.Parameters.Select(type => type.Name), Is.EqualTo(new[] { "u32" }));
+            Assert.That((await AsyncSourceFacts.SemanticAsync(call, CancellationToken.None)).ReferencedCallable?.SourceFile, Is.EqualTo(path));
+            Assert.That((await AsyncSourceFacts.SemanticAsync(call, CancellationToken.None)).ReferencedCallable?.Line, Is.EqualTo(1));
+            Assert.That((await AsyncSourceFacts.SemanticAsync(call, CancellationToken.None)).ReferencedCallable?.Column, Is.EqualTo(32));
         }
         Assert.That(ProviderErrors.Drain(), Is.Empty);
     }
 
     [Test]
-    public void IncompatibleBundledSourcesAndChangedDemandedFileNeverInventSemanticBindings()
+    public async System.Threading.Tasks.Task IncompatibleBundledSourcesAndChangedDemandedFileNeverInventSemanticBindings()
     {
         string manifest = Write("incompatible/manifest.json", "{\"release\":\"0.0.0\",\"compilerCommit\":\"incompatible\"}");
         Write("Cargo.toml", "[package]\nname='app'\nversion='1.0.0'\nedition='2024'");
         string path = Write("src/lib.rs", "fn run(){ Vec::<u32>::new(); }");
-        using var scope = new ToolchainExecutionScope();
-        var file = new RustSourceParser(_frontend, _root, Path.GetDirectoryName(manifest)).Parse(path, File.ReadAllText(path))!;
-        Assert.That(file.Statements.Single().ReferencedCallable, Is.Null);
+        await using var scope = new ToolchainExecutionScope();
+        var file = (await new RustSourceParser(_frontend, _root, Path.GetDirectoryName(manifest)).ParseAsync(path, File.ReadAllText(path), cancellationToken: CancellationToken.None))!;
+        Assert.That((await AsyncSourceFacts.SemanticAsync(file.Statements.Single(), CancellationToken.None)).ReferencedCallable, Is.Null);
         Assert.That(ProviderWarnings.Drain(), Has.Some.Contains("do not match installed compiler"));
         File.WriteAllText(manifest, "{}");
-        var corrupt = new RustSourceParser(_frontend, _root, Path.GetDirectoryName(manifest)).Parse(path, File.ReadAllText(path))!;
-        Assert.That(corrupt.Statements.Single().ReferencedCallable, Is.Null);
+        var corrupt = (await new RustSourceParser(_frontend, _root, Path.GetDirectoryName(manifest)).ParseAsync(path, File.ReadAllText(path), cancellationToken: CancellationToken.None))!;
+        Assert.That((await AsyncSourceFacts.SemanticAsync(corrupt.Statements.Single(), CancellationToken.None)).ReferencedCallable, Is.Null);
         Assert.That(ProviderErrors.Drain(), Has.Some.Contains("standard-library manifest is malformed"));
         File.WriteAllText(path, "fn known()->u32 { 1 } fn run(){ known(); }");
-        var changed = Parse(path);
+        var changed = (await ParseAsync(path, cancellationToken: CancellationToken.None));
         File.WriteAllText(path, "fn known()->bool { true } fn run(){ known(); }");
-        Assert.That(changed.Statements.Single().ReferencedCallable, Is.Null);
+        Assert.That((await AsyncSourceFacts.SemanticAsync(changed.Statements.Single(), CancellationToken.None)).ReferencedCallable, Is.Null);
         Assert.That(ProviderErrors.Drain(), Has.Some.Contains("source changed since its syntax parse"));
     }
 
     [Test]
-    public void CargoEnvironmentGlobalConfigurationAndCustomToolchainPathsAreExplicitPartialContexts()
+    public async Task ParserEnvironmentOverride_ReportsExplicitPartialContextWithoutChangingProcessEnvironment()
+    {
+        Write("Cargo.toml", "[package]\nname='app'\nversion='1.0.0'\nedition='2024'");
+        string path = Write("src/lib.rs", "fn known()->u32 { 1 } fn run(){ known(); }");
+        string? inheritedFlags = Environment.GetEnvironmentVariable("RUSTFLAGS");
+        var parser = new RustSourceParser(_frontend, _root, Path.Combine(_root, "no-standard-library"))
+        {
+            ToolchainEnvironment = new Dictionary<string, string?>
+            {
+                ["RUSTFLAGS"] = "--cfg=custom"
+            }
+        };
+        await using var scope = new ToolchainExecutionScope();
+        var file = await parser.ParseAsync(path, File.ReadAllText(path))
+            ?? throw new AssertionException("Expected Rust syntax facts in an explicit partial context.");
+        var call = file.Statements.Single(s => s.Kind == "call" && s.MemberName == "known");
+        await call.EnsureSemanticAnalysisAsync();
+        Assert.That(file.ParseErrors, Is.Empty);
+        Assert.That(call.ReferencedCallable, Is.Null);
+        Assert.That(call.ValueType, Is.Null);
+        Assert.That(ProviderWarnings.Drain(), Has.Some.Contains("Unsupported Cargo environment context"));
+        Assert.That(ProviderErrors.Drain(), Is.Empty);
+        Assert.That(Environment.GetEnvironmentVariable("RUSTFLAGS"), Is.EqualTo(inheritedFlags));
+    }
+
+    [Test]
+    public async System.Threading.Tasks.Task CargoEnvironmentGlobalConfigurationAndCustomToolchainPathsAreExplicitPartialContexts()
     {
         Write("Cargo.toml", "[package]\nname='app'\nversion='1.0.0'\nedition='2024'");
         string path = Write("src/lib.rs", "fn known()->u32 { 1 } fn run(){ known(); }");
@@ -588,17 +647,17 @@ public class RustFrontendTests
         string? home = Environment.GetEnvironmentVariable("CARGO_HOME");
         try
         {
-            using var scope = new ToolchainExecutionScope();
+            await using var scope = new ToolchainExecutionScope();
             Environment.SetEnvironmentVariable("RUSTFLAGS", "--cfg=custom");
-            Assert.That(Parse(path).Statements.Single().ReferencedCallable, Is.Null);
+            Assert.That((await AsyncSourceFacts.SemanticAsync((await ParseAsync(path, cancellationToken: CancellationToken.None)).Statements.Single(), CancellationToken.None)).ReferencedCallable, Is.Null);
             Assert.That(ProviderWarnings.Drain(), Has.Some.Contains("Unsupported Cargo environment context"));
             Environment.SetEnvironmentVariable("RUSTFLAGS", null);
             Write("cargo-home/config.toml", "[build]\nrustflags=['--cfg=custom']");
             Environment.SetEnvironmentVariable("CARGO_HOME", Path.Combine(_root, "cargo-home"));
-            Assert.That(Parse(path).Statements.Single().ReferencedCallable, Is.Null);
+            Assert.That((await AsyncSourceFacts.SemanticAsync((await ParseAsync(path, cancellationToken: CancellationToken.None)).Statements.Single(), CancellationToken.None)).ReferencedCallable, Is.Null);
             Assert.That(ProviderWarnings.Drain(), Has.Some.Contains("rather than assuming host defaults"));
             Write("rust-toolchain.toml", "[toolchain]\npath='untrusted-target-toolchain'");
-            Assert.That(Parse(path).Statements.Single().ReferencedCallable, Is.Null);
+            Assert.That((await AsyncSourceFacts.SemanticAsync((await ParseAsync(path, cancellationToken: CancellationToken.None)).Statements.Single(), CancellationToken.None)).ReferencedCallable, Is.Null);
             Assert.That(ProviderWarnings.Drain(), Has.Some.Contains("Custom path Rust toolchain is unsupported"));
             Assert.That(Directory.Exists(Path.Combine(_root, "target")), Is.False);
             Assert.That(ProviderErrors.Drain(), Is.Empty);
@@ -611,7 +670,7 @@ public class RustFrontendTests
     }
 
     [Test]
-    public void MaintainedAstControlConditionsAndElseBranchesKeepExactCallOwnership()
+    public async System.Threading.Tasks.Task MaintainedAstControlConditionsAndElseBranchesKeepExactCallOwnership()
     {
         string path = Write("src/lib.rs", """
             fn run(value: bool) {
@@ -623,8 +682,8 @@ public class RustFrontendTests
                 let Some(item) = lookup() else { return; };
             }
             """);
-        using var scope = new ToolchainExecutionScope();
-        var file = Parse(path);
+        await using var scope = new ToolchainExecutionScope();
+        var file = (await ParseAsync(path, cancellationToken: CancellationToken.None));
         Assert.That(file.ParseErrors, Is.Empty);
         StatementInfo Call(string name) => file.Statements.Single(s => s.MemberName == name);
         var declaration = file.Statements.Single(s => s.Kind == "declaration" && s.MemberName == "answer");

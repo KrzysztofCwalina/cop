@@ -30,7 +30,7 @@ public class LanguageCheckPackageTests
     /// This is the exact scenario `cop csharp-checks -t &lt;dir&gt;` exercises.
     /// </summary>
     [Test]
-    public void CSharpChecks_RunsWithoutProviderFlag_ProducesViolations()
+    public async Task CSharpChecks_RunsWithoutProviderFlag_ProducesViolations()
     {
         var feedPaths = new List<string> { Path.Combine(RepoRoot, "packages") };
 
@@ -43,7 +43,7 @@ public class LanguageCheckPackageTests
                 "class Sample { void M() { var x = 1; } }");
 
             // No `providers:` argument — mirrors `cop csharp-checks -t <dir>` with no -p.
-            var result = Engine.RunProject(feedPaths, ["csharp-checks"], fixtureDir, []);
+            var result = (await Engine.RunProjectAsync(feedPaths, ["csharp-checks"], fixtureDir, []));
 
             Assert.That(result.HasFatalErrors, Is.False,
                 "csharp-checks should run without -p. Errors: " + string.Join("; ", result.Errors));
@@ -65,7 +65,7 @@ public class LanguageCheckPackageTests
     /// This is the exact scenario `cop java-checks -t &lt;dir&gt;` exercises.
     /// </summary>
     [Test]
-    public void JavaChecks_RunsWithoutProviderFlag_ProducesViolations()
+    public async Task JavaChecks_RunsWithoutProviderFlag_ProducesViolations()
     {
         var feedPaths = new List<string> { Path.Combine(RepoRoot, "packages") };
 
@@ -78,7 +78,7 @@ public class LanguageCheckPackageTests
                 "public class Sample { void m() { System.out.println(\"x\"); System.exit(1); } }");
 
             // No `providers:` argument — mirrors `cop java-checks -t <dir>` with no -p.
-            var result = Engine.RunProject(feedPaths, ["java-checks"], fixtureDir, []);
+            var result = (await Engine.RunProjectAsync(feedPaths, ["java-checks"], fixtureDir, []));
 
             Assert.That(result.HasFatalErrors, Is.False,
                 "java-checks should run without -p. Errors: " + string.Join("; ", result.Errors));
@@ -99,7 +99,7 @@ public class LanguageCheckPackageTests
     /// This is the exact scenario `cop rust-checks -t &lt;dir&gt;` exercises.
     /// </summary>
     [Test]
-    public void RustChecks_RunsWithoutProviderFlag_ProducesViolations()
+    public async Task RustChecks_RunsWithoutProviderFlag_ProducesViolations()
     {
         var feedPaths = new List<string> { Path.Combine(RepoRoot, "packages") };
 
@@ -112,7 +112,7 @@ public class LanguageCheckPackageTests
                 "pub fn run() { let x = parse().unwrap(); }");
 
             // No `providers:` argument — mirrors `cop rust-checks -t <dir>` with no -p.
-            var result = Engine.RunProject(feedPaths, ["rust-checks"], fixtureDir, []);
+            var result = (await Engine.RunProjectAsync(feedPaths, ["rust-checks"], fixtureDir, []));
 
             Assert.That(result.HasFatalErrors, Is.False,
                 "rust-checks should run without -p. Errors: " + string.Join("; ", result.Errors));
@@ -134,7 +134,7 @@ public class LanguageCheckPackageTests
     /// This is the exact scenario `cop go-checks -t &lt;dir&gt;` exercises.
     /// </summary>
     [Test]
-    public void GoChecks_RunsWithoutProviderFlag_ProducesViolations()
+    public async Task GoChecks_RunsWithoutProviderFlag_ProducesViolations()
     {
         var feedPaths = new List<string> { Path.Combine(RepoRoot, "packages") };
 
@@ -147,7 +147,7 @@ public class LanguageCheckPackageTests
                 "package lib\nfunc Run() { panic(\"boom\") }\n");
 
             // No `providers:` argument — mirrors `cop go-checks -t <dir>` with no -p.
-            var result = Engine.RunProject(feedPaths, ["go-checks"], fixtureDir, []);
+            var result = (await Engine.RunProjectAsync(feedPaths, ["go-checks"], fixtureDir, []));
 
             Assert.That(result.HasFatalErrors, Is.False,
                 "go-checks should run without -p. Errors: " + string.Join("; ", result.Errors));

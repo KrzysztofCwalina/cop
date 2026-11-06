@@ -13,5 +13,8 @@ public sealed record ChangedFile(
     IReadOnlyList<ChangedRange> Ranges,
     bool IsBinary)
 {
+    /// <summary>
+    /// Whether the change removes the file from the head revision.
+    /// </summary>
     public bool IsDeleted => Status == "D";
 }

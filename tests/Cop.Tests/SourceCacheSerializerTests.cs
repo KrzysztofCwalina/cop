@@ -252,7 +252,7 @@ public class SourceCacheSerializerTests
             Expression = "logger.Log(items)",
             CopIgnore = "ignore-rule"
         };
-        ifStatement._children.Add(callStatement);
+        ifStatement.MutableChildren.Add(callStatement);
         method.Statements = [ifStatement];
 
         var throwStatement = new StatementInfo("throw", [], "InvalidOperationException", null, [], 18, false)
@@ -326,7 +326,7 @@ public class SourceCacheSerializerTests
     private static List<SourceFile>? TryLoad(string cachePath, byte[] fingerprint)
     {
         return (List<SourceFile>?)SerializerType
-            .GetMethod("TryLoad", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic,
+            .GetMethod("LoadOrDefault", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic,
                 [typeof(string), typeof(byte[])])!
             .Invoke(null, [cachePath, fingerprint]);
     }

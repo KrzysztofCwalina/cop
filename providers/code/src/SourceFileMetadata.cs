@@ -6,8 +6,14 @@ using Microsoft.Win32.SafeHandles;
 
 namespace Cop.Providers;
 
+/// <summary>
+/// Filesystem metadata used to describe a captured source-file version.
+/// </summary>
 public static class SourceFileMetadata
 {
+    /// <summary>
+    /// Reads the filesystem change timestamp used to describe a source-file version.
+    /// </summary>
     public static long ReadChangeTime(string path)
     {
         // Attribute-only access detects same-length edits even when LastWriteTime is restored.

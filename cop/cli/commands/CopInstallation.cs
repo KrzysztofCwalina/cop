@@ -33,7 +33,7 @@ internal static class CopInstallation
                 {
                     File.Move(staged, target);
                 }
-                catch
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
                 {
                     if (File.Exists(backup) && !File.Exists(target))
                     {

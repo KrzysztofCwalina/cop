@@ -16,7 +16,7 @@ namespace Cop.Cli.Commands;
 internal static class StartupNotices
 {
     // Commands that print their own output and should never carry the version notices.
-    private static readonly HashSet<string> SelfDescribing = new(StringComparer.OrdinalIgnoreCase)
+    private static readonly HashSet<string> s_selfDescribing = new(StringComparer.OrdinalIgnoreCase)
     {
         "update", "-v", "--version", "-h", "-help", "--help", "help"
     };
@@ -38,7 +38,7 @@ internal static class StartupNotices
         }
 
         string first = args[0];
-        if (SelfDescribing.Contains(first))
+        if (s_selfDescribing.Contains(first))
         {
             return false;           // help/version/update print their own output
         }

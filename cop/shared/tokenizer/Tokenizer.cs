@@ -20,6 +20,9 @@ public class Tokenizer
         _filePath = filePath;
     }
 
+    /// <summary>
+    /// Converts source text into tokens, retaining locations and an end-of-file token.
+    /// </summary>
     public List<Token> Tokenize()
     {
         List<Token> tokens = new List<Token>();

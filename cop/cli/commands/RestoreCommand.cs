@@ -35,7 +35,7 @@ public static class RestoreCommand
             fileArg
         };
 
-        command.SetAction(parseResult => ExecuteAsync(parseResult.GetValue(fileArg)).GetAwaiter().GetResult());
+        command.SetAction(parseResult => ExecuteAsync(parseResult.GetValue(fileArg)));
 
         return command;
     }
@@ -138,7 +138,7 @@ public static class RestoreCommand
             RestoreResult result = await engine.RestoreAsync(packages, filePath, repoRoot, CancellationToken.None);
 
             // Check if restore succeeded
-            if (!result.Success)
+            if (!result.IsSuccessful)
             {
                 foreach (string warning in result.Warnings)
                 {
@@ -179,7 +179,9 @@ public static class RestoreCommand
             Console.Error.WriteLine($"Error parsing .cop file: {ex.Message}");
             return 1;
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or
+            System.Net.Http.HttpRequestException or System.Text.Json.JsonException or
+            InvalidOperationException or ArgumentException)
         {
             Console.Error.WriteLine($"Error: {ex.Message}");
             return 1;

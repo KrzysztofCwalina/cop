@@ -9,7 +9,13 @@ using Cop.Lang.Ast;
 /// </summary>
 public sealed class TypeSymbol : Symbol
 {
+    /// <summary>
+    /// The optional named type extended by this type declaration.
+    /// </summary>
     public string? BaseTypeName { get; }
+    /// <summary>
+    /// The property declarations belonging to this object type.
+    /// </summary>
     public IReadOnlyList<PropertySymbol> Properties { get; }
 
     public TypeSymbol(string name, string? baseTypeName, IReadOnlyList<PropertySymbol> properties)

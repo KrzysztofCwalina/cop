@@ -10,7 +10,7 @@ public static class SqlParser
     /// <summary>Contains SQL statements collected from a source document.</summary>
     public record SqlParseResult(List<SqlStatementInfo> Statements);
 
-    private static readonly HashSet<string> KnownKinds = new(StringComparer.OrdinalIgnoreCase)
+    private static readonly HashSet<string> s_knownKinds = new(StringComparer.OrdinalIgnoreCase)
         { "SELECT", "INSERT", "UPDATE", "DELETE", "CREATE", "ALTER", "DROP", "MERGE" };
 
     /// <summary>
@@ -76,7 +76,7 @@ public static class SqlParser
             kind = main.Word ?? "OTHER";
             operation = main.Start;
         }
-        if (!KnownKinds.Contains(kind))
+        if (!s_knownKinds.Contains(kind))
         {
             kind = "OTHER";
         }

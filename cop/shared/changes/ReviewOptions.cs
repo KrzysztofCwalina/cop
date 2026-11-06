@@ -5,12 +5,30 @@ namespace Cop.Core;
 /// <summary>Controls the immutable comparison used by a review.</summary>
 public sealed record ReviewOptions
 {
+    /// <summary>
+    /// The change source to analyze, such as automatic discovery or a pull request.
+    /// </summary>
     public string Scope { get; init; } = "auto";
+    /// <summary>
+    /// The optional Git revision used as the base of a change comparison.
+    /// </summary>
     public string? Base { get; init; }
+    /// <summary>
+    /// The pull request number or URL used for pull-request-scoped analysis.
+    /// </summary>
     public string? Pr { get; init; }
+    /// <summary>
+    /// Whether diagnostics cover all analyzed code or only changed lines.
+    /// </summary>
     public string ReportScope { get; init; } = "all";
+    /// <summary>
+    /// The optional path to the AI review configuration.
+    /// </summary>
     public string? AiConfigPath { get; init; }
 
+    /// <summary>
+    /// Rejects unsupported scope values and incompatible review selections.
+    /// </summary>
     public void Validate()
     {
         if (AiConfigPath is not null && string.IsNullOrWhiteSpace(AiConfigPath))

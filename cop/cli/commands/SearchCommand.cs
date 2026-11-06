@@ -25,25 +25,27 @@ public static class SearchCommand
             queryArg
         };
 
-        command.SetAction(parseResult => Execute(parseResult.GetValue(queryArg)));
+        command.SetAction(parseResult => ExecuteAsync(parseResult.GetValue(queryArg)
+            ?? throw new InvalidOperationException("The required search query is missing.")));
 
         return command;
     }
 
-    private static int Execute(string query)
+    private static async Task<int> ExecuteAsync(string query)
     {
         try
         {
-            return ExecuteAsync(query).GetAwaiter().GetResult();
+            return await SearchFeedsAsync(query);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or
+            HttpRequestException or System.Text.Json.JsonException)
         {
             Console.Error.WriteLine($"Error: {ex.Message}");
             return 1;
         }
     }
 
-    private static async Task<int> ExecuteAsync(string query)
+    private static async Task<int> SearchFeedsAsync(string query)
     {
         if (string.IsNullOrWhiteSpace(query))
         {
@@ -94,7 +96,7 @@ public static class SearchCommand
                 {
                     // Try to fetch metadata for display
                     PackageInfo packageInfo = new PackageInfo { Name = packageName };
-                    
+
                     try
                     {
                         PackageReference packageRef = new PackageReference
@@ -111,10 +113,11 @@ public static class SearchCommand
                         packageInfo.Title = metadata.Title;
                         packageInfo.Version = metadata.Version;
                     }
-                    catch
+                    catch (Exception ex) when (ex is HttpRequestException or
+                        IOException or System.Text.Json.JsonException)
                     {
-                        // If metadata fetch fails, just use the package name
-                        // Keep packageInfo as is with defaults
+                        Console.Error.WriteLine(
+                            $"Warning: Could not read metadata for {packageName}: {ex.Message}");
                     }
 
                     matchingPackages.Add(packageInfo);

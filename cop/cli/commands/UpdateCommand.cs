@@ -15,14 +15,15 @@ static class UpdateCommand
     const string RepoName = "cop";
     const string GitHubApiBase = "https://api.github.com";
 
-    public static int Execute(bool force = false, bool local = false)
+    /// <summary>Installs a local executable or asynchronously downloads the latest release.</summary>
+    public static async Task<int> ExecuteAsync(UpdateOptions options)
     {
-        if (local)
+        if (options.IsLocal)
         {
             return InstallLocal();
         }
 
-        return ExecuteAsync(force).GetAwaiter().GetResult();
+        return await UpdateLatestAsync(options.IsForced);
     }
 
     [System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("SingleFile", "IL3000",
@@ -51,7 +52,7 @@ static class UpdateCommand
         }
     }
 
-    static async Task<int> ExecuteAsync(bool force)
+    static async Task<int> UpdateLatestAsync(bool force)
     {
         string? rid = GetCurrentRid();
         if (rid == null)
@@ -74,12 +75,13 @@ static class UpdateCommand
         {
             releaseResponse = await http.GetAsync(releaseUrl);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
         {
             Console.Error.WriteLine($"Error: Could not reach GitHub: {ex.Message}");
             return 1;
         }
 
+        using HttpResponseMessage responseLifetime = releaseResponse;
         if (!releaseResponse.IsSuccessStatusCode)
         {
             Console.Error.WriteLine($"Error: GitHub API returned {(int)releaseResponse.StatusCode}. Check your network connection.");
@@ -137,7 +139,7 @@ static class UpdateCommand
         {
             zipBytes = await http.GetByteArrayAsync(downloadUrl);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
         {
             Console.Error.WriteLine($"Error: Download failed: {ex.Message}");
             return 1;
@@ -205,7 +207,8 @@ static class UpdateCommand
             Console.Error.WriteLine("Check the permissions on your Cop user directory.");
             return 1;
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is IOException or InvalidDataException or
+            System.Security.SecurityException)
         {
             Console.Error.WriteLine($"Error during installation: {ex.Message}");
             return 1;
@@ -213,7 +216,15 @@ static class UpdateCommand
         finally
         {
             // Clean up temp directory
-            try { Directory.Delete(tempDir, recursive: true); } catch { }
+            try
+            {
+                Directory.Delete(tempDir, recursive: true);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                Console.Error.WriteLine(
+                    $"Warning: Could not remove update directory '{tempDir}': {ex.Message}");
+            }
         }
     }
 

@@ -24,7 +24,8 @@ public static class NewCommand
             nameArg
         };
 
-        command.SetAction(parseResult => Execute(parseResult.GetValue(nameArg)));
+        command.SetAction(parseResult => Execute(parseResult.GetValue(nameArg)
+            ?? throw new InvalidOperationException("The required package name is missing.")));
 
         return command;
     }
@@ -113,7 +114,8 @@ TODO - Add package description.
 
             Console.WriteLine($"Successfully created package '{name}' at {packageDir}");
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or
+            ArgumentException or NotSupportedException)
         {
             Console.Error.WriteLine($"Error creating package: {ex.Message}");
             Environment.Exit(1);

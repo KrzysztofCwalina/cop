@@ -24,29 +24,29 @@ public class CSharpProviderFunctionsTests
     }
 
     [Test]
-    public void ToCodebase_MaterializesPathScopedProviderResultAsCodebase()
+    public async Task ToCodebase_MaterializesPathScopedProviderResultAsCodebase()
     {
         var subDir = Path.Combine(_tempDir, "cs");
         Directory.CreateDirectory(subDir);
         File.WriteAllText(Path.Combine(subDir, "Sample.cs"), "public class Alpha {}");
 
         var provider = new CSharpProvider();
-        var queryResult = (Dictionary<string, List<object>>)provider.Query(new ProviderQuery { RootPath = subDir })!;
+        var queryResult = (Dictionary<string, List<object>>)(await provider.QueryAsync(new ProviderQuery { RootPath = subDir }, cancellationToken: CancellationToken.None))!;
         var rawCodebase = new DataObject("Object", queryResult.ToDictionary(
             pair => pair.Key,
             pair => (object?)pair.Value,
             StringComparer.OrdinalIgnoreCase));
 
         var toCodebase = provider.GetFunctions()!["toCodebase"];
-        var codebase = (DataObject)toCodebase([new List<object?> { rawCodebase }]).GetAwaiter().GetResult()!;
+        var codebase = (DataObject)(await toCodebase([new List<object?> { rawCodebase }], CancellationToken.None))!;
 
         Assert.That(codebase.TypeName, Is.EqualTo("Codebase"));
-        var types = (List<object?>)codebase.GetField("Types")!;
+        var types = (List<object?>)(await codebase.GetFieldAsync("Types"))!;
         Assert.That(types, Has.Count.EqualTo(1));
         var type = (DataObject)types[0]!;
-        Assert.That(type.GetField("Name"), Is.EqualTo("Alpha"));
-        var file = (DataObject)type.GetField("File")!;
-        Assert.That(file.GetField("Path"), Is.EqualTo("Sample.cs"));
+        Assert.That(await type.GetFieldAsync("Name"), Is.EqualTo("Alpha"));
+        var file = (DataObject)(await type.GetFieldAsync("File"))!;
+        Assert.That(await file.GetFieldAsync("Path"), Is.EqualTo("Sample.cs"));
     }
 
     [Test]
@@ -74,7 +74,7 @@ public class CSharpProviderFunctionsTests
         var context = new AnalysisContext(_tempDir, new ReviewOptions());
         var toCodebase = provider.GetFunctions(context)!["toCodebase"];
 
-        var codebase = (DataObject)(await toCodebase([new List<object?>(), path]))!;
+        var codebase = (DataObject)(await toCodebase([new List<object?>(), path], CancellationToken.None))!;
 
         Assert.That(codebase.TypeName, Is.EqualTo("Codebase"));
         Assert.That(codebase.GetField("Files"), Is.Empty);

@@ -25,16 +25,19 @@ public static class TestCommand
             fileArg,
             diagOption
         };
-        command.SetAction(parseResult => Execute(
+        command.SetAction(parseResult => ExecuteAsync(
             parseResult.GetValue(fileArg),
-            parseResult.GetValue(diagOption)));
+            parseResult.GetValue(diagOption)
+                ? message => Console.Error.WriteLine(RunCommand.ColorDiagLine(message))
+                : null));
         return command;
     }
 
     /// <summary>
     /// Executes tests in the selected source and returns their overall status.
     /// </summary>
-    public static int Execute(string? fileOrDir, bool diag = false)
+    public static async Task<int> ExecuteAsync(
+        string? fileOrDir, Action<string>? diagnosticLog = null)
     {
         string scriptsDir;
         string rootPath;
@@ -52,10 +55,9 @@ public static class TestCommand
             rootPath = scriptsDir;
         }
 
-        Action<string>? diagLog = diag ? msg => Console.Error.WriteLine(RunCommand.ColorDiagLine(msg)) : null;
-        EngineResult result = Engine.Run(scriptsDir, rootPath, new EngineRunOptions
+        EngineResult result = await Engine.RunAsync(scriptsDir, rootPath, new EngineRunOptions
         {
-            DiagnosticLog = diagLog,
+            DiagnosticLog = diagnosticLog,
             IsAssertMode = true,
         });
 

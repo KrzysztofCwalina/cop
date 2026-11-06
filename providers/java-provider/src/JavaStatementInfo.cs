@@ -11,10 +11,7 @@ public sealed class JavaStatementInfo : StatementInfo
     /// <summary>
     /// Creates a Java statement from parsed syntax and source-location facts.
     /// </summary>
-    public JavaStatementInfo(
-        string kind, List<string> keywords, string? typeName, string? memberName,
-        List<string> arguments, int line, bool isInMethod)
-        : base(kind, keywords, typeName, memberName, arguments, line, isInMethod) { }
+    public JavaStatementInfo(StatementInfo source) : base(source) { }
 
     /// <summary>True for a Java <c>synchronized</c> block.</summary>
     public bool IsSynchronized => Kind == "synchronized";
@@ -45,28 +42,8 @@ public sealed class JavaStatementInfo : StatementInfo
     /// Registers restoration of Java statements from cached source facts.
     /// </summary>
     public static void RegisterCacheFactory() =>
-        StatementTypeRegistry.Register("java", (baseDecl, flags) => new JavaStatementInfo(
-            baseDecl.Kind,
-            baseDecl.Keywords,
-            baseDecl.TypeName,
-            baseDecl.MemberName,
-            baseDecl.Arguments,
-            baseDecl.Line,
-            baseDecl.IsInMethod)
+        StatementTypeRegistry.Register("java", (baseDecl, flags) => new JavaStatementInfo(baseDecl)
         {
-            HasRethrow = baseDecl.HasRethrow,
-            IsErrorHandler = baseDecl.IsErrorHandler,
-            IsGenericErrorHandler = baseDecl.IsGenericErrorHandler,
-            IsBraced = baseDecl.IsBraced,
-            Condition = baseDecl.Condition,
-            Expression = baseDecl.Expression,
-            CopIgnore = baseDecl.CopIgnore,
-            _children = baseDecl._children,
-            CallTarget = baseDecl.CallTarget,
-            ArgumentExpressions = baseDecl.ArgumentExpressions,
-            Column = baseDecl.Column,
-            EndLine = baseDecl.EndLine,
-            EndColumn = baseDecl.EndColumn,
             IsTryWithResources = flags.TryGetValue("IsTryWithResources", out bool tryWithResources) && tryWithResources,
             IsEnhancedFor = flags.TryGetValue("IsEnhancedFor", out bool enhancedFor) && enhancedFor,
         });

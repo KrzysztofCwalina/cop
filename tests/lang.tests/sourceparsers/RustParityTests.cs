@@ -10,12 +10,16 @@ namespace Cop.Tests.Lang.SourceParsers;
 [TestFixture]
 public class RustParityTests
 {
-    private static SourceFile Parse(string text) => new RustSourceParser().Parse("fixture.rs", text)!;
+    // These controls specify the built-in lexer/parser, including its recovery limits.
+    private static async Task<SourceFile> ParseAsync(
+        string text, CancellationToken cancellationToken = default) =>
+        (await new RustSourceParser(bundleFactory: () => null)
+            .ParseAsync("fixture.rs", text, cancellationToken: cancellationToken))!;
 
     [Test]
-    public void NestedControlFlowAndInvocations_HaveExactStructureAndDecodedArguments()
+    public async Task NestedControlFlowAndInvocations_HaveExactStructureAndDecodedArguments()
     {
-        var file = Parse("""
+        var file = (await ParseAsync("""
             fn inspect(items: &[i32]) {
                 if ready() {
                     for item in items.iter() {
@@ -27,7 +31,7 @@ public class RustParityTests
                     return fallback();
                 }
             }
-            """);
+            """, cancellationToken: CancellationToken.None));
         Assert.That(file.ParseErrors, Is.Empty);
         Assert.That(file.Statements.Select(s => s.Kind), Is.EqualTo(new[]
         { "if", "call", "for", "call", "while", "call", "call", "call", "call", "call", "else", "return", "call" }));
@@ -46,13 +50,13 @@ public class RustParityTests
         Assert.That(read.ArgumentExpressions[0].StringValue, Is.EqualTo(@"raw\text"));
         Assert.That(flush.CallTarget?.Kind, Is.EqualTo("memberAccess"));
         Assert.That(flush.CallTarget?.Target?.Kind, Is.EqualTo("invocation"));
-        Assert.That(file.Statements.All(s => ReferenceEquals(s.Method, file.Types.Single().Methods.Single())), Is.True);
+        Assert.That((await file.Statements.ToAsyncEnumerable().AllAsync(async (Cop.Providers.SourceModel.StatementInfo s, CancellationToken cancellationToken) => ReferenceEquals(s.Method, (await AsyncSourceFacts.MembersAsync(file.Types.Single(), CancellationToken.None)).Methods.Single()))), Is.True);
     }
 
     [Test]
-    public void PatternsPayloadsGenericsAliasesAndSpans_AreNotLost()
+    public async Task PatternsPayloadsGenericsAliasesAndSpans_AreNotLost()
     {
-        var file = Parse("""
+        var file = (await ParseAsync("""
             pub struct Packet<T>(pub T, pub(crate) std::vec::Vec<String>);
             pub enum Message<T> { Data(T), Named { value: T }, Empty }
             pub type Messages<T> = std::vec::Vec<Message<T>>;
@@ -62,7 +66,7 @@ public class RustParityTests
                 text: &'a str,
                 _: T,
             ) -> std::option::Option<T> { None }
-            """);
+            """, cancellationToken: CancellationToken.None));
         Assert.That(file.ParseErrors, Is.Empty);
         var packet = file.Types.Single(t => t.Name == "Packet");
         Assert.That(packet.TypeParameters, Is.EqualTo(new[] { "T" }));
@@ -77,7 +81,7 @@ public class RustParityTests
         var alias = file.Types.Single(t => t.Name == "Messages");
         Assert.That(alias.Kind, Is.EqualTo(TypeKind.Alias));
         Assert.That(alias.AliasTarget?.GenericArguments.Single().OriginalText, Is.EqualTo("Message<T>"));
-        var method = (RustMethodDeclaration)file.Types.Single(t => t.Name.EndsWith("(functions)")).Methods.Single();
+        var method = (RustMethodDeclaration)(await AsyncSourceFacts.MembersAsync(file.Types.Single(t => t.Name.EndsWith("(functions)")), CancellationToken.None)).Methods.Single();
         Assert.That(method.IsExtern, Is.True);
         Assert.That(method.IsPublic, Is.True);
         Assert.That(method.IsPrivate, Is.False);
@@ -91,9 +95,9 @@ public class RustParityTests
     }
 
     [Test]
-    public void ImplOwnership_IsModuleScopedAndNewRemainsAnOrdinaryMethod()
+    public async Task ImplOwnership_IsModuleScopedAndNewRemainsAnOrdinaryMethod()
     {
-        var file = Parse("""
+        var file = (await ParseAsync("""
             mod a {
                 pub struct Same;
                 impl Same { pub fn new() -> Self { Same } }
@@ -105,25 +109,25 @@ public class RustParityTests
             impl std::fmt::Debug for external::Same {
                 fn fmt(&self) { other(); }
             }
-            """);
+            """, cancellationToken: CancellationToken.None));
         Assert.That(file.ParseErrors, Is.Empty);
         var declared = file.Types.Where(t => t.Name == "Same").ToList();
         Assert.That(declared, Has.Count.EqualTo(2));
         Assert.That(declared.Select(t => t.Namespace), Is.EqualTo(new[] { "a", "b" }));
-        Assert.That(declared[0].Methods.Select(m => m.Name), Is.EqualTo(new[] { "new" }));
-        Assert.That(declared[1].Methods.Select(m => m.Name), Is.EqualTo(new[] { "update" }));
-        Assert.That(declared[1].Methods[0].IsInternal, Is.True);
-        Assert.That(declared[1].Methods[0].IsPublic, Is.False);
+        Assert.That((await AsyncSourceFacts.MembersAsync(declared[0], CancellationToken.None)).Methods.Select(m => m.Name), Is.EqualTo(new[] { "new" }));
+        Assert.That((await AsyncSourceFacts.MembersAsync(declared[1], CancellationToken.None)).Methods.Select(m => m.Name), Is.EqualTo(new[] { "update" }));
+        Assert.That((await AsyncSourceFacts.MembersAsync(declared[1], CancellationToken.None)).Methods[0].IsInternal, Is.True);
+        Assert.That((await AsyncSourceFacts.MembersAsync(declared[1], CancellationToken.None)).Methods[0].IsPublic, Is.False);
         Assert.That(declared.SelectMany(t => t.Constructors), Is.Empty);
         var external = file.Types.Single(t => t.Name.StartsWith("external::Same"));
         Assert.That(external.BaseTypes, Is.EqualTo(new[] { "std::fmt::Debug" }));
-        Assert.That(external.Methods.Single().Name, Is.EqualTo("fmt"));
+        Assert.That((await AsyncSourceFacts.MembersAsync(external, CancellationToken.None)).Methods.Single().Name, Is.EqualTo("fmt"));
     }
 
     [Test]
-    public void MacroDistinctionAndTokenBoundaries_ArePreserved()
+    public async Task MacroDistinctionAndTokenBoundaries_ArePreserved()
     {
-        var file = Parse("""
+        var file = (await ParseAsync("""
             /* first
                second
                third */
@@ -140,7 +144,7 @@ public class RustParityTests
                 let bytes = b"not a Rust string";
                 take(r"ends at closing quote", "escaped\\\"quote", b"bytes", c"c string");
             }
-            """);
+            """, cancellationToken: CancellationToken.None));
         Assert.That(file.ParseErrors, Is.Empty);
         Assert.That(file.CommentLines.Order(), Is.EqualTo(new[] { 1, 2, 3 }));
         Assert.That(file.Statements.Count(s => s.Kind == "for"), Is.EqualTo(2));
@@ -157,9 +161,9 @@ public class RustParityTests
     }
 
     [Test]
-    public void MatchGuardsLetElseClosuresAndTurbofish_ExposeOnlyRealCalls()
+    public async Task MatchGuardsLetElseClosuresAndTurbofish_ExposeOnlyRealCalls()
     {
-        var file = Parse("""
+        var file = (await ParseAsync("""
             fn inspect(input: Option<i32>) {
                 let Some(value) = input else { return fallback(); };
                 match value {
@@ -169,7 +173,7 @@ public class RustParityTests
                 }
                 Vec::<String>::new().push(make::<String>());
             }
-            """);
+            """, cancellationToken: CancellationToken.None));
         Assert.That(file.ParseErrors, Is.Empty);
         Assert.That(file.Statements.Where(s => s.Kind == "call").Select(s => s.MemberName),
             Is.EqualTo(new[] { "fallback", "ready", "run", "stop", "iter", "for_each", "consume", "new", "push", "make" }));
@@ -181,34 +185,36 @@ public class RustParityTests
 
     [TestCase("fn f() { call([)]; }", 2)]
     [TestCase("fn f() { call({]); }", 1)]
-    public void MismatchedBalancedDelimiters_AreReported(string text, int mismatches)
+    public async Task MismatchedBalancedDelimiters_AreReported(string text, int mismatches)
     {
-        var file = Parse(text);
+        var file = (await ParseAsync(text, cancellationToken: CancellationToken.None));
         Assert.That(file.ParseErrors.Count(e => e.Contains("mismatched")), Is.EqualTo(mismatches));
-        Assert.That(Parse("fn f() { call([1]); }").ParseErrors, Is.Empty);
+        Assert.That((await ParseAsync("fn f() { call([1]); }", cancellationToken: CancellationToken.None)).ParseErrors, Is.Empty);
     }
 
     [Test]
-    public void RawStringAtEof_IsNotReportedAsUnterminated()
+    public async Task RawStringAtEof_IsNotReportedAsUnterminated()
     {
-        Assert.That(Parse("const TEXT: &str = r#\"text\"#").ParseErrors, Is.Empty);
-        Assert.That(Parse("const TEXT: &str = r#\"text\"").ParseErrors,
+        Assert.That((await ParseAsync("const TEXT: &str = r#\"text\"#", cancellationToken: CancellationToken.None)).ParseErrors, Is.Empty);
+        Assert.That((await ParseAsync("const TEXT: &str = r#\"text\"", cancellationToken: CancellationToken.None)).ParseErrors,
             Has.Count.EqualTo(1));
     }
 
     [Test]
-    public void AdversarialNestingTerminatesAndReportsLimits()
+    [CancelAfter(5000)]
+    public async Task AdversarialNestingTerminatesAndReportsLimits()
     {
-        var task = Task.Run(() => Parse("fn run() { " + new string('{', 2000) + "work();" + new string('}', 2000) + " after(); }"));
-        Assert.That(task.Wait(TimeSpan.FromSeconds(5)), Is.True);
-        Assert.That(task.Result.ParseErrors.Count(e => e.Contains("nesting limit")), Is.EqualTo(1));
-        Assert.That(task.Result.Statements.Count(s => s.MemberName == "after"), Is.EqualTo(1));
+        var file = await ParseAsync("fn run() { " + new string('{', 2000) + "work();" + new string('}', 2000) + " after(); }",
+            TestContext.CurrentContext.CancellationToken);
+        TestContext.CurrentContext.CancellationToken.ThrowIfCancellationRequested();
+        Assert.That(file.ParseErrors.Count(e => e.Contains("nesting limit")), Is.EqualTo(1));
+        Assert.That(file.Statements.Count(s => s.MemberName == "after"), Is.EqualTo(1));
     }
 
     [Test]
-    public void CachedRustSubtypeCopiesKeepExpressionFactsAndSpans()
+    public async Task CachedRustSubtypeCopiesKeepExpressionFactsAndSpans()
     {
-        var original = Parse("fn f() { log(read(\"decoded\\nvalue\")); }").Statements.Single(s => s.MemberName == "log");
+        var original = (await ParseAsync("fn f() { log(read(\"decoded\\nvalue\")); }", cancellationToken: CancellationToken.None)).Statements.Single(s => s.MemberName == "log");
         var copy = new RustStatementInfo(original);
         Assert.That(copy.CallTarget, Is.SameAs(original.CallTarget));
         Assert.That(copy.ArgumentExpressions, Is.SameAs(original.ArgumentExpressions));
@@ -217,21 +223,21 @@ public class RustParityTests
     }
 
     [Test]
-    public void ExternBlocksNestedFunctionsAndGroupedImports_HaveNoPhantomCalls()
+    public async Task ExternBlocksNestedFunctionsAndGroupedImports_HaveNoPhantomCalls()
     {
-        var file = Parse("""
+        var file = (await ParseAsync("""
             use std::{io::{self, Read as Input, Write}, fmt::Debug};
             unsafe extern "C" { pub fn foreign(value: i32) -> i32; }
             fn outer() {
                 fn inner(value: i32) { inside(value); }
                 inner(1);
             }
-            """);
+            """, cancellationToken: CancellationToken.None));
         Assert.That(file.ParseErrors, Is.Empty);
         Assert.That(file.Usings, Is.EqualTo(new[] { "std::io", "std::io::Read", "std::io::Write", "std::fmt::Debug" }));
         Assert.That(file.Imports.Select(i => i.Module), Is.EqualTo(new[] { "std", "std::io", "std::io", "std::fmt" }));
         Assert.That(file.Imports.Single(i => i.Name == "Read").Alias, Is.EqualTo("Input"));
-        var methods = file.Types.SelectMany(t => t.Methods).ToList();
+        var methods = await file.Types.ToAsyncEnumerable().SelectMany(AsyncSourceFacts.MethodsAsync).ToListAsync();
         Assert.That(methods.Select(m => m.Name).Order(), Is.EqualTo(new[] { "foreign", "inner", "outer" }));
         Assert.That(((RustMethodDeclaration)methods.Single(m => m.Name == "foreign")).IsExtern, Is.True);
         Assert.That(methods.Single(m => m.Name == "foreign").IsPublic, Is.True);
@@ -242,9 +248,9 @@ public class RustParityTests
     }
 
     [Test]
-    public void SourceCacheRoundTrip_PreservesRustGraphSubtypesSignaturesAndLocations()
+    public async Task SourceCacheRoundTrip_PreservesRustGraphSubtypesSignaturesAndLocations()
     {
-        var file = Parse("""
+        var file = (await ParseAsync("""
             use std::io::Read as Input;
             pub struct Packet<T>(pub T);
             impl<T> Packet<T> {
@@ -252,13 +258,13 @@ public class RustParityTests
                     if ready() { log(read("decoded\nvalue")); panic!("failed"); }
                 }
             }
-            """);
+            """, cancellationToken: CancellationToken.None));
         RustTypeDeclaration.RegisterCacheFactory();
         RustMethodDeclaration.RegisterCacheFactory();
         RustStatementInfo.RegisterCacheFactory();
         var serializer = typeof(CodeCollectionBuilder).Assembly.GetType("Cop.Providers.SourceCacheSerializer", true)!;
         var save = serializer.GetMethod("Save", [typeof(string), typeof(byte[]), typeof(List<SourceFile>)])!;
-        var load = serializer.GetMethod("TryLoad", [typeof(string), typeof(byte[]), typeof(Assembly)])!;
+        var load = serializer.GetMethod("LoadOrDefault", [typeof(string), typeof(byte[]), typeof(Assembly)])!;
         string cache = Path.Combine(Path.GetTempPath(), "cop-rust-roundtrip-" + Guid.NewGuid().ToString("N") + ".bin");
         try
         {
@@ -266,9 +272,9 @@ public class RustParityTests
             save.Invoke(null, [cache, fingerprint, new List<SourceFile> { file }]);
             var loaded = (List<SourceFile>)load.Invoke(null, [cache, fingerprint, typeof(RustSourceParser).Assembly])!;
             var warm = loaded.Single();
-            Assert.That(Snapshot(warm), Is.EqualTo(Snapshot(file)));
+            Assert.That((await Snapshot(warm)), Is.EqualTo((await Snapshot(file))));
             Assert.That(warm.Imports, Is.EqualTo(file.Imports));
-            var method = (RustMethodDeclaration)warm.Types.Single(t => t.Name == "Packet").Methods.Single();
+            var method = (RustMethodDeclaration)(await AsyncSourceFacts.MembersAsync(warm.Types.Single(t => t.Name == "Packet"), CancellationToken.None)).Methods.Single();
             Assert.That(method.IsExtern && method.IsUnsafe && method.IsPublic, Is.True);
             Assert.That(warm.Statements.All(s => s is RustStatementInfo), Is.True);
             Assert.That(warm.Statements.All(s => ReferenceEquals(s.Method, method)), Is.True);
@@ -283,15 +289,15 @@ public class RustParityTests
     }
 
     [Test]
-    public void ShiftExpressionsAndInitializerValues_KeepNestedCalls()
+    public async Task ShiftExpressionsAndInitializerValues_KeepNestedCalls()
     {
-        var file = Parse("""
+        var file = (await ParseAsync("""
             fn compute() {
                 let shifted = input() << shift();
                 flags |= mask();
                 return shifted >> amount();
             }
-            """);
+            """, cancellationToken: CancellationToken.None));
         Assert.That(file.ParseErrors, Is.Empty);
         Assert.That(file.Statements.Where(s => s.Kind == "call").Select(s => s.MemberName),
             Is.EqualTo(new[] { "input", "shift", "mask", "amount" }));
@@ -307,26 +313,27 @@ public class RustParityTests
 
     [TestCase("type Deep = ", "V<", ">", ";", "type nesting limit")]
     [TestCase("fn f() { root()", ".then()", "", "; after(); }", "nesting limit")]
-    public void AdversarialTypeAndPostfixNesting_IsBounded(string prefix, string open, string close,
+    [CancelAfter(5000)]
+    public async Task AdversarialTypeAndPostfixNesting_IsBounded(string prefix, string open, string close,
         string suffix, string diagnostic)
     {
         string source = prefix + string.Concat(Enumerable.Repeat(open, 2000)) + "T"
             + string.Concat(Enumerable.Repeat(close, 2000)) + suffix;
         if (open == ".then()") source = prefix + string.Concat(Enumerable.Repeat(open, 2000)) + suffix;
-        var task = Task.Run(() => Parse(source));
-        Assert.That(task.Wait(TimeSpan.FromSeconds(5)), Is.True);
-        Assert.That(task.Result.ParseErrors.Count(e => e.Contains(diagnostic)), Is.EqualTo(1));
+        var file = await ParseAsync(source, TestContext.CurrentContext.CancellationToken);
+        TestContext.CurrentContext.CancellationToken.ThrowIfCancellationRequested();
+        Assert.That(file.ParseErrors.Count(e => e.Contains(diagnostic)), Is.EqualTo(1));
         if (open == ".then()")
-            Assert.That(task.Result.Statements.Count(s => s.MemberName == "after"), Is.EqualTo(1));
+            Assert.That(file.Statements.Count(s => s.MemberName == "after"), Is.EqualTo(1));
     }
 
     [Test]
-    public void RawIdentifiersUnicodeCharsHexSubtractionAndSelfPaths_AreNotMisclassified()
+    public async Task RawIdentifiersUnicodeCharsHexSubtractionAndSelfPaths_AreNotMisclassified()
     {
-        var file = Parse("#[r#match]\nfn inspect(value: self::Thing) { take('" +
-            "\U0001F600" + "', 0x1e - amount()); }");
+        var file = (await ParseAsync("#[r#match]\nfn inspect(value: self::Thing) { take('" +
+            "\U0001F600" + "', 0x1e - amount()); }", cancellationToken: CancellationToken.None));
         Assert.That(file.ParseErrors, Is.Empty);
-        var method = file.Types.Single().Methods.Single();
+        var method = (await AsyncSourceFacts.MembersAsync(file.Types.Single(), CancellationToken.None)).Methods.Single();
         Assert.That(method.Parameters.Single().Name, Is.EqualTo("value"));
         Assert.That(method.Parameters.Single().Type?.OriginalText, Is.EqualTo("self::Thing"));
         Assert.That(file.Statements.Select(s => s.MemberName), Is.EqualTo(new[] { "take", "amount" }));
@@ -337,22 +344,22 @@ public class RustParityTests
         Assert.That(file.Statements[1].Parent, Is.SameAs(take));
     }
 
-    private static string Snapshot(SourceFile file) => string.Join("\n",
-        file.Types.Select(t => $"{t.GetType().Name}|{t.Name}|{t.Namespace}|{string.Join(",", t.TypeParameters)}|{t.Line}:{t.Column}-{t.EndLine}:{t.EndColumn}")
-        .Concat(file.Types.SelectMany(t => t.Methods).Select(m =>
+    private static async Task<string> Snapshot(SourceFile file) => string.Join("\n",
+        await file.Types.Select(t => $"{t.GetType().Name}|{t.Name}|{t.Namespace}|{string.Join(",", t.TypeParameters)}|{t.Line}:{t.Column}-{t.EndLine}:{t.EndColumn}").ToAsyncEnumerable()
+        .Concat(file.Types.ToAsyncEnumerable().SelectMany(AsyncSourceFacts.MethodsAsync).Select(m =>
             $"{m.GetType().Name}|{m.Name}|{m.Modifiers}|{string.Join(",", m.TypeParameters)}|{m.Line}:{m.Column}-{m.EndLine}:{m.EndColumn}|" +
             string.Join(",", m.Parameters.Select(p => $"{p.Name}:{p.Type}:{p.Line}:{p.Column}"))))
         .Concat(file.Statements.Select(s =>
             $"{s.GetType().Name}|{s.Kind}|{s.MemberName}|{s.Method?.Name}|{s.Parent?.Kind}:{s.Parent?.MemberName}|" +
             $"{s.Line}:{s.Column}-{s.EndLine}:{s.EndColumn}|{s.CallTarget?.Kind}:{s.CallTarget?.Name}|" +
-            string.Join(",", s.ArgumentExpressions.Select(a => $"{a.Kind}:{a.StringValue}")))));
+            string.Join(",", s.ArgumentExpressions.Select(a => $"{a.Kind}:{a.StringValue}"))).ToAsyncEnumerable()).ToArrayAsync());
 }
 
 [TestFixture, NonParallelizable]
 public class RustAnalysisCapabilityTests
 {
     [Test]
-    public void MalformedSourceDiagnosticsAreNotHiddenByRepeatedQueriesOrAnalysisNotices()
+    public async Task MalformedSourceDiagnosticsAreNotHiddenByRepeatedQueriesOrAnalysisNotices()
     {
         string root = Path.Combine(Path.GetTempPath(), "cop-rust-malformed-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
@@ -363,7 +370,7 @@ public class RustAnalysisCapabilityTests
             {
                 ProviderErrors.Clear();
                 ProviderWarnings.Clear();
-                new RustProvider().Query(new ProviderQuery { RootPath = root });
+                await new RustProvider().QueryAsync(new ProviderQuery { RootPath = root }, cancellationToken: CancellationToken.None);
                 Assert.That(ProviderErrors.Drain().Single(), Does.Contain("unclosed '{'"));
                 Assert.That(ProviderWarnings.Drain().Single(), Does.Contain("syntax-only"));
             }
@@ -373,7 +380,7 @@ public class RustAnalysisCapabilityTests
 
     [TestCase(false)]
     [TestCase(true)]
-    public void ToolchainPresenceDoesNotPretendToEnableSemanticAnalysis(bool launcherPresent)
+    public async Task ToolchainPresenceDoesNotPretendToEnableSemanticAnalysis(bool launcherPresent)
     {
         string root = Path.Combine(Path.GetTempPath(), "cop-rust-capabilities-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
@@ -391,7 +398,7 @@ public class RustAnalysisCapabilityTests
             ProviderWarnings.Clear();
             ProviderErrors.Clear();
             var provider = new RustProvider();
-            var result = (Dictionary<string, List<object>>)provider.Query(new ProviderQuery { RootPath = root })!;
+            var result = (Dictionary<string, List<object>>)(await provider.QueryAsync(new ProviderQuery { RootPath = root }, cancellationToken: CancellationToken.None))!;
             Assert.That(result["Calls"].Cast<StatementInfo>().Select(s => s.MemberName), Is.EqualTo(new[] { "read" }));
             var notices = ProviderWarnings.Drain();
             Assert.That(notices, Has.Count.EqualTo(1));

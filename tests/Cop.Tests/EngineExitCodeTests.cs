@@ -29,7 +29,37 @@ public class EngineExitCodeTests
     }
 
     [Test]
-    public void RawViolationList_RoutedThroughCheck_SetsStructuralExitCode()
+    public async Task MalformedProviderInputReportsOneCommandFailure()
+    {
+        string temporary = NewTemp();
+        try
+        {
+            string scripts = Path.Combine(temporary, "scripts");
+            string target = Path.Combine(temporary, "target");
+            Directory.CreateDirectory(scripts);
+            Directory.CreateDirectory(target);
+            File.WriteAllText(Path.Combine(scripts, "main.cop"),
+                "import json\ncommand MAIN = json.Parse('input.json')\n");
+            File.WriteAllText(Path.Combine(target, "input.json"), "{");
+
+            EngineResult result = await Engine.RunAsync(scripts, target, new EngineRunOptions
+            {
+                AdditionalFeedPaths = [PackagesDir]
+            });
+
+            Assert.That(result.ParseErrors, Is.Empty);
+            Assert.That(result.Errors.Count, Is.EqualTo(1));
+            Assert.That(result.Errors[0], Does.StartWith("Command 'main' failed:"));
+            Assert.That(result.Outputs, Is.Empty);
+        }
+        finally
+        {
+            Directory.Delete(temporary, recursive: true);
+        }
+    }
+
+    [Test]
+    public async Task RawViolationList_RoutedThroughCheck_SetsStructuralExitCode()
     {
         var temp = NewTemp();
         var scriptsDir = Path.Combine(temp, "scripts");
@@ -45,10 +75,10 @@ public class EngineExitCodeTests
                 "let violations = filesystem.Folders:isTarget:toError('V {item.Path}')\n" +
                 "command MAIN = violations\n");
 
-            var result = Engine.Run(scriptsDir, codebaseDir, new EngineRunOptions
+            var result = (await Engine.RunAsync(scriptsDir, codebaseDir, new EngineRunOptions
             {
                 AdditionalFeedPaths = [PackagesDir],
-            });
+            }));
 
             Assert.That(result.HasFatalErrors, Is.False, string.Join("; ", result.Errors));
             // P3: the routed result yields a STRUCTURAL exit code (CHECK's count), not a null that
@@ -63,7 +93,7 @@ public class EngineExitCodeTests
     }
 
     [Test]
-    public void NoMatchingViolations_RawList_ExitsClean()
+    public async Task NoMatchingViolations_RawList_ExitsClean()
     {
         var temp = NewTemp();
         var scriptsDir = Path.Combine(temp, "scripts");
@@ -78,10 +108,10 @@ public class EngineExitCodeTests
                 "let violations = filesystem.Folders:isTarget:toError('V {item.Path}')\n" +
                 "command MAIN = violations\n");
 
-            var result = Engine.Run(scriptsDir, codebaseDir, new EngineRunOptions
+            var result = (await Engine.RunAsync(scriptsDir, codebaseDir, new EngineRunOptions
             {
                 AdditionalFeedPaths = [PackagesDir],
-            });
+            }));
 
             Assert.That(result.HasFatalErrors, Is.False, string.Join("; ", result.Errors));
             // An empty violation list is not routed → clean exit.

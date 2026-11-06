@@ -14,6 +14,9 @@ internal sealed class CSharpSourceTextCache
     private bool _changed;
     private sealed record Entry(long Length, long Modified, long Changed, string Text);
 
+    /// <summary>
+    /// Selects the source-text cache associated with an analysis scope.
+    /// </summary>
     public CSharpSourceTextCache(string scope)
     {
         string key = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(scope)));
@@ -22,7 +25,11 @@ internal sealed class CSharpSourceTextCache
         _entries = new(Load);
     }
 
-    public string Read(string path)
+    /// <summary>
+    /// Reads source text while validating cached content against the current file.
+    /// </summary>
+    public async ValueTask<string> ReadAsync(
+        string path, CancellationToken cancellationToken = default)
     {
         FileInfo info = new FileInfo(path);
         long length = info.Length;
@@ -30,7 +37,9 @@ internal sealed class CSharpSourceTextCache
         long changed = OperatingSystem.IsWindows() ? SourceFileMetadata.ReadChangeTime(path) : 0;
         using FileStream stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
         using StreamReader reader = new StreamReader(stream);
-        string text = reader.ReadToEnd();
+        string text = await reader.ReadToEndAsync(cancellationToken).ConfigureAwait(false);
+        lock (_entries.Value)
+        {
         // Even native change times can collide or be restored; metadata is not content identity.
         if (changed != 0 && _entries.Value.TryGetValue(path, out Entry? cached)
             && cached.Length == length && cached.Modified == modified && cached.Changed == changed
@@ -42,6 +51,7 @@ internal sealed class CSharpSourceTextCache
         _entries.Value[path] = new(length, modified, changed, text);
         _changed = true;
         return text;
+        }
     }
 
     private Dictionary<string, Entry> Load()
@@ -86,6 +96,9 @@ internal sealed class CSharpSourceTextCache
         }
     }
 
+    /// <summary>
+    /// Persists source-text entries changed during this execution.
+    /// </summary>
     public void Save(IReadOnlyList<string> paths)
     {
         if (!_changed || !OperatingSystem.IsWindows())

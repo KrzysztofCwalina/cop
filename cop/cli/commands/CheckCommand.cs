@@ -51,7 +51,13 @@ public static class CheckCommand
                 rulesFilter = rules.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
             }
 
-            return RunCommand.ExecutePackages(packages, rootPath, rulesFilter, format, isDiag);
+            return RunCommand.ExecutePackagesAsync(packages, new RunOptions
+            {
+                Target = rootPath,
+                CommandNames = rulesFilter,
+                OutputFormat = format,
+                IsDiagnosticEnabled = isDiag
+            });
         });
         return command;
     }
@@ -62,7 +68,7 @@ public static class CheckCommand
     /// If .cop files only import packages without defining logic, run those packages as checks.
     /// Otherwise, prints a getting-started message.
     /// </summary>
-    public static int ExecuteFromConfig()
+    public static async Task<int> ExecuteFromConfigAsync()
     {
         string cwd = Directory.GetCurrentDirectory();
         string[] copFiles = Directory.GetFiles(cwd, "*.cop", SearchOption.TopDirectoryOnly);
@@ -96,19 +102,28 @@ public static class CheckCommand
                     }
                 }
             }
-            catch { /* skip unparseable files */ }
+            catch (Exception ex) when (ex is ParseException or IOException or
+                UnauthorizedAccessException)
+            {
+                Console.Error.WriteLine($"Error reading '{file}': {ex.Message}");
+                return 2;
+            }
         }
 
         if (hasOwnLogic)
         {
             // This is a cop program — run it with general-purpose semantics
-            return RunCommand.Execute(null);
+            return await RunCommand.ExecuteAsync(null);
         }
 
         if (imports.Count > 0)
         {
             // Config-only file: just imports, run as check packages
-            return RunCommand.ExecutePackages(imports.ToArray(), cwd, null, "text", false);
+            return await RunCommand.ExecutePackagesAsync(imports.ToArray(), new RunOptions
+            {
+                Target = cwd,
+                OutputFormat = "text"
+            });
         }
 
         PrintGettingStarted();

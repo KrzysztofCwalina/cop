@@ -1,109 +1,14 @@
 // Interprets TypeSpec HTTP decorators to produce service and operation metadata.
 
-namespace TypeSpecProvider;
-
-/// <summary>
-/// HTTP protocol graph types produced by the HTTP transformer.
-/// Mirrors TypeSpec's @typespec/http layer.
-/// </summary>
-public class HttpSpec
-{
-    /// <summary>
-    /// Gets or sets the service groupings derived from HTTP operations.
-    /// </summary>
-    public List<HttpService> Services { get; set; } = [];
-    /// <summary>Gets or sets all transformed HTTP operations.</summary>
-    public List<HttpOperation> Operations { get; set; } = [];
-}
-
-/// <summary>Groups related HTTP operations under a service identity.</summary>
-public class HttpService
-{
-    /// <summary>Gets or sets the service's display name.</summary>
-    public string Name { get; set; } = "";
-    /// <summary>Gets or sets the scope used to group the service's operations.</summary>
-    public string Namespace { get; set; } = "";
-    /// <summary>Gets or sets the HTTP operations belonging to the service.</summary>
-    public List<HttpOperation> Operations { get; set; } = [];
-    /// <summary>
-    /// Gets or sets the service authentication description, if available.
-    /// </summary>
-    public string? Auth { get; set; }
-}
-
-/// <summary>Describes the HTTP binding of a TypeSpec operation.</summary>
-public class HttpOperation
-{
-    /// <summary>Gets or sets the source operation's name.</summary>
-    public string Name { get; set; } = "";
-    /// <summary>Gets or sets the HTTP request method.</summary>
-    public string Verb { get; set; } = "";
-    /// <summary>Gets or sets the operation's resolved route path.</summary>
-    public string Path { get; set; } = "";
-    /// <summary>
-    /// Gets or sets the URI template including route parameter placeholders.
-    /// </summary>
-    public string UriTemplate { get; set; } = "";
-    /// <summary>Gets or sets the operation's HTTP parameter bindings.</summary>
-    public List<HttpParameter> Parameters { get; set; } = [];
-    /// <summary>Gets or sets the operation's declared HTTP responses.</summary>
-    public List<HttpResponse> Responses { get; set; } = [];
-    /// <summary>Gets or sets the source interface name, if any.</summary>
-    public string? Interface { get; set; }
-    /// <summary>Gets or sets decorators retained from the source operation.</summary>
-    public List<TspDecorator> Decorators { get; set; } = [];
-}
-
-/// <summary>Describes how an operation parameter is carried in an HTTP request.</summary>
-public class HttpParameter
-{
-    /// <summary>Gets or sets the HTTP parameter's name.</summary>
-    public string Name { get; set; } = "";
-    /// <summary>Gets or sets the parameter's TypeSpec type expression.</summary>
-    public string Type { get; set; } = "";
-    /// <summary>
-    /// Gets or sets its location: path, query, header, cookie, or body.
-    /// </summary>
-    public string In { get; set; } = "query"; // path, query, header, cookie, body
-    /// <summary>Gets or sets whether the parameter may be omitted.</summary>
-    public bool Optional { get; set; }
-    /// <summary>Gets or sets the parameter serialization style, if specified.</summary>
-    public string? Style { get; set; }
-}
-
-/// <summary>Describes an operation's response status, body type, and headers.</summary>
-public class HttpResponse
-{
-    /// <summary>
-    /// Gets or sets the response status code or status-code expression.
-    /// </summary>
-    public string StatusCode { get; set; } = "200";
-    /// <summary>Gets or sets the response documentation, if available.</summary>
-    public string? Description { get; set; }
-    /// <summary>
-    /// Gets or sets the response body's TypeSpec type expression, if any.
-    /// </summary>
-    public string? Body { get; set; }
-    /// <summary>Gets or sets the declared response header bindings.</summary>
-    public List<HttpHeader> Headers { get; set; } = [];
-}
-
-/// <summary>Describes a named HTTP response header and its value type.</summary>
-public class HttpHeader
-{
-    /// <summary>Gets or sets the header's HTTP field name.</summary>
-    public string Name { get; set; } = "";
-    /// <summary>Gets or sets the header value's TypeSpec type expression.</summary>
-    public string Type { get; set; } = "";
-}
+namespace Cop.Providers.TypeSpec;
 
 /// <summary>
 /// Transforms a raw TypeSpec type graph into an HTTP protocol graph.
 /// Interprets @get/@put/@post/@patch/@delete/@head, @route, @path, @query, @header, @body, @statusCode decorators.
 /// </summary>
-public class HttpTransformer
+public static class HttpTransformer
 {
-    private static readonly HashSet<string> HttpVerbDecorators = new(StringComparer.OrdinalIgnoreCase)
+    private static readonly HashSet<string> s_httpVerbDecorators = new(StringComparer.OrdinalIgnoreCase)
     {
         "get", "put", "post", "patch", "delete", "head",
         "Http.get", "Http.put", "Http.post", "Http.patch", "Http.delete", "Http.head",
@@ -244,7 +149,7 @@ public class HttpTransformer
             parts.Add(opRoute.TrimStart('/'));
         }
 
-        string basePath = parts.Count > 0 ? string.Join("/", parts) : "";
+        string basePath = parts.Count > 0 ? string.Join("/", parts) : string.Empty;
 
         // Add path parameters from the operation if not already in route
         foreach (TspProperty param in op.Parameters)
@@ -306,7 +211,7 @@ public class HttpTransformer
             Name = param.Name,
             Type = param.Type,
             In = location,
-            Optional = param.Optional,
+            IsOptional = param.IsOptional,
         };
     }
 
@@ -837,7 +742,7 @@ public class HttpTransformer
             {
                 Name = p.Name,
                 Type = SubstituteType(p.Type, substitutions),
-                Optional = p.Optional,
+                IsOptional = p.IsOptional,
                 Default = p.Default,
                 Decorators = p.Decorators.Select(d => new TspDecorator
                 {

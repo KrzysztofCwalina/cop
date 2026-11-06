@@ -15,15 +15,21 @@ public record ApiEntry(
     string Signature,
     int Line)
 {
+    /// <summary>
+    /// The source file that owns this declaration or source location.
+    /// </summary>
     public SourceFile? File { get; init; }
 
+    /// <summary>
+    /// The display source location used in diagnostics.
+    /// </summary>
     public string Source => Signature;
 
     /// <summary>
     /// The C# stub line for this API entry (e.g., "public virtual string Name { get { throw null; } }").
     /// Does NOT include indentation — the generator adds that based on nesting level.
     /// </summary>
-    public string ApiAsText { get; init; } = "";
+    public string ApiAsText { get; init; } = string.Empty;
 
     /// <summary>
     /// Build a canonical signature for a type-level entry.
@@ -32,7 +38,7 @@ public record ApiEntry(
     public static ApiEntry ForType(TypeDeclaration type) => new(
         Kind: type.Kind.ToString().ToLowerInvariant(),
         TypeName: type.Name,
-        MemberName: "",
+        MemberName: string.Empty,
         Signature: $"{type.Kind.ToString().ToLowerInvariant()} {type.Name}",
         Line: type.Line)
     {
@@ -141,7 +147,7 @@ public record ApiEntry(
             (true, true) => "get; set;",
             (true, false) => "get;",
             (false, true) => "set;",
-            _ => ""
+            _ => string.Empty
         };
 
     // --- ApiAsText helpers (full C# stub representation) ---
@@ -207,7 +213,7 @@ public record ApiEntry(
             parts.Add("async");
         }
 
-        return parts.Count > 0 ? string.Join(" ", parts) + " " : "";
+        return parts.Count > 0 ? string.Join(" ", parts) + " " : string.Empty;
     }
 
     private static string FormatParametersFull(List<ParameterDeclaration> parameters) =>
@@ -227,9 +233,9 @@ public record ApiEntry(
     {
         string mods = FormatModifiers(type.Modifiers);
         string kind = type.Kind.ToString().ToLowerInvariant();
-        string partial = type.Kind is TypeKind.Class or TypeKind.Struct or TypeKind.Interface ? "partial " : "";
+        string partial = type.Kind is TypeKind.Class or TypeKind.Struct or TypeKind.Interface ? "partial " : string.Empty;
         string name = type.Name;
-        string baseList = type.BaseTypes.Count > 0 ? $" : {string.Join(", ", type.BaseTypes)}" : "";
+        string baseList = type.BaseTypes.Count > 0 ? $" : {string.Join(", ", type.BaseTypes)}" : string.Empty;
         return $"{mods}{partial}{kind} {name}{baseList}";
     }
 

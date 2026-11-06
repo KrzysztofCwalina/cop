@@ -14,6 +14,7 @@ public class DocumentCollectionSource : ICollectionSource
     private readonly Func<Document, List<object>> _extractor;
     private readonly Func<FilterExpression, Func<object, bool>>? _filterCompiler;
 
+    /// <inheritdoc/>
     public override bool IsPerDocument => true;
 
     public DocumentCollectionSource(
@@ -24,6 +25,7 @@ public class DocumentCollectionSource : ICollectionSource
         _filterCompiler = filterCompiler;
     }
 
+    /// <inheritdoc/>
     public override List<object> Query(CollectionQuery query)
     {
         if (query.Document is not Document doc)

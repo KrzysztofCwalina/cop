@@ -25,37 +25,27 @@ public class GoProvider : DataProvider
     public override string QueryResultType => "Codebase";
 
     /// <inheritdoc />
-    public override object QueryDeferred(ProviderQuery query)
+    public override ValueTask<object?> QueryDeferredAsync(
+        ProviderQuery query, CancellationToken cancellationToken = default)
     {
         GoTypeDeclaration.RegisterCacheFactory();
         GoMethodDeclaration.RegisterCacheFactory();
         GoStatementInfo.RegisterCacheFactory();
         SourceParserRegistry parsers = new SourceParserRegistry();
         parsers.Register(new GoSourceParser());
-        return CodeCollectionBuilder.CollectDeferred(parsers, query, this,
-            () => GoProjectDiscovery.Discover(query.RootPath!, query.ExcludedDirectories));
+        cancellationToken.ThrowIfCancellationRequested();
+        return ValueTask.FromResult<object?>(CodeCollectionBuilder.CollectDeferred(
+            parsers, query, this, _ => ValueTask.FromResult(
+                GoProjectDiscovery.Discover(query.RootPath!, query.ExcludedDirectories))));
     }
 
     /// <inheritdoc />
-    public override object? Query(ProviderQuery query)
+    public override async ValueTask<object?> QueryAsync(
+        ProviderQuery query, CancellationToken cancellationToken = default)
     {
-        GoTypeDeclaration.RegisterCacheFactory();
-        GoMethodDeclaration.RegisterCacheFactory();
-        GoStatementInfo.RegisterCacheFactory();
-        SourceParserRegistry parsers = new SourceParserRegistry();
-        parsers.Register(new GoSourceParser());
-        Dictionary<string, List<object>> collections = CodeCollectionBuilder.CollectAndParse(parsers, query, this);
-
-        // Discover projects from go.mod
-        if (query.RootPath is not null)
-        {
-            List<ProjectInfo> projects = GoProjectDiscovery.Discover(query.RootPath, query.ExcludedDirectories);
-            if (query.Collection == null || query.Collection == "Projects")
-            {
-                collections["Projects"] = projects.Cast<object>().ToList();
-            }
-        }
-
-        return ApplyQueryFilters(query, collections);
+        DeferredProviderResult result = (DeferredProviderResult)
+            (await QueryDeferredAsync(query, cancellationToken).ConfigureAwait(false))!;
+        return await ProviderCollections.MaterializeAsync(result, cancellationToken)
+            .ConfigureAwait(false);
     }
 }

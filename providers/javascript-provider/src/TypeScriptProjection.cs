@@ -9,72 +9,9 @@ using Cop.Providers.SourceModel;
 
 namespace Cop.Providers.SourceParsers;
 
-/// <summary>Discovers an already-installed compiler without invoking npm or assuming global require resolution.</summary>
-public sealed record JavaScriptToolchain(string NodePath, string CompilerPath)
-{
-    /// <summary>Finds installed Node.js and TypeScript for a source path.</summary>
-    public static JavaScriptToolchain? Discover(string sourcePath, string? searchPath = null)
-    {
-        string? node = ToolchainProcess.FindExecutable("node", searchPath);
-        if (node is null)
-        {
-            return null;
-        }
-
-        for (DirectoryInfo? directory = new DirectoryInfo(Path.GetDirectoryName(Path.GetFullPath(sourcePath))!);
-            directory is not null; directory = directory.Parent)
-        {
-            string local = Path.Combine(directory.FullName, "node_modules", "typescript", "lib", "typescript.js");
-            if (File.Exists(local))
-            {
-                return new(node, local);
-            }
-        }
-
-        // npm's Windows launchers sit beside node_modules; Unix tsc is normally a symlink
-        // into ../lib/node_modules/typescript/bin/tsc (including version-manager installations).
-        foreach (string entry in (searchPath ?? Environment.GetEnvironmentVariable("PATH") ?? "")
-            .Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries))
-        {
-            string directory = entry.Trim().Trim('"');
-            if (!Path.IsPathFullyQualified(directory))
-            {
-                continue;
-            }
-
-            foreach (string? launcherName in OperatingSystem.IsWindows()
-                ? new[] { "tsc.cmd", "tsc.ps1", "tsc.exe", "tsc" } : new[] { "tsc" })
-            {
-                FileInfo launcher = new FileInfo(Path.Combine(directory, launcherName));
-                if (!launcher.Exists)
-                {
-                    continue;
-                }
-
-                FileSystemInfo? target = launcher.ResolveLinkTarget(returnFinalTarget: true);
-                string[] candidates = new[]
-                {
-                    Path.Combine(directory, "node_modules", "typescript", "lib", "typescript.js"),
-                    Path.GetFullPath(Path.Combine(directory, "..", "lib", "node_modules", "typescript", "lib", "typescript.js")),
-                    Path.GetFullPath(Path.Combine(Path.GetDirectoryName(target?.FullName ?? launcher.FullName)!,
-                        "..", "lib", "typescript.js"))
-                };
-                foreach (string? candidate in candidates)
-                {
-                    if (File.Exists(candidate))
-                    {
-                        return new(node, candidate);
-                    }
-                }
-            }
-        }
-        return null;
-    }
-}
-
 internal sealed class TypeScriptProjection(string? searchPath)
 {
-    private static readonly Lazy<string> ScriptPath = new(() =>
+    private static readonly Lazy<string> s_scriptPath = new(() =>
     {
         using Stream stream = typeof(TypeScriptProjection).Assembly.GetManifestResourceStream(
             "Cop.Providers.src.typescript-projector.cjs")
@@ -117,7 +54,8 @@ internal sealed class TypeScriptProjection(string? searchPath)
         ? $"{toolchain.NodePath}:{toolchain.CompilerPath}" : null;
 
     /// <summary>Projects compiler syntax and binding facts for a file.</summary>
-    public SourceFile? Parse(string filePath, string sourceText)
+    public async ValueTask<SourceFile?> ParseAsync(
+        string filePath, string sourceText, CancellationToken cancellationToken = default)
     {
         string absolutePath = Path.GetFullPath(filePath);
         JavaScriptToolchain? toolchain = FindToolchain(filePath);
@@ -127,7 +65,12 @@ internal sealed class TypeScriptProjection(string? searchPath)
         }
 
         string request = JsonSerializer.Serialize(new { filePath = absolutePath, sourceText });
-        try { return Request<FileProjection>(toolchain, request).ToSourceFile(filePath, sourceText); }
+        try
+        {
+            FileProjection projection = await RequestAsync<FileProjection>(
+                toolchain, request, cancellationToken).ConfigureAwait(false);
+            return projection.ToSourceFile(filePath, sourceText);
+        }
         catch (CompilerUnavailableException ex)
         {
             ReportUnavailable(toolchain, ex.Message);
@@ -136,7 +79,8 @@ internal sealed class TypeScriptProjection(string? searchPath)
     }
 
     /// <summary>Reads the compiler configuration governing a source file.</summary>
-    public ProjectConfiguration? ReadProject(string filePath)
+    public async ValueTask<ProjectConfiguration?> ReadProjectAsync(
+        string filePath, CancellationToken cancellationToken = default)
     {
         JavaScriptToolchain? toolchain = FindToolchain(filePath);
         if (toolchain is null)
@@ -146,8 +90,9 @@ internal sealed class TypeScriptProjection(string? searchPath)
 
         try
         {
-            return Request<ProjectConfiguration>(toolchain,
-                JsonSerializer.Serialize(new { kind = "project", filePath = Path.GetFullPath(filePath) }));
+            return await RequestAsync<ProjectConfiguration>(toolchain,
+                JsonSerializer.Serialize(new { kind = "project", filePath = Path.GetFullPath(filePath) }),
+                cancellationToken).ConfigureAwait(false);
         }
         catch (CompilerUnavailableException ex)
         {
@@ -162,15 +107,14 @@ internal sealed class TypeScriptProjection(string? searchPath)
         ProviderWarnings.ReportOnce("javascript", "typescript-load", diagnostic + " Using simpler syntax analysis.");
     }
 
-    private static T Request<T>(JavaScriptToolchain toolchain, string request)
+    private static async ValueTask<T> RequestAsync<T>(
+        JavaScriptToolchain toolchain, string request, CancellationToken cancellationToken)
     {
-        ToolchainResult output = ToolchainExecutionScope.RequestAsync(toolchain.NodePath, [ScriptPath.Value, toolchain.CompilerPath],
-            Environment.CurrentDirectory, request, environment: new Dictionary<string, string?>
+        ToolchainResult output = await ToolchainExecutionScope.RequestAsync(new ToolchainCommand(toolchain.NodePath, [s_scriptPath.Value, toolchain.CompilerPath], Environment.CurrentDirectory, new Dictionary<string, string?>
             {
                 ["NODE_OPTIONS"] = null,
                 ["NODE_PATH"] = null
-            })
-            .GetAwaiter().GetResult();
+            }), request, cancellationToken: cancellationToken).ConfigureAwait(false);
         if (output.Status == ToolchainStatus.Unavailable)
         {
             throw new CompilerUnavailableException(output.Diagnostic ?? "Node.js is unavailable.");
@@ -244,7 +188,7 @@ internal sealed class TypeScriptProjection(string? searchPath)
                 if (projection.ParentId is int parentId)
                 {
                     statement.Parent = statements[parentId];
-                    statement.Parent._children.Add(statement);
+                    statement.Parent.MutableChildren.Add(statement);
                 }
             }
             return new(filePath, "javascript", types, statements, sourceText)
@@ -258,9 +202,9 @@ internal sealed class TypeScriptProjection(string? searchPath)
     private sealed class TypeProjection
     {
         /// <summary>Gets or sets the declared type name.</summary>
-        public string Name { get; set; } = "";
+        public string Name { get; set; } = string.Empty;
         /// <summary>Gets or sets the shared-model type category.</summary>
-        public string Kind { get; set; } = "";
+        public string Kind { get; set; } = string.Empty;
         /// <summary>Gets or sets the enclosing namespace, if present.</summary>
         public string? Namespace { get; set; }
         /// <summary>Gets or sets the shared-model modifier flags.</summary>
@@ -312,7 +256,7 @@ internal sealed class TypeScriptProjection(string? searchPath)
 
         /// <summary>Builds a type and indexes its projected methods.</summary>
         public TypeDeclaration ToType(Dictionary<int, MethodDeclaration> methods) =>
-            new TypeDeclaration(Name, Enum.Parse<TypeKind>(Kind), (Modifier)Modifiers, BaseTypes, Decorators,
+            new JavaScriptTypeDeclaration(new TypeDeclaration(Name, Enum.Parse<TypeKind>(Kind), (Modifier)Modifiers, BaseTypes, Decorators,
                 Constructors.Select(m => m.ToMethod(methods)).ToList(),
                 Methods.Select(m => m.ToMethod(methods)).ToList(),
                 NestedTypes.Select(t => t.ToType(methods)).ToList(), EnumValues, Line)
@@ -320,7 +264,11 @@ internal sealed class TypeScriptProjection(string? searchPath)
                 Fields = Fields, Properties = Properties, HasDocComment = HasDocComment, DocComment = DocComment,
                 AliasTarget = AliasTarget, TypeParameters = TypeParameters, Interfaces = Interfaces, Namespace = Namespace,
                 Column = Column, EndLine = EndLine, EndColumn = EndColumn
-            }.AsJavaScript(IsExported, HasBaseClass, IsAbstract, IsGeneric, HasImplements);
+            })
+            {
+                IsExported = IsExported, HasBaseClass = HasBaseClass, IsAbstract = IsAbstract,
+                IsGeneric = IsGeneric, HasImplements = HasImplements
+            };
     }
 
     private sealed class MethodProjection
@@ -328,7 +276,7 @@ internal sealed class TypeScriptProjection(string? searchPath)
         /// <summary>Gets or sets the ID used by statement method links.</summary>
         public int Id { get; set; }
         /// <summary>Gets or sets the declared method name.</summary>
-        public string Name { get; set; } = "";
+        public string Name { get; set; } = string.Empty;
         /// <summary>Gets or sets the shared-model modifier flags.</summary>
         public int Modifiers { get; set; }
         /// <summary>Gets or sets attached decorator expressions.</summary>
@@ -376,7 +324,7 @@ internal sealed class TypeScriptProjection(string? searchPath)
     private sealed class StatementProjection
     {
         /// <summary>Gets or sets the shared-model statement category.</summary>
-        public string Kind { get; set; } = "";
+        public string Kind { get; set; } = string.Empty;
         /// <summary>Gets or sets parsed statement keywords.</summary>
         public List<string> Keywords { get; set; } = [];
         /// <summary>Gets or sets the referenced type's name.</summary>
@@ -426,7 +374,7 @@ internal sealed class TypeScriptProjection(string? searchPath)
 
         /// <summary>Builds shared statement and expression facts.</summary>
         public StatementInfo ToStatement() =>
-            new JavaScriptStatementInfo(Kind, Keywords, TypeName, MemberName, Arguments, Line, MethodId is not null)
+            new JavaScriptStatementInfo(new StatementInfo(Kind, Keywords, TypeName, MemberName, Arguments, Line, MethodId is not null))
             {
                 CallTarget = CallTarget, ArgumentExpressions = ArgumentExpressions, HasRethrow = HasRethrow,
                 IsErrorHandler = IsErrorHandler, IsGenericErrorHandler = IsGenericErrorHandler,

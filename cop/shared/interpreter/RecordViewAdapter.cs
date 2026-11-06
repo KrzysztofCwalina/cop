@@ -16,7 +16,9 @@ public sealed class RecordViewAdapter : IDynamicObjectAdapter
     private readonly Dictionary<string, DataTable>? _childTables;
     private readonly string? _typeName;
 
+    /// <inheritdoc/>
     public override string? TypeName => _typeName;
+    /// <inheritdoc/>
     public override IEnumerable<string> GetFieldNames(object obj) => _schema.Keys;
 
     public RecordViewAdapter(IReadOnlyList<ProviderPropertySchema> properties, Dictionary<string, DataTable>? childTables = null, string? typeName = null, ProviderSchema? providerSchema = null)
@@ -24,7 +26,7 @@ public sealed class RecordViewAdapter : IDynamicObjectAdapter
         _schema = new Dictionary<string, (int, string, bool)>(properties.Count, StringComparer.Ordinal);
         for (int i = 0; i < properties.Count; i++)
         {
-            _schema[properties[i].Name] = (i, properties[i].Type, properties[i].Collection);
+            _schema[properties[i].Name] = (i, properties[i].Type, properties[i].IsCollection);
         }
 
         _childTables = childTables;
@@ -32,6 +34,7 @@ public sealed class RecordViewAdapter : IDynamicObjectAdapter
         _providerSchema = providerSchema;
     }
 
+    /// <inheritdoc/>
     public override CopValue GetField(object obj, string name)
     {
         if (obj is not RecordView rv)
@@ -57,7 +60,7 @@ public sealed class RecordViewAdapter : IDynamicObjectAdapter
             (int start, int count) = rv.Table.GetRange(rv.Index, slot);
             List<ProviderPropertySchema>? properties = _providerSchema?.Types.FirstOrDefault(t => t.Name == type)?.Properties;
             RecordViewAdapter? adapter = properties is null ? null : new RecordViewAdapter(properties, _childTables, type, _providerSchema);
-            return new CopLazyCollection(() => Enumerable.Range(start, count).Select(i => adapter is not null
+            return new CopLazyCollection((deferredCancellationToken) => Enumerable.Range(start, count).Select(i => adapter is not null
                 ? (CopValue)new CopDynamicObject(new RecordView(child, i), adapter)
                 : type switch
                 {
@@ -83,6 +86,7 @@ public sealed class RecordViewAdapter : IDynamicObjectAdapter
         };
     }
 
+    /// <inheritdoc/>
     public override string Display(object obj)
     {
         if (obj is not RecordView rv)

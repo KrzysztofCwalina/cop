@@ -32,7 +32,12 @@ public static class PackageInstaller
         if (existingIsValidPackage)
         {
             // Another process already placed a complete package — keep theirs.
-            try { Directory.Delete(tempDir, recursive: true); } catch { }
+            try { Directory.Delete(tempDir, recursive: true); }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+            {
+                ProviderWarnings.ReportOnce("package", tempDir,
+                    $"Cannot remove redundant package staging directory: {exception.Message}");
+            }
             return;
         }
 

@@ -7,7 +7,7 @@ namespace Cop.Tests;
 public class LazySourceLocationRegressionTests
 {
     [Test]
-    public void Issue063_ToErrorResolvesLazySourceLocationWithoutPriorFieldReads()
+    public async Task Issue063_ToErrorResolvesLazySourceLocationWithoutPriorFieldReads()
     {
         var repo = TestContext.CurrentContext.TestDirectory;
         while (repo is not null && !File.Exists(Path.Combine(repo, "cop.sln")))
@@ -29,10 +29,10 @@ public class LazySourceLocationRegressionTests
                 command MAIN = CHECK(findings)
                 """);
 
-            var result = Engine.Run(scripts, target, new EngineRunOptions
+            var result = (await Engine.RunAsync(scripts, target, new EngineRunOptions
             {
                 AdditionalFeedPaths = [Path.Combine(repo!, "packages")],
-            });
+            }));
 
             Assert.That(result.ParseErrors, Is.Empty);
             Assert.That(result.Errors, Is.Empty, string.Join("\n", result.Errors));

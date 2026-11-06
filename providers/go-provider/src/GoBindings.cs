@@ -54,6 +54,7 @@ public static class GoBindings
         };
         bindings.Accessors["GoStatement"] = goStatementAccessors;
 
+        CodeBindings.AddDerivedAsyncAccessors(bindings);
         return bindings;
     }
 }

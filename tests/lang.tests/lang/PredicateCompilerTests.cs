@@ -14,7 +14,7 @@ public class PredicateCompilerTests
     {
         // :enabled → PropertyFilter("enabled", true)
         AstExpr pred = new IdentifierExpr("enabled", 1);
-        var result = PredicateCompiler.TryCompile(pred);
+        var result = PredicateCompiler.CompileOrDefault(pred);
 
         Assert.That(result, Is.InstanceOf<PropertyFilter>());
         var pf = (PropertyFilter)result!;
@@ -26,7 +26,7 @@ public class PredicateCompilerTests
     public void BareIdentifier_Negated_CompilesTo_NotPropertyFilter()
     {
         AstExpr pred = new IdentifierExpr("enabled", 1);
-        var result = PredicateCompiler.TryCompile(pred, negated: true);
+        var result = PredicateCompiler.CompileOrDefault(pred, polarity: Cop.Lang.Interpreter.PredicatePolarity.Negative);
 
         Assert.That(result, Is.InstanceOf<NotFilter>());
         var nf = (NotFilter)result!;
@@ -41,7 +41,7 @@ public class PredicateCompilerTests
             new IdentifierExpr("startsWith", 1),
             [new LiteralExpr("A", 1)],
             1);
-        var result = PredicateCompiler.TryCompile(pred, propertyContext: "Name");
+        var result = PredicateCompiler.CompileOrDefault(pred, propertyContext: "Name");
 
         Assert.That(result, Is.InstanceOf<StringOpFilter>());
         var sf = (StringOpFilter)result!;
@@ -58,7 +58,7 @@ public class PredicateCompilerTests
             new IdentifierExpr("sw", 1),
             [new LiteralExpr("A", 1)],
             1);
-        var result = PredicateCompiler.TryCompile(pred, propertyContext: "Name");
+        var result = PredicateCompiler.CompileOrDefault(pred, propertyContext: "Name");
 
         Assert.That(result, Is.InstanceOf<StringOpFilter>());
         var sf = (StringOpFilter)result!;
@@ -73,7 +73,7 @@ public class PredicateCompilerTests
             new IdentifierExpr("gt", 1),
             [new LiteralExpr(100, 1)],
             1);
-        var result = PredicateCompiler.TryCompile(pred, propertyContext: "Size");
+        var result = PredicateCompiler.CompileOrDefault(pred, propertyContext: "Size");
 
         Assert.That(result, Is.InstanceOf<ComparisonFilter>());
         var cf = (ComparisonFilter)result!;
@@ -91,7 +91,7 @@ public class PredicateCompilerTests
             BinaryOp.And,
             new IdentifierExpr("active", 1),
             1);
-        var result = PredicateCompiler.TryCompile(pred);
+        var result = PredicateCompiler.CompileOrDefault(pred);
 
         Assert.That(result, Is.InstanceOf<AndFilter>());
         var af = (AndFilter)result!;
@@ -106,7 +106,7 @@ public class PredicateCompilerTests
             BinaryOp.Or,
             new IdentifierExpr("active", 1),
             1);
-        var result = PredicateCompiler.TryCompile(pred);
+        var result = PredicateCompiler.CompileOrDefault(pred);
 
         Assert.That(result, Is.InstanceOf<OrFilter>());
     }
@@ -115,7 +115,7 @@ public class PredicateCompilerTests
     public void Not_Compiles()
     {
         AstExpr pred = new UnaryExpr(UnaryOp.Not, new IdentifierExpr("enabled", 1), 1);
-        var result = PredicateCompiler.TryCompile(pred);
+        var result = PredicateCompiler.CompileOrDefault(pred);
 
         Assert.That(result, Is.InstanceOf<NotFilter>());
     }
@@ -128,7 +128,7 @@ public class PredicateCompilerTests
             new IdentifierExpr("Name", 1),
             new CallExpr(new IdentifierExpr("startsWith", 1), [new LiteralExpr("A", 1)], 1),
             false, 1);
-        var result = PredicateCompiler.TryCompile(pred);
+        var result = PredicateCompiler.CompileOrDefault(pred);
 
         Assert.That(result, Is.InstanceOf<StringOpFilter>());
         var sf = (StringOpFilter)result!;
@@ -141,7 +141,7 @@ public class PredicateCompilerTests
     {
         // 'any' is a collection function, not a property
         AstExpr pred = new IdentifierExpr("any", 1);
-        var propName = PredicateCompiler.TryExtractPropertyAccess(pred);
+        var propName = PredicateCompiler.GetPropertyAccessOrDefault(pred);
 
         Assert.That(propName, Is.Null);
     }
@@ -154,7 +154,7 @@ public class PredicateCompilerTests
             new IdentifierExpr("myCustomPredicate", 1),
             [new LiteralExpr("arg", 1)],
             1);
-        var result = PredicateCompiler.TryCompile(pred);
+        var result = PredicateCompiler.CompileOrDefault(pred);
 
         Assert.That(result, Is.Null);
     }
@@ -167,7 +167,7 @@ public class PredicateCompilerTests
             new IdentifierExpr("startsWith", 1),
             [new LiteralExpr("A", 1)],
             1);
-        var result = PredicateCompiler.TryCompile(pred);
+        var result = PredicateCompiler.CompileOrDefault(pred);
 
         Assert.That(result, Is.Null);
     }
@@ -179,7 +179,7 @@ public class PredicateCompilerTests
             new IdentifierExpr("equals", 1),
             [new LiteralExpr("hello", 1)],
             1);
-        var result = PredicateCompiler.TryCompile(pred, propertyContext: "Name");
+        var result = PredicateCompiler.CompileOrDefault(pred, propertyContext: "Name");
 
         Assert.That(result, Is.InstanceOf<StringOpFilter>());
         var sf = (StringOpFilter)result!;
@@ -194,7 +194,7 @@ public class PredicateCompilerTests
             new IdentifierExpr("eq", 1),
             [new LiteralExpr(42, 1)],
             1);
-        var result = PredicateCompiler.TryCompile(pred, propertyContext: "Count");
+        var result = PredicateCompiler.CompileOrDefault(pred, propertyContext: "Count");
 
         Assert.That(result, Is.InstanceOf<ComparisonFilter>());
         var cf = (ComparisonFilter)result!;

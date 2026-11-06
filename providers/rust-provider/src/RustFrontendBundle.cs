@@ -5,8 +5,6 @@ using System.Security.Cryptography;
 
 namespace Cop.Providers.SourceParsers;
 
-internal sealed record RustFrontendDeployment(string Executable, Func<string>? PrepareStandardLibrary = null);
-
 internal static class RustFrontendBundle
 {
     internal const string BundleFileName = "Cop.RustFrontend.Bundle.zip";
@@ -118,7 +116,7 @@ internal static class RustFrontendBundle
         string cache = Path.GetFullPath(cacheDirectory ?? Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Cop", "rust-frontends"));
         Directory.CreateDirectory(cache);
-        string destination = Path.Combine(cache, identity + (includeStandardLibrary ? "" : "-syntax"));
+        string destination = Path.Combine(cache, identity + (includeStandardLibrary ? string.Empty : "-syntax"));
         string staging = Path.Combine(cache, ".extracting-" + Guid.NewGuid().ToString("N"));
         if (!Directory.Exists(destination))
         {

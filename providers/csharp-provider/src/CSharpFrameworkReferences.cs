@@ -10,10 +10,10 @@ namespace Cop.Providers.SourceParsers;
 
 internal static class CSharpFrameworkReferences
 {
-    private static readonly Lazy<string[]> s_packRoots = new(FindPackRoots);
+    private static readonly AsyncProviderValue<string[]> s_packRoots = new(FindPackRootsAsync);
 
-    internal static IEnumerable<MetadataReference> Resolve(
-        string framework, string target, string project)
+    internal static async ValueTask<IEnumerable<MetadataReference>> ResolveAsync(
+        string framework, string target, string project, CancellationToken cancellationToken)
     {
         if (framework == "Microsoft.NETCore.App")
         {
@@ -39,7 +39,8 @@ internal static class CSharpFrameworkReferences
         };
         try
         {
-            string? directory = s_packRoots.Value
+            string[] roots = await s_packRoots.GetValueAsync(cancellationToken).ConfigureAwait(false);
+            string? directory = roots
                 .Select(root => Path.Combine(root, pack))
                 .Where(Directory.Exists)
                 .SelectMany(Directory.EnumerateDirectories)
@@ -79,10 +80,12 @@ internal static class CSharpFrameworkReferences
         return [];
     }
 
-    private static string[] FindPackRoots() =>
-        FindPackRoots(Path.GetFullPath(Path.Combine(
-            RuntimeEnvironment.GetRuntimeDirectory(), "..", "..", "..", "packs")),
-            FindSdkPackRoots);
+    private static async ValueTask<string[]> FindPackRootsAsync(CancellationToken cancellationToken)
+    {
+        string[] sdkPacks = await FindSdkPackRootsAsync(cancellationToken).ConfigureAwait(false);
+        return FindPackRoots(Path.GetFullPath(Path.Combine(
+            RuntimeEnvironment.GetRuntimeDirectory(), "..", "..", "..", "packs")), () => sdkPacks);
+    }
 
     private static string[] FindPackRoots(string runtimePacks, Func<string[]> discoverSdkPacks)
     {
@@ -90,38 +93,23 @@ internal static class CSharpFrameworkReferences
             .Distinct(StringComparer.Ordinal).ToArray();
     }
 
-    private static string[] FindSdkPackRoots()
+    private static async ValueTask<string[]> FindSdkPackRootsAsync(CancellationToken cancellationToken)
     {
         List<string> roots = [];
         try
         {
-            ProcessStartInfo start = new("dotnet")
-            {
-                UseShellExecute = false,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                CreateNoWindow = true
-            };
-            start.ArgumentList.Add("--list-sdks");
-            using Process process = Process.Start(start)
-                ?? throw new InvalidOperationException("Could not start SDK discovery.");
-            Task<string> output = process.StandardOutput.ReadToEndAsync();
-            Task<string> error = process.StandardError.ReadToEndAsync();
-            if (!process.WaitForExit(10_000))
-            {
-                process.Kill(entireProcessTree: true);
-                process.WaitForExit();
-                ProviderWarnings.ReportOnce("csharp", "sdk-discovery",
-                    "SDK discovery timed out while locating framework references.");
-                return roots.ToArray();
-            }
-            if (process.ExitCode != 0)
+            ToolchainResult result = await ToolchainProcess.RunAsync(
+                new ToolchainCommand("dotnet", ["--list-sdks"], Environment.CurrentDirectory),
+                new ToolchainRunOptions { Timeout = TimeSpan.FromSeconds(10) }, cancellationToken)
+                .ConfigureAwait(false);
+            if (result.Status != ToolchainStatus.Success)
             {
                 ProviderWarnings.ReportOnce("csharp", "sdk-discovery",
-                    $"SDK discovery failed while locating framework references: {error.Result}");
+                    $"SDK discovery failed while locating framework references: " +
+                    $"{result.Diagnostic} {result.StandardError}");
                 return roots.ToArray();
             }
-            foreach (string line in output.Result.Split('\n'))
+            foreach (string line in result.StandardOutput.Split('\n'))
             {
                 int opening = line.LastIndexOf('[');
                 int closing = line.LastIndexOf(']');

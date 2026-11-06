@@ -18,13 +18,17 @@ internal static class PythonSemanticBinding
         string[] lines = file.RawText.Split('\n');
         foreach (StatementInfo? statement in file.Statements.Where(s => s.Kind == "call"))
         {
-            statement.DeferSemanticAnalysis(new(() =>
+            statement.DeferSemanticAnalysisAsync(new(async cancellationToken =>
             {
                 string line = lines[statement.Line - 1];
                 int byteColumn = Encoding.UTF8.GetByteCount(line.AsSpan(0, statement.Column!.Value - 1));
                 int endByteColumn = Encoding.UTF8.GetByteCount(lines[statement.EndLine!.Value - 1].AsSpan(0, statement.EndColumn!.Value - 1));
-                using JsonDocument result = toolchain.Analyze(path, file.RawText, "binding", statement.Line,
-                    byteColumn, statement.EndLine, endByteColumn)
+                using JsonDocument result = await toolchain.AnalyzeAsync(
+                    new(path, file.RawText)
+                    {
+                        Mode = "binding", Line = statement.Line, ByteColumn = byteColumn,
+                        EndLine = statement.EndLine, EndByteColumn = endByteColumn
+                    }, cancellationToken).ConfigureAwait(false)
                     ?? throw new InvalidOperationException("The Python interpreter became unavailable during semantic analysis.");
                 JsonElement root = result.RootElement;
                 statement.ReceiverType = Type(Get(root, "receiver"));

@@ -176,7 +176,7 @@ public class PackageMetadata
     /// Attempts to load PackageMetadata from a directory.
     /// Checks for cop.json first, then falls back to legacy {dirName}.md with YAML front-matter.
     /// </summary>
-    public static PackageMetadata? TryLoadFromDirectory(string dirPath)
+    public static PackageMetadata? LoadFromDirectoryOrDefault(string dirPath)
     {
         string jsonPath = Path.Combine(dirPath, MetadataFileName);
         if (File.Exists(jsonPath))
@@ -186,7 +186,13 @@ public class PackageMetadata
                 string json = File.ReadAllText(jsonPath);
                 return ParseFromJson(json);
             }
-            catch { return null; }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException
+                or JsonException or ArgumentException)
+            {
+                ProviderWarnings.ReportOnce("package", dirPath,
+                    $"Cannot read package metadata: {exception.Message}");
+                return null;
+            }
         }
 
         // Legacy fallback: {dirName}.md with YAML front-matter
@@ -207,7 +213,13 @@ public class PackageMetadata
                     return ParseFromMarkdown(content);
                 }
             }
-            catch { return null; }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException
+                or YamlDotNet.Core.YamlException or ArgumentException)
+            {
+                ProviderWarnings.ReportOnce("package", dirPath,
+                    $"Cannot read legacy package metadata: {exception.Message}");
+                return null;
+            }
         }
 
         return null;
@@ -305,6 +317,7 @@ public class PackageMetadata
     /// </summary>
     private class TagsConverter : JsonConverter<List<string>>
     {
+        /// <inheritdoc/>
         public override List<string>? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
         {
             if (reader.TokenType == JsonTokenType.StartArray)
@@ -327,6 +340,7 @@ public class PackageMetadata
             return [];
         }
 
+        /// <inheritdoc/>
         public override void Write(Utf8JsonWriter writer, List<string> value, JsonSerializerOptions options)
         {
             writer.WriteStartArray();
@@ -344,8 +358,10 @@ public class PackageMetadata
     /// </summary>
     private class YamlTagsConverter : IYamlTypeConverter
     {
+        /// <inheritdoc/>
         public bool Accepts(Type type) => type == typeof(List<string>);
 
+        /// <inheritdoc/>
         public object? ReadYaml(IParser parser, Type type, ObjectDeserializer rootDeserializer)
         {
             if (parser.TryConsume<Scalar>(out Scalar? scalar))
@@ -376,6 +392,7 @@ public class PackageMetadata
             return new List<string>();
         }
 
+        /// <inheritdoc/>
         public void WriteYaml(IEmitter emitter, object? value, Type type, ObjectSerializer serializer)
         {
             List<string> list = value as List<string> ?? [];

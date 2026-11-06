@@ -74,7 +74,7 @@ public sealed class SemanticModel
             // Reuse the REAL parser: wrap the chain as a let value so a single expression parses.
             probe = CopParser.Parse("let __semanticmodel_probe = " + exprText, "__semanticmodel_probe__");
         }
-        catch
+        catch (ParseException)
         {
             return null;
         }

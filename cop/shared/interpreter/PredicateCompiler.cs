@@ -15,21 +15,22 @@ public static class PredicateCompiler
     // The name sets below are derived from the single IntrinsicRegistry so provider pushdown can
     // never drift from the language's actual built-ins. (The name -> StringOp/CompareOp mapping is a
     // pushdown-specific concern and stays local in NormalizeStringOp / NormalizeCompareOp.)
-    private static readonly HashSet<string> StringOps =
+    private static readonly HashSet<string> s_stringOps =
         new(IntrinsicRegistry.NameSet(o => o.Kind == Cop.Lang.IntrinsicKind.StringPredicate && o.Pushable),
             StringComparer.OrdinalIgnoreCase);
 
-    private static readonly HashSet<string> ComparisonOps =
+    private static readonly HashSet<string> s_comparisonOps =
         new(IntrinsicRegistry.NameSet(o => o.Kind == Cop.Lang.IntrinsicKind.NumericPredicate && o.Pushable),
             StringComparer.OrdinalIgnoreCase);
 
-    private static readonly HashSet<string> CollectionFunctions = IntrinsicRegistry.CollectionFunctionNames();
+    private static readonly HashSet<string> s_collectionFunctions = IntrinsicRegistry.CollectionFunctionNames();
 
     /// <summary>
     /// Attempts to compile a predicate expression (from a FilterExpr) into a FilterExpression.
     /// Returns null if the predicate is not compilable to a pushdown filter.
     /// </summary>
-    public static FilterExpression? TryCompile(AstExpr predicate, bool negated = false, string? propertyContext = null)
+    public static FilterExpression? CompileOrDefault(AstExpr predicate,
+        PredicatePolarity polarity = PredicatePolarity.Positive, string? propertyContext = null)
     {
         FilterExpression? result = CompileCore(predicate, propertyContext);
         if (result is null)
@@ -37,11 +38,11 @@ public static class PredicateCompiler
             return null;
         }
 
-        return negated ? new NotFilter(result) : result;
+        return polarity == PredicatePolarity.Negative ? new NotFilter(result) : result;
     }
 
     /// <summary>Expands unambiguous, pure predicate bodies; unsupported expressions stay local.</summary>
-    public static FilterExpression? TryCompileBound(AstExpr predicate, Environment environment, string? itemType = null)
+    public static FilterExpression? CompileBoundOrDefault(AstExpr predicate, Environment environment, string? itemType = null)
     {
         HashSet<string> expanding = new HashSet<string>(StringComparer.Ordinal);
         return Expand(predicate, environment, null);
@@ -90,7 +91,9 @@ public static class PredicateCompiler
 
             if (expression is FilterExpr filter && Property(filter.Collection, parameter) is { } property)
             {
-                FilterExpression? compiled = TryCompile(filter.Predicate, filter.Negated, property);
+                FilterExpression? compiled = CompileOrDefault(filter.Predicate,
+                    filter.Negated ? PredicatePolarity.Negative : PredicatePolarity.Positive,
+                    property);
                 return compiled;
             }
             if (expression is Ast.BinaryExpr comparison && Property(comparison.Left, parameter) is { } name
@@ -163,7 +166,10 @@ public static class PredicateCompiler
             ? null : selected;
     }
 
-    public static FilterExpression? TryCompileElement(AstExpr expression, Environment environment, string? itemType)
+    /// <summary>
+    /// Compiles an element expression to a provider filter, or returns null.
+    /// </summary>
+    public static FilterExpression? CompileElementOrDefault(AstExpr expression, Environment environment, string? itemType)
     {
         Parameter parameter = new Parameter("item", null);
         if (expression is LambdaExpr { Params.Count: 1 } lambda)
@@ -174,7 +180,7 @@ public static class PredicateCompiler
         Environment scope = environment.Extend();
         scope.Define("$query", new CopFunction(new FunctionDecl("$query", [parameter], null,
             new ExpressionBody(expression), IsPredicate: true), environment));
-        return TryCompileBound(new Ast.IdentifierExpr("$query"), scope, itemType);
+        return CompileBoundOrDefault(new Ast.IdentifierExpr("$query"), scope, itemType);
     }
 
     /// <summary>
@@ -182,9 +188,9 @@ public static class PredicateCompiler
     /// Used to detect compound patterns: queryable:PropertyName:StringOp(value).
     /// Returns the property name if the expression is a simple property access, null otherwise.
     /// </summary>
-    public static string? TryExtractPropertyAccess(AstExpr predicate)
+    public static string? GetPropertyAccessOrDefault(AstExpr predicate)
     {
-        if (predicate is Ast.IdentifierExpr id && !CollectionFunctions.Contains(id.Name))
+        if (predicate is Ast.IdentifierExpr id && !s_collectionFunctions.Contains(id.Name))
         {
             return id.Name;
         }
@@ -202,7 +208,7 @@ public static class PredicateCompiler
         switch (predicate)
         {
             // Bare identifier: configs:enabled → PropertyFilter("enabled", true)
-            case Ast.IdentifierExpr id when !CollectionFunctions.Contains(id.Name):
+            case Ast.IdentifierExpr id when !s_collectionFunctions.Contains(id.Name):
                 return new PropertyFilter(id.Name, true);
 
             // Call expression: :startsWith('A') or :gt(100)
@@ -243,7 +249,7 @@ public static class PredicateCompiler
 
             // Nested filter: Property:op(value) — compound pattern
             case Ast.FilterExpr { Collection: Ast.IdentifierExpr propId } filt
-                when !CollectionFunctions.Contains(propId.Name):
+                when !s_collectionFunctions.Contains(propId.Name):
                 FilterExpression? compiled = CompileCore(filt.Predicate, propId.Name);
                 if (compiled is null)
                 {
@@ -294,7 +300,7 @@ public static class PredicateCompiler
         }
 
         // String operations: property:startsWith('value')
-        if (StringOps.Contains(methodName))
+        if (s_stringOps.Contains(methodName))
         {
             if (args[0] is not Ast.LiteralExpr { Value: string strVal })
             {
@@ -311,7 +317,7 @@ public static class PredicateCompiler
         }
 
         // Comparison operations: property:gt(100)
-        if (ComparisonOps.Contains(methodName))
+        if (s_comparisonOps.Contains(methodName))
         {
             double? numVal = args[0] switch
             {

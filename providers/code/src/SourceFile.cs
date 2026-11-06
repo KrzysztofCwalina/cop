@@ -2,6 +2,9 @@
 
 namespace Cop.Providers.SourceModel;
 
+/// <summary>
+/// A parsed file containing declarations, statements, imports, and source text.
+/// </summary>
 public record SourceFile(
     string Path,
     string Language,
@@ -10,21 +13,39 @@ public record SourceFile(
     string RawText)
 {
     /// <summary>Absolute source identity, independent of the parser's selected root.</summary>
-    public string FullPath { get; init; } = "";
-    public string SourceRoot { get; init; } = "";
+    public string FullPath { get; init; } = string.Empty;
+    /// <summary>
+    /// The analysis root used to interpret this source file and its imports.
+    /// </summary>
+    public string SourceRoot { get; init; } = string.Empty;
 
     private List<string>? _lines;
 
+    /// <summary>
+    /// The source lines exposed by this parsed file.
+    /// </summary>
     public List<string> Lines => _lines ??= RawText.Split('\n').Select(l => l.TrimEnd('\r')).ToList();
 
+    /// <summary>
+    /// The imported namespace or module names captured from this file.
+    /// </summary>
     public List<string> Usings { get; init; } = [];
+    /// <summary>
+    /// The structured import declarations captured from this file.
+    /// </summary>
     public List<ImportInfo> Imports { get; init; } = [];
 
     /// <summary>Top-level functions, including declarations outside a type.</summary>
     public List<MethodDeclaration> Methods { get; init; } = [];
 
+    /// <summary>
+    /// The namespace that contains the declaration.
+    /// </summary>
     public string? Namespace { get; init; }
 
+    /// <summary>
+    /// The parsed named regions in this source file.
+    /// </summary>
     public List<RegionInfo> Regions { get; init; } = [];
 
     /// <summary>
@@ -32,6 +53,10 @@ public record SourceFile(
     /// </summary>
     private List<string>? _projects;
     private Lazy<List<string>>? _deferredProjects;
+    private AsyncProviderValue<List<string>>? _asyncProjects;
+    /// <summary>
+    /// The projects associated with this source file.
+    /// </summary>
     public List<string> Projects
     {
         get => _projects ??= _deferredProjects?.Value ?? [];
@@ -42,6 +67,18 @@ public record SourceFile(
     {
         _projects = null;
         _deferredProjects = new(discover);
+    }
+
+    internal void DeferProjectsAsync(Func<CancellationToken, ValueTask<List<string>>> discover) =>
+        _asyncProjects = new(discover);
+
+    /// <summary>Awaits project discovery only when the file's project membership is demanded.</summary>
+    public async ValueTask EnsureProjectsAsync(CancellationToken cancellationToken = default)
+    {
+        if (_asyncProjects is not null)
+        {
+            _projects = await _asyncProjects.GetValueAsync(cancellationToken).ConfigureAwait(false);
+        }
     }
 
     /// <summary>
@@ -84,6 +121,9 @@ public record SourceFile(
         }
     }
 
+    /// <summary>
+    /// Shares lazy type-name enrichment across declarations and statements in this file.
+    /// </summary>
     public void DeferTypeNameAnalysis(Action analyze)
     {
         Lazy<bool> typeNames = new Lazy<bool>(() => { analyze(); return true; });

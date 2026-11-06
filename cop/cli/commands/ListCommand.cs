@@ -29,15 +29,15 @@ public static class ListCommand
         command.SetAction(parseResult =>
         {
             string packageName = parseResult.GetValue(packageArg)!;
-            return Execute(packageName);
+            return ExecuteAsync(packageName);
         });
         return command;
     }
 
     /// <summary>Resolves a package and lists its exported commands and checks.</summary>
-    public static int Execute(string packageName)
+    public static async Task<int> ExecuteAsync(string packageName)
     {
-        string? packageDir = PackageResolver.ResolvePackageDir(packageName);
+        string? packageDir = await PackageResolver.ResolvePackageDirAsync(packageName);
 
         if (packageDir == null)
         {
@@ -193,7 +193,11 @@ public static class ListCommand
                         return lines[0][2..].Trim();
                     }
                 }
-                catch { }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                    Console.Error.WriteLine(
+                        $"Warning: Cannot read documentation '{path}': {ex.Message}");
+                }
             }
         }
         return null;

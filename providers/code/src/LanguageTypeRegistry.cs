@@ -14,30 +14,19 @@ namespace Cop.Providers.SourceModel;
 /// </summary>
 public static class LanguageTypeRegistry
 {
+    /// <summary>
+    /// Registers reconstruction of language-specific types from shared cached
+    /// declarations.
+    /// </summary>
     public static void Register(string tag, Func<TypeDeclaration, IReadOnlyDictionary<string, bool>, TypeDeclaration> factory)
         => LanguageCacheFactories<TypeDeclaration>.Register(tag, factory);
 
+    /// <summary>
+    /// Restores a language-specific type from its shared declaration and cached flags.
+    /// </summary>
     public static TypeDeclaration Reconstruct(string tag, TypeDeclaration baseDecl, IReadOnlyDictionary<string, bool> flags)
         => Reconstruct(tag, baseDecl, flags, System.Runtime.Loader.AssemblyLoadContext.Default);
 
     internal static TypeDeclaration Reconstruct(string tag, TypeDeclaration baseDecl, IReadOnlyDictionary<string, bool> flags,
         System.Runtime.Loader.AssemblyLoadContext context) => LanguageCacheFactories<TypeDeclaration>.Reconstruct(tag, baseDecl, flags, context);
-}
-
-internal static class LanguageCacheFactories<T>
-{
-    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<System.Runtime.Loader.AssemblyLoadContext,
-        System.Collections.Concurrent.ConcurrentDictionary<string, Func<T, IReadOnlyDictionary<string, bool>, T>>> Factories = new();
-
-    public static void Register(string tag, Func<T, IReadOnlyDictionary<string, bool>, T> factory)
-    {
-        AssemblyLoadContext context = System.Runtime.Loader.AssemblyLoadContext.GetLoadContext(factory.Method.Module.Assembly)
-            ?? System.Runtime.Loader.AssemblyLoadContext.Default;
-        Factories.GetOrCreateValue(context)[tag] = factory;
-    }
-
-    public static T Reconstruct(string tag, T value, IReadOnlyDictionary<string, bool> flags,
-        System.Runtime.Loader.AssemblyLoadContext context) =>
-        Factories.TryGetValue(context, out ConcurrentDictionary<string, Func<T, IReadOnlyDictionary<string, bool>, T>>? factories) && factories.TryGetValue(tag, out Func<T, IReadOnlyDictionary<string, bool>, T>? factory)
-            ? factory(value, flags) : value;
 }

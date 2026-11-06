@@ -9,7 +9,8 @@ namespace Cop.Providers.SourceParsers;
 
 /// <summary>Protocol client for Cop's pinned, source-only rust-analyzer frontend.</summary>
 internal sealed class RustFrontend(string executable, string root, string? standardLibraryDirectory = null,
-    Func<string>? prepareStandardLibrary = null)
+    Func<string>? prepareStandardLibrary = null,
+    IReadOnlyDictionary<string, string?>? toolchainEnvironment = null)
 {
     /// <summary>Identifies the pinned frontend version and request protocol.</summary>
     public const string ProtocolIdentity = "rust-analyzer:0.0.358:protocol1";
@@ -19,11 +20,15 @@ internal sealed class RustFrontend(string executable, string root, string? stand
     /// <summary>
     /// Sends a frontend request and validates the response protocol identity.
     /// </summary>
-    public JsonElement Request(object request, TimeSpan? timeout = null)
+    public async ValueTask<JsonElement> RequestAsync(
+        object request, TimeSpan? timeout = null, CancellationToken cancellationToken = default)
     {
-        ToolchainResult result = ToolchainExecutionScope.RequestAsync(Executable, [], Path.GetFullPath(root),
-            JsonSerializer.Serialize(request), timeout: timeout ?? TimeSpan.FromSeconds(60),
-            maxOutputCharacters: 32 * 1024 * 1024).GetAwaiter().GetResult();
+        ToolchainResult result = await ToolchainExecutionScope.RequestAsync(
+            new ToolchainCommand(Executable, [], Path.GetFullPath(root), toolchainEnvironment),
+            JsonSerializer.Serialize(request), new ToolchainRunOptions
+            {
+                Timeout = timeout ?? TimeSpan.FromSeconds(60), MaxOutputCharacters = 32 * 1024 * 1024
+            }, cancellationToken).ConfigureAwait(false);
         if (result.Status != ToolchainStatus.Success)
         {
             throw new InvalidDataException($"Rust frontend {result.Status}: {result.Diagnostic} {result.StandardError}");
@@ -54,34 +59,45 @@ internal sealed class RustFrontend(string executable, string root, string? stand
     /// <summary>
     /// Parses Rust source and attaches deferred project semantic analysis.
     /// </summary>
-    public SourceFile Parse(string path, string text)
+    public async ValueTask<SourceFile> ParseAsync(
+        string path, string text, CancellationToken cancellationToken = default)
     {
-        JsonElement response = Request(new { op = "parse", text });
+        JsonElement response = await RequestAsync(
+            new { op = "parse", text }, cancellationToken: cancellationToken).ConfigureAwait(false);
         SourceFile file = new RustAstProjection(path, text, response).Build();
-        Lazy<bool> analysis = new Lazy<bool>(() => { Bind(file); return true; });
+        AsyncProviderValue<bool> analysis = new(async token =>
+        {
+            await BindAsync(file, token).ConfigureAwait(false);
+            return true;
+        });
         foreach (StatementInfo statement in file.Statements)
         {
-            statement.DeferSemanticAnalysis(analysis);
+            statement.DeferSemanticAnalysisAsync(analysis);
         }
 
         return file;
     }
 
-    private void Bind(SourceFile file)
+    private async ValueTask BindAsync(SourceFile file, CancellationToken cancellationToken)
     {
         try
         {
-            string[] unsupportedEnvironment = Environment.GetEnvironmentVariables().Keys.Cast<string>()
-                .Where(name => name is "RUSTFLAGS" or "CARGO_ENCODED_RUSTFLAGS" or "CARGO_BUILD_TARGET" ||
-                    name.StartsWith("CARGO_TARGET_", StringComparison.Ordinal) && name.EndsWith("_RUSTFLAGS", StringComparison.Ordinal))
-                .Where(name => !string.IsNullOrEmpty(Environment.GetEnvironmentVariable(name))).ToArray();
+            IReadOnlyDictionary<string, string?> environment =
+                RustToolchainEnvironment.Capture(toolchainEnvironment);
+            string[] unsupportedEnvironment = environment
+                .Where(pair => pair.Key is "RUSTFLAGS" or "CARGO_ENCODED_RUSTFLAGS" or "CARGO_BUILD_TARGET" ||
+                    pair.Key.StartsWith("CARGO_TARGET_", StringComparison.Ordinal)
+                    && pair.Key.EndsWith("_RUSTFLAGS", StringComparison.Ordinal))
+                .Where(pair => !string.IsNullOrEmpty(pair.Value)).Select(pair => pair.Key).ToArray();
             if (unsupportedEnvironment.Length != 0)
             {
                 ProviderWarnings.ReportOnce("rust", root,
                     $"Unsupported Cargo environment context ({string.Join(", ", unsupportedEnvironment)}); semantic bindings left unknown rather than assuming host defaults.");
                 return;
             }
-            JsonElement selection = Request(new { op = "toolchain", file = Path.GetFullPath(file.Path) });
+            JsonElement selection = await RequestAsync(
+                new { op = "toolchain", file = Path.GetFullPath(file.Path) },
+                cancellationToken: cancellationToken).ConfigureAwait(false);
             if (Text(selection, "unsupported") is { } unsupported)
             {
                 ProviderWarnings.ReportOnce("rust", root, unsupported);
@@ -90,10 +106,14 @@ internal sealed class RustFrontend(string executable, string root, string? stand
             string? channel = Text(selection, "channel");
             string compiler = channel is null ? "rustc" : "rustup";
             string[] prefix = channel is null ? [] : ["run", channel, "rustc"];
-            ToolchainResult cfg = ToolchainProcess.RunAsync(compiler, [.. prefix, "--print", "cfg"], Path.GetTempPath(),
-                environment: new Dictionary<string, string?> { ["RUSTUP_AUTO_INSTALL"] = "0" }).GetAwaiter().GetResult();
-            ToolchainResult version = ToolchainProcess.RunAsync(compiler, [.. prefix, "-vV"], Path.GetTempPath(),
-                environment: new Dictionary<string, string?> { ["RUSTUP_AUTO_INSTALL"] = "0" }).GetAwaiter().GetResult();
+            Dictionary<string, string?> compilerEnvironment = new(environment)
+            {
+                ["RUSTUP_AUTO_INSTALL"] = "0"
+            };
+            ToolchainResult cfg = await ToolchainProcess.RunAsync(new ToolchainCommand(compiler, [.. prefix, "--print", "cfg"], Path.GetTempPath(), compilerEnvironment),
+                cancellationToken: cancellationToken).ConfigureAwait(false);
+            ToolchainResult version = await ToolchainProcess.RunAsync(new ToolchainCommand(compiler, [.. prefix, "-vV"], Path.GetTempPath(), compilerEnvironment),
+                cancellationToken: cancellationToken).ConfigureAwait(false);
             if (cfg.Status != ToolchainStatus.Success || version.Status != ToolchainStatus.Success)
             {
                 ProviderWarnings.ReportOnce("rust", root, $"Rust target configuration unavailable: {cfg.Diagnostic} {version.Diagnostic}; target-specific context is partial.");
@@ -102,19 +122,20 @@ internal sealed class RustFrontend(string executable, string root, string? stand
                     return;
                 }
             }
-            ToolchainResult sysroot = ToolchainProcess.RunAsync(compiler, [.. prefix, "--print", "sysroot"], Path.GetTempPath(),
-                environment: new Dictionary<string, string?> { ["RUSTUP_AUTO_INSTALL"] = "0" }).GetAwaiter().GetResult();
+            ToolchainResult sysroot = await ToolchainProcess.RunAsync(new ToolchainCommand(compiler, [.. prefix, "--print", "sysroot"], Path.GetTempPath(), compilerEnvironment),
+                cancellationToken: cancellationToken).ConfigureAwait(false);
             string? library = SelectStandardLibrary(version.StandardOutput,
                 sysroot.Status == ToolchainStatus.Success ? sysroot.StandardOutput.Trim() : null);
-            JsonElement response = Request(new { op = "project", root = Path.GetFullPath(root),
+            JsonElement response = await RequestAsync(new { op = "project", root = Path.GetFullPath(root),
                 file = Path.GetFullPath(file.Path),
                 expected_text = file.RawText,
                 cfg = cfg.Status == ToolchainStatus.Success ? cfg.StandardOutput.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries) : [],
-                target = version.StandardOutput.Split('\n').FirstOrDefault(s => s.StartsWith("host: ", StringComparison.Ordinal))?[6..].Trim() ?? "",
-                stdlib = library ?? "",
-                cargo_home = Environment.GetEnvironmentVariable("CARGO_HOME")
+                target = version.StandardOutput.Split('\n').FirstOrDefault(s => s.StartsWith("host: ", StringComparison.Ordinal))?[6..].Trim() ?? string.Empty,
+                stdlib = library ?? string.Empty,
+                cargo_home = (environment.TryGetValue("CARGO_HOME", out string? cargoHome) ? cargoHome : null)
                     ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".cargo") },
-                timeout: TimeSpan.FromMinutes(3));
+                timeout: TimeSpan.FromMinutes(3), cancellationToken: cancellationToken)
+                .ConfigureAwait(false);
             if (response.TryGetProperty("diagnostics", out JsonElement diagnostics))
             {
                 foreach (JsonElement diagnostic in diagnostics.EnumerateArray())
@@ -232,38 +253,4 @@ internal sealed class RustFrontend(string executable, string root, string? stand
         Text(element, property) is { } text ? ParseType(text) : null;
     private static TypeReference ParseType(string text) => RustTypeReferences.Parse(text,
         () => throw new InvalidDataException("Rust semantic type exceeded depth limit."));
-}
-
-internal sealed class RustSourcePositions
-{
-    private readonly int[] _characters;
-    private readonly int[] _lines;
-    private readonly int[] _columns;
-    /// <summary>
-    /// Indexes UTF-8 byte offsets against source characters and line starts.
-    /// </summary>
-    public RustSourcePositions(string text)
-    {
-        int bytes = Encoding.UTF8.GetByteCount(text);
-        _characters = new int[bytes + 1]; _lines = new int[bytes + 1]; _columns = new int[bytes + 1];
-        int offset = 0, character = 0, line = 1, column = 1;
-        foreach (Rune rune in text.EnumerateRunes())
-        {
-            for (int i = 0; i < rune.Utf8SequenceLength; i++)
-            { _characters[offset + i] = character; _lines[offset + i] = line; _columns[offset + i] = column; }
-            offset += rune.Utf8SequenceLength; character += rune.Utf16SequenceLength;
-            if (rune.Value == '\n') { line++; column = 1; } else
-            {
-                column += rune.Utf16SequenceLength;
-            }
-        }
-        _characters[bytes] = character; _lines[bytes] = line; _columns[bytes] = column;
-    }
-    /// <summary>Converts a frontend byte offset to its source character index.</summary>
-    public int Character(int offset) => _characters[offset];
-    /// <summary>
-    /// Converts frontend byte offsets into a line-and-column source span.
-    /// </summary>
-    public (int Line, int Column, int EndLine, int EndColumn) Span(int start, int end) =>
-        (_lines[start], _columns[start], _lines[end], _columns[end]);
 }

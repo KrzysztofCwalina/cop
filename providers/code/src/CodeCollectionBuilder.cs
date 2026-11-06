@@ -17,21 +17,25 @@ namespace Cop.Providers;
 public static class CodeCollectionBuilder
 {
     private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<DataProvider,
-        Dictionary<string, List<SourceFile>>> Snapshots = new();
+        Dictionary<string, List<SourceFile>>> s_snapshots = new();
     private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<DataProvider,
-        Dictionary<string, DeferredSourceSnapshot>> DeferredSnapshots = new();
+        Dictionary<string, DeferredSourceSnapshot>> s_deferredSnapshots = new();
 
+    /// <summary>
+    /// Captures source paths and defers parsing until the query demands a collection.
+    /// </summary>
     public static DeferredProviderResult CollectDeferred(SourceParserRegistry parsers, ProviderQuery query,
-        DataProvider owner, Func<List<ProjectInfo>>? discoverProjects = null)
+        DataProvider owner,
+        Func<CancellationToken, ValueTask<List<ProjectInfo>>>? discoverProjects = null)
     {
         if (query.RootPath is null)
         {
-            return new(new Dictionary<string, IEnumerable<object>>());
+            return new(new Dictionary<string, IAsyncEnumerable<object>>());
         }
 
         string key = Path.GetFullPath(query.RootPath) + "\n" +
             string.Join("\n", (query.ExcludedDirectories ?? new HashSet<string>()).Order(StringComparer.Ordinal));
-        Dictionary<string, DeferredSourceSnapshot> snapshots = DeferredSnapshots.GetOrCreateValue(owner);
+        Dictionary<string, DeferredSourceSnapshot> snapshots = s_deferredSnapshots.GetOrCreateValue(owner);
         if (!snapshots.TryGetValue(key, out DeferredSourceSnapshot? snapshot))
         {
             snapshot = new(parsers, query, discoverProjects: discoverProjects);
@@ -43,11 +47,20 @@ public static class CodeCollectionBuilder
     /// <summary>
     /// Scans source files under rootPath, parses them, and returns flat collections.
     /// </summary>
-    public static Dictionary<string, List<object>> CollectAndParse(SourceParserRegistry parsers, ProviderQuery query)
-        => CollectAndParse(parsers, query, null);
+    public static ValueTask<Dictionary<string, List<object>>> CollectAndParseAsync(
+        SourceParserRegistry parsers, ProviderQuery query,
+        CancellationToken cancellationToken = default)
+        => CollectAndParseAsync(parsers, query, null, cancellationToken);
 
-    public static Dictionary<string, List<object>> CollectAndParse(SourceParserRegistry parsers, ProviderQuery query, DataProvider? owner)
+    /// <summary>
+    /// Collects matching source files and parses them with the registered language
+    /// parsers.
+    /// </summary>
+    public static async ValueTask<Dictionary<string, List<object>>> CollectAndParseAsync(
+        SourceParserRegistry parsers, ProviderQuery query, DataProvider? owner,
+        CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         if (query.RootPath is null)
         {
             return new();
@@ -57,10 +70,11 @@ public static class CodeCollectionBuilder
         IReadOnlySet<string>? excluded = query.ExcludedDirectories;
         string snapshotKey = Path.GetFullPath(rootPath) + "\n" +
             string.Join("\n", (excluded ?? new HashSet<string>()).Order(StringComparer.Ordinal));
-        Dictionary<string, List<SourceFile>>? snapshots = owner is null ? null : Snapshots.GetOrCreateValue(owner);
+        Dictionary<string, List<SourceFile>>? snapshots = owner is null ? null : s_snapshots.GetOrCreateValue(owner);
         if (snapshots?.TryGetValue(snapshotKey, out List<SourceFile>? snapshot) == true)
         {
-            return ExtractCollections(snapshot, query.Collection, query.CollectionFilters, query.Filter);
+            return await ExtractCollectionsAsync(snapshot, query, owner, cancellationToken)
+                .ConfigureAwait(false);
         }
 
         List<string> filePaths = new List<string>();
@@ -78,7 +92,7 @@ public static class CodeCollectionBuilder
                     int[] retryDelaysMs = [200, 1000, 3000];
                     foreach (int delay in retryDelaysMs)
                     {
-                        Thread.Sleep(delay);
+                        await Task.Delay(delay, cancellationToken).ConfigureAwait(false);
                         CollectSourceFiles(rootPath, parsers, excluded, filePaths);
                         if (filePaths.Count > 0)
                         {
@@ -92,7 +106,10 @@ public static class CodeCollectionBuilder
                     }
                 }
             }
-            catch { /* ignore retry errors — the original empty result stands */ }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                ProviderErrors.Report($"Could not retry source discovery in '{rootPath}': {ex.Message}");
+            }
         }
 
         // Compute cache fingerprint from file stats (fast: just stat calls, no file reading)
@@ -100,7 +117,7 @@ public static class CodeCollectionBuilder
         bool canCache = filePaths.All(path => parsers.GetParser(Path.GetExtension(path))!.CanCache(path));
         string cachePath = GetCachePath(rootPath);
         List<SourceFile>? cachedFiles = canCache
-            ? SourceCacheSerializer.TryLoad(cachePath, fingerprint, owner?.GetType().Assembly ?? parsers.CacheAssembly) : null;
+            ? SourceCacheSerializer.LoadOrDefault(cachePath, fingerprint, owner?.GetType().Assembly ?? parsers.CacheAssembly) : null;
 
         List<SourceFile> sorted;
         if (cachedFiles != null)
@@ -111,7 +128,8 @@ public static class CodeCollectionBuilder
         else
         {
             // Cache miss: parse all files
-            sorted = ParseAllFiles(filePaths, rootPath, parsers);
+            sorted = await ParseAllFilesAsync(filePaths, rootPath, parsers, cancellationToken)
+                .ConfigureAwait(false);
 
             // Don't cache a parse that produced errors: the file-stats fingerprint won't change until
             // the file is fixed, so re-parsing each run keeps the error surfaced (a cached run would
@@ -120,7 +138,10 @@ public static class CodeCollectionBuilder
             {
                 // Save to cache for next run
                 try { SourceCacheSerializer.Save(cachePath, fingerprint, sorted); }
-                catch { /* cache save failure is non-fatal */ }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                    Console.Error.WriteLine($"Warning: Could not cache source models: {ex.Message}");
+                }
             }
         }
 
@@ -145,20 +166,56 @@ public static class CodeCollectionBuilder
             }
         }
         snapshots?.Add(snapshotKey, sorted);
-        return ExtractCollections(sorted, query.Collection, query.CollectionFilters, query.Filter);
+        return await ExtractCollectionsAsync(sorted, query, owner, cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    private static async ValueTask<Dictionary<string, List<object>>> ExtractCollectionsAsync(
+        List<SourceFile> sourceFiles, ProviderQuery query, DataProvider? owner,
+        CancellationToken cancellationToken)
+    {
+        Dictionary<string, List<object>> collections = ExtractCollections(
+            sourceFiles, query.Collection);
+        AsyncProviderFilter evaluator = new(owner?.GetRuntimeBindings() ?? CodeBindings.Build());
+        foreach (string collection in collections.Keys.ToArray())
+        {
+            FilterExpression? filter =
+                query.CollectionFilters?.GetValueOrDefault(collection) ?? query.Filter;
+            if (filter is null)
+            {
+                continue;
+            }
+            List<object> accepted = [];
+            foreach (object item in collections[collection])
+            {
+                if (await evaluator.MatchesAsync(item, filter, cancellationToken)
+                    .ConfigureAwait(false))
+                {
+                    accepted.Add(item);
+                }
+            }
+            collections[collection] = accepted;
+        }
+        return collections;
     }
 
     /// <summary>
     /// Parses all discovered source files in parallel. Used on cache miss.
     /// </summary>
-    private static List<SourceFile> ParseAllFiles(List<string> filePaths, string rootPath, SourceParserRegistry parsers)
+    private static async ValueTask<List<SourceFile>> ParseAllFilesAsync(
+        List<string> filePaths, string rootPath, SourceParserRegistry parsers,
+        CancellationToken cancellationToken)
     {
         ConcurrentBag<string> parseErrors = new System.Collections.Concurrent.ConcurrentBag<string>();
         ConcurrentBag<SourceFile> sourceFiles = new System.Collections.Concurrent.ConcurrentBag<SourceFile>();
         long diagThresholdMs = GetParseDiagThresholdMs();
-        Parallel.ForEach(filePaths,
-            new ParallelOptions { MaxDegreeOfParallelism = Environment.ProcessorCount },
-            filePath =>
+        await Parallel.ForEachAsync(filePaths,
+            new ParallelOptions
+            {
+                MaxDegreeOfParallelism = Environment.ProcessorCount,
+                CancellationToken = cancellationToken
+            },
+            async (filePath, token) =>
             {
                 string ext = Path.GetExtension(filePath);
                 ISourceParser? parser = parsers.GetParser(ext);
@@ -172,11 +229,12 @@ public static class CodeCollectionBuilder
                 {
                     using FileStream stream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
                     using StreamReader reader = new StreamReader(stream);
-                    string text = reader.ReadToEnd();
+                    string text = await reader.ReadToEndAsync(token).ConfigureAwait(false);
                     if (diagThresholdMs >= 0)
                     {
                         Stopwatch sw = System.Diagnostics.Stopwatch.StartNew();
-                        sourceFile = parser.Parse(filePath, text);
+                        sourceFile = await parser.ParseAsync(filePath, text, token)
+                            .ConfigureAwait(false);
                         sw.Stop();
                         if (sw.ElapsedMilliseconds >= diagThresholdMs)
                         {
@@ -185,10 +243,11 @@ public static class CodeCollectionBuilder
                     }
                     else
                     {
-                        sourceFile = parser.Parse(filePath, text);
+                        sourceFile = await parser.ParseAsync(filePath, text, token)
+                            .ConfigureAwait(false);
                     }
                 }
-                catch (Exception ex) when (ex is not OutOfMemoryException)
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
                 {
                     parseErrors.Add($"{filePath}: error: failed to parse — {ex.Message}");
                     return;
@@ -213,7 +272,7 @@ public static class CodeCollectionBuilder
                 {
                     parseErrors.Add(pe);
                 }
-            });
+            }).ConfigureAwait(false);
 
         // Forward parse errors to the engine via the shared sink so a file that failed to parse is
         // surfaced as a prominent warning instead of being silently skipped or modelled as partial
@@ -231,11 +290,11 @@ public static class CodeCollectionBuilder
     }
 
     /// <summary>
-    /// Returns the per-file parse timing threshold in ms when -dd (CopDiagnostics.Timing) is set
+    /// Returns the per-file parse timing threshold when diagnostic timing is enabled
     /// (logs files slower than 100ms). Returns -1 when disabled.
     /// </summary>
     private static long GetParseDiagThresholdMs()
-        => Cop.Core.CopDiagnostics.Timing ? 100 : -1;
+        => Cop.Core.CopDiagnostics.IsTimingEnabled ? 100 : -1;
 
     /// <summary>
     /// Restores source files from cache, re-linking references.
@@ -399,10 +458,10 @@ public static class CodeCollectionBuilder
                 writer.Write(info.Length);
                 writer.Write(info.LastWriteTimeUtc.Ticks);
             }
-            catch
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
-                writer.Write(0L);
-                writer.Write(0L);
+                throw new IOException(
+                    $"Cannot fingerprint source file '{path}': {ex.Message}", ex);
             }
         }
         writer.Flush();
@@ -431,6 +490,9 @@ public static class CodeCollectionBuilder
         IReadOnlyDictionary<string, FilterExpression>? collectionFilters = null)
         => ExtractCollections(sourceFiles, collection, collectionFilters, null);
 
+    /// <summary>
+    /// Extracts requested source collections and applies the supplied query filters.
+    /// </summary>
     public static Dictionary<string, List<object>> ExtractCollections(
         List<SourceFile> sourceFiles, string? collection,
         IReadOnlyDictionary<string, FilterExpression>? collectionFilters,
@@ -507,7 +569,12 @@ public static class CodeCollectionBuilder
         ["Projects"] = "Project",
     };
 
-    public static void CollectSourceFiles(string rootDir, SourceParserRegistry parsers, IReadOnlySet<string>? excluded, List<string> result, bool isRoot = true)
+    /// <summary>
+    /// Enumerates source files supported by the registered parsers beneath an analysis
+    /// root.
+    /// </summary>
+    public static void CollectSourceFiles(string rootDir, SourceParserRegistry parsers,
+        IReadOnlySet<string>? excluded, List<string> result)
     {
         // Prune excluded directories (node_modules, bin, obj, .git, dist, ...) DURING traversal
         // instead of enumerating the whole tree and filtering paths afterward. This is critical:
@@ -519,7 +586,7 @@ public static class CodeCollectionBuilder
             foreach (string file in Directory.EnumerateFiles(rootDir, "*", new EnumerationOptions
             {
                 RecurseSubdirectories = false,
-                IgnoreInaccessible = !isRoot,  // propagate root errors, skip subdirectory errors
+                IgnoreInaccessible = false,
                 AttributesToSkip = FileAttributes.System
             }))
             {
@@ -529,33 +596,31 @@ public static class CodeCollectionBuilder
                     result.Add(file);
                 }
             }
-        }
-        catch (UnauthorizedAccessException) when (!isRoot) { }
-        catch (IOException) when (!isRoot) { }
 
-        IEnumerable<string> subDirs;
-        try
-        {
-            subDirs = Directory.EnumerateDirectories(rootDir, "*", new EnumerationOptions
+            IEnumerable<string> subDirs = Directory.EnumerateDirectories(
+                rootDir, "*", new EnumerationOptions
             {
                 RecurseSubdirectories = false,
-                IgnoreInaccessible = !isRoot,
+                IgnoreInaccessible = false,
                 // Skip reparse points (symlinks/junctions) to avoid infinite loops in pnpm-style node_modules.
                 AttributesToSkip = FileAttributes.System | FileAttributes.ReparsePoint
             });
-        }
-        catch (UnauthorizedAccessException) when (!isRoot) { return; }
-        catch (IOException) when (!isRoot) { return; }
 
-        foreach (string subDir in subDirs)
-        {
-            string dirName = Path.GetFileName(subDir);
-            if (excluded is not null && excluded.Contains(dirName))
+            foreach (string subDir in subDirs)
             {
-                continue;
-            }
+                string dirName = Path.GetFileName(subDir);
+                if (excluded is not null && excluded.Contains(dirName))
+                {
+                    continue;
+                }
 
-            CollectSourceFiles(subDir, parsers, excluded, result, isRoot: false);
+                CollectSourceFiles(subDir, parsers, excluded, result);
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            throw new IOException(
+                $"Cannot enumerate source directory '{rootDir}': {ex.Message}", ex);
         }
     }
 }

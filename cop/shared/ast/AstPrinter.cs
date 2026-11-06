@@ -15,6 +15,7 @@ public class AstPrinter : AstVisitor<string>
 
     protected override string DefaultVisit(AstNode node) => $"{Pad()}{node.GetType().Name}";
 
+    /// <inheritdoc/>
     public override string VisitModule(ModuleNode node)
     {
         StringBuilder sb = new StringBuilder();
@@ -29,9 +30,11 @@ public class AstPrinter : AstVisitor<string>
         return sb.ToString().TrimEnd();
     }
 
+    /// <inheritdoc/>
     public override string VisitImportDecl(ImportDecl node) =>
         $"{Pad()}Import: {node.ModuleName}";
 
+    /// <inheritdoc/>
     public override string VisitTypeDecl(TypeDecl node)
     {
         StringBuilder sb = new StringBuilder();
@@ -48,18 +51,21 @@ public class AstPrinter : AstVisitor<string>
         return sb.ToString().TrimEnd();
     }
 
+    /// <inheritdoc/>
     public override string VisitEnumDecl(EnumDecl node)
     {
         string export = node.IsExported ? "export " : "";
         return $"{Pad()}{export}Enum: {node.Name} = {string.Join(" | ", node.Members)}";
     }
 
+    /// <inheritdoc/>
     public override string VisitFlagsDecl(FlagsDecl node)
     {
         string export = node.IsExported ? "export " : "";
         return $"{Pad()}{export}Flags: {node.Name} = {string.Join(" | ", node.Members)}";
     }
 
+    /// <inheritdoc/>
     public override string VisitFunctionDecl(FunctionDecl node)
     {
         StringBuilder sb = new StringBuilder();
@@ -79,6 +85,7 @@ public class AstPrinter : AstVisitor<string>
         return sb.ToString().TrimEnd();
     }
 
+    /// <inheritdoc/>
     public override string VisitLetDecl(LetDecl node)
     {
         string export = node.IsExported ? "export " : "";
@@ -86,6 +93,7 @@ public class AstPrinter : AstVisitor<string>
         return $"{Pad()}{export}Let: {node.Name}{type} = {Visit(node.Value)}";
     }
 
+    /// <inheritdoc/>
     public override string VisitCommandDecl(CommandDecl node)
     {
         StringBuilder sb = new StringBuilder();
@@ -102,12 +110,14 @@ public class AstPrinter : AstVisitor<string>
     }
 
     // Statements
+    /// <inheritdoc/>
     public override string VisitLetStatement(LetStatement node)
     {
         string type = node.TypeAnnotation is not null ? $" : {FormatTypeRef(node.TypeAnnotation)}" : "";
         return $"{Pad()}Let: {node.Name}{type} = {Visit(node.Value)}";
     }
 
+    /// <inheritdoc/>
     public override string VisitForEachStatement(ForEachStatement node)
     {
         StringBuilder sb = new StringBuilder();
@@ -122,9 +132,11 @@ public class AstPrinter : AstVisitor<string>
         return sb.ToString().TrimEnd();
     }
 
+    /// <inheritdoc/>
     public override string VisitExpressionStatement(ExpressionStatement node) =>
         $"{Pad()}Expr: {Visit(node.Expr)}";
 
+    /// <inheritdoc/>
     public override string VisitPipelineStatement(PipelineStatement node)
     {
         string stages = string.Join(" => ", node.Stages.Select(s => Visit(s.Expr)));
@@ -132,8 +144,10 @@ public class AstPrinter : AstVisitor<string>
     }
 
     // Expressions
+    /// <inheritdoc/>
     public override string VisitIdentifierExpr(IdentifierExpr node) => node.Name;
 
+    /// <inheritdoc/>
     public override string VisitLiteralExpr(LiteralExpr node) => node.Value switch
     {
         null => "null",
@@ -142,33 +156,41 @@ public class AstPrinter : AstVisitor<string>
         _ => node.Value.ToString() ?? "null"
     };
 
+    /// <inheritdoc/>
     public override string VisitBinaryExpr(BinaryExpr node) =>
         $"({Visit(node.Left)} {FormatOp(node.Op)} {Visit(node.Right)})";
 
+    /// <inheritdoc/>
     public override string VisitUnaryExpr(UnaryExpr node) =>
         $"{FormatUnaryOp(node.Op)}{Visit(node.Operand)}";
 
+    /// <inheritdoc/>
     public override string VisitCallExpr(CallExpr node)
     {
         string args = string.Join(", ", node.Args.Select(Visit));
         return $"{Visit(node.Callee)}({args})";
     }
 
+    /// <inheritdoc/>
     public override string VisitMemberExpr(MemberExpr node) =>
         $"{Visit(node.Object)}.{node.Member}";
 
+    /// <inheritdoc/>
     public override string VisitIndexExpr(IndexExpr node) =>
         $"{Visit(node.Object)}[{Visit(node.Index)}]";
 
+    /// <inheritdoc/>
     public override string VisitLambdaExpr(LambdaExpr node)
     {
         string @params = string.Join(", ", node.Params.Select(p => p.Name));
         return $"({@params}) => {Visit(node.Body)}";
     }
 
+    /// <inheritdoc/>
     public override string VisitConditionalExpr(ConditionalExpr node) =>
         $"({Visit(node.Condition)} ? {Visit(node.Then)} : {Visit(node.Else)})";
 
+    /// <inheritdoc/>
     public override string VisitMatchExpr(MatchExpr node)
     {
         string arms = string.Join(" | ", node.Arms.Select(a =>
@@ -176,12 +198,14 @@ public class AstPrinter : AstVisitor<string>
         return $"match {Visit(node.Discriminant)} {{ {arms} }}";
     }
 
+    /// <inheritdoc/>
     public override string VisitListExpr(ListExpr node)
     {
         string elements = string.Join(", ", node.Elements.Select(Visit));
         return $"[{elements}]";
     }
 
+    /// <inheritdoc/>
     public override string VisitObjectExpr(ObjectExpr node)
     {
         string fields = string.Join(", ", node.Fields.Select(f => $"{f.Name}: {Visit(f.Value)}"));
@@ -189,6 +213,7 @@ public class AstPrinter : AstVisitor<string>
         return $"{type}{{ {fields} }}";
     }
 
+    /// <inheritdoc/>
     public override string VisitInterpolatedStringExpr(InterpolatedStringExpr node)
     {
         string parts = string.Join("", node.Parts.Select(p => p switch
@@ -200,6 +225,7 @@ public class AstPrinter : AstVisitor<string>
         return $"'{parts}'";
     }
 
+    /// <inheritdoc/>
     public override string VisitFilterExpr(FilterExpr node)
     {
         string neg = node.Negated ? "!" : "";

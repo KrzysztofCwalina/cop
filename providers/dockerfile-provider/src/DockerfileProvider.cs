@@ -12,9 +12,9 @@ namespace Cop.Providers.Dockerfile;
 public sealed class DockerfileProvider : DataProvider
 {
     /// <inheritdoc />
-    public override ReadOnlyMemory<byte> GetSchema() => _schema.ToJson();
+    public override ReadOnlyMemory<byte> GetSchema() => s_schema.ToJson();
 
-    private static readonly ProviderSchema _schema = BuildSchema();
+    private static readonly ProviderSchema s_schema = BuildSchema();
 
     private static ProviderSchema BuildSchema()
     {
@@ -25,7 +25,7 @@ public sealed class DockerfileProvider : DataProvider
                 TypeDef("DockerInstruction", null,
                     Prop("Instruction"), Prop("Argument"),
                     Prop("Line", "int"), Prop("Stage", "int"),
-                    Prop("IsJsonForm", "bool"), new() { Name = "Arguments", Type = "string", Collection = true },
+                    Prop("IsJsonForm", "bool"), new() { Name = "Arguments", Type = "string", IsCollection = true },
                     Opt("From"), Prop("ReferencedStage", "int"),
                     Opt("File", "File"), Prop("Source")),
 
@@ -47,7 +47,7 @@ public sealed class DockerfileProvider : DataProvider
     private static ProviderPropertySchema Prop(string name, string type = "string")
         => new() { Name = name, Type = type };
     private static ProviderPropertySchema Opt(string name, string type = "string")
-        => new() { Name = name, Type = type, Optional = true };
+        => new() { Name = name, Type = type, IsOptional = true };
 
     /// <inheritdoc />
     public override RuntimeBindings GetRuntimeBindings()
@@ -69,20 +69,25 @@ public sealed class DockerfileProvider : DataProvider
     }
 
     /// <inheritdoc />
-    public override object? Query(ProviderQuery query)
+    public override async ValueTask<object?> QueryAsync(
+        ProviderQuery query, CancellationToken cancellationToken = default)
     {
-        DeferredProviderResult result = (DeferredProviderResult)QueryDeferred(query);
-        return result.Collections.ToDictionary(c => c.Key, c => c.Value.ToList(), StringComparer.Ordinal);
+        DeferredProviderResult result = (DeferredProviderResult)
+            (await QueryDeferredAsync(query, cancellationToken).ConfigureAwait(false))!;
+        return await ProviderCollections.MaterializeAsync(result, cancellationToken)
+            .ConfigureAwait(false);
     }
 
     private readonly Dictionary<string, DeferredFormatSnapshot> _snapshots = new(StringComparer.Ordinal);
 
     /// <inheritdoc />
-    public override object QueryDeferred(ProviderQuery query)
+    public override ValueTask<object?> QueryDeferredAsync(
+        ProviderQuery query, CancellationToken cancellationToken = default)
     {
         if (query.RootPath is null)
         {
-            return new DeferredProviderResult(new Dictionary<string, IEnumerable<object>>());
+            return ValueTask.FromResult<object?>(new DeferredProviderResult(
+                new Dictionary<string, IAsyncEnumerable<object>>()));
         }
 
         string key = DeferredFormatSnapshot.Key(query);
@@ -94,9 +99,9 @@ public sealed class DockerfileProvider : DataProvider
                 List<string> paths = new List<string>();
                 CollectDockerfiles(root, query.ExcludedDirectories, paths);
                 return paths;
-            }, path =>
+            }, async (path, token) =>
             {
-                string text = File.ReadAllText(path);
+                string text = await File.ReadAllTextAsync(path, token).ConfigureAwait(false);
                 SourceFile file = new SourceFile(Path.GetRelativePath(root, path).Replace('\\', '/'), "dockerfile", [], [], text);
                 DockerfileParser.DockerfileParseResult doc = DockerfileParser.Parse(text);
                 return new()
@@ -107,7 +112,8 @@ public sealed class DockerfileProvider : DataProvider
             });
             _snapshots.Add(key, snapshot);
         }
-        return snapshot.Query(query, _schema, GetRuntimeBindings());
+        cancellationToken.ThrowIfCancellationRequested();
+        return ValueTask.FromResult<object?>(snapshot.Query(query, s_schema, GetRuntimeBindings()));
     }
 
     private static void CollectDockerfiles(string dir, IReadOnlySet<string>? excluded, List<string> result)

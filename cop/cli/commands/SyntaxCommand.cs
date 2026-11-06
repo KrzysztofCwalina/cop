@@ -69,7 +69,7 @@ public static class SyntaxCommand
                 Console.Error.WriteLine(ex.Message);
                 errors++;
             }
-            catch (Exception ex) when (ex is not OutOfMemoryException)
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
                 Console.Error.WriteLine($"{file}: {ex.Message}");
                 errors++;

@@ -9,6 +9,7 @@ public abstract class AstWalker : AstVisitor<object?>
 {
     protected override object? DefaultVisit(AstNode node) => null;
 
+    /// <inheritdoc/>
     public override object? VisitModule(ModuleNode node)
     {
         foreach (Declaration decl in node.Declarations)
@@ -19,6 +20,7 @@ public abstract class AstWalker : AstVisitor<object?>
         return null;
     }
 
+    /// <inheritdoc/>
     public override object? VisitTypeDecl(TypeDecl node)
     {
         foreach (PropertyDecl prop in node.Properties)
@@ -29,6 +31,7 @@ public abstract class AstWalker : AstVisitor<object?>
         return null;
     }
 
+    /// <inheritdoc/>
     public override object? VisitFunctionDecl(FunctionDecl node)
     {
         if (node.Guard is not null)
@@ -40,12 +43,14 @@ public abstract class AstWalker : AstVisitor<object?>
         return null;
     }
 
+    /// <inheritdoc/>
     public override object? VisitLetDecl(LetDecl node)
     {
         Visit(node.Value);
         return null;
     }
 
+    /// <inheritdoc/>
     public override object? VisitCommandDecl(CommandDecl node)
     {
         foreach (Statement stmt in node.Body)
@@ -56,12 +61,14 @@ public abstract class AstWalker : AstVisitor<object?>
         return null;
     }
 
+    /// <inheritdoc/>
     public override object? VisitLetStatement(LetStatement node)
     {
         Visit(node.Value);
         return null;
     }
 
+    /// <inheritdoc/>
     public override object? VisitForEachStatement(ForEachStatement node)
     {
         Visit(node.Collection);
@@ -73,12 +80,14 @@ public abstract class AstWalker : AstVisitor<object?>
         return null;
     }
 
+    /// <inheritdoc/>
     public override object? VisitExpressionStatement(ExpressionStatement node)
     {
         Visit(node.Expr);
         return null;
     }
 
+    /// <inheritdoc/>
     public override object? VisitPipelineStatement(PipelineStatement node)
     {
         Visit(node.Source);
@@ -90,6 +99,7 @@ public abstract class AstWalker : AstVisitor<object?>
         return null;
     }
 
+    /// <inheritdoc/>
     public override object? VisitBinaryExpr(BinaryExpr node)
     {
         Visit(node.Left);
@@ -97,12 +107,14 @@ public abstract class AstWalker : AstVisitor<object?>
         return null;
     }
 
+    /// <inheritdoc/>
     public override object? VisitUnaryExpr(UnaryExpr node)
     {
         Visit(node.Operand);
         return null;
     }
 
+    /// <inheritdoc/>
     public override object? VisitCallExpr(CallExpr node)
     {
         Visit(node.Callee);
@@ -114,12 +126,14 @@ public abstract class AstWalker : AstVisitor<object?>
         return null;
     }
 
+    /// <inheritdoc/>
     public override object? VisitMemberExpr(MemberExpr node)
     {
         Visit(node.Object);
         return null;
     }
 
+    /// <inheritdoc/>
     public override object? VisitIndexExpr(IndexExpr node)
     {
         Visit(node.Object);
@@ -127,12 +141,14 @@ public abstract class AstWalker : AstVisitor<object?>
         return null;
     }
 
+    /// <inheritdoc/>
     public override object? VisitLambdaExpr(LambdaExpr node)
     {
         Visit(node.Body);
         return null;
     }
 
+    /// <inheritdoc/>
     public override object? VisitConditionalExpr(ConditionalExpr node)
     {
         Visit(node.Condition);
@@ -141,6 +157,7 @@ public abstract class AstWalker : AstVisitor<object?>
         return null;
     }
 
+    /// <inheritdoc/>
     public override object? VisitMatchExpr(MatchExpr node)
     {
         Visit(node.Discriminant);
@@ -152,6 +169,7 @@ public abstract class AstWalker : AstVisitor<object?>
         return null;
     }
 
+    /// <inheritdoc/>
     public override object? VisitListExpr(ListExpr node)
     {
         foreach (Expression elem in node.Elements)
@@ -162,6 +180,7 @@ public abstract class AstWalker : AstVisitor<object?>
         return null;
     }
 
+    /// <inheritdoc/>
     public override object? VisitObjectExpr(ObjectExpr node)
     {
         foreach (FieldInit field in node.Fields)
@@ -172,6 +191,7 @@ public abstract class AstWalker : AstVisitor<object?>
         return null;
     }
 
+    /// <inheritdoc/>
     public override object? VisitInterpolatedStringExpr(InterpolatedStringExpr node)
     {
         foreach (StringPart part in node.Parts)
@@ -184,6 +204,7 @@ public abstract class AstWalker : AstVisitor<object?>
         return null;
     }
 
+    /// <inheritdoc/>
     public override object? VisitFilterExpr(FilterExpr node)
     {
         Visit(node.Collection);

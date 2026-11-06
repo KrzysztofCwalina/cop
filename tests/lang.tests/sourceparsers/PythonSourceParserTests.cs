@@ -9,7 +9,7 @@ public class PythonSourceParserTests
     private readonly PythonSourceParser _parser = new();
 
     [Test]
-    public void Parse_ExtractsImports()
+    public async Task Parse_ExtractsImports()
     {
         var source = """
             import os
@@ -20,7 +20,7 @@ public class PythonSourceParserTests
             class MyClient:
                 pass
             """;
-        var result = _parser.Parse("test.py", source)!;
+        var result = (await _parser.ParseAsync("test.py", source, cancellationToken: CancellationToken.None))!;
         Assert.That(result.Usings, Does.Contain("os"));
         Assert.That(result.Usings, Does.Contain("sys"));
         Assert.That(result.Usings, Does.Contain("azure.core"));
@@ -28,171 +28,171 @@ public class PythonSourceParserTests
     }
 
     [Test]
-    public void Parse_MultipleImportsOnOneLine()
+    public async Task Parse_MultipleImportsOnOneLine()
     {
         var source = """
             import os, sys, json
             """;
-        var result = _parser.Parse("test.py", source)!;
+        var result = (await _parser.ParseAsync("test.py", source, cancellationToken: CancellationToken.None))!;
         Assert.That(result.Usings, Does.Contain("os"));
         Assert.That(result.Usings, Does.Contain("sys"));
         Assert.That(result.Usings, Does.Contain("json"));
     }
 
     [Test]
-    public void Parse_ImportWithAlias()
+    public async Task Parse_ImportWithAlias()
     {
         var source = """
             import numpy as np
             from collections import OrderedDict as OD
             """;
-        var result = _parser.Parse("test.py", source)!;
+        var result = (await _parser.ParseAsync("test.py", source, cancellationToken: CancellationToken.None))!;
         Assert.That(result.Usings, Does.Contain("numpy"));
         Assert.That(result.Usings, Does.Contain("collections"));
     }
 
     [Test]
-    public void Parse_NoImports_EmptyUsings()
+    public async Task Parse_NoImports_EmptyUsings()
     {
         var source = """
             class Simple:
                 pass
             """;
-        var result = _parser.Parse("test.py", source)!;
+        var result = (await _parser.ParseAsync("test.py", source, cancellationToken: CancellationToken.None))!;
         Assert.That(result.Usings, Is.Empty);
     }
 
     // ── Statement extraction tests ──
 
     [Test]
-    public void Parse_ExtractsPrintCall()
+    public async Task Parse_ExtractsPrintCall()
     {
         var source = "class Foo:\n    def bar(self):\n        print('hello')\n";
-        var result = _parser.Parse("test.py", source)!;
+        var result = (await _parser.ParseAsync("test.py", source, cancellationToken: CancellationToken.None))!;
         var prints = result.Statements.Where(s => s.Kind == "call" && s.MemberName == "print").ToList();
         Assert.That(prints, Has.Count.EqualTo(1));
         Assert.That(prints[0].IsInMethod, Is.True);
     }
 
     [Test]
-    public void Parse_ExtractsBareExcept()
+    public async Task Parse_ExtractsBareExcept()
     {
         var source = "class Foo:\n    def bar(self):\n        try:\n            pass\n        except:\n            pass\n";
-        var result = _parser.Parse("test.py", source)!;
+        var result = (await _parser.ParseAsync("test.py", source, cancellationToken: CancellationToken.None))!;
         var catches = result.Statements.Where(s => s.Kind == "catch").ToList();
         Assert.That(catches, Has.Count.EqualTo(1));
-        Assert.That(catches[0].TypeName, Is.Null);
+        Assert.That((await AsyncSourceFacts.TypeNameAsync(catches[0], CancellationToken.None)).TypeName, Is.Null);
         Assert.That(catches[0].HasRethrow, Is.False);
         Assert.That(catches[0].IsErrorHandler, Is.True);
         Assert.That(catches[0].IsGenericErrorHandler, Is.True);
     }
 
     [Test]
-    public void Parse_ExtractsExceptWithType()
+    public async Task Parse_ExtractsExceptWithType()
     {
         var source = "class Foo:\n    def bar(self):\n        try:\n            pass\n        except ValueError:\n            pass\n";
-        var result = _parser.Parse("test.py", source)!;
+        var result = (await _parser.ParseAsync("test.py", source, cancellationToken: CancellationToken.None))!;
         var catches = result.Statements.Where(s => s.Kind == "catch").ToList();
         Assert.That(catches, Has.Count.EqualTo(1));
-        Assert.That(catches[0].TypeName, Is.EqualTo("ValueError"));
+        Assert.That((await AsyncSourceFacts.TypeNameAsync(catches[0], CancellationToken.None)).TypeName, Is.EqualTo("ValueError"));
         Assert.That(catches[0].IsErrorHandler, Is.True);
         Assert.That(catches[0].IsGenericErrorHandler, Is.False);
     }
 
     [Test]
-    public void Parse_ExtractsExceptWithAsClause()
+    public async Task Parse_ExtractsExceptWithAsClause()
     {
         var source = "class Foo:\n    def bar(self):\n        try:\n            pass\n        except Exception as e:\n            pass\n";
-        var result = _parser.Parse("test.py", source)!;
+        var result = (await _parser.ParseAsync("test.py", source, cancellationToken: CancellationToken.None))!;
         var catches = result.Statements.Where(s => s.Kind == "catch").ToList();
         Assert.That(catches, Has.Count.EqualTo(1));
-        Assert.That(catches[0].TypeName, Is.EqualTo("Exception"));
+        Assert.That((await AsyncSourceFacts.TypeNameAsync(catches[0], CancellationToken.None)).TypeName, Is.EqualTo("Exception"));
         Assert.That(catches[0].IsErrorHandler, Is.True);
         Assert.That(catches[0].IsGenericErrorHandler, Is.True);
     }
 
     [Test]
-    public void Parse_ExtractsExceptTupleForm()
+    public async Task Parse_ExtractsExceptTupleForm()
     {
         var source = "class Foo:\n    def bar(self):\n        try:\n            pass\n        except (ValueError, TypeError):\n            pass\n";
-        var result = _parser.Parse("test.py", source)!;
+        var result = (await _parser.ParseAsync("test.py", source, cancellationToken: CancellationToken.None))!;
         var catches = result.Statements.Where(s => s.Kind == "catch").ToList();
         Assert.That(catches, Has.Count.EqualTo(1));
-        Assert.That(catches[0].TypeName, Is.EqualTo("ValueError"));
+        Assert.That((await AsyncSourceFacts.TypeNameAsync(catches[0], CancellationToken.None)).TypeName, Is.EqualTo("ValueError"));
     }
 
     [Test]
-    public void Parse_DetectsHasRethrow_BareRaise()
+    public async Task Parse_DetectsHasRethrow_BareRaise()
     {
         var source = "class Foo:\n    def bar(self):\n        try:\n            pass\n        except Exception:\n            raise\n";
-        var result = _parser.Parse("test.py", source)!;
+        var result = (await _parser.ParseAsync("test.py", source, cancellationToken: CancellationToken.None))!;
         var catches = result.Statements.Where(s => s.Kind == "catch").ToList();
         Assert.That(catches[0].HasRethrow, Is.True);
     }
 
     [Test]
-    public void Parse_DoesNotTreatRaiseNewAsRethrow()
+    public async Task Parse_DoesNotTreatRaiseNewAsRethrow()
     {
         var source = "class Foo:\n    def bar(self):\n        try:\n            pass\n        except Exception:\n            raise ValueError('wrapped')\n";
-        var result = _parser.Parse("test.py", source)!;
+        var result = (await _parser.ParseAsync("test.py", source, cancellationToken: CancellationToken.None))!;
         var catches = result.Statements.Where(s => s.Kind == "catch").ToList();
         Assert.That(catches[0].HasRethrow, Is.False);
     }
 
     [Test]
-    public void Parse_ExtractsRaiseStatement()
+    public async Task Parse_ExtractsRaiseStatement()
     {
         var source = "class Foo:\n    def bar(self):\n        raise ValueError('bad')\n";
-        var result = _parser.Parse("test.py", source)!;
+        var result = (await _parser.ParseAsync("test.py", source, cancellationToken: CancellationToken.None))!;
         var throws = result.Statements.Where(s => s.Kind == "throw").ToList();
         Assert.That(throws, Has.Count.EqualTo(1));
-        Assert.That(throws[0].TypeName, Is.EqualTo("ValueError"));
+        Assert.That((await AsyncSourceFacts.TypeNameAsync(throws[0], CancellationToken.None)).TypeName, Is.EqualTo("ValueError"));
     }
 
     [Test]
-    public void Parse_ExtractsModuleLevelInvocation()
+    public async Task Parse_ExtractsModuleLevelInvocation()
     {
         var source = "print('hello')\n";
-        var result = _parser.Parse("test.py", source)!;
+        var result = (await _parser.ParseAsync("test.py", source, cancellationToken: CancellationToken.None))!;
         var prints = result.Statements.Where(s => s.Kind == "call" && s.MemberName == "print").ToList();
         Assert.That(prints, Has.Count.EqualTo(1));
         Assert.That(prints[0].IsInMethod, Is.False);
     }
 
     [Test]
-    public void Parse_ExtractsTopLevelFunctionStatements()
+    public async Task Parse_ExtractsTopLevelFunctionStatements()
     {
         var source = "def my_func():\n    print('inside')\n";
-        var result = _parser.Parse("test.py", source)!;
+        var result = (await _parser.ParseAsync("test.py", source, cancellationToken: CancellationToken.None))!;
         var prints = result.Statements.Where(s => s.Kind == "call" && s.MemberName == "print").ToList();
         Assert.That(prints, Has.Count.EqualTo(1));
         Assert.That(prints[0].IsInMethod, Is.True);
     }
 
     [Test]
-    public void Parse_ExtractsMethodCallWithModule()
+    public async Task Parse_ExtractsMethodCallWithModule()
     {
         var source = "class Foo:\n    def bar(self):\n        os.system('ls')\n";
-        var result = _parser.Parse("test.py", source)!;
+        var result = (await _parser.ParseAsync("test.py", source, cancellationToken: CancellationToken.None))!;
         var calls = result.Statements.Where(s => s.Kind == "call" && s.MemberName == "system").ToList();
         Assert.That(calls, Has.Count.EqualTo(1));
-        Assert.That(calls[0].TypeName, Is.EqualTo("os"));
+        Assert.That((await AsyncSourceFacts.TypeNameAsync(calls[0], CancellationToken.None)).TypeName, Is.EqualTo("os"));
     }
 
     [Test]
-    public void Parse_SkipsDocstrings()
+    public async Task Parse_SkipsDocstrings()
     {
         var source = "class Foo:\n    \"\"\"This has print('hello') in a docstring.\"\"\"\n    def bar(self):\n        pass\n";
-        var result = _parser.Parse("test.py", source)!;
+        var result = (await _parser.ParseAsync("test.py", source, cancellationToken: CancellationToken.None))!;
         var prints = result.Statements.Where(s => s.MemberName == "print").ToList();
         Assert.That(prints, Is.Empty);
     }
 
     [Test]
-    public void Parse_SkipsComments()
+    public async Task Parse_SkipsComments()
     {
         var source = "class Foo:\n    def bar(self):\n        # print('commented out')\n        pass\n";
-        var result = _parser.Parse("test.py", source)!;
+        var result = (await _parser.ParseAsync("test.py", source, cancellationToken: CancellationToken.None))!;
         var prints = result.Statements.Where(s => s.MemberName == "print").ToList();
         Assert.That(prints, Is.Empty);
     }
@@ -200,20 +200,20 @@ public class PythonSourceParserTests
     // ── Comment line detection ──
 
     [Test]
-    public void Parse_CommentLines_HashComment()
+    public async Task Parse_CommentLines_HashComment()
     {
         var source = "# This is a comment\nx = 1\n# Another comment\n";
-        var result = _parser.Parse("test.py", source)!;
+        var result = (await _parser.ParseAsync("test.py", source, cancellationToken: CancellationToken.None))!;
         Assert.That(result.CommentLines, Does.Contain(1));
         Assert.That(result.CommentLines, Does.Not.Contain(2));
         Assert.That(result.CommentLines, Does.Contain(3));
     }
 
     [Test]
-    public void Parse_CommentLines_IndentedComment()
+    public async Task Parse_CommentLines_IndentedComment()
     {
         var source = "class Foo:\n    # indented comment\n    x = 1\n";
-        var result = _parser.Parse("test.py", source)!;
+        var result = (await _parser.ParseAsync("test.py", source, cancellationToken: CancellationToken.None))!;
         Assert.That(result.CommentLines, Does.Contain(2));
         Assert.That(result.CommentLines, Does.Not.Contain(1));
         Assert.That(result.CommentLines, Does.Not.Contain(3));
@@ -222,11 +222,11 @@ public class PythonSourceParserTests
     // ── ParseErrors — negative tests (malformed Python) ──
 
     [Test]
-    public void Parse_UnterminatedStringLiteral_ReportsError()
+    public async Task Parse_UnterminatedStringLiteral_ReportsError()
     {
         // Double-quoted string that never closes before end of line
         var source = "x = \"hello\nprint('done')\n";
-        var result = _parser.Parse("test.py", source)!;
+        var result = (await _parser.ParseAsync("test.py", source, cancellationToken: CancellationToken.None))!;
         Assert.That(result.ParseErrors, Has.Some.Contains("unterminated string literal"),
             "Should report unterminated string literal");
         Assert.That(result.ParseErrors, Has.Some.Contains("test.py(1,"),
@@ -234,11 +234,11 @@ public class PythonSourceParserTests
     }
 
     [Test]
-    public void Parse_ClassMissingName_ReportsError()
+    public async Task Parse_ClassMissingName_ReportsError()
     {
         // 'class' with no name before the colon
         var source = "class :\n    pass\n";
-        var result = _parser.Parse("test.py", source)!;
+        var result = (await _parser.ParseAsync("test.py", source, cancellationToken: CancellationToken.None))!;
         Assert.That(result.ParseErrors, Has.Some.Contains("test.py(1,"),
             "Error should reference line 1 of test.py");
         Assert.That(result.ParseErrors, Has.Some.Contains("error:"),
@@ -246,11 +246,11 @@ public class PythonSourceParserTests
     }
 
     [Test]
-    public void Parse_DefMissingColon_ReportsError()
+    public async Task Parse_DefMissingColon_ReportsError()
     {
         // def whose parameter list has no closing ':' on the header line
         var source = "def foo(x)\n    pass\n";
-        var result = _parser.Parse("test.py", source)!;
+        var result = (await _parser.ParseAsync("test.py", source, cancellationToken: CancellationToken.None))!;
         Assert.That(result.ParseErrors, Has.Some.Contains("test.py(1,"),
             "Error should reference line 1 of test.py");
         Assert.That(result.ParseErrors, Has.Some.Contains(":"),
@@ -258,7 +258,7 @@ public class PythonSourceParserTests
     }
 
     [Test]
-    public void Parse_ValidPythonFile_HasEmptyParseErrors()
+    public async Task Parse_ValidPythonFile_HasEmptyParseErrors()
     {
         // A realistic modern Python file — must produce ZERO parse errors
         var source = """
@@ -282,7 +282,7 @@ public class PythonSourceParserTests
 
             result = helper(1, 2)
             """;
-        var result = _parser.Parse("test.py", source)!;
+        var result = (await _parser.ParseAsync("test.py", source, cancellationToken: CancellationToken.None))!;
         Assert.That(result.ParseErrors, Is.Empty,
             "Valid Python should produce no parse errors");
     }

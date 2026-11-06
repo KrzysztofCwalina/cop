@@ -11,13 +11,13 @@ namespace Cop.Providers.SourceParsers;
 
 internal static class GoNativeAnalysis
 {
-    private static readonly ConcurrentDictionary<string, Lazy<string?>> Helpers = new();
-    private static readonly JsonSerializerOptions Json = new() { PropertyNameCaseInsensitive = true };
-    private static readonly Dictionary<string, string?> EnvironmentOverrides = new()
+    private static readonly ConcurrentDictionary<string, AsyncProviderValue<string?>> s_helpers = new();
+    private static readonly JsonSerializerOptions s_json = new() { PropertyNameCaseInsensitive = true };
+    private static readonly Dictionary<string, string?> s_environmentOverrides = new()
     {
         ["GOTOOLCHAIN"] = "local",
         ["GOWORK"] = "off",
-        ["GOFLAGS"] = "",
+        ["GOFLAGS"] = string.Empty,
         ["GO111MODULE"] = "off",
         ["GOENV"] = "off",
         ["CGO_ENABLED"] = "0",
@@ -31,42 +31,39 @@ internal static class GoNativeAnalysis
     /// <summary>
     /// Identifies the native Go analysis configuration for source caching.
     /// </summary>
-    public static string Identity(string? searchPath, bool injected)
+    public static string Identity(string? searchPath,
+        Func<string, CancellationToken, ValueTask<ToolchainResult>>? request)
     {
-        if (injected)
+        if (request is not null)
         {
             return "native-protocol";
         }
 
         string? go = ToolchainProcess.FindExecutable("go", searchPath);
-        if (go is not null)
-        {
-            string? helper = Helper(go);
-            if (helper is not null)
-            {
-                return "go-ast:" + helper;
-            }
-        }
-        Warn("", go is null ? "Go toolchain is not installed" : "Go native helper is unavailable");
-        return "go-syntax-fallback";
+        return go is null ? "go-syntax-fallback" : "go-ast:" + go;
     }
 
     /// <summary>Adds native Go type and binding facts to a parsed source file.</summary>
-    public static SourceFile Enrich(SourceFile file, string? searchPath, Func<string, ToolchainResult>? request)
+    public static async ValueTask<SourceFile> EnrichAsync(
+        SourceFile file, string? searchPath,
+        Func<string, CancellationToken, ValueTask<ToolchainResult>>? request,
+        CancellationToken cancellationToken)
     {
         ToolchainResult result;
         if (request is not null)
         {
-            result = request(Request(file));
+            result = await request(Request(file), cancellationToken).ConfigureAwait(false);
         }
         else
         {
             string? go = ToolchainProcess.FindExecutable("go", searchPath);
             if (go is null) { Warn(file.Path, "Go toolchain is not installed"); return file; }
-            string? helper = Helper(go);
+            string? helper = await HelperAsync(go, cancellationToken).ConfigureAwait(false);
             if (helper is null) { Warn(file.Path, "Go toolchain cannot compile the bundled parse-only helper"); return file; }
-            result = ToolchainExecutionScope.RequestAsync(helper, [], Path.GetDirectoryName(helper)!, Request(file),
-                timeout: TimeSpan.FromSeconds(30)).GetAwaiter().GetResult();
+            result = await ToolchainExecutionScope.RequestAsync(
+                new ToolchainCommand(helper, [], Path.GetDirectoryName(helper)!),
+                Request(file), new ToolchainRunOptions { Timeout = TimeSpan.FromSeconds(30) },
+                cancellationToken).ConfigureAwait(false);
         }
         if (result.Status != ToolchainStatus.Success)
         {
@@ -76,7 +73,7 @@ internal static class GoNativeAnalysis
         NativeResponse response;
         try
         {
-            response = JsonSerializer.Deserialize<NativeResponse>(result.StandardOutput, Json)
+            response = JsonSerializer.Deserialize<NativeResponse>(result.StandardOutput, s_json)
                 ?? throw new JsonException("null response");
         }
         catch (JsonException ex) { throw new InvalidOperationException("Go native analysis returned invalid JSON.", ex); }
@@ -96,7 +93,9 @@ internal static class GoNativeAnalysis
         if (request is null)
         {
             string go = ToolchainProcess.FindExecutable("go", searchPath)!;
-            GoSemanticAnalysis.Attach(file, go, Helper(go)!);
+            string helper = await HelperAsync(go, cancellationToken).ConfigureAwait(false)
+                ?? throw new InvalidOperationException("Go semantic helper is unavailable.");
+            GoSemanticAnalysis.Attach(file, go, helper);
         }
         return file;
     }
@@ -110,27 +109,29 @@ internal static class GoNativeAnalysis
         Source = Convert.ToBase64String(Encoding.UTF8.GetBytes(file.RawText))
     });
 
-    private static string? Helper(string go)
+    private static ValueTask<string?> HelperAsync(string go, CancellationToken cancellationToken)
     {
         FileInfo executable = new FileInfo(go);
         string key = go + executable.Length + executable.LastWriteTimeUtc.Ticks;
-        return Helpers.GetOrAdd(key, _ => new(() => Build(go))).Value;
+        return s_helpers.GetOrAdd(key, _ => new(token => BuildAsync(go, token)))
+            .GetValueAsync(cancellationToken);
     }
 
-    private static string? Build(string go)
+    private static async ValueTask<string?> BuildAsync(string go, CancellationToken cancellationToken)
     {
         using Stream resource = typeof(GoSourceParser).Assembly.GetManifestResourceStream("Cop.Go.Native")
             ?? throw new InvalidOperationException("Bundled Go helper resource is missing.");
         using StreamReader reader = new StreamReader(resource);
-        string source = reader.ReadToEnd();
+        string source = await reader.ReadToEndAsync(cancellationToken).ConfigureAwait(false);
         using Stream semantics = typeof(GoSourceParser).Assembly.GetManifestResourceStream("Cop.Go.Semantics")
             ?? throw new InvalidOperationException("Bundled Go semantics resource is missing.");
         using StreamReader semanticReader = new StreamReader(semantics);
-        string semanticSource = semanticReader.ReadToEnd();
+        string semanticSource = await semanticReader.ReadToEndAsync(cancellationToken)
+            .ConfigureAwait(false);
         FileInfo executable = new FileInfo(go);
         string identity = source + semanticSource + go + executable.Length + executable.LastWriteTimeUtc.Ticks
             + System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture
-            + string.Join(";", EnvironmentOverrides.Select(p => $"{p.Key}={p.Value}"));
+            + string.Join(";", s_environmentOverrides.Select(p => $"{p.Key}={p.Value}"));
         string hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(identity)));
         string directory = Path.Combine(Path.GetTempPath(), "cop-native-go", hash);
         string binary = Path.Combine(directory, OperatingSystem.IsWindows() ? "analysis.exe" : "analysis");
@@ -146,11 +147,17 @@ internal static class GoNativeAnalysis
         {
             string input = Path.Combine(scratch, "analysis.go");
             string output = Path.Combine(scratch, Path.GetFileName(binary));
-            File.WriteAllText(input, source, new UTF8Encoding(false));
+            await File.WriteAllTextAsync(input, source, new UTF8Encoding(false), cancellationToken)
+                .ConfigureAwait(false);
             string semanticInput = Path.Combine(scratch, "semantics.go");
-            File.WriteAllText(semanticInput, semanticSource, new UTF8Encoding(false));
-            ToolchainResult result = ToolchainProcess.RunAsync(go, ["build", "-o", output, input, semanticInput], scratch,
-                timeout: TimeSpan.FromMinutes(3), environment: EnvironmentOverrides).GetAwaiter().GetResult();
+            await File.WriteAllTextAsync(
+                semanticInput, semanticSource, new UTF8Encoding(false), cancellationToken)
+                .ConfigureAwait(false);
+            ToolchainResult result = await ToolchainProcess.RunAsync(
+                new ToolchainCommand(go, ["build", "-o", output, input, semanticInput],
+                    scratch, s_environmentOverrides),
+                new ToolchainRunOptions { Timeout = TimeSpan.FromMinutes(3) }, cancellationToken)
+                .ConfigureAwait(false);
             if (result.Status != ToolchainStatus.Success)
             {
                 ProviderWarnings.ReportOnce("go", "preflight", $"Go native helper unavailable: {result.Diagnostic}\n{result.StandardError}");
@@ -194,7 +201,7 @@ internal static class GoNativeAnalysis
         foreach (NativeStatement fact in response.Statements)
         {
             Add(fact.ID, fact.ParentID, fact.MethodLine, fact.MethodColumn,
-                new GoStatementInfo(fact.Kind, [], null, Null(fact.MemberName), [], fact.Line, fact.MethodLine > 0)
+                new GoStatementInfo(new StatementInfo(fact.Kind, [], null, Null(fact.MemberName), [], fact.Line, fact.MethodLine > 0))
                 {
                     Column = fact.Column,
                     EndLine = fact.EndLine,
@@ -214,8 +221,8 @@ internal static class GoNativeAnalysis
                 throw new InvalidOperationException("Go native analysis returned an invalid call.");
             }
 
-            GoStatementInfo call = new GoStatementInfo("call", [], string.IsNullOrEmpty(fact.TypeName) ? null : fact.TypeName,
-                fact.MemberName, fact.Arguments, fact.Line, fact.MethodLine > 0)
+            GoStatementInfo call = new GoStatementInfo(new StatementInfo("call", [], string.IsNullOrEmpty(fact.TypeName) ? null : fact.TypeName,
+                fact.MemberName, fact.Arguments, fact.Line, fact.MethodLine > 0))
             {
                 Column = fact.Column,
                 EndLine = fact.EndLine,
@@ -238,7 +245,7 @@ internal static class GoNativeAnalysis
             }
 
             node.Parent = owner;
-            owner._children.Add(node);
+            owner.MutableChildren.Add(node);
         }
         file.Statements.Sort((a, b) => a.Line != b.Line ? a.Line.CompareTo(b.Line) : Nullable.Compare(a.Column, b.Column));
     }
@@ -274,7 +281,7 @@ internal static class GoNativeAnalysis
             return method;
         }
         List<MethodDeclaration> methods = response.Methods.Select(Method).ToList();
-        List<TypeDeclaration> types = response.Types.Select(t => new TypeDeclaration(t.Name,
+        List<TypeDeclaration> types = response.Types.Select(t => new GoTypeDeclaration(new TypeDeclaration(t.Name,
             t.Kind == "alias" ? TypeKind.Alias : t.Kind == "interface" ? TypeKind.Interface : TypeKind.Struct,
             Visibility(t.Name), t.BaseTypes, [], [], t.Methods.Select(Method).ToList(), [], [], t.Line)
         {
@@ -285,7 +292,12 @@ internal static class GoNativeAnalysis
             TypeParameters = t.TypeParameters,
             HasDocComment = t.Documented,
             Fields = t.Fields.Select(f => new FieldDeclaration(f.Name, f.TypeFact ?? Type(f.Type)!, Visibility(f.Name), f.Line)).ToList()
-        }.AsGo(t.Kind == "interface", t.Kind == "struct", t.Kind == "alias", t.StructTags, t.Union, t.Underlying))
+        })
+        {
+            IsInterface = t.Kind == "interface", IsStruct = t.Kind == "struct",
+            IsTypeAlias = t.Kind == "alias", HasStructTags = t.StructTags,
+            HasUnionTypeSet = t.Union, HasUnderlyingTypeTerms = t.Underlying
+        })
             .Cast<TypeDeclaration>().ToList();
         foreach (MethodDeclaration? method in methods.Where(m => m.ReceiverType is not null))
         {

@@ -22,8 +22,10 @@ public class ReplEvaluator
     /// <summary>
     /// Evaluates a line of REPL input and returns the output lines to display.
     /// </summary>
-    public List<string> Evaluate(string input)
+    public async ValueTask<List<string>> EvaluateAsync(
+        string input, CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         input = input.Trim();
         if (string.IsNullOrEmpty(input))
         {
@@ -33,25 +35,25 @@ public class ReplEvaluator
         // Line reference: <N>! — evaluate line N from main.cop
         if (TryParseLineReference(input, out int lineNumber))
         {
-            return EvaluateLineFromMainCop(lineNumber);
+            return await EvaluateLineFromMainCopAsync(lineNumber, cancellationToken);
         }
 
         // Try as command name
-        List<string>? commandResult = TryEvaluateCommand(input);
+        List<string>? commandResult = await TryEvaluateCommandAsync(input, cancellationToken);
         if (commandResult is not null)
         {
             return commandResult;
         }
 
         // Try as let binding name (simple identifier)
-        List<string>? letResult = TryEvaluateLetBinding(input);
+        List<string>? letResult = await TryEvaluateLetBindingAsync(input, cancellationToken);
         if (letResult is not null)
         {
             return letResult;
         }
 
         // Try as ad-hoc expression
-        return EvaluateExpression(input);
+        return await EvaluateExpressionAsync(input, cancellationToken);
     }
 
     private static bool TryParseLineReference(string input, out int lineNumber)
@@ -66,7 +68,8 @@ public class ReplEvaluator
         return false;
     }
 
-    private List<string> EvaluateLineFromMainCop(int lineNumber)
+    private async ValueTask<List<string>> EvaluateLineFromMainCopAsync(
+        int lineNumber, CancellationToken cancellationToken)
     {
         string? targetPath = ResolveLineReferenceFile();
         if (targetPath is null)
@@ -100,13 +103,13 @@ public class ReplEvaluator
             if (!string.IsNullOrEmpty(name))
             {
                 // Try as command name first (let X = foreach ... => '...' is a command)
-                List<string>? cmdResult = TryEvaluateCommand(name);
+                List<string>? cmdResult = await TryEvaluateCommandAsync(name, cancellationToken);
                 if (cmdResult is not null)
                 {
                     return cmdResult;
                 }
                 // Then try as let binding
-                List<string>? letResult = TryEvaluateLetBinding(name);
+                List<string>? letResult = await TryEvaluateLetBindingAsync(name, cancellationToken);
                 if (letResult is not null)
                 {
                     return letResult;
@@ -125,7 +128,7 @@ public class ReplEvaluator
             string name = line[nameStart..nameEnd];
             if (!string.IsNullOrEmpty(name))
             {
-                List<string>? cmdResult = TryEvaluateCommand(name);
+                List<string>? cmdResult = await TryEvaluateCommandAsync(name, cancellationToken);
                 if (cmdResult is not null)
                 {
                     return cmdResult;
@@ -138,7 +141,7 @@ public class ReplEvaluator
         string snippet = GatherBalancedBlock(lines, lineNumber - 1);
 
         // Otherwise evaluate as raw expression
-        return EvaluateExpression(snippet);
+        return await EvaluateExpressionAsync(snippet, cancellationToken);
     }
 
     /// <summary>
@@ -204,7 +207,8 @@ public class ReplEvaluator
         return File.Exists(mainCopPath) ? mainCopPath : null;
     }
 
-    private List<string>? TryEvaluateCommand(string input)
+    private async ValueTask<List<string>?> TryEvaluateCommandAsync(
+        string input, CancellationToken cancellationToken)
     {
         bool hasCommand = _context.Modules
             .SelectMany(m => m.Module.Declarations)
@@ -216,11 +220,12 @@ public class ReplEvaluator
             return null;
         }
 
-        EnsureProviders();
+        await Engine.LoadProvidersAsync(_context, cancellationToken);
         return RunWithCommand(input);
     }
 
-    private List<string>? TryEvaluateLetBinding(string input)
+    private async ValueTask<List<string>?> TryEvaluateLetBindingAsync(
+        string input, CancellationToken cancellationToken)
     {
         if (input.Contains(':') || input.Contains('.') || input.Contains('(') || input.Contains(' '))
         {
@@ -237,14 +242,15 @@ public class ReplEvaluator
             return null;
         }
 
-        EnsureProviders();
+        await Engine.LoadProvidersAsync(_context, cancellationToken);
         string snippet = $"foreach {input} => '{{item}}'";
         return EvaluateSnippet(snippet);
     }
 
-    private List<string> EvaluateExpression(string input)
+    private async ValueTask<List<string>> EvaluateExpressionAsync(
+        string input, CancellationToken cancellationToken)
     {
-        EnsureProviders();
+        await Engine.LoadProvidersAsync(_context, cancellationToken);
         return EvaluateSnippet(input);
     }
 
@@ -265,20 +271,11 @@ public class ReplEvaluator
     }
 
 
-    private void EnsureProviders()
-    {
-        if (!_context.ProvidersLoaded)
-        {
-            Engine.LoadProviders(_context);
-        }
-    }
-
     /// <summary>
     /// Gets all available identifiers for completion: commands, lets, collections.
     /// </summary>
     public List<string> GetCompletionCandidates()
     {
-        EnsureProviders();
         List<string> candidates = new List<string>();
 
         foreach (Engine.ParsedModule module in _context.Modules)
@@ -356,7 +353,6 @@ public class ReplEvaluator
     /// </summary>
     public List<string> GetNamespaceCollections(string ns)
     {
-        EnsureProviders();
         return _context.TypeRegistry.GetNamespaceCollections(ns);
     }
 }

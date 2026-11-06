@@ -1,4 +1,5 @@
 using Cop.Providers;
+using Cop.Providers.SourceParsers;
 using NUnit.Framework;
 
 namespace Cop.Tests.Lang.SourceParsers;
@@ -22,7 +23,7 @@ public class PythonProjectDiscoveryTests
     }
 
     [Test]
-    public void Discover_Pyproject_ExtractsNameAndVersionStrippedDependencies()
+    public async Task Discover_Pyproject_ExtractsNameAndVersionStrippedDependencies()
     {
         File.WriteAllText(Path.Combine(_tempDir, "pyproject.toml"), """
             [project]
@@ -30,7 +31,7 @@ public class PythonProjectDiscoveryTests
             dependencies = ["service>=1.0", "requests==2.31.0", "typing-extensions~=4.0"]
             """);
 
-        var projects = PythonProjectDiscovery.Discover(_tempDir, null);
+        var projects = (await PythonProjectDiscovery.DiscoverAsync(_tempDir, null, cancellationToken: CancellationToken.None));
 
         Assert.That(projects, Has.Count.EqualTo(1));
         Assert.That(projects[0].Name, Is.EqualTo("foundation"));
@@ -40,7 +41,7 @@ public class PythonProjectDiscoveryTests
     }
 
     [Test]
-    public void Discover_SetupPy_ExtractsNameAndInstallRequires()
+    public async Task Discover_SetupPy_ExtractsNameAndInstallRequires()
     {
         File.WriteAllText(Path.Combine(_tempDir, "setup.py"), """
             from setuptools import setup
@@ -54,7 +55,7 @@ public class PythonProjectDiscoveryTests
             )
             """);
 
-        var projects = PythonProjectDiscovery.Discover(_tempDir, null);
+        var projects = (await PythonProjectDiscovery.DiscoverAsync(_tempDir, null, cancellationToken: CancellationToken.None));
 
         Assert.That(projects, Has.Count.EqualTo(1));
         Assert.That(projects[0].Name, Is.EqualTo("service"));
@@ -63,14 +64,14 @@ public class PythonProjectDiscoveryTests
     }
 
     [Test]
-    public void Discover_Pyproject_NoDependencies_HasEmptyReferences()
+    public async Task Discover_Pyproject_NoDependencies_HasEmptyReferences()
     {
         File.WriteAllText(Path.Combine(_tempDir, "pyproject.toml"), """
             [project]
             name = "standalone"
             """);
 
-        var projects = PythonProjectDiscovery.Discover(_tempDir, null);
+        var projects = (await PythonProjectDiscovery.DiscoverAsync(_tempDir, null, cancellationToken: CancellationToken.None));
 
         Assert.That(projects, Has.Count.EqualTo(1));
         Assert.That(projects[0].Name, Is.EqualTo("standalone"));
@@ -78,7 +79,7 @@ public class PythonProjectDiscoveryTests
     }
 
     [Test]
-    public void Discover_RelativePath_NormalizedWithForwardSlash()
+    public async Task Discover_RelativePath_NormalizedWithForwardSlash()
     {
         var packageDir = Path.Combine(_tempDir, "src", "foundation");
         Directory.CreateDirectory(packageDir);
@@ -87,7 +88,7 @@ public class PythonProjectDiscoveryTests
             name = "foundation"
             """);
 
-        var projects = PythonProjectDiscovery.Discover(_tempDir, null);
+        var projects = (await PythonProjectDiscovery.DiscoverAsync(_tempDir, null, cancellationToken: CancellationToken.None));
 
         Assert.That(projects, Has.Count.EqualTo(1));
         Assert.That(projects[0].Path, Is.EqualTo("src/foundation/pyproject.toml"));
@@ -95,7 +96,7 @@ public class PythonProjectDiscoveryTests
 
     [TestCase(true)]
     [TestCase(false)]
-    public void Discover_QuotedMetadataOptionalDependenciesAndNestedProjects(bool useToolchain)
+    public async Task Discover_QuotedMetadataOptionalDependenciesAndNestedProjects(bool useToolchain)
     {
         File.WriteAllText(Path.Combine(_tempDir, "pyproject.toml"), """
             [project] # valid inline comment
@@ -110,14 +111,16 @@ public class PythonProjectDiscoveryTests
         var nested = Path.Combine(_tempDir, "nested");
         Directory.CreateDirectory(nested);
         File.WriteAllText(Path.Combine(nested, "pyproject.toml"), "[project]\nname = 'inner'\n");
-        var projects = PythonProjectDiscovery.Discover(_tempDir, null, useToolchain);
+        var projects = (await PythonProjectDiscovery.DiscoverAsync(_tempDir, null,
+            useToolchain ? PythonAnalysisBackend.PreferNative : PythonAnalysisBackend.SyntaxOnly,
+            cancellationToken: CancellationToken.None));
         Assert.That(projects.Select(p => p.Name), Is.EqualTo(new[] { "outer", "inner" }));
         Assert.That(projects[0].References, Is.EqualTo(new[] { "requests", "urllib3", "pytest" }));
         Assert.That(projects[1].References, Is.Empty);
     }
 
     [Test]
-    public void Discover_DoesNotExecuteSetupCodeOrTreatUnrelatedNameAsMetadata()
+    public async Task Discover_DoesNotExecuteSetupCodeOrTreatUnrelatedNameAsMetadata()
     {
         File.WriteAllText(Path.Combine(_tempDir, "setup.py"), """
             import module_that_does_not_exist
@@ -126,29 +129,29 @@ public class PythonProjectDiscoveryTests
             setup(name='actual', install_requires=['requests>=2'],
                   extras_require={'test': ['pytest>=8']})
             """);
-        var projects = PythonProjectDiscovery.Discover(_tempDir, null);
+        var projects = (await PythonProjectDiscovery.DiscoverAsync(_tempDir, null, cancellationToken: CancellationToken.None));
         Assert.That(projects.Select(p => p.Name), Is.EqualTo(new[] { "actual" }));
         Assert.That(projects[0].References, Is.EqualTo(new[] { "requests", "pytest" }));
     }
 
     [Test]
-    public void Discover_InvalidManifestSurfacesDiagnostic()
+    public async Task Discover_InvalidManifestSurfacesDiagnostic()
     {
         Cop.Core.ProviderErrors.Clear();
         File.WriteAllText(Path.Combine(_tempDir, "pyproject.toml"), "[project]\nname = [");
-        Assert.That(PythonProjectDiscovery.Discover(_tempDir, null), Is.Empty);
+        Assert.That((await PythonProjectDiscovery.DiscoverAsync(_tempDir, null, cancellationToken: CancellationToken.None)), Is.Empty);
         var errors = Cop.Core.ProviderErrors.Drain();
         Assert.That(errors, Has.Count.EqualTo(1));
         Assert.That(errors[0], Does.Contain("pyproject.toml").And.Contain("error:"));
     }
 
     [Test]
-    public void Discover_DynamicDependenciesAreExplicitlyReportedAsUnknown()
+    public async Task Discover_DynamicDependenciesAreExplicitlyReportedAsUnknown()
     {
         Cop.Core.ProviderWarnings.Clear();
         File.WriteAllText(Path.Combine(_tempDir, "setup.py"),
             "setup(name='project', install_requires=read_dependencies())");
-        var projects = PythonProjectDiscovery.Discover(_tempDir, null);
+        var projects = (await PythonProjectDiscovery.DiscoverAsync(_tempDir, null, cancellationToken: CancellationToken.None));
         Assert.That(projects.Select(p => p.Name), Is.EqualTo(new[] { "project" }));
         Assert.That(projects.Single().References, Is.Empty);
         var warnings = Cop.Core.ProviderWarnings.Drain();

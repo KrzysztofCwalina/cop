@@ -3,7 +3,7 @@
 using Cop.Core;
 using Cop.Lang;
 
-namespace TypeSpecProvider;
+namespace Cop.Providers.TypeSpec;
 
 /// <summary>
 /// DataProvider for HTTP protocol graph derived from TypeSpec.
@@ -15,9 +15,9 @@ public class TypeSpecHttpProvider : DataProvider
 {
 
     /// <inheritdoc />
-    public override ReadOnlyMemory<byte> GetSchema() => _schema.ToJson();
+    public override ReadOnlyMemory<byte> GetSchema() => s_schema.ToJson();
 
-    private static readonly ProviderSchema _schema = BuildSchema();
+    private static readonly ProviderSchema s_schema = BuildSchema();
 
     private static ProviderSchema BuildSchema()
     {
@@ -28,7 +28,7 @@ public class TypeSpecHttpProvider : DataProvider
                 new() { Name = "TspDecorator", Properties =
                 [
                     new() { Name = "Name" },
-                    new() { Name = "Arguments", Collection = true },
+                    new() { Name = "Arguments", IsCollection = true },
                 ]},
                 new() { Name = "HttpParameter", Properties =
                 [
@@ -36,7 +36,7 @@ public class TypeSpecHttpProvider : DataProvider
                     new() { Name = "Type" },
                     new() { Name = "In" },
                     new() { Name = "Optional", Type = "bool" },
-                    new() { Name = "Style", Optional = true },
+                    new() { Name = "Style", IsOptional = true },
                 ]},
                 new() { Name = "HttpHeader", Properties =
                 [
@@ -46,9 +46,9 @@ public class TypeSpecHttpProvider : DataProvider
                 new() { Name = "HttpResponse", Properties =
                 [
                     new() { Name = "StatusCode" },
-                    new() { Name = "Description", Optional = true },
-                    new() { Name = "Body", Optional = true },
-                    new() { Name = "Headers", Type = "HttpHeader", Collection = true },
+                    new() { Name = "Description", IsOptional = true },
+                    new() { Name = "Body", IsOptional = true },
+                    new() { Name = "Headers", Type = "HttpHeader", IsCollection = true },
                 ]},
                 new() { Name = "HttpOperation", Properties =
                 [
@@ -56,17 +56,17 @@ public class TypeSpecHttpProvider : DataProvider
                     new() { Name = "Verb" },
                     new() { Name = "Path" },
                     new() { Name = "UriTemplate" },
-                    new() { Name = "Parameters", Type = "HttpParameter", Collection = true },
-                    new() { Name = "Responses", Type = "HttpResponse", Collection = true },
-                    new() { Name = "Interface", Optional = true },
-                    new() { Name = "Decorators", Type = "TspDecorator", Collection = true },
+                    new() { Name = "Parameters", Type = "HttpParameter", IsCollection = true },
+                    new() { Name = "Responses", Type = "HttpResponse", IsCollection = true },
+                    new() { Name = "Interface", IsOptional = true },
+                    new() { Name = "Decorators", Type = "TspDecorator", IsCollection = true },
                 ]},
                 new() { Name = "HttpService", Properties =
                 [
                     new() { Name = "Name" },
                     new() { Name = "Namespace" },
-                    new() { Name = "Operations", Type = "HttpOperation", Collection = true },
-                    new() { Name = "Auth", Optional = true },
+                    new() { Name = "Operations", Type = "HttpOperation", IsCollection = true },
+                    new() { Name = "Auth", IsOptional = true },
                 ]},
             ],
             Collections =
@@ -78,12 +78,14 @@ public class TypeSpecHttpProvider : DataProvider
     }
 
     /// <inheritdoc />
-    public override object? Query(ProviderQuery query)
+    public override async ValueTask<object?> QueryAsync(
+        ProviderQuery query, CancellationToken cancellationToken = default)
     {
         TspSpec rawSpec = new TspSpec();
         if (query.RootPath is not null && Directory.Exists(query.RootPath))
         {
-            rawSpec = TspParser.ParseFiles(query.RootPath);
+            rawSpec = await TspParser.ParseFilesAsync(
+                query.RootPath, cancellationToken: cancellationToken).ConfigureAwait(false);
         }
 
         HttpSpec httpSpec = HttpTransformer.Transform(rawSpec);
@@ -178,7 +180,7 @@ public class TypeSpecHttpProvider : DataProvider
             parameters.SetString(pRow, 0, p.Name);
             parameters.SetString(pRow, 1, p.Type);
             parameters.SetString(pRow, 2, p.In);
-            parameters.SetBool(pRow, 3, p.Optional);
+            parameters.SetBool(pRow, 3, p.IsOptional);
             parameters.SetString(pRow, 4, p.Style);
         }
         operations.SetRange(row, 4, paramStart, o.Parameters.Count);

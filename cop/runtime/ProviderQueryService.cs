@@ -4,6 +4,7 @@ using Cop.Core;
 using Cop.Lang;
 using Cop.Lang.Interpreter;
 using System.Text.Json;
+using System.Runtime.CompilerServices;
 
 namespace Cop.Providers;
 
@@ -12,7 +13,7 @@ namespace Cop.Providers;
 /// Caches results by (provider, collection, absolutePath) to avoid re-scanning.
 /// Used by the interpreter when a collection reference has a PathOverride.
 /// </summary>
-public class ProviderQueryService
+public class ProviderQueryService : IAsyncDisposable
 {
     private readonly record struct CacheKey(string ProviderName, string CollectionName, string AbsolutePath);
 
@@ -23,10 +24,13 @@ public class ProviderQueryService
     private readonly Dictionary<(string Provider, Type Type), ClrObjectAdapter> _clrAdapters = new();
     private readonly Dictionary<DataTable, RecordViewAdapter> _tableAdapters = new();
     private readonly Dictionary<string, (DataProvider Instance, ProviderSchema Schema)> _providers = new(StringComparer.OrdinalIgnoreCase);
+    private readonly HashSet<object> _ownedProviders =
+        new(ReferenceEqualityComparer.Instance);
     private readonly string _invocationDirectory;
     private readonly IReadOnlySet<string>? _excludedDirectories;
     private Action<string>? _diagLog;
 
+    /// <summary>Creates a query cache rooted at the invocation directory.</summary>
     public ProviderQueryService(string invocationDirectory, IReadOnlySet<string>? excludedDirectories = null, Action<string>? diagLog = null)
     {
         _invocationDirectory = invocationDirectory;
@@ -43,6 +47,30 @@ public class ProviderQueryService
         _bindings[name] = instance.GetRuntimeBindings();
     }
 
+    /// <summary>Registers a provider and assumes ownership of its disposable resources.</summary>
+    public void RegisterOwnedProvider(ProviderLoader.LoadedProvider provider)
+    {
+        RegisterOwnedResource(provider.Instance);
+        RegisterProvider(provider.PackageName, provider.Instance, provider.Schema);
+    }
+
+    internal void RegisterOwnedResource(object instance)
+    {
+        if (instance is IDisposable or IAsyncDisposable)
+        {
+            _ownedProviders.Add(instance);
+        }
+    }
+
+    /// <summary>Releases owned providers without disposing borrowed built-in providers.</summary>
+    public async ValueTask DisposeAsync()
+    {
+        object[] providers = _ownedProviders.ToArray();
+        _ownedProviders.Clear();
+        await Task.WhenAll(providers.Select(
+            provider => ProviderLoader.DisposeProviderAsync(provider).AsTask()));
+    }
+
     /// <summary>
     /// Queries a collection from a provider with a path override.
     /// The path is resolved relative to the invocation directory (process CWD).
@@ -52,8 +80,11 @@ public class ProviderQueryService
     /// <param name="collectionName">Collection name (e.g., "Types", "Files")</param>
     /// <param name="pathOverride">Path to scan (relative to invocation directory or absolute)</param>
     /// <returns>Collection items, or empty list if the path is invalid or provider fails.</returns>
-    public List<object> Query(string providerName, string collectionName, string pathOverride)
+    public async ValueTask<List<object>> QueryAsync(
+        string providerName, string collectionName, string pathOverride,
+        CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         // Resolve relative path against invocation directory (process CWD, not -t root)
         string absolutePath = Path.IsPathRooted(pathOverride)
             ? Path.GetFullPath(pathOverride)
@@ -86,7 +117,8 @@ public class ProviderQueryService
         _diagLog?.Invoke($"[diag] Path-scoped query: {providerName}.{collectionName} RootPath={absolutePath}");
 
         (DataProvider? instance, ProviderSchema? schema) = provider;
-        Dictionary<string, List<object>> collections = ProviderLoader.QueryCollections(instance, schema, query);
+        Dictionary<string, List<object>> collections = await ProviderLoader.QueryCollectionsAsync(
+            instance, schema, query, cancellationToken: cancellationToken);
 
         _diagLog?.Invoke($"[query-result] {providerName}.{query.Collection ?? "*"} returned={collections
             .Where(c => query.Collection is null || c.Key == query.Collection).Sum(c => c.Value.Count)}");
@@ -104,8 +136,10 @@ public class ProviderQueryService
     /// Queries a provider with a ProviderQuery and returns the result as a CopValue.
     /// The provider decides what collections to return. Single collection → CopList, multiple → CopObject.
     /// </summary>
-    public CopValue QueryProvider(string providerName, ProviderQuery query)
+    public async ValueTask<CopValue> QueryProviderAsync(string providerName,
+        ProviderQuery query, CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         if (!_providers.TryGetValue(providerName, out (DataProvider Instance, ProviderSchema Schema) provider))
         {
             throw new InvalidOperationException($"Provider '{providerName}' not found.");
@@ -137,34 +171,41 @@ public class ProviderQueryService
         (DataProvider? instance, ProviderSchema? schema) = provider;
         _diagLog?.Invoke($"[query] Query {providerName}.{query.Collection ?? "*"} root={query.RootPath} filter={(query.Filter is null ? "<none>" : FilterExpression.Format(query.Filter))}");
         DataStore? store = null;
-        IReadOnlyDictionary<string, IEnumerable<object>> collections = ProviderLoader.QueryDeferredCollections(instance, schema, query, onStore: value => store = value);
+        IReadOnlyDictionary<string, IAsyncEnumerable<object>> collections =
+            await ProviderLoader.QueryDeferredCollectionsAsync(instance, schema, query,
+                onStore: value => store = value, cancellationToken: cancellationToken);
 
-        IEnumerable<object> ReportResults(string name, IEnumerable<object> items)
+        async IAsyncEnumerable<CopValue> Enumerate(string name,
+            IAsyncEnumerable<object> items,
+            [EnumeratorCancellation] CancellationToken enumerationCancellation = default)
         {
             int count = 0;
-            foreach (object item in items)
+            FilterExpression? filter = query.CollectionFilters?.GetValueOrDefault(name) ??
+                query.Filter;
+            await foreach (object item in items.WithCancellation(enumerationCancellation))
             {
                 count++;
-                yield return item;
+                CopValue value = Adapt(providerName, schema, name, item, store);
+                if (filter is null ||
+                    await CopFilter.MatchesAsync(filter, value, enumerationCancellation))
+                {
+                    yield return value;
+                }
             }
             _diagLog?.Invoke($"[query-result] {providerName}.{name} returned={count}");
         }
-        CopValue ToCollection(string name, IEnumerable<object> items)
+        CopValue ToCollection(string name, IAsyncEnumerable<object> items)
         {
-            IEnumerable<CopValue> values = ReportResults(name, items).Select(item => Adapt(providerName, schema, name, item, store));
             FilterExpression? filter = query.CollectionFilters?.GetValueOrDefault(name) ?? query.Filter;
-            if (filter is not null)
-            {
-                values = values.Where(item => CopFilter.Matches(filter, item));
-            }
-
-            return new CopLazyCollection(() => values) { AppliedFilter = filter };
+            return new CopLazyCollection(token => Enumerate(name, items, token))
+                { AppliedFilter = filter };
         }
 
         CopValue result;
         if (query.Collection is { } collection)
         {
-            result = ToCollection(collection, collections.GetValueOrDefault(collection) ?? []);
+            result = ToCollection(collection, collections.GetValueOrDefault(collection) ??
+                AsyncEnumerable.Empty<object>());
         }
         else if (collections.Count == 1)
         {
@@ -191,10 +232,15 @@ public class ProviderQueryService
         CopQueryable Collection(ProviderCollectionSchema collection)
         {
             Dictionary<string, string>? properties = schema.Types.FirstOrDefault(t => t.Name == collection.ItemType)?.Properties
-                .Where(p => !p.Collection && p.Type is "string" or "bool" or "int" or "float")
+                .Where(p => !p.IsCollection && p.Type is "string" or "bool" or "int" or "float")
                 .ToDictionary(p => p.Name, p => p.Type, StringComparer.Ordinal);
-            CopQueryable value = new CopQueryable(providerName, query.ForCollection(collection.Name), QueryProvider,
-                itemType: collection.ItemType, scalarProperties: properties);
+            CopQueryable value = new CopQueryable(
+                providerName, query.ForCollection(collection.Name), QueryProviderAsync,
+                new CopQueryableOptions
+                {
+                    ItemType = collection.ItemType,
+                    ScalarProperties = properties
+                });
             value.SetQueryLog(_diagLog);
             value.SetReuseScope(_queryReuse);
             return value;
@@ -250,7 +296,8 @@ public class ProviderQueryService
             string? type = bindings.ClrTypeMappings.GetValueOrDefault(item.GetType()) ?? itemType;
             if (type is not null && bindings.Accessors.TryGetValue(type, out Dictionary<string, Func<object, object?>>? accessors))
             {
-                ClrObjectAdapter adapter = new ClrObjectAdapter(accessors, type, bindings.Accessors, bindings.ClrTypeMappings);
+                ClrObjectAdapter adapter = new ClrObjectAdapter(accessors, type,
+                    bindings.Accessors, bindings.ClrTypeMappings, bindings.AsyncAccessors);
                 _clrAdapters.Add(key, adapter);
                 return new CopDynamicObject(item, adapter);
             }

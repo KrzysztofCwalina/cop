@@ -55,7 +55,7 @@ public class ReferenceTypeSystemTests
     }
 
     [TestCaseSource(nameof(GetTestPrograms))]
-    public void RunProgram(string fileName)
+    public async Task RunProgram(string fileName)
     {
         var filePath = Path.Combine(ProgramsDir, fileName);
         var source = File.ReadAllText(filePath);
@@ -70,10 +70,10 @@ public class ReferenceTypeSystemTests
             try
             {
                 File.Copy(filePath, Path.Combine(errDir, "program.cop"));
-                var parseResult = Engine.Run(errDir, SamplesDir, new EngineRunOptions
+                var parseResult = (await Engine.RunAsync(errDir, SamplesDir, new EngineRunOptions
                 {
                     AdditionalFeedPaths = [PackagesDir],
-                });
+                }));
                 Assert.That(parseResult.ParseErrors, Has.Count.EqualTo(1),
                     $"{fileName}: Expected a parse error but got none. Outputs: {string.Join(", ", parseResult.Outputs.Select(o => o.Message))}");
             }
@@ -93,11 +93,11 @@ public class ReferenceTypeSystemTests
             File.Copy(filePath, Path.Combine(tempDir, fileName));
 
             var diagMessages = new List<string>();
-            var result = Engine.Run(tempDir, SamplesDir, new EngineRunOptions
+            var result = (await Engine.RunAsync(tempDir, SamplesDir, new EngineRunOptions
             {
                 DiagnosticLog = msg => diagMessages.Add(msg),
                 AdditionalFeedPaths = [PackagesDir],
-            });
+            }));
 
             var diagInfo = string.Join("; ", diagMessages);
             var warningInfo = result.Warnings is not null ? string.Join("; ", result.Warnings) : "";

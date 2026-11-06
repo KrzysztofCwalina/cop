@@ -8,7 +8,7 @@ using Microsoft.Win32.SafeHandles;
 namespace Cop.Core;
 
 /// <summary>Windows job ownership keeps descendants killable even after the launcher exits.</summary>
-internal sealed class ToolchainProcessContainment : IDisposable
+internal sealed class ToolchainProcessContainment : IAsyncDisposable
 {
     private readonly JobHandle? _job;
 
@@ -35,6 +35,9 @@ internal sealed class ToolchainProcessContainment : IDisposable
         }
     }
 
+    /// <summary>
+    /// Associates a started process with the platform's containment mechanism.
+    /// </summary>
     public void Attach(Process process)
     {
         if (_job is not null && !AssignProcessToJobObject(_job, process.Handle))
@@ -43,7 +46,10 @@ internal sealed class ToolchainProcessContainment : IDisposable
         }
     }
 
-    public void Terminate()
+    /// <summary>
+    /// Terminates contained descendants and waits for bounded cleanup.
+    /// </summary>
+    public async ValueTask TerminateAsync()
     {
         if (_job is not null && !TerminateJobObject(_job, 1))
         {
@@ -70,14 +76,17 @@ internal sealed class ToolchainProcessContainment : IDisposable
                     throw new TimeoutException("Toolchain descendants did not exit after job termination.");
                 }
 
-                Thread.Sleep(10);
+                await Task.Delay(10).ConfigureAwait(false);
             }
         }
     }
 
-    public void Dispose()
+    /// <summary>
+    /// Terminates contained processes before releasing the containment handle.
+    /// </summary>
+    public async ValueTask DisposeAsync()
     {
-        try { Terminate(); }
+        try { await TerminateAsync().ConfigureAwait(false); }
         finally { _job?.Dispose(); }
     }
 

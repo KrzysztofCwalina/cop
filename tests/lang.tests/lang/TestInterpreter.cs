@@ -71,7 +71,7 @@ internal static class TestInterpreter
         }
     }
 
-    public static List<Document> ParseSourceFiles(params string[] filePaths)
+    public static async Task<List<Document>> ParseSourceFilesAsync(CancellationToken cancellationToken, params string[] filePaths)
     {
         var commonRoot = filePaths.Length > 1
             ? FindCommonRoot(filePaths)
@@ -91,7 +91,7 @@ internal static class TestInterpreter
             try
             {
                 var text = File.ReadAllText(filePath);
-                var sourceFile = parser.Parse(filePath, text);
+                var sourceFile = (await parser.ParseAsync(filePath, text, cancellationToken: cancellationToken));
                 if (sourceFile == null) continue;
                 var relativePath = string.IsNullOrEmpty(commonRoot)
                     ? Path.GetFileName(filePath)

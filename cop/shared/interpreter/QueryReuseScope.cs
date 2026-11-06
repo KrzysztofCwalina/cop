@@ -13,6 +13,9 @@ internal sealed class QueryReuseScope
     private readonly LinkedList<string> _recent = new();
     internal int Count => _stages.Count;
 
+    /// <summary>
+    /// Registers a deferred query stage for compatible reuse within this execution.
+    /// </summary>
     public QueryReuseStage Register(string provider, ProviderQuery query, FilterExpression filter, QuerySource? source)
     {
         FilterExpression[] conditions = Flatten(filter).ToArray();
@@ -51,6 +54,9 @@ internal sealed class QueryReuseScope
         return parent;
     }
 
+    /// <summary>
+    /// Tests whether a filter can be shared without context-dependent evaluation.
+    /// </summary>
     public static bool IsReusable(FilterExpression filter) => filter switch
     {
         PropertyFilter => true,
@@ -63,10 +69,16 @@ internal sealed class QueryReuseScope
         _ => false
     };
 
+    /// <summary>
+    /// Compares filter structure without relying on record collection identity.
+    /// </summary>
     public static bool SameFilter(FilterExpression? left, FilterExpression? right) =>
         ReferenceEquals(left, right) || left is not null && right is not null
             && JsonSerializer.Serialize<FilterExpression>(left) == JsonSerializer.Serialize<FilterExpression>(right);
 
+    /// <summary>
+    /// Copies a provider query while replacing only its filter.
+    /// </summary>
     public static ProviderQuery WithFilter(ProviderQuery query, FilterExpression filter) => new()
     {
         RootPath = query.RootPath, Collection = query.Collection, Filter = filter,

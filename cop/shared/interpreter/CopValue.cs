@@ -21,4 +21,18 @@ public abstract class CopValue
     /// Display representation for interpolation / print.
     /// </summary>
     public abstract string Display();
+
+    /// <summary>Formats this value after awaiting any deferred computation it contains.</summary>
+    public virtual ValueTask<string> DisplayAsync(CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return ValueTask.FromResult(Display());
+    }
+
+    /// <summary>Tests truthiness after awaiting any deferred computation.</summary>
+    public virtual ValueTask<bool> IsTruthyAsync(CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return ValueTask.FromResult(IsTruthy);
+    }
 }

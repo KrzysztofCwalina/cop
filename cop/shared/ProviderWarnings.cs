@@ -13,9 +13,12 @@ public static class ProviderWarnings
         public readonly System.Collections.Concurrent.ConcurrentQueue<string> Messages = new();
     }
 
-    private static readonly System.Threading.AsyncLocal<State?> _state = new();
-    private static State Current => _state.Value ??= new();
+    private static readonly System.Threading.AsyncLocal<State?> s_state = new();
+    private static State Current => s_state.Value ??= new();
 
+    /// <summary>
+    /// Records a provider warning once per provider, scope, and message.
+    /// </summary>
     public static void ReportOnce(string provider, string scope, string message)
     {
         State state = Current;
@@ -25,6 +28,9 @@ public static class ProviderWarnings
         }
     }
 
+    /// <summary>
+    /// Removes and returns the warnings recorded in the current execution.
+    /// </summary>
     public static IReadOnlyList<string> Drain()
     {
         List<string> result = new List<string>();
@@ -36,5 +42,8 @@ public static class ProviderWarnings
         return result;
     }
 
-    public static void Clear() => _state.Value = new();
+    /// <summary>
+    /// Starts a fresh warning state for the current asynchronous execution.
+    /// </summary>
+    public static void Clear() => s_state.Value = new();
 }

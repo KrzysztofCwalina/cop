@@ -113,7 +113,7 @@ public static class JavaProjectDiscovery
 
     internal static IEnumerable<string> ReadGradleDependencies(string content, IReadOnlySet<string>? selectedConfigurations = null)
     {
-        List<JavaToken> tokens = new JavaLexer(content).Tokenize(singleQuotedStrings: true);
+        List<JavaToken> tokens = new JavaLexer(content).Tokenize(JavaLiteralDialect.Gradle);
         string[] configurations = ["implementation", "api", "compile", "compileOnly", "runtimeOnly", "testImplementation", "testRuntimeOnly", "annotationProcessor"];
         for (int i = 0; i + 1 < tokens.Count; i++)
         {

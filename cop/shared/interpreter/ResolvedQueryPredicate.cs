@@ -17,8 +17,11 @@ using CallExpr = Cop.Lang.Ast.CallExpr;
 internal sealed record ResolvedQueryPredicate(Expression Expression, Environment Environment,
     IReadOnlyList<FunctionDecl> Definitions)
 {
+    /// <summary>
+    /// Captures referenced predicate bodies and literal values in a query scope.
+    /// </summary>
     public static ResolvedQueryPredicate Resolve(Expression expression, Environment environment, string? itemType,
-        bool element = false)
+        QueryPredicateContext context = QueryPredicateContext.Collection)
     {
         List<FunctionDecl> definitions = new List<FunctionDecl>();
         Dictionary<CopFunction, string> names = new Dictionary<CopFunction, string>();
@@ -64,7 +67,8 @@ internal sealed record ResolvedQueryPredicate(Expression Expression, Environment
                 _ => node
             });
 
-        Expression resolvedExpression = ResolveExpression(expression, environment, element ? ["item"] : []);
+        Expression resolvedExpression = ResolveExpression(expression, environment,
+            context == QueryPredicateContext.Element ? ["item"] : []);
         return new(resolvedExpression, scope, definitions);
     }
 
@@ -104,7 +108,7 @@ internal sealed record ResolvedQueryPredicate(Expression Expression, Environment
             CopString text => new LiteralExpr(text.Value),
             CopInt integer => new LiteralExpr(integer.Value),
             CopNumber number when double.IsFinite(number.Value) => new LiteralExpr(number.Value),
-            CopBool boolean => new LiteralExpr(boolean.Value),
+            CopBool boolean => new LiteralExpr(boolean.IsTrue),
             CopNull => new LiteralExpr(null),
             _ => null
         };

@@ -14,6 +14,12 @@ namespace Cop.Lang.Interpreter;
 /// </summary>
 public interface ICopCallable
 {
-    CopValue Invoke(IReadOnlyList<CopValue> args, Evaluator evaluator, Environment env);
+    /// <summary>
+    /// Invokes this callable with evaluated arguments and the current evaluation context.
+    /// </summary>
+    ValueTask<CopValue> InvokeAsync(IReadOnlyList<CopValue> args, Evaluator evaluator,
+        Environment env, CancellationToken cancellationToken = default);
+
+    /// <summary>The number of arguments still required to invoke this callable.</summary>
     int Arity { get; }
 }

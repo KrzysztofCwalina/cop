@@ -9,8 +9,17 @@ using Cop.Lang.Ast;
 /// </summary>
 public sealed class FunctionSymbol : Symbol
 {
+    /// <summary>
+    /// Whether the declaration defines a function, predicate, or command.
+    /// </summary>
     public CallableKind CallableKind { get; }
+    /// <summary>
+    /// The ordered parameter symbols declared by the callable.
+    /// </summary>
     public IReadOnlyList<ParameterSymbol> Parameters { get; }
+    /// <summary>
+    /// The callable's declared result type, when explicitly annotated.
+    /// </summary>
     public TypeRef? ReturnType { get; }
 
     /// <summary>

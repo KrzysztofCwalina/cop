@@ -21,9 +21,13 @@ internal sealed class CopCommandFunction : CopValue, ICopCallable
         _closure = closure;
     }
 
+    /// <summary>
+    /// The number of arguments still required to invoke this callable.
+    /// </summary>
     public int Arity => _decl.Parameters?.Count ?? 0;
 
-    public CopValue Invoke(IReadOnlyList<CopValue> args, Evaluator evaluator, Environment env)
+    /// <inheritdoc cref="ICopCallable.InvokeAsync"/>
+    public async ValueTask<CopValue> InvokeAsync(IReadOnlyList<CopValue> args, Evaluator evaluator, Environment env, CancellationToken cancellationToken = default)
     {
         Environment cmdEnv = _closure.Extend();
 
@@ -42,17 +46,19 @@ internal sealed class CopCommandFunction : CopValue, ICopCallable
         {
             if (stmt is ExpressionStatement es)
             {
-                result = evaluator.Eval(es.Expr, cmdEnv);
+                result = (await evaluator.EvalAsync(es.Expr, cmdEnv, cancellationToken: cancellationToken));
             }
             else
             {
-                evaluator.ExecStatement(stmt, cmdEnv);
+                await evaluator.ExecStatementAsync(stmt, cmdEnv, cancellationToken: cancellationToken);
                 result = CopNull.Instance;
             }
         }
         return result;
     }
 
+    /// <inheritdoc/>
     public override string Display() => $"<command {_decl.Name}>";
+    /// <inheritdoc/>
     public override string ToString() => Display();
 }

@@ -12,9 +12,12 @@ public class PythonMypyProvider : ToolProvider
 {
     protected override string ToolName => "mypy";
 
-    protected override List<object> RunTool(string rootPath, IReadOnlySet<string> excluded)
+    protected override async ValueTask<List<object>> RunToolAsync(
+        string rootPath, IReadOnlySet<string> excluded, CancellationToken cancellationToken)
     {
-        (string? stdout, string _, int _) = RunProcess("mypy", ". --output json --ignore-missing-imports", rootPath, shell: true);
+        (string? stdout, string _, int _) = await RunProcessAsync(
+            new("mypy", ". --output json --ignore-missing-imports", rootPath)
+            { Mode = ToolInvocationMode.Shell }, cancellationToken).ConfigureAwait(false);
         if (string.IsNullOrWhiteSpace(stdout))
         {
             return [];
@@ -35,7 +38,7 @@ public class PythonMypyProvider : ToolProvider
                 using JsonDocument doc = JsonDocument.Parse(line);
                 JsonElement item = doc.RootElement;
 
-                string filePath = NormalizePath(item.GetProperty("file").GetString() ?? "", rootPath);
+                string filePath = NormalizePath(item.GetProperty("file").GetString() ?? string.Empty, rootPath);
                 if (string.IsNullOrEmpty(filePath) || IsExcluded(filePath, excluded))
                 {
                     continue;
@@ -43,7 +46,7 @@ public class PythonMypyProvider : ToolProvider
 
                 int lineNum = item.TryGetProperty("line", out JsonElement ln) ? ln.GetInt32() : 0;
                 string severity = item.TryGetProperty("severity", out JsonElement s) ? s.GetString() ?? "error" : "error";
-                string message = item.TryGetProperty("message", out JsonElement m) ? m.GetString() ?? "" : "";
+                string message = item.TryGetProperty("message", out JsonElement m) ? m.GetString() ?? string.Empty : string.Empty;
                 string? code = item.TryGetProperty("code", out JsonElement c) ? c.GetString() : null;
 
                 violations.Add(new ToolViolation

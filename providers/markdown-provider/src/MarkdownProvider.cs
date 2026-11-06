@@ -15,19 +15,24 @@ public class MarkdownProvider : DataProvider
     /// <inheritdoc />
     public override string QueryResultType => "MarkdownContent";
     /// <inheritdoc />
-    public override ReadOnlyMemory<byte> GetSchema() => _schema.ToJson();
+    public override ReadOnlyMemory<byte> GetSchema() => s_schema.ToJson();
 
-    private static readonly ProviderSchema _schema = BuildSchema();
-    private static readonly RuntimeBindings _bindings = BuildBindings();
+    private static readonly ProviderSchema s_schema = BuildSchema();
+    private static readonly RuntimeBindings s_bindings = BuildBindings();
 
     /// <inheritdoc />
-    public override Dictionary<string, Func<List<object?>, Task<object?>>>? GetFunctions() => new()
+    public override Dictionary<string,
+        Func<List<object?>, CancellationToken, ValueTask<object?>>>? GetFunctions() => new()
     {
-        ["toContent"] = args => Task.FromResult<object?>(ToContent(args.Count == 1 ? args[0] : null))
+        ["toContent"] = (args, token) =>
+        {
+            token.ThrowIfCancellationRequested();
+            return ValueTask.FromResult<object?>(ToContent(args.Count == 1 ? args[0] : null));
+        }
     };
 
     // Markdown file extensions
-    private static readonly HashSet<string> MarkdownExtensions = new(StringComparer.OrdinalIgnoreCase)
+    private static readonly HashSet<string> s_markdownExtensions = new(StringComparer.OrdinalIgnoreCase)
         { ".md", ".markdown", ".mdown", ".mkd" };
 
     private static ProviderSchema BuildSchema()
@@ -76,10 +81,10 @@ public class MarkdownProvider : DataProvider
     private static ProviderPropertySchema Prop(string name, string type = "string")
         => new() { Name = name, Type = type };
     private static ProviderPropertySchema Opt(string name, string type = "string")
-        => new() { Name = name, Type = type, Optional = true };
+        => new() { Name = name, Type = type, IsOptional = true };
 
     /// <inheritdoc />
-    public override RuntimeBindings GetRuntimeBindings() => _bindings;
+    public override RuntimeBindings GetRuntimeBindings() => s_bindings;
 
     private static RuntimeBindings BuildBindings()
     {
@@ -105,7 +110,8 @@ public class MarkdownProvider : DataProvider
     /// <summary>
     /// Reads one Markdown file or scans a directory, returning trees and flat collections.
     /// </summary>
-    public override object? Query(ProviderQuery query)
+    public override async ValueTask<object?> QueryAsync(
+        ProviderQuery query, CancellationToken cancellationToken = default)
     {
         if (query.RootPath is null)
         {
@@ -119,7 +125,7 @@ public class MarkdownProvider : DataProvider
         List<string> filePaths = new List<string>();
         if (File.Exists(rootPath))
         {
-            if (!MarkdownExtensions.Contains(Path.GetExtension(rootPath)))
+            if (!s_markdownExtensions.Contains(Path.GetExtension(rootPath)))
             {
                 throw new InvalidOperationException($"Not a Markdown file: '{rootPath}'.");
             }
@@ -139,11 +145,14 @@ public class MarkdownProvider : DataProvider
 
         // Parse files and build SourceFile wrappers for File backlinks
         ConcurrentBag<(SourceFile File, MarkdownDocument Doc)> parsedFiles = new ConcurrentBag<(SourceFile File, MarkdownDocument Doc)>();
-        Parallel.ForEach(filePaths,
-            new ParallelOptions { MaxDegreeOfParallelism = Environment.ProcessorCount },
-            filePath =>
+        await Parallel.ForEachAsync(filePaths,
+            new ParallelOptions
             {
-                string text = File.ReadAllText(filePath);
+                MaxDegreeOfParallelism = Environment.ProcessorCount,
+                CancellationToken = cancellationToken
+            }, async (filePath, token) =>
+            {
+                string text = await File.ReadAllTextAsync(filePath, token).ConfigureAwait(false);
                 string relativePath = Path.GetRelativePath(rootPath, filePath).Replace('\\', '/');
 
                 SourceFile sourceFile = new SourceFile(relativePath, "markdown", [], [], text)
@@ -156,7 +165,7 @@ public class MarkdownProvider : DataProvider
                 ExecutionStatistics.RecordInputFile(filePath);
                 SetFile(doc.Root, sourceFile);
                 parsedFiles.Add((sourceFile, doc));
-            });
+            }).ConfigureAwait(false);
 
         // Sort for deterministic order
         List<(SourceFile File, MarkdownDocument Doc)> sorted = parsedFiles.OrderBy(p => p.File.Path, StringComparer.Ordinal).ToList();
@@ -211,7 +220,7 @@ public class MarkdownProvider : DataProvider
     {
         foreach (string file in Directory.GetFiles(dir))
         {
-            if (MarkdownExtensions.Contains(Path.GetExtension(file)))
+            if (s_markdownExtensions.Contains(Path.GetExtension(file)))
             {
                 result.Add(file);
             }
@@ -276,8 +285,8 @@ public class MarkdownProvider : DataProvider
             return sequence.Cast<object?>().Select(Wrap).ToList();
         }
 
-        if (!_bindings.ClrTypeMappings!.TryGetValue(value.GetType(), out string? type)
-            || !_bindings.Accessors!.TryGetValue(type, out Dictionary<string, Func<object, object?>>? accessors))
+        if (!s_bindings.ClrTypeMappings!.TryGetValue(value.GetType(), out string? type)
+            || !s_bindings.Accessors!.TryGetValue(type, out Dictionary<string, Func<object, object?>>? accessors))
         {
             throw new InvalidOperationException($"Unsupported Markdown model value: {value.GetType().Name}.");
         }

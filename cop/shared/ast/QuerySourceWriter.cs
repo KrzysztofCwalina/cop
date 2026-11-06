@@ -7,6 +7,9 @@ namespace Cop.Lang.Ast;
 /// <summary>Untruncated, precedence-preserving source for the portable query-expression subset.</summary>
 internal static class QuerySourceWriter
 {
+    /// <summary>
+    /// Renders a predicate declaration as executable Cop source.
+    /// </summary>
     public static string Predicate(FunctionDecl declaration)
     {
         return $"predicate {declaration.Name}({string.Join(", ", declaration.Params.Select(Parameter))}) => {Render(((ExpressionBody)declaration.Body).Expr)}";
@@ -16,6 +19,9 @@ internal static class QuerySourceWriter
         parameter.Type is null || parameter.Type.Name == parameter.Name && !parameter.Type.IsCollection
             ? parameter.Name : $"{parameter.Name}: {(parameter.Type.IsCollection ? $"[{parameter.Type.Name}]" : parameter.Type.Name)}";
 
+    /// <summary>
+    /// Tests whether an expression has a portable Cop source representation.
+    /// </summary>
     public static bool CanRender(Expression expression) => expression switch
     {
         IdentifierExpr => true,
@@ -33,6 +39,9 @@ internal static class QuerySourceWriter
         _ => false
     };
 
+    /// <summary>
+    /// Renders an expression with parentheses required by its surrounding precedence.
+    /// </summary>
     public static string Render(Expression expression, int parentPrecedence = 0)
     {
         int precedence = Precedence(expression);

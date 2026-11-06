@@ -13,7 +13,7 @@ namespace Cop.Core;
 internal static class RegexCache
 {
     private const int MaxEntries = 1024;
-    private static readonly ConcurrentDictionary<(string Pattern, RegexOptions Options), Regex> _cache = new();
+    private static readonly ConcurrentDictionary<(string Pattern, RegexOptions Options), Regex> s_cache = new();
 
     /// <summary>
     /// Gets or creates a Regex for the given pattern and options.
@@ -21,19 +21,19 @@ internal static class RegexCache
     public static Regex Get(string pattern, RegexOptions options = RegexOptions.None)
     {
         (string pattern, RegexOptions options) key = (pattern, options);
-        if (_cache.TryGetValue(key, out Regex? cached))
+        if (s_cache.TryGetValue(key, out Regex? cached))
         {
             return cached;
         }
 
         // Evict all if over capacity (simple bounded strategy)
-        if (_cache.Count >= MaxEntries)
+        if (s_cache.Count >= MaxEntries)
         {
-            _cache.Clear();
+            s_cache.Clear();
         }
 
         Regex regex = new Regex(pattern, options);
-        _cache.TryAdd(key, regex);
+        s_cache.TryAdd(key, regex);
         return regex;
     }
 

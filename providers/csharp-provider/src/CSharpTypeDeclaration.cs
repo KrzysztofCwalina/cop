@@ -13,26 +13,12 @@ namespace Cop.Providers.SourceModel;
 public sealed record CSharpTypeDeclaration : TypeDeclaration
 {
     internal int SyntaxStart { get; set; } = -1;
-    public CSharpTypeDeclaration(
-        TypeDeclaration source,
-        bool isRecord = false,
-        bool isRecordStruct = false,
-        bool isReadOnly = false,
-        bool isRef = false,
-        bool isFileLocal = false,
-        bool isPartial = false,
-        bool hasPrimaryConstructor = false,
-        bool isGeneric = false)
+    /// <summary>
+    /// Copies a shared type before C#-specific facts are initialized.
+    /// </summary>
+    public CSharpTypeDeclaration(TypeDeclaration source)
         : base(source)
     {
-        IsRecord = isRecord;
-        IsRecordStruct = isRecordStruct;
-        IsReadOnly = isReadOnly;
-        IsRef = isRef;
-        IsFileLocal = isFileLocal;
-        IsPartial = isPartial;
-        HasPrimaryConstructor = hasPrimaryConstructor;
-        IsGeneric = isGeneric;
     }
 
     /// <summary>True for <c>record</c> / <c>record struct</c> declarations.</summary>
@@ -58,20 +44,4 @@ public sealed record CSharpTypeDeclaration : TypeDeclaration
 
     /// <summary>True when the type declares generic type parameters.</summary>
     public bool IsGeneric { get; init; }
-}
-
-public static class CSharpTypeDeclarationExtensions
-{
-    /// <summary>Wraps a common <see cref="TypeDeclaration"/> as a C#-specific one.</summary>
-    public static CSharpTypeDeclaration AsCSharp(
-        this TypeDeclaration source,
-        bool isRecord = false,
-        bool isRecordStruct = false,
-        bool isReadOnly = false,
-        bool isRef = false,
-        bool isFileLocal = false,
-        bool isPartial = false,
-        bool hasPrimaryConstructor = false,
-        bool isGeneric = false)
-        => new(source, isRecord, isRecordStruct, isReadOnly, isRef, isFileLocal, isPartial, hasPrimaryConstructor, isGeneric);
 }

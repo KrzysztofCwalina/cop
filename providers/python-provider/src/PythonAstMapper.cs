@@ -38,7 +38,7 @@ internal sealed class PythonAstMapper(string path, string source)
     private static string Kind(JsonElement node) => String(node, "kind");
     private static string String(JsonElement node, string key) =>
         node.ValueKind == JsonValueKind.Object && node.TryGetProperty(key, out JsonElement value)
-            && value.ValueKind == JsonValueKind.String ? value.GetString()! : "";
+            && value.ValueKind == JsonValueKind.String ? value.GetString()! : string.Empty;
     private static int Line(JsonElement node) => node.ValueKind == JsonValueKind.Object && node.TryGetProperty("line", out JsonElement line) ? line.GetInt32() : 0;
     private static JsonElement Get(JsonElement node, string key) =>
         node.ValueKind == JsonValueKind.Object && node.TryGetProperty(key, out JsonElement value) ? value : default;
@@ -122,20 +122,23 @@ internal sealed class PythonAstMapper(string path, string source)
         }
 
         bool Base(string value) => bases.Any(b => b == value || b.EndsWith("." + value, StringComparison.Ordinal));
-        return new TypeDeclaration(name, TypeKind.Class, Visibility(name), bases, decorators,
+        return new PythonTypeDeclaration(new TypeDeclaration(name, TypeKind.Class, Visibility(name), bases, decorators,
             constructors, methods, nested, [], Line(node))
         {
             Fields = fields.DistinctBy(f => f.Name).ToList(), Properties = properties,
             HasDocComment = doc is not null, DocComment = doc,
             TypeParameters = Items(Get(node, "type_params")).Select(p => String(p, "name")).ToList(),
             Column = Position(node, "column"), EndLine = Position(node, "end_line"), EndColumn = Position(node, "end_column"),
-        }.AsPython(
-            isDataclass: decorators.Any(d => d == "dataclass" || d.EndsWith(".dataclass", StringComparison.Ordinal)),
-            isEnum: new[] { "Enum", "IntEnum", "StrEnum", "Flag", "IntFlag" }.Any(Base),
-            isAbstract: Base("ABC") || Items(Get(node, "keywords")).Any(k => String(k, "arg") == "metaclass" && Text(Get(k, "value")).EndsWith("ABCMeta", StringComparison.Ordinal)),
-            isNamedTuple: Base("NamedTuple"), isProtocol: Base("Protocol"),
-            isException: bases.Any(b => b.EndsWith("Exception", StringComparison.Ordinal) || b.EndsWith("Error", StringComparison.Ordinal)),
-            hasSlots: slots);
+        },
+            isAbstract: Base("ABC") || Items(Get(node, "keywords")).Any(k => String(k, "arg") == "metaclass" && Text(Get(k, "value")).EndsWith("ABCMeta", StringComparison.Ordinal))
+        )
+        {
+            IsDataclass = decorators.Any(d => d == "dataclass" || d.EndsWith(".dataclass", StringComparison.Ordinal)),
+            IsEnum = new[] { "Enum", "IntEnum", "StrEnum", "Flag", "IntFlag" }.Any(Base),
+            IsNamedTuple = Base("NamedTuple"), IsProtocol = Base("Protocol"),
+            IsException = bases.Any(b => b.EndsWith("Exception", StringComparison.Ordinal) || b.EndsWith("Error", StringComparison.Ordinal)),
+            HasSlots = slots
+        };
     }
 
     private static void CollectFields(JsonElement node, List<FieldDeclaration> fields, ref bool slots)
@@ -391,23 +394,23 @@ internal sealed class PythonAstMapper(string path, string source)
                 "Raise" => Kind(Get(node, "exc")) == "Call" ? Text(Get(Get(node, "exc"), "func")) : Text(Get(node, "exc")),
                 _ => null,
             };
-            if (typeName == "")
+            if (typeName == string.Empty)
             {
                 typeName = null;
             }
 
             string? member = kind == "Call" ? Kind(target) == "Name" ? String(target, "id")
                 : Kind(target) == "Attribute" ? String(target, "attr") : null : null;
-            PythonStatementInfo statement = new PythonStatementInfo(statementKind, [], typeName, member,
+            PythonStatementInfo statement = new PythonStatementInfo(new StatementInfo(statementKind, [], typeName, member,
                 args.Select(LiteralArgument).Concat(kwargs.Select(k => LiteralArgument(Get(k, "value")))).ToList(),
-                Line(node), method is not null)
+                Line(node), method is not null))
             {
                 Method = method, Parent = parent,
                 Column = Position(node, "column"), EndLine = Position(node, "end_line"), EndColumn = Position(node, "end_column"),
                 CallTarget = kind == "Call" ? Expression(target) : null,
                 ArgumentExpressions = args.Select(Expression).Concat(kwargs.Select(k => new ExpressionInfo(
-                    String(k, "arg") == "" ? "spread" : "namedArgument")
-                { Name = String(k, "arg") == "" ? null : String(k, "arg"), Children = [Expression(Get(k, "value"))] })).ToList(),
+                    String(k, "arg") == string.Empty ? "spread" : "namedArgument")
+                { Name = String(k, "arg") == string.Empty ? null : String(k, "arg"), Children = [Expression(Get(k, "value"))] })).ToList(),
                 Condition = kind is "If" or "While" or "Assert" ? Text(Get(node, "test")) : null,
                 Expression = Text(Get(node, "value")),
                 ValueExpression = Get(node, "value").ValueKind == JsonValueKind.Object ? Expression(Get(node, "value")) : null,
@@ -417,7 +420,7 @@ internal sealed class PythonAstMapper(string path, string source)
             };
             _statements.Add(statement);
             method?.Statements.Add(statement);
-            parent?._children.Add(statement);
+            parent?.MutableChildren.Add(statement);
             parent = statement;
         }
         foreach (JsonElement child in Children(node))
@@ -429,7 +432,7 @@ internal sealed class PythonAstMapper(string path, string source)
     private static ImportInfo Import(JsonElement node, string module, string? name, string alias, int level) =>
         new(module, Line(node))
         {
-            Name = name, Alias = alias == "" ? null : alias, RelativeLevel = level, IsWildcard = name == "*",
+            Name = name, Alias = alias == string.Empty ? null : alias, RelativeLevel = level, IsWildcard = name == "*",
             Column = Position(node, "column"), EndLine = Position(node, "end_line"), EndColumn = Position(node, "end_column"),
         };
 

@@ -10,10 +10,10 @@ namespace Cop.Core;
 public sealed class RecordView
 {
     /// <summary>The provider table containing the referenced record.</summary>
-    public readonly DataTable Table;
+    public DataTable Table { get; }
 
     /// <summary>The zero-based row index within the table.</summary>
-    public readonly int Index;
+    public int Index { get; }
 
     /// <summary>
     /// References a row in the supplied table without copying its field data.

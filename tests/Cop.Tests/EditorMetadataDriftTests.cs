@@ -1,6 +1,6 @@
 using NUnit.Framework;
 using Cop.Lang;
-using CopMeta;
+using Cop.Tools.Metadata;
 
 namespace Cop.Tests;
 

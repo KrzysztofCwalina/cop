@@ -25,7 +25,7 @@ public static class JavaBindings
         {
             ["IsRecord"] = o => (object)((JavaTypeDeclaration)o).IsRecord,
             ["IsEnum"] = o => (object)((JavaTypeDeclaration)o).IsEnum,
-            ["IsSealed"] = o => (object)((JavaTypeDeclaration)o).IsSealed,
+            ["IsSealed"] = o => (object)((JavaTypeDeclaration)o).HasSealedModifier,
             ["IsNonSealed"] = o => (object)((JavaTypeDeclaration)o).IsNonSealed,
             ["IsFinal"] = o => (object)((JavaTypeDeclaration)o).IsFinal,
             ["IsGeneric"] = o => (object)((JavaTypeDeclaration)o).IsGeneric,
@@ -56,6 +56,7 @@ public static class JavaBindings
         };
         bindings.Accessors["JavaStatement"] = javaStatementAccessors;
 
+        CodeBindings.AddDerivedAsyncAccessors(bindings);
         return bindings;
     }
 }

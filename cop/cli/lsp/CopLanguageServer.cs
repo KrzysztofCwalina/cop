@@ -4,6 +4,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Cop.Lang;
+using Cop.Lang.Interpreter;
 
 namespace Cop.Cli.Lsp;
 
@@ -26,7 +27,7 @@ internal sealed class CopLanguageServer
     private readonly Dictionary<string, string> _documents = new(StringComparer.Ordinal);
     private bool _shutdownRequested;
 
-    private static readonly JsonSerializerOptions JsonOpts = new()
+    private static readonly JsonSerializerOptions s_jsonOptions = new()
     {
         Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping
     };
@@ -47,10 +48,16 @@ internal sealed class CopLanguageServer
             {
                 msg = ReadMessage();
             }
-            catch (Exception ex)
+            catch (JsonException ex)
             {
                 Log($"failed to read message: {ex.Message}");
+                RespondError(null, -32700, $"Invalid JSON: {ex.Message}");
                 continue;
+            }
+            catch (IOException ex)
+            {
+                Log($"failed to read message: {ex.Message}");
+                return 1;
             }
             if (msg is null)
             {
@@ -65,9 +72,23 @@ internal sealed class CopLanguageServer
                     return exitCode.Value;
                 }
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or
+                FormatException or JsonException)
             {
-                Log($"error handling '{msg["method"]?.GetValue<string>()}': {ex.Message}");
+                Log($"invalid request: {ex.Message}");
+                if (msg["id"] is JsonNode id)
+                {
+                    RespondError(id, -32602, $"Invalid parameters: {ex.Message}");
+                }
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or
+                System.Security.SecurityException or ParseException or CopEvaluationException)
+            {
+                Log($"request failed: {ex.Message}");
+                if (msg["id"] is JsonNode id)
+                {
+                    RespondError(id, -32603, ex.Message);
+                }
             }
         }
         // Stream closed without an explicit exit: 0 if shutdown was requested, else 1 per LSP.
@@ -229,10 +250,12 @@ internal sealed class CopLanguageServer
             {
                 diags = CopLanguageService.Analyze(path, text);
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or
+                System.Security.SecurityException or ParseException or CopEvaluationException)
             {
                 Log($"analyze failed for {uri}: {ex.Message}");
-                diags = [];
+                diags = [new CopDiagnostic(
+                    CopDiagnosticSeverity.Error, $"Analysis failed: {ex.Message}", path)];
             }
             foreach (CopDiagnostic d in diags)
             {
@@ -354,16 +377,7 @@ internal sealed class CopLanguageServer
             return null;
         }
 
-        string? markdown;
-        try
-        {
-            markdown = CopLanguageService.Hover(path, text, line, character);
-        }
-        catch (Exception ex)
-        {
-            Log($"hover failed for {uri}: {ex.Message}");
-            return null;
-        }
+        string? markdown = CopLanguageService.Hover(path, text, line, character);
         if (markdown is null)
         {
             return null;
@@ -404,16 +418,8 @@ internal sealed class CopLanguageServer
             return new JsonArray();
         }
 
-        IReadOnlyList<CompletionEntry> entries;
-        try
-        {
-            entries = CopLanguageService.Complete(path, text, line, character);
-        }
-        catch (Exception ex)
-        {
-            Log($"completion failed for {uri}: {ex.Message}");
-            return new JsonArray();
-        }
+        IReadOnlyList<CompletionEntry> entries =
+            CopLanguageService.Complete(path, text, line, character);
 
         JsonArray items = new JsonArray();
         foreach (CompletionEntry e in entries)
@@ -454,16 +460,7 @@ internal sealed class CopLanguageServer
             return null;
         }
 
-        DefinitionLocation? loc;
-        try
-        {
-            loc = CopLanguageService.Definition(path, text, line, character);
-        }
-        catch (Exception ex)
-        {
-            Log($"definition failed for {uri}: {ex.Message}");
-            return null;
-        }
+        DefinitionLocation? loc = CopLanguageService.Definition(path, text, line, character);
         if (loc is null)
         {
             return null;
@@ -527,7 +524,8 @@ internal sealed class CopLanguageServer
             read += n;
         }
         string json = Encoding.UTF8.GetString(buffer);
-        return JsonNode.Parse(json) as JsonObject;
+        return JsonNode.Parse(json) as JsonObject
+            ?? throw new JsonException("A JSON-RPC message must be an object.");
     }
 
     private string? ReadHeaderLine()
@@ -556,7 +554,7 @@ internal sealed class CopLanguageServer
 
     private void WriteMessage(JsonObject message)
     {
-        string json = message.ToJsonString(JsonOpts);
+        string json = message.ToJsonString(s_jsonOptions);
         byte[] body = Encoding.UTF8.GetBytes(json);
         byte[] header = Encoding.ASCII.GetBytes($"Content-Length: {body.Length}\r\n\r\n");
         lock (_writeLock)

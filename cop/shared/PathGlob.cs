@@ -12,10 +12,18 @@ public static class PathGlob
     /// </summary>
     /// <param name="path">Path to test, using either directory separator.</param>
     /// <param name="pattern">Pattern supporting ?, *, and recursive ** wildcards.</param>
-    /// <param name="ignoreCase">Whether literal comparisons ignore case.</param>
+    /// <param name="comparison">Ordinal literal comparisons, with or without case folding.</param>
     /// <returns>Whether the entire normalized path matches the pattern.</returns>
-    public static bool IsMatch(string path, string pattern, bool ignoreCase = true)
+    public static bool IsMatch(string path, string pattern,
+        StringComparison comparison = StringComparison.OrdinalIgnoreCase)
     {
+        bool ignoreCase = comparison switch
+        {
+            StringComparison.OrdinalIgnoreCase => true,
+            StringComparison.Ordinal => false,
+            _ => throw new ArgumentOutOfRangeException(nameof(comparison),
+                "Path globs support ordinal comparisons only.")
+        };
         string normalized = path.Replace('\\', '/');
         string glob = pattern.Replace('\\', '/');
         bool[] current = new bool[normalized.Length + 1];

@@ -13,7 +13,7 @@ public static class PowerShellParser
     /// <summary>Contains parsed PowerShell commands and script-wide settings.</summary>
     public record PowerShellParseResult(List<PowerShellCommandInfo> Commands, PowerShellScriptInfo Script);
 
-    private static readonly HashSet<string> PowerShellKeywords = new(StringComparer.OrdinalIgnoreCase)
+    private static readonly HashSet<string> s_powerShellKeywords = new(StringComparer.OrdinalIgnoreCase)
     {
         "begin", "break", "catch", "class", "clean", "continue", "data", "define", "do", "dynamicparam",
         "else", "elseif", "end", "enum", "exit", "filter", "finally", "for", "foreach", "from", "function",
@@ -108,7 +108,7 @@ public static class PowerShellParser
         foreach (string segment in SplitSimpleCommands(text))
         {
             string name = GetCommandName(segment);
-            if (name.Length == 0 || PowerShellKeywords.Contains(name))
+            if (name.Length == 0 || s_powerShellKeywords.Contains(name))
             {
                 continue;
             }
@@ -213,7 +213,7 @@ public static class PowerShellParser
             int assignment = segment.IndexOf('=');
             if (assignment < 0 || assignment + 1 >= segment.Length)
             {
-                return "";
+                return string.Empty;
             }
 
             return GetCommandName(segment[(assignment + 1)..]);
@@ -226,13 +226,13 @@ public static class PowerShellParser
 
         if (i >= tokens.Count)
         {
-            return "";
+            return string.Empty;
         }
 
         string name = tokens[i];
         if (IsAssignmentLike(name))
         {
-            return "";
+            return string.Empty;
         }
 
         return name;

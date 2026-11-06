@@ -107,7 +107,7 @@ public static class JsonCollectionDeserializer
             ProviderPropertySchema? propSchema = typeSchema?.Properties.Find(p => p.Name == prop.Name);
             string propTypeName = propSchema?.Type ?? "string";
 
-            if (propSchema is { Collection: true })
+            if (propSchema is { IsCollection: true })
             {
                 if (prop.Value.ValueKind == JsonValueKind.Array)
                 {

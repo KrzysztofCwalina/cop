@@ -57,7 +57,8 @@ public class CodeqlProvider : DataProvider
     }
 
     /// <inheritdoc />
-    public override object? Query(ProviderQuery query)
+    public override async ValueTask<object?> QueryAsync(
+        ProviderQuery query, CancellationToken cancellationToken = default)
     {
         // Auto-discover SARIF files in the root path
         List<object> violations = new List<object>();
@@ -68,7 +69,8 @@ public class CodeqlProvider : DataProvider
             string[] sarifFiles = Directory.GetFiles(query.RootPath, "*.sarif", SearchOption.TopDirectoryOnly);
             foreach (string file in sarifFiles)
             {
-                LoadSarifFile(file, violations, rules);
+                await LoadSarifFileAsync(file, violations, rules, cancellationToken)
+                    .ConfigureAwait(false);
             }
         }
 
@@ -109,11 +111,14 @@ public class CodeqlProvider : DataProvider
         }
     };
 
-    private static void LoadSarifFile(string filePath, List<object> violations, List<object> rules)
+    private static async ValueTask LoadSarifFileAsync(
+        string filePath, List<object> violations, List<object> rules,
+        CancellationToken cancellationToken)
     {
         try
         {
-            byte[] json = File.ReadAllBytes(filePath);
+            byte[] json = await File.ReadAllBytesAsync(filePath, cancellationToken)
+                .ConfigureAwait(false);
             using JsonDocument doc = JsonDocument.Parse(json);
             JsonElement root = doc.RootElement;
 
@@ -132,20 +137,20 @@ public class CodeqlProvider : DataProvider
                 {
                     foreach (JsonElement rule in rulesArray.EnumerateArray())
                     {
-                        string id = rule.GetProperty("id").GetString() ?? "";
-                        string name = rule.TryGetProperty("name", out JsonElement n) ? n.GetString() ?? "" : "";
-                        string desc = "";
+                        string id = rule.GetProperty("id").GetString() ?? string.Empty;
+                        string name = rule.TryGetProperty("name", out JsonElement n) ? n.GetString() ?? string.Empty : string.Empty;
+                        string desc = string.Empty;
                         if (rule.TryGetProperty("shortDescription", out JsonElement sd) && sd.TryGetProperty("text", out JsonElement sdt))
                         {
-                            desc = sdt.GetString() ?? "";
+                            desc = sdt.GetString() ?? string.Empty;
                         }
                         else if (rule.TryGetProperty("fullDescription", out JsonElement fd) && fd.TryGetProperty("text", out JsonElement fdt))
                         {
-                            desc = fdt.GetString() ?? "";
+                            desc = fdt.GetString() ?? string.Empty;
                         }
 
                         string severity = "warning";
-                        string precision = "";
+                        string precision = string.Empty;
                         if (rule.TryGetProperty("properties", out JsonElement props))
                         {
                             if (props.TryGetProperty("problem.severity", out JsonElement sev))
@@ -155,17 +160,17 @@ public class CodeqlProvider : DataProvider
 
                             if (props.TryGetProperty("precision", out JsonElement prec))
                             {
-                                precision = prec.GetString() ?? "";
+                                precision = prec.GetString() ?? string.Empty;
                             }
                         }
 
-                        string tags = "";
+                        string tags = string.Empty;
                         if (rule.TryGetProperty("properties", out JsonElement p2) && p2.TryGetProperty("tags", out JsonElement tagsArr))
                         {
                             List<string> tagList = new List<string>();
                             foreach (JsonElement t in tagsArr.EnumerateArray())
                             {
-                                tagList.Add(t.GetString() ?? "");
+                                tagList.Add(t.GetString() ?? string.Empty);
                             }
 
                             tags = string.Join(", ", tagList);
@@ -184,11 +189,11 @@ public class CodeqlProvider : DataProvider
 
                 foreach (JsonElement result in resultsArray.EnumerateArray())
                 {
-                    string ruleId = result.TryGetProperty("ruleId", out JsonElement rid) ? rid.GetString() ?? "" : "";
-                    string message = "";
+                    string ruleId = result.TryGetProperty("ruleId", out JsonElement rid) ? rid.GetString() ?? string.Empty : string.Empty;
+                    string message = string.Empty;
                     if (result.TryGetProperty("message", out JsonElement msg) && msg.TryGetProperty("text", out JsonElement msgText))
                     {
-                        message = msgText.GetString() ?? "";
+                        message = msgText.GetString() ?? string.Empty;
                     }
 
                     string severity = "warning";
@@ -215,7 +220,7 @@ public class CodeqlProvider : DataProvider
                         severity = "info";
                     }
 
-                    string file = "";
+                    string file = string.Empty;
                     int startLine = 0;
 
                     if (result.TryGetProperty("locations", out JsonElement locs))
@@ -227,7 +232,7 @@ public class CodeqlProvider : DataProvider
                                 if (physLoc.TryGetProperty("artifactLocation", out JsonElement artLoc) &&
                                     artLoc.TryGetProperty("uri", out JsonElement uri))
                                 {
-                                    file = uri.GetString() ?? "";
+                                    file = uri.GetString() ?? string.Empty;
                                 }
 
                                 if (physLoc.TryGetProperty("region", out JsonElement region))
@@ -254,20 +259,3 @@ public class CodeqlProvider : DataProvider
     /// <inheritdoc />
     public override string ToString() => "CodeqlProvider";
 }
-
-/// <summary>CodeQL analysis violation (mapped from SARIF finding)</summary>
-public record CodeqlViolation(
-    string File,
-    int Line,
-    string Severity,
-    string Message,
-    string Source);
-
-/// <summary>CodeQL rule definition from SARIF</summary>
-public record CodeqlRule(
-    string Id,
-    string Name,
-    string Description,
-    string Severity,
-    string Tags,
-    string Precision);

@@ -12,27 +12,27 @@ public class PowerShellToolchainPolicyTests
         new(ToolchainStatus.Success, "test-host", null, output, "", null);
 
     [Test]
-    public void MissingToolchain_UsesFallbackWithoutStartingWorker()
+    public async Task MissingToolchain_UsesFallbackWithoutStartingWorker()
     {
-        var parser = new PowerShellAstParser(_ => null, (_, _) => throw new AssertionException("Unexpected worker request"));
-        Assert.That(parser.Parse("$value = Invoke-Expression 'text'", "sample.ps1").Commands.Select(c => c.Name),
+        var parser = new PowerShellAstParser(_ => null, (_, _, cancellationToken) => throw new AssertionException("Unexpected worker request"));
+        Assert.That((await parser.ParseAsync("$value = Invoke-Expression 'text'", "sample.ps1", cancellationToken: CancellationToken.None)).Commands.Select(c => c.Name),
             Is.EqualTo(new[] { "Invoke-Expression" }));
     }
 
     [Test]
-    public void UnusablePreferredCandidate_TriesAlternateAndProbesOnlyOnce()
+    public async Task UnusablePreferredCandidate_TriesAlternateAndProbesOnlyOnce()
     {
         var requests = new List<(string, bool)>();
-        var parser = new PowerShellAstParser(name => name, (executable, request) =>
+        var parser = new PowerShellAstParser(name => name, (executable, request, cancellationToken) =>
         {
             var probe = request.Contains("\"Probe\"");
             requests.Add((executable, probe));
             if (executable == "pwsh")
-                return new(ToolchainStatus.Failed, executable, 1, "", "", "unusable shim");
-            return Response(probe ? """{"Ready":true}""" : """{"Commands":[{"Name":"NativeCommand","Text":"NativeCommand","Line":1}],"Errors":[]}""");
+                return ValueTask.FromResult<ToolchainResult>(new(ToolchainStatus.Failed, executable, 1, "", "", "unusable shim"));
+            return ValueTask.FromResult<ToolchainResult>(Response(probe ? """{"Ready":true}""" : """{"Commands":[{"Name":"NativeCommand","Text":"NativeCommand","Line":1}],"Errors":[]}"""));
         });
-        Assert.That(parser.Parse("echo fallback", "one.ps1").Commands.Single().Name, Is.EqualTo("NativeCommand"));
-        Assert.That(parser.Parse("echo fallback", "two.ps1").Commands.Single().Name, Is.EqualTo("NativeCommand"));
+        Assert.That((await parser.ParseAsync("echo fallback", "one.ps1", cancellationToken: CancellationToken.None)).Commands.Single().Name, Is.EqualTo("NativeCommand"));
+        Assert.That((await parser.ParseAsync("echo fallback", "two.ps1", cancellationToken: CancellationToken.None)).Commands.Single().Name, Is.EqualTo("NativeCommand"));
         Assert.That(requests, Is.EqualTo(new[]
         {
             ("pwsh", true), ("powershell", true), ("powershell", false), ("powershell", false)
@@ -40,16 +40,16 @@ public class PowerShellToolchainPolicyTests
     }
 
     [Test]
-    public void UnusablePreflights_AllowFallbackButNeverSubmitSource()
+    public async Task UnusablePreflights_AllowFallbackButNeverSubmitSource()
     {
         var requests = new List<string>();
-        var parser = new PowerShellAstParser(name => name, (_, request) =>
+        var parser = new PowerShellAstParser(name => name, (_, request, cancellationToken) =>
         {
             requests.Add(request);
-            return Response("invalid handshake");
+            return ValueTask.FromResult<ToolchainResult>(Response("invalid handshake"));
         });
-        Assert.That(parser.Parse("Write-Output 'fallback'", "one.ps1").Commands.Single().Name, Is.EqualTo("Write-Output"));
-        Assert.That(parser.Parse("Write-Output 'fallback'", "two.ps1").Commands.Single().Name, Is.EqualTo("Write-Output"));
+        Assert.That((await parser.ParseAsync("Write-Output 'fallback'", "one.ps1", cancellationToken: CancellationToken.None)).Commands.Single().Name, Is.EqualTo("Write-Output"));
+        Assert.That((await parser.ParseAsync("Write-Output 'fallback'", "two.ps1", cancellationToken: CancellationToken.None)).Commands.Single().Name, Is.EqualTo("Write-Output"));
         Assert.That(requests, Is.EqualTo(new[] { """{"Probe":true}""", """{"Probe":true}""" }));
     }
 
@@ -60,10 +60,10 @@ public class PowerShellToolchainPolicyTests
     public void EstablishedWorkerFailure_IsFatalRatherThanFallback(ToolchainStatus status)
     {
         int requests = 0;
-        var parser = new PowerShellAstParser(name => name, (_, _) => ++requests == 1
+        var parser = new PowerShellAstParser(name => name, (_, _, cancellationToken) => ValueTask.FromResult<ToolchainResult>(++requests == 1
             ? Response("""{"Ready":true}""")
-            : new(status, "test-host", null, "", "", "fixture failure"));
-        var error = Assert.Throws<InvalidDataException>(() => parser.Parse("Write-Output 'not fallback'", "broken.ps1"));
+            : new(status, "test-host", null, "", "", "fixture failure")));
+        var error = Assert.ThrowsAsync<InvalidDataException>(async () => await parser.ParseAsync("Write-Output 'not fallback'", "broken.ps1", cancellationToken: CancellationToken.None));
         Assert.That(error!.Message, Is.EqualTo($"broken.ps1: PowerShell AST request {status}: fixture failure"));
         Assert.That(requests, Is.EqualTo(2), "Established helper failure must not try another candidate.");
     }
@@ -75,32 +75,32 @@ public class PowerShellToolchainPolicyTests
     public void EstablishedWorkerInvalidProtocol_IsFatalRatherThanFallback(string output)
     {
         int requests = 0;
-        var parser = new PowerShellAstParser(name => name, (_, _) => Response(++requests == 1 ? """{"Ready":true}""" : output));
-        var error = Assert.Throws<InvalidDataException>(() => parser.Parse("echo fallback", "broken.ps1"));
+        var parser = new PowerShellAstParser(name => name, (_, _, cancellationToken) => ValueTask.FromResult<ToolchainResult>(Response(++requests == 1 ? """{"Ready":true}""" : output)));
+        var error = Assert.ThrowsAsync<InvalidDataException>(async () => await parser.ParseAsync("echo fallback", "broken.ps1", cancellationToken: CancellationToken.None));
         Assert.That(error!.Message, Does.StartWith("broken.ps1: PowerShell returned invalid AST JSON:"));
         Assert.That(requests, Is.EqualTo(2));
     }
 
     [Test]
-    public void EstablishedWorkerFailure_BecomesVisibleProviderErrorThroughSnapshot()
+    public async Task EstablishedWorkerFailure_BecomesVisibleProviderErrorThroughSnapshot()
     {
         ProviderErrors.Clear();
         try
         {
             int requests = 0;
-            var parser = new PowerShellAstParser(name => name, (_, _) => ++requests == 1
+            var parser = new PowerShellAstParser(name => name, (_, _, cancellationToken) => ValueTask.FromResult<ToolchainResult>(++requests == 1
                 ? Response("""{"Ready":true}""")
-                : new(ToolchainStatus.TimedOut, "test-host", null, "", "", "fixture timeout"));
-            var snapshot = new DeferredFormatSnapshot(() => ["broken.ps1"], path =>
+                : new(ToolchainStatus.TimedOut, "test-host", null, "", "", "fixture timeout")));
+            var snapshot = new DeferredFormatSnapshot(() => ["broken.ps1"], async (path, cancellationToken) =>
             {
-                var parsed = parser.Parse("echo fallback", path);
+                var parsed = (await parser.ParseAsync("echo fallback", path, cancellationToken: CancellationToken.None));
                 return new() { ["Commands"] = parsed.Commands.Cast<object>().ToList() };
             });
             var result = snapshot.Query(new ProviderQuery(), new ProviderSchema
             {
                 Collections = [new() { Name = "Commands", ItemType = "PowerShellCommand" }]
             }, new RuntimeBindings());
-            Assert.That(result.Collections["Commands"].ToArray(), Is.Empty);
+            Assert.That((await result.Collections["Commands"].ToArrayAsync()), Is.Empty);
             Assert.That(ProviderErrors.Drain(), Is.EqualTo(new[]
             {
                 "Failed to analyze 'broken.ps1': broken.ps1: PowerShell AST request TimedOut: fixture timeout"

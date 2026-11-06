@@ -9,7 +9,7 @@ public class ForeachPipelineRegressionTests
     [Test]
     [Explicit("Issue #88: verified multiline command silently emits no output - remove when fixed")]
     [Category("PendingFix")]
-    public void Issue088_MultilineCommandDoesNotSilentlyDropLiteralAndForeachOutput()
+    public async Task Issue088_MultilineCommandDoesNotSilentlyDropLiteralAndForeachOutput()
     {
         string directory = Path.Combine(TestContext.CurrentContext.WorkDirectory, "cop-issue088-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(directory);
@@ -21,7 +21,7 @@ public class ForeachPipelineRegressionTests
                     'count:{values.Count}'
                     foreach values => 'value:{item}'
                 """);
-            var result = Engine.Run(directory, directory);
+            var result = (await Engine.RunAsync(directory, directory));
             Assert.That(result.HasFatalErrors, Is.False, string.Join("; ", result.Errors));
             Assert.That(result.Outputs.Select(output => output.Message),
                 Is.EqualTo(new[] { "count:2", "value:1", "value:2" }));
@@ -32,7 +32,7 @@ public class ForeachPipelineRegressionTests
     [Test]
     [Explicit("Issue #84: verified pipe-separated foreach silently emits no output - remove when fixed")]
     [Category("PendingFix")]
-    public void Issue084_PipeSeparatedForeachCommandsProduceBothOutputs()
+    public async Task Issue084_PipeSeparatedForeachCommandsProduceBothOutputs()
     {
         var directory = Path.Combine(TestContext.CurrentContext.WorkDirectory, "cop-issue084-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(directory);
@@ -55,7 +55,7 @@ public class ForeachPipelineRegressionTests
                     foreach cb.Methods => 'method:{item.Name}:{item.File.Path}' |
                     foreach cb.Calls => 'call:{item.MemberName}:method={item.Method.Name}'
                 """);
-            var result = Engine.Run(program, input);
+            var result = (await Engine.RunAsync(program, input));
             Assert.That(result.HasFatalErrors, Is.False, string.Join("; ", result.Errors));
             Assert.That(result.Outputs.Select(output => output.Message), Is.EqualTo(new[]
             {

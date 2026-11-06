@@ -16,7 +16,7 @@ namespace Cop.Providers;
 internal class ProviderLoadContext : AssemblyLoadContext
 {
     private readonly AssemblyDependencyResolver _resolver;
-    private static readonly string HostAssemblyName = typeof(DataProvider).Assembly.GetName().Name!;
+    private static readonly string s_hostAssemblyName = typeof(DataProvider).Assembly.GetName().Name!;
 
     public ProviderLoadContext(string pluginPath) : base(isCollectible: false)
     {
@@ -27,7 +27,7 @@ internal class ProviderLoadContext : AssemblyLoadContext
     {
         // Share the host assembly with the default context so provider types
         // (ObjectProvider, SourceFile, etc.) have the same identity in both contexts
-        if (assemblyName.Name == HostAssemblyName)
+        if (assemblyName.Name == s_hostAssemblyName)
         {
             return null; // falls back to default context
         }

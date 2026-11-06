@@ -9,6 +9,9 @@ using Cop.Lang.Ast;
 /// </summary>
 public sealed class EnumMemberSymbol : Symbol
 {
+    /// <summary>
+    /// The declared enum type to which this member belongs.
+    /// </summary>
     public string OwningEnumName { get; }
 
     public EnumMemberSymbol(string name, string owningEnumName)

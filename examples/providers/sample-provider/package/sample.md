@@ -7,6 +7,7 @@ authors: cop-team
 tags: sample, template
 provider: clr
 providerEntry: SampleProvider.SampleProvider
+providerAssembly: sample-provider.dll
 ---
 
 # Sample Provider
@@ -18,8 +19,7 @@ A minimal provider that reads `.widget` files and exposes them as a `Widgets` co
 ```cop
 import sample
 
-foreach Widgets   # Widgets is exported by the sample package via: export let Widgets = data('sample').Widgets
-    '{Widget.Name} ({Widget.Category}) size={Widget.Size}'
+foreach Widgets => '{item.Name} ({item.Category}) size={item.Size}'
 ```
 
 ## Widget File Format

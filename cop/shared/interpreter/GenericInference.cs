@@ -45,7 +45,7 @@ public static class GenericInference
     /// Infers concrete type bindings from actual argument values matched against declared parameter types.
     /// Returns a mapping from type variable names to concrete type names.
     /// </summary>
-    public static Dictionary<string, string> InferBindings(FunctionDecl decl, IReadOnlyList<CopValue> args)
+    public static async ValueTask<Dictionary<string, string>> InferBindingsAsync(FunctionDecl decl, IReadOnlyList<CopValue> args, CancellationToken cancellationToken = default)
     {
         Dictionary<string, string> bindings = new Dictionary<string, string>();
 
@@ -57,8 +57,8 @@ public static class GenericInference
                 continue;
             }
 
-            CopValue arg = ForceValue(args[i]);
-            UnifyType(param.Type, arg, bindings);
+            CopValue arg = (await ForceValueAsync(args[i], cancellationToken: cancellationToken));
+            await UnifyTypeAsync(param.Type, arg, bindings, cancellationToken: cancellationToken);
         }
 
         return bindings;
@@ -163,9 +163,9 @@ public static class GenericInference
     /// Gets the element type of a collection by inspecting its first item.
     /// Returns "object" if the collection is empty or element type cannot be determined.
     /// </summary>
-    public static string GetCollectionElementType(CopValue collection)
+    public static async ValueTask<string> GetCollectionElementTypeAsync(CopValue collection, CancellationToken cancellationToken = default)
     {
-        CopValue? items = GetFirstItem(collection);
+        CopValue? items = (await GetFirstItemAsync(collection, cancellationToken: cancellationToken));
         return items is not null ? GetValueTypeName(items) : "object";
     }
 
@@ -205,14 +205,14 @@ public static class GenericInference
         return false;
     }
 
-    private static void UnifyType(TypeRef declaredType, CopValue actualValue, Dictionary<string, string> bindings)
+    private static async ValueTask UnifyTypeAsync(TypeRef declaredType, CopValue actualValue, Dictionary<string, string> bindings, CancellationToken cancellationToken = default)
     {
         if (declaredType.IsCollection)
         {
             // [T] matched against a collection → infer T from element type
             if (IsTypeVariable(declaredType.Name))
             {
-                string elementType = GetCollectionElementType(actualValue);
+                string elementType = (await GetCollectionElementTypeAsync(actualValue, cancellationToken: cancellationToken));
                 TryBind(declaredType.Name, elementType, bindings);
             }
             return;
@@ -280,29 +280,29 @@ public static class GenericInference
         return result.ToString();
     }
 
-    private static CopValue? GetFirstItem(CopValue collection)
+    private static async ValueTask<CopValue?> GetFirstItemAsync(CopValue collection, CancellationToken cancellationToken = default)
     {
         if (collection is CopList list && list.Items.Count > 0)
         {
-            return ForceValue(list.Items[0]);
+            return (await ForceValueAsync(list.Items[0], cancellationToken: cancellationToken));
         }
 
         if (collection is CopLazyCollection lazy)
         {
-            foreach (CopValue item in lazy.Enumerate())
+            await foreach (CopValue item in lazy.EnumerateAsync(cancellationToken: cancellationToken))
             {
-                return ForceValue(item);
+                return (await ForceValueAsync(item, cancellationToken: cancellationToken));
             }
         }
 
         return null;
     }
 
-    private static CopValue ForceValue(CopValue value)
+    private static async ValueTask<CopValue> ForceValueAsync(CopValue value, CancellationToken cancellationToken = default)
     {
         while (value is CopThunk thunk)
         {
-            value = thunk.Force();
+            value = (await thunk.ForceAsync(cancellationToken: cancellationToken));
         }
 
         return value;

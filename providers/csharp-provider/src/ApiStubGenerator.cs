@@ -23,7 +23,7 @@ public static class ApiStubGenerator
 
         foreach (SourceFile file in files)
         {
-            string ns = file.Namespace ?? "";
+            string ns = file.Namespace ?? string.Empty;
             foreach (TypeDeclaration type in file.Types)
             {
                 if (!type.IsPublic)
@@ -82,7 +82,7 @@ public static class ApiStubGenerator
     /// </summary>
     public static string Generate(IEnumerable<TypeDeclaration> types, string? defaultNamespace = null)
     {
-        SourceFile fakeFile = new SourceFile("", "csharp", types.ToList(), [], "")
+        SourceFile fakeFile = new SourceFile(string.Empty, "csharp", types.ToList(), [], string.Empty)
         { Namespace = defaultNamespace };
         return Generate([fakeFile]);
     }

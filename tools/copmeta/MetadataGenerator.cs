@@ -4,7 +4,7 @@ using System.Text;
 using System.Text.Json;
 using Cop.Lang;
 
-namespace CopMeta;
+namespace Cop.Tools.Metadata;
 
 /// <summary>
 /// Regenerates the data-driven parts of the TextMate grammar — the keyword/constant lists in
@@ -37,13 +37,16 @@ public static class MetadataGenerator
     }
 
     /// <summary>
-    /// Regenerates the grammar keyword lists. When <paramref name="check"/> is true, only verifies the
-    /// committed grammar is up to date and returns non-zero (without writing) if not.
+    /// Verifies the committed grammar is current without modifying it.
     /// </summary>
     /// <param name="repoRoot">The repository containing the editor grammar.</param>
-    /// <param name="check">Whether to verify the grammar without modifying it.</param>
-    /// <returns>Zero on success, or one when check mode detects stale keyword lists.</returns>
-    public static int Run(string repoRoot, bool check)
+    /// <returns>Zero when current, or one when the committed keyword lists are stale.</returns>
+    public static int Check(string repoRoot) => Run(repoRoot, check: true);
+
+    /// <summary>Writes grammar keyword lists generated from compiler metadata.</summary>
+    public static int Write(string repoRoot) => Run(repoRoot, check: false);
+
+    private static int Run(string repoRoot, bool check)
     {
         string grammarPath = Path.Combine(repoRoot, GrammarRelPath.Replace('/', Path.DirectorySeparatorChar));
         string newGrammar = BuildGrammar(File.ReadAllText(grammarPath));

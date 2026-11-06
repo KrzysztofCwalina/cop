@@ -8,5 +8,8 @@ namespace Cop.Lang;
 /// </summary>
 public record TextSpan(string Text, IReadOnlyDictionary<string, string>? Annotations = null)
 {
+    /// <summary>
+    /// Whether this text segment contains any named formatting annotations.
+    /// </summary>
     public bool HasAnnotations => Annotations != null && Annotations.Count > 0;
 }

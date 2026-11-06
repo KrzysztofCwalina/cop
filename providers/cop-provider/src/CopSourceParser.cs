@@ -19,7 +19,15 @@ public class CopSourceParser : ISourceParser
     public override string Language => "cop";
 
     /// <inheritdoc />
-    public override SourceFile? Parse(string filePath, string sourceText)
+    public override ValueTask<SourceFile?> ParseAsync(
+        string filePath, string sourceText, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return ValueTask.FromResult(Parse(filePath, sourceText));
+    }
+
+    /// <summary>Parses in-memory Cop syntax without starting asynchronous provider work.</summary>
+    public SourceFile? Parse(string filePath, string sourceText)
     {
         if (IsNegativeParserFixture(filePath, sourceText))
         {
@@ -64,7 +72,7 @@ public class CopSourceParser : ISourceParser
                 continue;
             }
 
-            if (Cop.Core.CopDiagnostics.Summaries)
+            if (Cop.Core.CopDiagnostics.IsSummaryEnabled)
             {
                 Console.Error.WriteLine($"[diag] Excluded '{filePath}': explicitly marked '# @expect parse-error' parser test input.");
             }
@@ -195,7 +203,7 @@ public class CopSourceParser : ISourceParser
             statements.Add(statement);
             if (_parent is not null)
             {
-                _parent._children.Add(statement);
+                _parent.MutableChildren.Add(statement);
             }
             else
             {

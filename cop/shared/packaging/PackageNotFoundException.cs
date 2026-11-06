@@ -5,6 +5,9 @@ namespace Cop.Core;
 /// <summary>Thrown when a package is not found in the GitHub repository.</summary>
 public class PackageNotFoundException : Exception
 {
+    /// <summary>Reports that a package could not be found without additional context.</summary>
+    public PackageNotFoundException() { }
+
     /// <summary>Reports a missing package with a descriptive message.</summary>
     public PackageNotFoundException(string message) : base(message) { }
 

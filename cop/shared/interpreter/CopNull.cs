@@ -16,7 +16,10 @@ public sealed class CopNull : CopValue
 {
     public static readonly CopNull Instance = new();
     private CopNull() { }
+    /// <inheritdoc/>
     public override bool IsTruthy => false;
+    /// <inheritdoc/>
     public override string Display() => "null";
+    /// <inheritdoc/>
     public override string ToString() => "null";
 }

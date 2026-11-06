@@ -10,13 +10,13 @@ namespace Cop.Providers.SourceParsers;
 internal static class FrameworkMetadata
 {
     private const string Prefix = "Cop.CSharp.Framework.";
-    private static readonly Lazy<ImmutableDictionary<string, ImmutableArray<byte>>> Images = new(ReadImages);
-    private static readonly Lazy<ImmutableArray<PortableExecutableReference>> References = new(() =>
-        Images.Value.OrderBy(pair => pair.Key, StringComparer.Ordinal)
+    private static readonly Lazy<ImmutableDictionary<string, ImmutableArray<byte>>> s_images = new(ReadImages);
+    private static readonly Lazy<ImmutableArray<PortableExecutableReference>> s_references = new(() =>
+        s_images.Value.OrderBy(pair => pair.Key, StringComparer.Ordinal)
             .Select(pair => MetadataReference.CreateFromImage(pair.Value, filePath: pair.Key + ".dll"))
             .ToImmutableArray());
 
-    internal static ImmutableArray<PortableExecutableReference> CompilationReferences => References.Value;
+    internal static ImmutableArray<PortableExecutableReference> CompilationReferences => s_references.Value;
 
     internal static MetadataAssemblyResolver CreateAssemblyResolver(string assemblyPath) =>
         new FrameworkAssemblyResolver(assemblyPath);
@@ -46,11 +46,12 @@ internal static class FrameworkMetadata
         private readonly PathAssemblyResolver _local = new(
             Directory.EnumerateFiles(Path.GetDirectoryName(assemblyPath)!, "*.dll"));
 
+        /// <inheritdoc />
         public override Assembly? Resolve(MetadataLoadContext context, AssemblyName assemblyName)
         {
             // Framework references must come from one coherent pack, never implementation DLLs
             // incidentally adjacent to the inspected library.
-            if (assemblyName.Name is { } name && Images.Value.TryGetValue(name, out ImmutableArray<byte> image))
+            if (assemblyName.Name is { } name && s_images.Value.TryGetValue(name, out ImmutableArray<byte> image))
             {
                 return context.LoadFromByteArray(image.ToArray());
             }
@@ -58,7 +59,7 @@ internal static class FrameworkMetadata
             // core-library APIs are split across System.Runtime, System.Collections, etc.
             if (assemblyName.Name == "System.Private.CoreLib")
             {
-                return context.LoadFromByteArray(Images.Value["mscorlib"].ToArray());
+                return context.LoadFromByteArray(s_images.Value["mscorlib"].ToArray());
             }
 
             return _local.Resolve(context, assemblyName);

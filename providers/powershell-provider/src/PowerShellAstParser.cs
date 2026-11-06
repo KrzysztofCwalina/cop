@@ -9,16 +9,17 @@ namespace Cop.Providers.PowerShell;
 internal sealed class PowerShellAstParser
 {
     private readonly Func<string, string?> _find;
-    private readonly Func<string, string, ToolchainResult> _request;
-    private bool _initialized;
+    private readonly Func<string, string, CancellationToken, ValueTask<ToolchainResult>> _request;
+    private readonly AsyncProviderValue<bool> _initialization;
     private string? _executable;
     private string _unavailableReason = "PowerShell is not installed on PATH";
 
     internal PowerShellAstParser(Func<string, string?>? find = null,
-        Func<string, string, ToolchainResult>? request = null)
+        Func<string, string, CancellationToken, ValueTask<ToolchainResult>>? request = null)
     {
         _find = find ?? (name => ToolchainProcess.FindExecutable(name));
-        _request = request ?? Request;
+        _request = request ?? RequestAsync;
+        _initialization = new(InitializeAsync);
     }
 
     private const string Script = """
@@ -52,22 +53,16 @@ internal sealed class PowerShellAstParser
         }
         """;
 
-    private static ToolchainResult Request(string executable, string request)
+    private static async ValueTask<ToolchainResult> RequestAsync(
+        string executable, string request, CancellationToken cancellationToken)
     {
         string encoded = Convert.ToBase64String(Encoding.Unicode.GetBytes(Script));
-        return ToolchainExecutionScope.RequestAsync(executable,
-            ["-NoLogo", "-NoProfile", "-NonInteractive", "-EncodedCommand", encoded],
-            Path.GetTempPath(), request, timeout: TimeSpan.FromSeconds(15)).GetAwaiter().GetResult();
+        return await ToolchainExecutionScope.RequestAsync(new ToolchainCommand(executable, ["-NoLogo", "-NoProfile", "-NonInteractive", "-EncodedCommand", encoded], Path.GetTempPath()), request, new ToolchainRunOptions { Timeout = TimeSpan.FromSeconds(15) }, cancellationToken)
+            .ConfigureAwait(false);
     }
 
-    private void Initialize()
+    private async ValueTask<bool> InitializeAsync(CancellationToken cancellationToken)
     {
-        if (_initialized)
-        {
-            return;
-        }
-
-        _initialized = true;
         List<string> failures = new List<string>();
         foreach (string? name in new[] { "pwsh", "powershell" })
         {
@@ -77,7 +72,8 @@ internal sealed class PowerShellAstParser
                 continue;
             }
 
-            ToolchainResult probe = _request(executable, """{"Probe":true}""");
+            ToolchainResult probe = await _request(executable, """{"Probe":true}""",
+                cancellationToken).ConfigureAwait(false);
             string reason = probe.Diagnostic ?? probe.StandardError;
             if (probe.Status == ToolchainStatus.Success)
             {
@@ -89,7 +85,7 @@ internal sealed class PowerShellAstParser
                         && ready.ValueKind == JsonValueKind.True)
                     {
                         _executable = executable;
-                        return;
+                        return true;
                     }
                     reason = "invalid availability handshake (expected Ready=true)";
                 }
@@ -101,17 +97,20 @@ internal sealed class PowerShellAstParser
         {
             _unavailableReason = string.Join("; ", failures);
         }
+        return true;
     }
 
-    internal PowerShellParser.PowerShellParseResult Parse(string text, string path)
+    internal async ValueTask<PowerShellParser.PowerShellParseResult> ParseAsync(
+        string text, string path, CancellationToken cancellationToken = default)
     {
-        Initialize();
+        await _initialization.GetValueAsync(cancellationToken).ConfigureAwait(false);
         if (_executable is null)
         {
             return Fallback(text, _unavailableReason);
         }
 
-        ToolchainResult result = _request(_executable, JsonSerializer.Serialize(new { Source = text }));
+        ToolchainResult result = await _request(_executable,
+            JsonSerializer.Serialize(new { Source = text }), cancellationToken).ConfigureAwait(false);
         if (result.Status != ToolchainStatus.Success)
         {
             throw new InvalidDataException($"{path}: PowerShell AST request {result.Status}: {result.Diagnostic ?? result.StandardError}");

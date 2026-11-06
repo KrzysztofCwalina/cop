@@ -14,12 +14,8 @@ static class VscodeCommand
     const string GitHubApiBase = "https://api.github.com";
     const string AssetName = "cop-vscode.zip";
 
-    public static int Execute()
-    {
-        return ExecuteAsync().GetAwaiter().GetResult();
-    }
-
-    static async Task<int> ExecuteAsync()
+    /// <summary>Downloads and installs the latest Visual Studio Code extension.</summary>
+    public static async Task<int> ExecuteAsync()
     {
         Console.WriteLine("Installing VS Code extension...");
 
@@ -33,12 +29,13 @@ static class VscodeCommand
         {
             releaseResponse = await http.GetAsync(releaseUrl);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
         {
             Console.Error.WriteLine($"Error: Could not reach GitHub: {ex.Message}");
             return 1;
         }
 
+        using HttpResponseMessage responseLifetime = releaseResponse;
         if (!releaseResponse.IsSuccessStatusCode)
         {
             Console.Error.WriteLine($"Error: GitHub API returned {(int)releaseResponse.StatusCode}. Check your network connection.");
@@ -74,7 +71,7 @@ static class VscodeCommand
         {
             zipBytes = await http.GetByteArrayAsync(downloadUrl);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
         {
             Console.Error.WriteLine($"Error: Download failed: {ex.Message}");
             return 1;
@@ -89,7 +86,7 @@ static class VscodeCommand
             if (packageEntry != null)
             {
                 using StreamReader reader = new StreamReader(packageEntry.Open());
-                JsonDocument packageJson = JsonDocument.Parse(await reader.ReadToEndAsync());
+                using JsonDocument packageJson = JsonDocument.Parse(await reader.ReadToEndAsync());
                 if (packageJson.RootElement.TryGetProperty("version", out JsonElement ver))
                 {
                     version = ver.GetString() ?? version;

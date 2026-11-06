@@ -1,6 +1,7 @@
 // Enumerates interpreter collections after resolving deferred values.
 
 using Cop.Core;
+using System.Runtime.CompilerServices;
 
 namespace Cop.Lang.Interpreter;
 
@@ -9,21 +10,42 @@ namespace Cop.Lang.Interpreter;
 /// </summary>
 internal static class CollectionValues
 {
-    public static IEnumerable<CopValue> Enumerate(CopValue value)
+    /// <summary>
+    /// Enumerates eager or deferred collection values without replacing scalar values.
+    /// </summary>
+    public static async IAsyncEnumerable<CopValue> EnumerateAsync(CopValue value,
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         while (value is CopThunk thunk)
         {
-            value = thunk.Force();
+            value = await thunk.ForceAsync(cancellationToken).ConfigureAwait(false);
         }
 
-        return value switch
+        IAsyncEnumerable<CopValue> items = value switch
         {
-            CopList list => list.Items,
-            CopLazyCollection lazy => lazy.Enumerate(),
-            CopQueryable query => query.Enumerate(),
-            CopQueryableProperty property => property.Source.Enumerate(),
-            CopNull => [],
-            _ => [value]
+            CopList list => FromEnumerable(list.Items, cancellationToken),
+            CopLazyCollection lazy => lazy.EnumerateAsync(cancellationToken),
+            CopQueryable query => query.EnumerateAsync(cancellationToken),
+            CopQueryableProperty property => property.Source.EnumerateAsync(cancellationToken),
+            CopNull => FromEnumerable([], cancellationToken),
+            _ => FromEnumerable([value], cancellationToken)
         };
+        await foreach (CopValue item in items.WithCancellation(cancellationToken)
+            .ConfigureAwait(false))
+        {
+            yield return item;
+        }
+    }
+
+    internal static async IAsyncEnumerable<CopValue> FromEnumerable(
+        IEnumerable<CopValue> values,
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        await ValueTask.CompletedTask;
+        foreach (CopValue value in values)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            yield return value;
+        }
     }
 }

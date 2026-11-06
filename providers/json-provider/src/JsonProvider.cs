@@ -35,7 +35,8 @@ public sealed class JsonProvider : DataProvider
     }
 
     /// <inheritdoc />
-    public override object? Query(ProviderQuery query)
+    public override async ValueTask<object?> QueryAsync(
+        ProviderQuery query, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrEmpty(query.RootPath))
         {
@@ -55,7 +56,7 @@ public sealed class JsonProvider : DataProvider
             throw new FileNotFoundException($"JSON file not found: '{filePath}'");
         }
 
-        byte[] json = File.ReadAllBytes(filePath);
+        byte[] json = await File.ReadAllBytesAsync(filePath, cancellationToken).ConfigureAwait(false);
         List<object> items = ParseJson(json);
         ExecutionStatistics.RecordInputFile(filePath);
 
@@ -124,15 +125,15 @@ public sealed class JsonProvider : DataProvider
 
     private static object ElementToValue(JsonElement elem) => elem.ValueKind switch
     {
-        JsonValueKind.String => elem.GetString() ?? "",
+        JsonValueKind.String => elem.GetString() ?? string.Empty,
         JsonValueKind.Number when elem.TryGetInt32(out int i) => i,
         JsonValueKind.Number => elem.GetDouble(),
         JsonValueKind.True => true,
         JsonValueKind.False => false,
-        JsonValueKind.Null => "",
+        JsonValueKind.Null => string.Empty,
         JsonValueKind.Array => ParseNestedArray(elem),
         JsonValueKind.Object => ElementToDataObject(elem),
-        _ => elem.ToString() ?? ""
+        _ => elem.ToString() ?? string.Empty
     };
 
     private static List<object> ParseNestedArray(JsonElement elem)

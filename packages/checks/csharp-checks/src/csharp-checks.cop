@@ -164,20 +164,24 @@ export let console-calls = consoleCalls(cb)
 
 # Exception handling
 
-predicate isCatchingBaseException(Statement) => Statement.ErrorHandler == true
-    && Statement.Generic == true
+predicate isCatchingBaseException(CSharpStatement) =>
+    CSharpStatement.ErrorHandler &&
+    CSharpStatement.Generic &&
+    !CSharpStatement.HasTypeRestrictedCatchFilter
 
 # Empty catch — catches base Exception and does nothing (no statements in catch body)
-predicate isEmptyCatch(Statement) =>
-    isUnrethrowingGenericHandler(Statement) &&
-    Statement.Children.count() == 0
+predicate isEmptyCatch(CSharpStatement) =>
+    isSwallowingBaseException(CSharpStatement) &&
+    CSharpStatement.Children.count() == 0
 
-predicate isSwallowingBaseException(Statement) =>
-    isUnrethrowingGenericHandler(Statement)
+predicate isSwallowingBaseException(CSharpStatement) =>
+    isCatchingBaseException(CSharpStatement) &&
+    !alwaysRethrowsOriginalException(CSharpStatement)
 
 ## Catch specific exception types instead of bare Exception
 export function baseExceptionCatches(cb: Codebase) : [Violation] =>
-    cb.Statements:isCatchingBaseException:notIgnored
+    cb.Statements:asCSharp:isCatchingBaseException
+        :!alwaysRethrowsOriginalException:notIgnored
         :toWarning(
             'Catch a specific exception type instead of Exception',
             nameof(base-exception-catches))
@@ -186,7 +190,7 @@ export let base-exception-catches = baseExceptionCatches(cb)
 
 ## Do not swallow base exceptions — always rethrow
 export function swallowedExceptions(cb: Codebase) : [Violation] =>
-    cb.Statements:isSwallowingBaseException:notIgnored
+    cb.Statements:asCSharp:isSwallowingBaseException:notIgnored
         :toWarning(
             'Do not swallow Exception — rethrow or catch a specific type',
             nameof(swallowed-exceptions))
@@ -195,7 +199,7 @@ export let swallowed-exceptions = swallowedExceptions(cb)
 
 ## Empty catch — catches base Exception and does absolutely nothing
 export function emptyCatches(cb: Codebase) : [Violation] =>
-    cb.Statements:isEmptyCatch:notIgnored
+    cb.Statements:asCSharp:isEmptyCatch:notIgnored
         :toError(
             'Empty catch block swallows all exceptions silently',
             nameof(empty-catches))
@@ -276,6 +280,7 @@ predicate isDisposableNew(CSharpStatement) => CSharpStatement.Kind == call
     && CSharpStatement.MemberName == nic
     && CSharpStatement.ConstructedTypeInterfaces:contains('IDisposable')
     && !CSharpStatement.IsUsingResource
+    && !CSharpStatement.IsOwnershipTransferred
 
 ## CA2000: Dispose objects before losing scope
 export function undisposedNew(cb: Codebase) : [Violation] =>
@@ -538,6 +543,7 @@ predicate hasPublicField(Type) => Type.Fields:any(isPublicNonConstField)
 predicate isPrivateFieldMissingUnderscore(Field) =>
     Field:isPrivate &&
     Field:!isStatic &&
+    Field:!isConst &&
     !Field.Name:matches('^_')
 predicate hasPrivateFieldNamingViolation(Type) =>
     Type.Fields:any(isPrivateFieldMissingUnderscore)
@@ -713,7 +719,7 @@ let affirmative-bool-prefixes =
     '^(Is|Has|Can|Should|Was|Will|Are|Supports|Allows|Needs|Contains|Includes|' +
     'Requires|Enables)'
 let descriptive-bool-prefixes =
-    '^(Exists|Enabled|Visible|Active|Valid|Available|Ready|Empty|Open|Closed|' +
+    '^(Value|BooleanValue|Exists|Enabled|Visible|Active|Valid|Available|Ready|Empty|Open|Closed|' +
     'Connected|Locked)'
 
 predicate isBoolProperty(Property) => Property:isPublic && Property.Type.Name == 'bool'
@@ -846,18 +852,35 @@ export function noMarkerInterfaces(cb: Codebase) : [Violation] =>
 export let no-marker-interfaces = noMarkerInterfaces(cb)
 
 # Classes with only static members should be marked static
-predicate hasAllMethodsStatic(Type) => Type.Kind == 'Class'
-    && Type:!isStatic && Type:!isAbstract
-    && Type.Methods.Count > 0
-    && Type.Methods:none(isInstanceMethod)
-    && Type.Fields:none(isInstanceField)
-    && Type.Constructors.Count == 0
-    && Type.Properties.Count == 0
-    && Type.Events.Count == 0
+predicate hasAllMethodsStatic(CSharpType) => CSharpType.Kind == 'Class'
+    && !CSharpType.IsRecord
+    && CSharpType:!isStatic && CSharpType:!isAbstract
+    && CSharpType.Methods.Count > 0
+    && CSharpType.Methods:none(isInstanceMethod)
+    && CSharpType.Fields:none(isInstanceField)
+    && CSharpType.Constructors.Count == 0
+    && CSharpType.Properties.Count == 0
+    && CSharpType.Events.Count == 0
+
+predicate requiresInstance(Type) =>
+    Type.Methods:any(isInstanceMethod) ||
+    Type.Fields:any(isInstanceField) ||
+    Type.Constructors.Count > 0 ||
+    Type.Properties.Count > 0 ||
+    Type.Events.Count > 0 ||
+    Type.BaseTypes.Count > 0 ||
+    Type.Interfaces.Count > 0
+
+function staticClassCandidates(types: [Type], instanceTypes: [string]) : [Type] =>
+    types:asCSharp:hasAllMethodsStatic
+        .Where(!instanceTypes:contains(declarationIdentity(item)))
 
 ## FDG: Classes with only static members should be static
+## An instance member or base type in another partial declaration also prevents this suggestion.
 export function shouldBeStatic(cb: Codebase) : [Violation] =>
-    cb.Types:hasAllMethodsStatic
+    staticClassCandidates(
+        cb.Types,
+        cb.Types:requiresInstance.Select(declarationIdentity(item)))
         :toInfo(
             '{item.Name} has only static members; consider a static class',
             nameof(should-be-static))
@@ -954,21 +977,42 @@ export function ctorParameterCount(cb: Codebase) : [Violation] =>
 
 export let ctor-parameter-count = ctorParameterCount(cb)
 
-# Boolean parameters in public methods (prefer enum or overloads)
-predicate isBoolParam(Parameter) => Parameter.Type.Name == 'bool'
-predicate isPublicMethodWithBoolParam(Method) =>
+# Boolean inputs are allowed; their names should describe a state, choice, or data value.
+let bool-parameter-prefixes =
+    '^(is|has|can|should|was|will|are|supports|allows|needs|contains|includes|' +
+    'requires|enables|include|exclude|allow|enable|disable|ignore|skip|prefer|' +
+    'use|keep|remove|create|overwrite|append|in)[A-Z].*$'
+let descriptive-bool-parameter-names =
+    '^(value|recursive|enabled|disabled|visible|active|valid|available|ready|' +
+    'empty|open|closed|connected|locked|required|optional|nullable|changed|' +
+    'found|success|completed|strict|quiet|overwrite|append)$'
+
+predicate isBoolParam(Parameter) =>
+    Parameter.Type.Name == 'bool' ||
+    (Parameter.Type.Name == 'Boolean' && Parameter.Type.Namespace == 'System')
+predicate hasUnclearBoolName(Parameter) =>
+    isBoolParam &&
+    !Parameter.Name:matches(bool-parameter-prefixes) &&
+    !Parameter.Name:matches(descriptive-bool-parameter-names)
+predicate hasUnclearBoolParameter(Method) =>
     Method:isPublic &&
-    Method.Parameters:any(isBoolParam)
-predicate hasBoolParam(Type) => Type.Methods:any(isPublicMethodWithBoolParam)
+    Method.Parameters:any(hasUnclearBoolName)
 
-## FDG: Avoid bool parameters in public methods
-export function avoidBoolParams(cb: Codebase) : [Violation] =>
-    cb.Types:hasBoolParam
+## Boolean parameters are allowed when named affirmatively or descriptively, including `value`.
+## Vague names such as `flag`, `b`, and `arg` do not communicate their meaning.
+export function boolParameterNaming(cb: Codebase) : [Violation] =>
+    cb.Methods:hasUnclearBoolParameter
         :toInfo(
-            '{item.Name}: replace public bool parameters with named options',
-            nameof(avoid-bool-params))
+            '{item.Name}: name bool parameters affirmatively or descriptively',
+            nameof(bool-parameter-naming))
 
-export let avoid-bool-params = avoidBoolParams(cb)
+export let bool-parameter-naming = boolParameterNaming(cb)
+
+## Compatibility name for boolParameterNaming; bool inputs are no longer prohibited.
+export function avoidBoolParams(cb: Codebase) : [Violation] =>
+    boolParameterNaming(cb)
+
+export let avoid-bool-params = bool-parameter-naming
 
 # Properties that return arrays (prefer ReadOnlyCollection or IReadOnlyList)
 predicate isArrayProperty(Property) =>
@@ -991,7 +1035,7 @@ export function fdgMemberDesign(cb: Codebase) : [Violation] =>
     noWriteOnlyProperties(cb) +
     extensionClassNaming(cb) +
     ctorParameterCount(cb) +
-    avoidBoolParams(cb) +
+    boolParameterNaming(cb) +
     noArrayProperties(cb)
 
 export let fdg-member-design = fdgMemberDesign(cb)
@@ -1070,15 +1114,15 @@ export function tryPatternReturnsBool(cb: Codebase) : [Violation] =>
 
 export let try-pattern-returns-bool = tryPatternReturnsBool(cb)
 
-# Do not catch OperationCanceledException without rethrowing
-predicate isCatchingCancellation(Statement) => Statement.ErrorHandler == true
-    && Statement.TypeName == 'OperationCanceledException' && !Statement.Rethrows
+# Preserve caller cancellation; internal deadlines may be handled or mapped separately.
+predicate isCatchingCancellation(CSharpStatement) =>
+    CSharpStatement.IsCancellationHandler && !CSharpStatement.IsCallerCancellationPreserved
 
-## FDG: Do not swallow OperationCanceledException
+## FDG: Preserve caller cancellation through supported bound cancellation paths.
 export function noSwallowCancellation(cb: Codebase) : [Violation] =>
-    cb.Statements:isCatchingCancellation:notIgnored
+    cb.Statements:asCSharp:isCatchingCancellation:notIgnored
         :toError(
-            'FDG Exceptions: Do not swallow OperationCanceledException — always rethrow',
+            'FDG Exceptions: Preserve caller cancellation; handle internal deadlines separately',
             nameof(no-swallow-cancellation))
 
 export let no-swallow-cancellation = noSwallowCancellation(cb)

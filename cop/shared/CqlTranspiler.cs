@@ -11,21 +11,21 @@ namespace Cop.Lang;
 public class CqlTranspiler
 {
     // Code provider collections that have CodeQL equivalents
-    private static readonly HashSet<string> SupportedCollections = new(StringComparer.OrdinalIgnoreCase)
+    private static readonly HashSet<string> s_supportedCollections = new(StringComparer.OrdinalIgnoreCase)
     {
         "Types", "Statements", "Calls", "Methods",
         "Code.Types", "Code.Statements", "Code.Calls", "Code.Methods"
     };
 
     // Collections from the code provider that we do NOT support transpiling
-    private static readonly HashSet<string> UnsupportedCodeCollections = new(StringComparer.OrdinalIgnoreCase)
+    private static readonly HashSet<string> s_unsupportedCodeCollections = new(StringComparer.OrdinalIgnoreCase)
     {
         "Lines", "Files", "Api", "Members", "Regions", "Projects",
         "Code.Lines", "Code.Files", "Code.Api", "Code.Members", "Code.Regions", "Code.Projects"
     };
 
     // Cop Statement.Kind → CodeQL class name (C# pack)
-    private static readonly Dictionary<string, string> StatementKindToCqlClass = new(StringComparer.OrdinalIgnoreCase)
+    private static readonly Dictionary<string, string> s_statementKindToCqlClass = new(StringComparer.OrdinalIgnoreCase)
     {
         ["call"] = "MethodAccess",
         ["declaration"] = "LocalVariableDeclStmt",
@@ -45,7 +45,7 @@ public class CqlTranspiler
     };
 
     // Cop Modifier flag names → CodeQL predicate names
-    private static readonly Dictionary<string, string> ModifierToCqlPredicate = new(StringComparer.OrdinalIgnoreCase)
+    private static readonly Dictionary<string, string> s_modifierToCqlPredicate = new(StringComparer.OrdinalIgnoreCase)
     {
         ["Public"] = "isPublic",
         ["Private"] = "isPrivate",
@@ -238,7 +238,7 @@ public class CqlTranspiler
 
     private static bool IsCodeCollection(string name)
     {
-        return SupportedCollections.Contains(name) || UnsupportedCodeCollections.Contains(name);
+        return s_supportedCollections.Contains(name) || s_unsupportedCodeCollections.Contains(name);
     }
 
     private static string NormalizeCollectionName(string name)
@@ -257,7 +257,7 @@ public class CqlTranspiler
     {
         string collName = NormalizeCollectionName(let.BaseCollection);
 
-        if (UnsupportedCodeCollections.Contains(collName))
+        if (s_unsupportedCodeCollections.Contains(collName))
         {
             _errors.Add($"Error: Collection '{let.BaseCollection}' in let '{let.Name}' (line {let.Line}) has no CodeQL equivalent.");
             return null;
@@ -393,7 +393,7 @@ public class CqlTranspiler
         // Commands with collections are similar to let bindings
         string collName = NormalizeCollectionName(cmd.Collection!);
 
-        if (UnsupportedCodeCollections.Contains(collName))
+        if (s_unsupportedCodeCollections.Contains(collName))
         {
             _errors.Add($"Error: Collection '{cmd.Collection}' in check '{cmd.Name}' (line {cmd.Line}) has no CodeQL equivalent.");
             return null;
@@ -492,7 +492,7 @@ public class CqlTranspiler
             case "Statements" or "Calls":
                 // Must inspect Kind filter to determine CodeQL type
                 string? stmtKind = ExtractKindFilter(filters);
-                if (stmtKind is not null && StatementKindToCqlClass.TryGetValue(stmtKind, out string? cqlClass))
+                if (stmtKind is not null && s_statementKindToCqlClass.TryGetValue(stmtKind, out string? cqlClass))
                 {
                     string varName = cqlClass[0].ToString().ToLowerInvariant();
                     return (cqlClass, varName, null);
@@ -812,7 +812,7 @@ public class CqlTranspiler
             _ => null
         };
 
-        if (flagName is null || !ModifierToCqlPredicate.TryGetValue(flagName, out string? cqlPred))
+        if (flagName is null || !s_modifierToCqlPredicate.TryGetValue(flagName, out string? cqlPred))
         {
             return null;
         }
@@ -868,7 +868,7 @@ public class CqlTranspiler
         // Special handling: Kind == 'value' → CodeQL instanceof
         if (string.Equals(propName, "Kind", StringComparison.OrdinalIgnoreCase)
             && op == "==" && literal is string kindVal
-            && StatementKindToCqlClass.TryGetValue(kindVal, out string? cqlClass))
+            && s_statementKindToCqlClass.TryGetValue(kindVal, out string? cqlClass))
         {
             return $"{cqlVar} instanceof {cqlClass}";
         }

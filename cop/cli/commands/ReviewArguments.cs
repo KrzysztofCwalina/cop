@@ -6,6 +6,7 @@ namespace Cop.Cli.Commands;
 
 internal static class ReviewArguments
 {
+    /// <summary>Separates review options from the remaining program arguments.</summary>
     public static (string[] Arguments, ReviewOptions Options) Parse(string[] args)
     {
         List<string> remaining = new List<string>();

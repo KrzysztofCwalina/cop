@@ -4,16 +4,18 @@ using System.Text.Json;
 
 namespace Cop.Core;
 
+/// <summary>Resolves exact pull-request revisions and repository metadata for review.</summary>
 public sealed partial class ChangeSnapshot
 {
     private sealed record PullRequestMetadata(
         string Base, string Head, string BaseRef, string HeadRef,
         string BaseRepository, string HeadRepository, string Number, string Url);
 
-    private PullRequestMetadata LoadPullRequest()
+    private async ValueTask<PullRequestMetadata> LoadPullRequestAsync(CancellationToken cancellationToken = default)
     {
-        ChangeCommandResult result = command.Run(RepositoryRoot, "gh", "pr", "view", options.Pr!, "--json",
-            "baseRefOid,headRefOid,baseRefName,headRefName,headRepository,headRepositoryOwner,url");
+        ChangeCommandResult result = (await _command.RunAsync(RepositoryRoot, "gh",
+            ["pr", "view", _options.Pr!, "--json",
+            "baseRefOid,headRefOid,baseRefName,headRefName,headRepository,headRepositoryOwner,url"], cancellationToken: cancellationToken));
         if (result.ExitCode != 0)
         {
             throw new InvalidOperationException(
@@ -56,12 +58,12 @@ public sealed partial class ChangeSnapshot
             PullRequestMetadata metadata = new PullRequestMetadata(baseSha.ToLowerInvariant(), headSha.ToLowerInvariant(),
                 RequiredString(root, "baseRefName"), RequiredString(root, "headRefName"),
                 baseRepository, $"{uri.Host}/{owner}/{headName}".ToLowerInvariant(), parts[3], url);
-            if (long.TryParse(options.Pr, out long requestedNumber) && requestedNumber != number)
+            if (long.TryParse(_options.Pr, out long requestedNumber) && requestedNumber != number)
             {
                 throw new InvalidOperationException("PR metadata does not match the requested number.");
             }
 
-            if (Uri.TryCreate(options.Pr, UriKind.Absolute, out Uri? requestedUri)
+            if (Uri.TryCreate(_options.Pr, UriKind.Absolute, out Uri? requestedUri)
                 && !string.Equals(requestedUri.GetLeftPart(UriPartial.Path).TrimEnd('/'),
                     uri.GetLeftPart(UriPartial.Path).TrimEnd('/'), StringComparison.OrdinalIgnoreCase))
             {
@@ -76,11 +78,11 @@ public sealed partial class ChangeSnapshot
         }
     }
 
-    private string FindPullRequestRemote(PullRequestMetadata metadata)
+    private async ValueTask<string> FindPullRequestRemoteAsync(PullRequestMetadata metadata, CancellationToken cancellationToken = default)
     {
-        foreach (string remote in Git("remote").Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        foreach (string remote in (await GitAsync(cancellationToken, "remote")).Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
         {
-            string url = Git("remote", "get-url", "--", remote).Trim();
+            string url = (await GitAsync(cancellationToken, "remote", "get-url", "--", remote)).Trim();
             if (RepositoryIdentity(url) == metadata.BaseRepository)
             {
                 return remote;
@@ -90,15 +92,15 @@ public sealed partial class ChangeSnapshot
             $"The PR targets {metadata.BaseRepository}, which is not a remote of this worktree. Use the correct repository; no checkout was performed.");
     }
 
-    private void EnsurePullRequestCommit(string sha, string remote, string fetchRef)
+    private async ValueTask EnsurePullRequestCommitAsync(string sha, string remote, string fetchRef, CancellationToken cancellationToken = default)
     {
-        if (RunGit("cat-file", "-e", sha + "^{commit}").ExitCode == 0)
+        if ((await RunGitAsync(cancellationToken, "cat-file", "-e", sha + "^{commit}")).ExitCode == 0)
         {
             return;
         }
 
-        ChangeCommandResult fetched = RunGit("fetch", "--no-tags", "--no-recurse-submodules", "--", remote, fetchRef);
-        if (fetched.ExitCode != 0 || RunGit("cat-file", "-e", sha + "^{commit}").ExitCode != 0)
+        ChangeCommandResult fetched = (await RunGitAsync(cancellationToken, "fetch", "--no-tags", "--no-recurse-submodules", "--", remote, fetchRef));
+        if (fetched.ExitCode != 0 || (await RunGitAsync(cancellationToken, "cat-file", "-e", sha + "^{commit}")).ExitCode != 0)
         {
             throw new InvalidOperationException(
                 $"The exact PR commit {sha} is unavailable. Fetch complete PR history from '{remote}' and retry. {fetched.Error.Trim()}");

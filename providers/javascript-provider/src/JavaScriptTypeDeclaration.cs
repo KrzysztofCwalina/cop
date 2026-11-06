@@ -13,17 +13,11 @@ namespace Cop.Providers.SourceModel;
 public sealed record JavaScriptTypeDeclaration : TypeDeclaration
 {
     /// <summary>
-    /// Copies a shared type and adds JavaScript declaration-specific facts.
+    /// Copies a shared type before JavaScript-specific facts are initialized.
     /// </summary>
-    public JavaScriptTypeDeclaration(TypeDeclaration source, bool isExported, bool hasBaseClass,
-        bool isAbstract = false, bool isGeneric = false, bool hasImplements = false)
+    public JavaScriptTypeDeclaration(TypeDeclaration source)
         : base(source)
     {
-        IsExported = isExported;
-        HasBaseClass = hasBaseClass;
-        IsAbstract = isAbstract;
-        IsGeneric = isGeneric;
-        HasImplements = hasImplements;
     }
 
     /// <summary>True for <c>export</c>ed classes.</summary>
@@ -58,20 +52,12 @@ public sealed record JavaScriptTypeDeclaration : TypeDeclaration
     /// Registers reconstruction of JavaScript type facts from source caches.
     /// </summary>
     public static void RegisterCacheFactory() =>
-        LanguageTypeRegistry.Register("javascript", (baseDecl, flags) => new JavaScriptTypeDeclaration(
-            baseDecl,
-            isExported: flags.TryGetValue("IsExported", out bool x) && x,
-            hasBaseClass: flags.TryGetValue("HasBaseClass", out bool b) && b,
-            isAbstract: flags.TryGetValue("IsAbstract", out bool a) && a,
-            isGeneric: flags.TryGetValue("IsGeneric", out bool g) && g,
-            hasImplements: flags.TryGetValue("HasImplements", out bool i) && i));
-}
-
-/// <summary>Converts shared types to JavaScript-specific declarations.</summary>
-public static class JavaScriptTypeDeclarationExtensions
-{
-    /// <summary>Wraps a shared type with JavaScript declaration-specific facts.</summary>
-    public static JavaScriptTypeDeclaration AsJavaScript(this TypeDeclaration source, bool isExported = false,
-        bool hasBaseClass = false, bool isAbstract = false, bool isGeneric = false, bool hasImplements = false)
-        => new(source, isExported, hasBaseClass, isAbstract, isGeneric, hasImplements);
+        LanguageTypeRegistry.Register("javascript", (baseDecl, flags) => new JavaScriptTypeDeclaration(baseDecl)
+        {
+            IsExported = flags.TryGetValue("IsExported", out bool x) && x,
+            HasBaseClass = flags.TryGetValue("HasBaseClass", out bool b) && b,
+            IsAbstract = flags.TryGetValue("IsAbstract", out bool a) && a,
+            IsGeneric = flags.TryGetValue("IsGeneric", out bool g) && g,
+            HasImplements = flags.TryGetValue("HasImplements", out bool i) && i
+        });
 }

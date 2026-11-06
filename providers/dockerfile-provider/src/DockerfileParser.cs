@@ -119,7 +119,7 @@ public static class DockerfileParser
         }
 
         string instruction = keyword.ToUpperInvariant();
-        string argument = split < 0 ? "" : trimmed[(split + 1)..].Trim();
+        string argument = split < 0 ? string.Empty : trimmed[(split + 1)..].Trim();
         int stage = stages.Count == 0 ? -1 : stages.Count - 1;
 
         if (instruction == "FROM")
@@ -163,7 +163,7 @@ public static class DockerfileParser
     private static (string Image, string Name) ParseFrom(string argument)
     {
         List<string> tokens = SplitTokens(argument);
-        string image = "";
+        string image = string.Empty;
         int imageIndex = -1;
 
         for (int i = 0; i < tokens.Count; i++)
@@ -178,7 +178,7 @@ public static class DockerfileParser
             break;
         }
 
-        string name = "";
+        string name = string.Empty;
         for (int i = imageIndex + 1; i + 1 < tokens.Count; i++)
         {
             if (tokens[i].Equals("AS", StringComparison.OrdinalIgnoreCase))

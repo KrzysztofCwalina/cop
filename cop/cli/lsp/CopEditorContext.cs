@@ -13,9 +13,11 @@ namespace Cop.Cli.Lsp;
 /// </summary>
 internal static class CopEditorContext
 {
+    /// <summary>Splits editor text while normalizing supported line endings.</summary>
     public static string[] SplitLines(string text) =>
         text.Replace("\r\n", "\n").Replace('\r', '\n').Split('\n');
 
+    /// <summary>Returns the identifier touching the cursor and its starting column.</summary>
     public static (string? word, int start) WordAt(string lineText, int ch)
     {
         if (ch < 0)
@@ -42,8 +44,10 @@ internal static class CopEditorContext
         return start == end ? (null, start) : (lineText[start..end], start);
     }
 
+    /// <summary>Whether a character can belong to a Cop identifier.</summary>
     public static bool IsWordChar(char c) => char.IsLetterOrDigit(c) || c == '_' || c == '-';
 
+    /// <summary>Finds the qualified member chain immediately before a delimiter.</summary>
     public static string? ChainBefore(string text, char delimiter)
     {
         int end = text.Length;

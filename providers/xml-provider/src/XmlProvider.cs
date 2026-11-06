@@ -15,11 +15,11 @@ namespace Cop.Providers.Xml;
 public sealed class XmlProvider : DataProvider
 {
     /// <inheritdoc />
-    public override ReadOnlyMemory<byte> GetSchema() => _schema.ToJson();
+    public override ReadOnlyMemory<byte> GetSchema() => s_schema.ToJson();
 
-    private static readonly ProviderSchema _schema = BuildSchema();
+    private static readonly ProviderSchema s_schema = BuildSchema();
 
-    private static readonly HashSet<string> XmlExtensions = new(StringComparer.OrdinalIgnoreCase)
+    private static readonly HashSet<string> s_xmlExtensions = new(StringComparer.OrdinalIgnoreCase)
         { ".xml", ".csproj", ".props", ".targets", ".config", ".nuspec" };
 
     private static ProviderSchema BuildSchema()
@@ -49,7 +49,7 @@ public sealed class XmlProvider : DataProvider
     private static ProviderPropertySchema Prop(string name, string type = "string")
         => new() { Name = name, Type = type };
     private static ProviderPropertySchema Opt(string name, string type = "string")
-        => new() { Name = name, Type = type, Optional = true };
+        => new() { Name = name, Type = type, IsOptional = true };
 
     /// <inheritdoc />
     public override RuntimeBindings GetRuntimeBindings()
@@ -71,8 +71,10 @@ public sealed class XmlProvider : DataProvider
     }
 
     /// <inheritdoc />
-    public override object? Query(ProviderQuery query)
+    public override async ValueTask<object?> QueryAsync(
+        ProviderQuery query, CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         if (query.RootPath is null)
         {
             return new Dictionary<string, List<object>>();
@@ -87,28 +89,44 @@ public sealed class XmlProvider : DataProvider
         {
             CollectXmlFiles(rootPath, excluded, filePaths);
         }
-        else if (File.Exists(rootPath) && XmlExtensions.Contains(Path.GetExtension(rootPath)))
+        else if (File.Exists(rootPath) && s_xmlExtensions.Contains(Path.GetExtension(rootPath)))
         {
             filePaths.Add(rootPath);
             relativeRoot = Path.GetDirectoryName(rootPath) ?? Environment.CurrentDirectory;
         }
+        else if (!File.Exists(rootPath))
+        {
+            throw new DirectoryNotFoundException($"XML target '{rootPath}' does not exist.");
+        }
 
         ConcurrentBag<(SourceFile File, List<XmlElementInfo> Elements, List<XmlAttributeInfo> Attributes)> parsed = new ConcurrentBag<(SourceFile File, List<XmlElementInfo> Elements, List<XmlAttributeInfo> Attributes)>();
-        Parallel.ForEach(filePaths,
-            new ParallelOptions { MaxDegreeOfParallelism = Environment.ProcessorCount },
-            filePath =>
+        await Parallel.ForEachAsync(filePaths,
+            new ParallelOptions
+            {
+                MaxDegreeOfParallelism = Environment.ProcessorCount,
+                CancellationToken = cancellationToken
+            }, async (filePath, token) =>
             {
                 try
                 {
-                    string text = File.ReadAllText(filePath);
+                    string text = await File.ReadAllTextAsync(filePath, token).ConfigureAwait(false);
                     string relativePath = Path.GetRelativePath(relativeRoot, filePath).Replace('\\', '/');
                     SourceFile sourceFile = new SourceFile(relativePath, "xml", [], [], text);
                     (List<XmlElementInfo>? elements, List<XmlAttributeInfo>? attributes) = ParseDocument(text);
                     ExecutionStatistics.RecordInputFile(filePath);
                     parsed.Add((sourceFile, elements, attributes));
                 }
-                catch { }
-            });
+                catch (System.Xml.XmlException ex)
+                {
+                    throw new InvalidDataException(
+                        $"Cannot parse XML file '{filePath}': {ex.Message}", ex);
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                    throw new IOException(
+                        $"Cannot read XML file '{filePath}': {ex.Message}", ex);
+                }
+            }).ConfigureAwait(false);
 
         List<(SourceFile File, List<XmlElementInfo> Elements, List<XmlAttributeInfo> Attributes)> sorted = parsed.OrderBy(p => p.File.Path, StringComparer.Ordinal).ToList();
 
@@ -143,7 +161,8 @@ public sealed class XmlProvider : DataProvider
             XmlResolver = null,
         };
 
-        using XmlReader reader = XmlReader.Create(new StringReader(text), settings);
+        using StringReader input = new StringReader(text);
+        using XmlReader reader = XmlReader.Create(input, settings);
         XDocument document = XDocument.Load(reader, LoadOptions.SetLineInfo);
         List<XmlElementInfo> elements = new List<XmlElementInfo>();
         List<XmlAttributeInfo> attributes = new List<XmlAttributeInfo>();
@@ -194,7 +213,7 @@ public sealed class XmlProvider : DataProvider
         {
             foreach (string file in Directory.GetFiles(dir))
             {
-                if (XmlExtensions.Contains(Path.GetExtension(file)))
+                if (s_xmlExtensions.Contains(Path.GetExtension(file)))
                 {
                     result.Add(file);
                 }
@@ -210,8 +229,11 @@ public sealed class XmlProvider : DataProvider
                 CollectXmlFiles(subDir, excluded, result);
             }
         }
-        catch (UnauthorizedAccessException) { }
-        catch (IOException) { }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            throw new IOException(
+                $"Cannot enumerate XML files in '{dir}': {ex.Message}", ex);
+        }
     }
 
     private static Dictionary<string, Dictionary<string, Func<object, object?>>> BuildAccessors()

@@ -15,7 +15,13 @@ namespace Cop.Lang.Interpreter;
 /// </summary>
 public sealed class CopClosure : CopValue, ICopCallable
 {
+    /// <summary>
+    /// The function whose explicit arguments are being partially applied.
+    /// </summary>
     public CopFunction Func { get; }
+    /// <summary>
+    /// The explicit arguments already captured by this partial application.
+    /// </summary>
     public IReadOnlyList<CopValue> BoundExplicit { get; }
     /// <summary>Number of explicit parameters (declared params minus the leading item parameter).</summary>
     public int ExplicitArity { get; }
@@ -31,9 +37,13 @@ public sealed class CopClosure : CopValue, ICopCallable
     public CopClosure WithExplicit(IEnumerable<CopValue> more)
         => new(Func, [.. BoundExplicit, .. more], ExplicitArity);
 
+    /// <summary>
+    /// The number of arguments still required to invoke this callable.
+    /// </summary>
     public int Arity => ExplicitArity - BoundExplicit.Count;
 
-    public CopValue Invoke(IReadOnlyList<CopValue> args, Evaluator evaluator, Environment env)
+    /// <inheritdoc cref="ICopCallable.InvokeAsync"/>
+    public async ValueTask<CopValue> InvokeAsync(IReadOnlyList<CopValue> args, Evaluator evaluator, Environment env, CancellationToken cancellationToken = default)
     {
         // Invoked as a callable (e.g. by a filter): the first argument is the item that fills the
         // leading parameter; any further arguments complete the remaining explicit parameters
@@ -50,9 +60,11 @@ public sealed class CopClosure : CopValue, ICopCallable
             full.Add(args[i]);
         }
 
-        return evaluator.CallUserFunction(Func, full);
+        return (await evaluator.CallUserFunctionAsync(Func, full, cancellationToken: cancellationToken));
     }
 
+    /// <inheritdoc/>
     public override string Display() => $"<closure {Func.Declaration.Name}>";
+    /// <inheritdoc/>
     public override string ToString() => Display();
 }

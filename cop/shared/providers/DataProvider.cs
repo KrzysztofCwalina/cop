@@ -11,7 +11,7 @@ namespace Cop.Core;
 ///
 /// Contract:
 ///   GetSchema() — declares what types and collections this provider can produce (static capability).
-///   Query()     — returns actual data for a given context. Single method for all formats.
+///   QueryAsync() — returns actual data for a given context, honoring caller cancellation.
 /// </summary>
 public abstract class DataProvider
 {
@@ -57,13 +57,15 @@ public abstract class DataProvider
     /// Use query.Collection to select a single collection (optimization hint:
     /// providers may skip computing other collections).
     /// </summary>
-    public virtual object? Query(ProviderQuery query) => null;
+    public virtual ValueTask<object?> QueryAsync(ProviderQuery query,
+        CancellationToken cancellationToken = default) => ValueTask.FromResult<object?>(null);
 
     /// <summary>
     /// Optional pull-based query path. Providers may return DeferredProviderResult to defer
-    /// file reads and parsing until enumeration. Existing providers keep their Query behavior.
+    /// file reads and parsing until enumeration. The default uses the provider's QueryAsync behavior.
     /// </summary>
-    public virtual object? QueryDeferred(ProviderQuery query) => Query(query);
+    public virtual ValueTask<object?> QueryDeferredAsync(ProviderQuery query,
+        CancellationToken cancellationToken = default) => QueryAsync(query, cancellationToken);
 
     /// <summary>Filters extracted CLR collections before returning them to the host.</summary>
     protected Dictionary<string, List<object>> ApplyQueryFilters(
@@ -91,17 +93,19 @@ public abstract class DataProvider
 
     /// <summary>
     /// Returns namespace-scoped functions that this provider exposes (e.g., http.Get, json.Load).
-    /// Functions are async (return Task&lt;object?&gt;) and accept a list of evaluated arguments.
+    /// Functions return ValueTask&lt;object?&gt; and accept evaluated arguments and a cancellation token.
     /// The engine registers these under the provider's namespace so they can be called as
     /// namespace.FunctionName(args) in cop scripts.
     /// </summary>
-    public virtual Dictionary<string, Func<List<object?>, Task<object?>>>? GetFunctions() => null;
+    public virtual Dictionary<string,
+        Func<List<object?>, CancellationToken, ValueTask<object?>>>? GetFunctions() => null;
 
     /// <summary>
     /// Returns functions bound to this execution's source and comparison context.
     /// The default preserves existing providers' parameterless function contract.
     /// </summary>
-    public virtual Dictionary<string, Func<List<object?>, Task<object?>>>? GetFunctions(AnalysisContext context)
+    public virtual Dictionary<string,
+        Func<List<object?>, CancellationToken, ValueTask<object?>>>? GetFunctions(AnalysisContext context)
         => GetFunctions();
 
     /// <summary>

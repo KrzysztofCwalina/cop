@@ -187,6 +187,9 @@ public class ImportResolver
     public static string? FindPackageDir(string feedPath, string packageName)
         => FindPackageDir(feedPath, packageName, null);
 
+    /// <summary>
+    /// Finds an installed compatible package and reports rejected provider versions.
+    /// </summary>
     public static string? FindPackageDir(string feedPath, string packageName, Action<string>? incompatibleProvider)
     {
         if (!Directory.Exists(feedPath))
@@ -208,7 +211,7 @@ public class ImportResolver
             if (Directory.Exists(direct)
                 && (File.GetAttributes(direct) & FileAttributes.ReparsePoint) == 0 && IsPackageDir(direct))
             {
-                PackageMetadata? metadata = PackageMetadata.TryLoadFromDirectory(direct);
+                PackageMetadata? metadata = PackageMetadata.LoadFromDirectoryOrDefault(direct);
                 if (metadata is not null && ProviderCompatibility.GetError(direct, metadata) is { } error)
                 {
                     incompatibleProvider?.Invoke(error);

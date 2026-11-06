@@ -42,7 +42,7 @@ public class DeterminismAndScaleTests
 
     [Test]
     [CancelAfter(90_000)]
-    public void SameProgramAndFixture_ProducesIdenticalNonZeroOutputsAcrossRuns()
+    public async Task SameProgramAndFixture_ProducesIdenticalNonZeroOutputsAcrossRuns()
     {
         const int fileCount = 24;
         const int writesPerFile = 3;
@@ -51,36 +51,38 @@ public class DeterminismAndScaleTests
         GenerateCSharpTree(fileCount, writesPerFile);
         ClearSourceCacheForTarget(_targetDir);
 
-        var snapshots = Enumerable.Range(0, DeterminismRuns)
-            .Select(_ => RunAndCapture())
-            .ToArray();
+        var snapshots = new List<RunSnapshot>();
+        for (int run = 0; run < DeterminismRuns; run++)
+        {
+            snapshots.Add(await RunAndCapture());
+        }
 
         AssertStableSnapshots(snapshots, $"console-writeline-count={expectedCount}");
     }
 
     [Test]
     [CancelAfter(60_000)]
-    public void CacheInvalidation_SourceEditWithChangedStats_ReparsesUpdatedSource()
+    public async Task CacheInvalidation_SourceEditWithChangedStats_ReparsesUpdatedSource()
     {
         WriteConsoleWriteLineRule();
         var sourcePath = Path.Combine(_targetDir, "Edited.cs");
         ClearSourceCacheForTarget(_targetDir);
 
         File.WriteAllText(sourcePath, CSharpSource("Edited", writeLineCount: 2));
-        var before = RunAndCapture();
+        var before = (await RunAndCapture());
         Assert.That(before.Messages, Is.EqualTo(new[] { "console-writeline-count=2" }));
 
         File.WriteAllText(sourcePath, CSharpSource("Edited", writeLineCount: 3));
         File.SetLastWriteTimeUtc(sourcePath, DateTime.UtcNow.AddSeconds(2));
 
-        var after = RunAndCapture();
+        var after = (await RunAndCapture());
         Assert.That(after.Messages, Is.EqualTo(new[] { "console-writeline-count=3" }),
             "The second run must observe the edited source, not a stale source cache entry.");
     }
 
     [Test]
     [CancelAfter(60_000)]
-    public void CacheInvalidation_SameLengthSameTimestampEdit_DoesNotServeStaleParse()
+    public async Task CacheInvalidation_SameLengthSameTimestampEdit_DoesNotServeStaleParse()
     {
         WriteConsoleWriteLineRule();
         var sourcePath = Path.Combine(_targetDir, "SameStats.cs");
@@ -93,20 +95,20 @@ public class DeterminismAndScaleTests
         var originalWriteTime = new DateTime(2026, 06, 23, 12, 0, 0, DateTimeKind.Utc);
         File.SetLastWriteTimeUtc(sourcePath, originalWriteTime);
 
-        var before = RunAndCapture();
+        var before = (await RunAndCapture());
         Assert.That(before.Messages, Is.EqualTo(new[] { "console-writeline-count=1" }));
 
         File.WriteAllText(sourcePath, edited);
         File.SetLastWriteTimeUtc(sourcePath, originalWriteTime);
 
-        var after = RunAndCapture();
+        var after = (await RunAndCapture());
         Assert.That(after.Messages, Is.EqualTo(new[] { "console-writeline-count=2" }),
             "A source edit with unchanged file length and timestamp must not reuse stale parsed source.");
     }
 
     [Test]
     [CancelAfter(180_000)]
-    public void LargeCSharpTree_ProducesExactStableNonZeroCountAcrossRuns()
+    public async Task LargeCSharpTree_ProducesExactStableNonZeroCountAcrossRuns()
     {
         var expectedCount = ScaleFileCount * ScaleWritesPerFile;
         WriteConsoleWriteLineRule();
@@ -116,19 +118,21 @@ public class DeterminismAndScaleTests
         GenerateCSharpTree(ScaleFileCount, ScaleWritesPerFile);
         ClearSourceCacheForTarget(_targetDir);
 
-        var snapshots = Enumerable.Range(0, ScaleRuns)
-            .Select(_ => RunAndCapture())
-            .ToArray();
+        var snapshots = new List<RunSnapshot>();
+        for (int run = 0; run < ScaleRuns; run++)
+        {
+            snapshots.Add(await RunAndCapture());
+        }
 
         AssertStableSnapshots(snapshots, $"console-writeline-count={expectedCount}");
     }
 
-    private RunSnapshot RunAndCapture()
+    private async Task<RunSnapshot> RunAndCapture()
     {
-        var result = Engine.Run(_scriptsDir, _targetDir, new EngineRunOptions
+        var result = (await Engine.RunAsync(_scriptsDir, _targetDir, new EngineRunOptions
         {
             AdditionalFeedPaths = new[] { PackagesDir },
-        });
+        }));
 
         Assert.That(result.HasParseErrors, Is.False, string.Join(Environment.NewLine, result.ParseErrors));
         Assert.That(result.HasFatalErrors, Is.False, string.Join(Environment.NewLine, result.Errors));

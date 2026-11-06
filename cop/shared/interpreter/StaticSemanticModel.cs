@@ -15,6 +15,9 @@ public sealed class StaticSemanticModel
 
     public StaticSemanticModel(IEnumerable<ModuleNode> modules) => _checker = TypeChecker.ForStaticModel(modules);
 
+    /// <summary>
+    /// Infers an expression's static type using optional local type bindings.
+    /// </summary>
     public TypeInfo? InferType(Expression expression, IReadOnlyDictionary<string, TypeInfo?>? locals = null)
     {
         lock (_gate)
@@ -23,6 +26,9 @@ public sealed class StaticSemanticModel
         }
     }
 
+    /// <summary>
+    /// Resolves a call's target and argument types without executing it.
+    /// </summary>
     public StaticCallInfo ResolveCall(CallExpr call, IReadOnlyDictionary<string, TypeInfo?>? locals = null)
     {
         lock (_gate)

@@ -10,10 +10,10 @@ namespace Cop.Providers;
 /// </summary>
 public static class PythonSchema
 {
-    private static readonly ProviderSchema _schema = Build();
+    private static readonly ProviderSchema s_schema = Build();
 
     /// <summary>Serializes the Python provider schema as UTF-8 JSON.</summary>
-    public static ReadOnlyMemory<byte> GetJson() => _schema.ToJson();
+    public static ReadOnlyMemory<byte> GetJson() => s_schema.ToJson();
 
     private static ProviderSchema Build()
     {

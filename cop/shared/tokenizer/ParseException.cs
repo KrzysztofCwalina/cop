@@ -9,11 +9,37 @@ namespace Cop.Lang;
 /// </summary>
 public class ParseException : Exception
 {
+    /// <summary>
+    /// The source file associated with the parsing failure.
+    /// </summary>
     public string FilePath { get; }
+    /// <summary>
+    /// The one-based source line where parsing failed.
+    /// </summary>
     public int Line { get; }
+    /// <summary>
+    /// The optional one-based source column where parsing failed.
+    /// </summary>
     public int? Column { get; }
+    /// <summary>
+    /// The optional source text used to display the failing line.
+    /// </summary>
     public string? SourceLine { get; }
 
+    /// <summary>Reports a parsing failure without a known source location.</summary>
+    public ParseException() : this("An error occurred while parsing Cop source.") { }
+
+    /// <summary>Reports a parsing failure without a known source location.</summary>
+    public ParseException(string message) : this(message, "<unknown>", 0) { }
+
+    /// <summary>Reports a parsing failure while retaining its underlying cause.</summary>
+    public ParseException(string message, Exception innerException)
+        : base($"<unknown>(0): {message}", innerException)
+    {
+        FilePath = "<unknown>";
+    }
+
+    /// <summary>Reports a parsing failure with its location and optional source context.</summary>
     public ParseException(string message, string filePath, int line, int? column = null, string? sourceLine = null)
         : base($"{filePath}({line}): {message}")
     {

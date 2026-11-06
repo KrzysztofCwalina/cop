@@ -83,7 +83,7 @@ public class JavaScriptParityTests
     }
 
     [Test]
-    public void Parse_NativeLaunch_UsesBoundedArgumentsAndContentAddressedHelper()
+    public async System.Threading.Tasks.Task Parse_NativeLaunch_UsesBoundedArgumentsAndContentAddressedHelper()
     {
         var root = Path.Combine(Path.GetTempPath(), "cop-js-launch-" + Guid.NewGuid().ToString("N"));
         var compilerDirectory = Path.Combine(root, "node_modules", "typescript", "lib");
@@ -99,10 +99,10 @@ public class JavaScriptParityTests
             string? helperPath = null;
             for (int run = 0; run < 2; run++)
             {
-                using var scope = new Cop.Core.ToolchainExecutionScope();
-                var file = new JavaScriptSourceParser().Parse(Path.Combine(root, "sample.ts"),
-                    "function run(): number { return 1; } run();")!;
-                Assert.That(file.Statements.Single(s => s.Kind == "call").ValueType!.Name, Is.EqualTo("number"));
+                await using var scope = new Cop.Core.ToolchainExecutionScope();
+                var file = (await new JavaScriptSourceParser().ParseAsync(Path.Combine(root, "sample.ts"),
+                    "function run(): number { return 1; } run();", cancellationToken: CancellationToken.None))!;
+                Assert.That((await AsyncSourceFacts.SemanticAsync(file.Statements.Single(s => s.Kind == "call"), CancellationToken.None)).ValueType!.Name, Is.EqualTo("number"));
                 using var document = System.Text.Json.JsonDocument.Parse(File.ReadAllText(capture));
                 var arguments = document.RootElement.GetProperty("args").EnumerateArray().Select(e => e.GetString()!).ToArray();
                 var flags = document.RootElement.GetProperty("flags").EnumerateArray().Select(e => e.GetString()!).ToArray();
@@ -124,9 +124,9 @@ public class JavaScriptParityTests
     }
 
     [Test]
-    public void Parse_CheckerBinding_DistinguishesReceiverValueAndSelectedOverload()
+    public async Task Parse_CheckerBinding_DistinguishesReceiverValueAndSelectedOverload()
     {
-        var file = new JavaScriptSourceParser().Parse("binding.ts", """
+        var file = (await new JavaScriptSourceParser().ParseAsync("binding.ts", """
             class First {
                 convert(value: string): number;
                 convert(value: number): string;
@@ -141,38 +141,40 @@ public class JavaScriptParityTests
             declare const dynamic: any;
             dynamic.convert('unknown');
             missing('unknown');
-            """)!;
+            """, cancellationToken: CancellationToken.None))!;
         var calls = file.Statements.Where(s => s.Kind == "call").ToList();
         var factory = calls.Single(s => s.MemberName == "factory");
-        Assert.That(factory.ReceiverType, Is.Null);
-        Assert.That(factory.ValueType!.Name, Is.EqualTo("First"));
-        Assert.That(factory.ReferencedCallable!.Name, Is.EqualTo("factory"));
-        Assert.That(factory.ReferencedCallable.ReturnType!.Name, Is.EqualTo("First"));
+        Assert.That((await AsyncSourceFacts.SemanticAsync(factory, CancellationToken.None)).ReceiverType, Is.Null);
+        Assert.That((await AsyncSourceFacts.SemanticAsync(factory, CancellationToken.None)).ValueType!.Name, Is.EqualTo("First"));
+        var factoryCallable = factory.ReferencedCallable
+            ?? throw new AssertionException("Expected the factory call to resolve its declaration.");
+        Assert.That(factoryCallable.Name, Is.EqualTo("factory"));
+        Assert.That(factoryCallable.ReturnType!.Name, Is.EqualTo("First"));
         var converts = calls.Where(s => s.MemberName == "convert").ToList();
-        Assert.That(converts.Select(s => s.ReceiverType?.Name), Is.EqualTo(new string?[] { "First", "First", "Second", null }));
-        Assert.That(converts.Select(s => s.ValueType?.Name), Is.EqualTo(new string?[] { "number", "string", "boolean", null }));
-        Assert.That(converts.Take(3).Select(s => s.ReferencedCallable!.DeclaringType),
+        Assert.That((await converts.ToAsyncEnumerable().Select(async (Cop.Providers.SourceModel.StatementInfo s, CancellationToken cancellationToken) => (await AsyncSourceFacts.SemanticAsync(s, CancellationToken.None)).ReceiverType?.Name).ToArrayAsync()), Is.EqualTo(new string?[] { "First", "First", "Second", null }));
+        Assert.That((await converts.ToAsyncEnumerable().Select(async (Cop.Providers.SourceModel.StatementInfo s, CancellationToken cancellationToken) => (await AsyncSourceFacts.SemanticAsync(s, CancellationToken.None)).ValueType?.Name).ToArrayAsync()), Is.EqualTo(new string?[] { "number", "string", "boolean", null }));
+        Assert.That((await converts.Take(3).ToAsyncEnumerable().Select(async (Cop.Providers.SourceModel.StatementInfo s, CancellationToken cancellationToken) => (await AsyncSourceFacts.SemanticAsync(s, CancellationToken.None)).ReferencedCallable!.DeclaringType).ToArrayAsync()),
             Is.EqualTo(new[] { "First", "First", "Second" }));
-        Assert.That(converts.Take(3).Select(s => s.ReferencedCallable!.Signature),
+        Assert.That((await converts.Take(3).ToAsyncEnumerable().Select(async (Cop.Providers.SourceModel.StatementInfo s, CancellationToken cancellationToken) => (await AsyncSourceFacts.SemanticAsync(s, CancellationToken.None)).ReferencedCallable!.Signature).ToArrayAsync()),
             Is.EqualTo(new[] { "(value: string): number", "(value: number): string", "(value: string): boolean" }));
-        Assert.That(converts.Take(3).Select(s => s.ReferencedCallable!.Parameters.Single().Name),
+        Assert.That((await converts.Take(3).ToAsyncEnumerable().Select(async (Cop.Providers.SourceModel.StatementInfo s, CancellationToken cancellationToken) => (await AsyncSourceFacts.SemanticAsync(s, CancellationToken.None)).ReferencedCallable!.Parameters.Single().Name).ToArrayAsync()),
             Is.EqualTo(new[] { "string", "number", "string" }));
-        Assert.That(converts.Take(3).Select(s => s.ReferencedCallable!.Line), Is.EqualTo(new int?[] { 2, 3, 6 }));
-        Assert.That(converts.Last().ReferencedCallable, Is.Null);
-        Assert.That(calls.Single(s => s.MemberName == "missing").ReferencedCallable, Is.Null);
-        Assert.That(converts.Take(3).All(s => s.ReferencedCallable!.SourceFile!.EndsWith("binding.ts")), Is.True);
+        Assert.That((await converts.Take(3).ToAsyncEnumerable().Select(async (Cop.Providers.SourceModel.StatementInfo s, CancellationToken cancellationToken) => (await AsyncSourceFacts.SemanticAsync(s, CancellationToken.None)).ReferencedCallable!.Line).ToArrayAsync()), Is.EqualTo(new int?[] { 2, 3, 6 }));
+        Assert.That((await AsyncSourceFacts.SemanticAsync(converts.Last(), CancellationToken.None)).ReferencedCallable, Is.Null);
+        Assert.That((await AsyncSourceFacts.SemanticAsync(calls.Single(s => s.MemberName == "missing"), CancellationToken.None)).ReferencedCallable, Is.Null);
+        Assert.That((await converts.Take(3).ToAsyncEnumerable().AllAsync(async (Cop.Providers.SourceModel.StatementInfo s, CancellationToken cancellationToken) => (await AsyncSourceFacts.SemanticAsync(s, CancellationToken.None)).ReferencedCallable!.SourceFile!.EndsWith("binding.ts"))), Is.True);
     }
 
     [Test]
-    public void Parse_ModuleFunctionsArrowsAndSemicolonFreeDeclarations_RetainsExactFacts()
+    public async Task Parse_ModuleFunctionsArrowsAndSemicolonFreeDeclarations_RetainsExactFacts()
     {
-        var file = new JavaScriptSourceParser().Parse("module.ts", """
+        var file = (await new JavaScriptSourceParser().ParseAsync("module.ts", """
             const value = 1
             export class AfterVariable { run(): number { return value } }
             export async function load(url: string): Promise<string> { return await fetch(url) }
             export const arrow = (n: number): number => outer(inner(n))
             topLevel('ready')
-            """)!;
+            """, cancellationToken: CancellationToken.None))!;
 
         Assert.That(file.Types.Select(t => t.Name), Is.EqualTo(new[] { "AfterVariable" }));
         Assert.That(file.Methods.Select(m => m.Name), Is.EqualTo(new[] { "load", "arrow" }));
@@ -185,14 +187,14 @@ public class JavaScriptParityTests
     }
 
     [Test]
-    public void Parse_NestingAndDecodedArguments_PreservesExpressionStructure()
+    public async Task Parse_NestingAndDecodedArguments_PreservesExpressionStructure()
     {
-        var file = new JavaScriptSourceParser().Parse("calls.ts", """
+        var file = (await new JavaScriptSourceParser().ParseAsync("calls.ts", """
             function run(flag: boolean) {
                 if (flag) { sink(wrap('a\u0062\n'), obj.value); }
                 await 42;
             }
-            """)!;
+            """, cancellationToken: CancellationToken.None))!;
         var calls = file.Statements.Where(s => s.Kind == "call").ToList();
         Assert.That(calls.Select(s => s.MemberName), Is.EqualTo(new[] { "sink", "wrap" }));
         Assert.That(calls[0].CallTarget!.Kind, Is.EqualTo("identifier"));
@@ -208,9 +210,9 @@ public class JavaScriptParityTests
     }
 
     [Test]
-    public void Parse_TypeScriptMembers_ReportsVisibilitySignaturesDocsAndInterfaces()
+    public async Task Parse_TypeScriptMembers_ReportsVisibilitySignaturesDocsAndInterfaces()
     {
-        var file = new JavaScriptSourceParser().Parse("members.ts", """
+        var file = (await new JavaScriptSourceParser().ParseAsync("members.ts", """
             interface Contract<T> extends Parent<T> { execute(value?: T): Promise<T>; }
             enum Mode { First = 4, Second = 'next' }
             /** A service. */
@@ -224,11 +226,11 @@ public class JavaScriptParityTests
                 private hidden(): void {}
                 get label(): string { return this.name; }
             }
-            """)!;
+            """, cancellationToken: CancellationToken.None))!;
         Assert.That(file.ParseErrors, Is.Empty);
         Assert.That(file.Types.Select(t => t.Name), Is.EqualTo(new[] { "Contract", "Mode", "Service" }));
         Assert.That(file.Types[0].BaseTypes, Is.EqualTo(new[] { "Parent<T>" }));
-        Assert.That(file.Types[0].Methods.Single().ReturnType!.ToString(), Is.EqualTo("Promise<T>"));
+        Assert.That((await AsyncSourceFacts.MembersAsync(file.Types[0], CancellationToken.None)).Methods.Single().ReturnType!.ToString(), Is.EqualTo("Promise<T>"));
         Assert.That(file.Types[1].EnumValues, Is.EqualTo(new[] { "First", "Second" }));
         var service = file.Types[2];
         Assert.That(service.IsAbstract, Is.True);
@@ -238,13 +240,13 @@ public class JavaScriptParityTests
         Assert.That(service.Fields[0].IsPrivate, Is.True);
         Assert.That(service.Fields[0].IsReadonly, Is.True);
         Assert.That(service.Fields[1].IsProtected, Is.True);
-        var execute = service.Methods.Single(m => m.Name == "execute");
+        var execute = (await AsyncSourceFacts.MembersAsync(service, CancellationToken.None)).Methods.Single(m => m.Name == "execute");
         Assert.That(execute.ReturnType!.GenericArguments.Single().Name, Is.EqualTo("T"));
         Assert.That(execute.Parameters.Select(p => p.Name), Is.EqualTo(new[] { "{ value }", "rest" }));
         Assert.That(execute.Parameters[1].IsVariadic, Is.True);
         Assert.That(execute.HasDocComment, Is.True);
         Assert.That(execute.Decorators, Is.EqualTo(new[] { "logged" }));
-        Assert.That(service.Methods.Single(m => m.Name == "hidden").IsPrivate, Is.True);
+        Assert.That((await AsyncSourceFacts.MembersAsync(service, CancellationToken.None)).Methods.Single(m => m.Name == "hidden").IsPrivate, Is.True);
         Assert.That(service.Properties.Single().Name, Is.EqualTo("label"));
         Assert.That(service.Properties.Single().HasGetter, Is.True);
     }
@@ -257,25 +259,25 @@ public class JavaScriptParityTests
     [TestCase(".cjs")]
     [TestCase(".mts")]
     [TestCase(".cts")]
-    public void Parse_AllSupportedExtensions_RetainsModuleCalls(string extension)
+    public async Task Parse_AllSupportedExtensions_RetainsModuleCalls(string extension)
     {
         var parser = new JavaScriptSourceParser();
         Assert.That(parser.Extensions, Does.Contain(extension));
-        var file = parser.Parse("module" + extension, "export const work = () => log('ok'); work();")!;
+        var file = (await parser.ParseAsync("module" + extension, "export const work = () => log('ok'); work();", cancellationToken: CancellationToken.None))!;
         Assert.That(file.Methods.Select(m => m.Name), Is.EqualTo(new[] { "work" }));
         Assert.That(file.Statements.Where(s => s.Kind == "call").Select(s => s.MemberName),
             Is.EqualTo(new[] { "log", "work" }));
     }
 
     [Test]
-    public void Parse_AliasOptionalGenericImportsAndSpans_PreservesNeutralFacts()
+    public async Task Parse_AliasOptionalGenericImportsAndSpans_PreservesNeutralFacts()
     {
-        var file = new JavaScriptSourceParser().Parse("facts.ts", """
+        var file = (await new JavaScriptSourceParser().ParseAsync("facts.ts", """
             import Default, { thing as renamed } from 'module';
             import * as namespace from 'other';
             export type Result<T> = { value: T; read(input?: T): T };
             export function identity<T>(value?: T): T { return value!; }
-            """)!;
+            """, cancellationToken: CancellationToken.None))!;
         Assert.That(file.Imports.Select(i => (i.Module, i.Name, i.Alias, i.IsWildcard)),
             Is.EqualTo(new[]
             {
@@ -287,7 +289,7 @@ public class JavaScriptParityTests
         Assert.That(alias.AliasTarget!.OriginalText, Is.EqualTo("{ value: T; read(input?: T): T }"));
         Assert.That(alias.TypeParameters, Is.EqualTo(new[] { "T" }));
         Assert.That(alias.Properties.Single().Name, Is.EqualTo("value"));
-        Assert.That(alias.Methods.Single().Parameters.Single().IsOptional, Is.True);
+        Assert.That((await AsyncSourceFacts.MembersAsync(alias, CancellationToken.None)).Methods.Single().Parameters.Single().IsOptional, Is.True);
         var method = file.Methods.Single();
         Assert.That(method.TypeParameters, Is.EqualTo(new[] { "T" }));
         Assert.That(method.Parameters.Single().IsOptional, Is.True);
@@ -295,29 +297,29 @@ public class JavaScriptParityTests
     }
 
     [Test]
-    public void Parse_ResolvedReceiverAndUnknownReceiver_DoesNotInventDynamicTypes()
+    public async Task Parse_ResolvedReceiverAndUnknownReceiver_DoesNotInventDynamicTypes()
     {
-        var file = new JavaScriptSourceParser().Parse("semantic.ts", """
+        var file = (await new JavaScriptSourceParser().ParseAsync("semantic.ts", """
             class Actual { execute() {} }
             function run(client: Actual, dynamic: any) {
                 client.execute();
                 dynamic.execute();
                 console.log('output');
             }
-            """)!;
+            """, cancellationToken: CancellationToken.None))!;
         var calls = file.Statements.Where(s => s.Kind == "call").ToList();
-        Assert.That(calls.Select(s => s.TypeName), Is.EqualTo(new string?[] { "Actual", null, "Console" }));
+        Assert.That((await calls.ToAsyncEnumerable().Select(async (Cop.Providers.SourceModel.StatementInfo s, CancellationToken cancellationToken) => (await AsyncSourceFacts.TypeNameAsync(s, CancellationToken.None)).TypeName).ToArrayAsync()), Is.EqualTo(new string?[] { "Actual", null, "Console" }));
         Assert.That(calls.Select(s => s.CallTarget!.Target!.Name), Is.EqualTo(new[] { "client", "dynamic", "console" }));
         Assert.That(calls[0].Method!.Name, Is.EqualTo("run"));
     }
 
     [TestCase(".jsx")]
     [TestCase(".tsx")]
-    public void Parse_JSXAndTSX_KeepsEmbeddedCallsWithoutTreatingTagsAsCalls(string extension)
+    public async Task Parse_JSXAndTSX_KeepsEmbeddedCallsWithoutTreatingTagsAsCalls(string extension)
     {
-        var file = new JavaScriptSourceParser().Parse("view" + extension, """
+        var file = (await new JavaScriptSourceParser().ParseAsync("view" + extension, """
             export const View = () => <section title={format('title')}><Child value={compute(2)} /></section>;
-            """)!;
+            """, cancellationToken: CancellationToken.None))!;
         Assert.That(file.ParseErrors, Is.Empty);
         Assert.That(file.Methods.Select(m => m.Name), Is.EqualTo(new[] { "View" }));
         Assert.That(file.Statements.Where(s => s.Kind == "call").Select(s => s.MemberName),
@@ -326,7 +328,7 @@ public class JavaScriptParityTests
 
     [TestCase("tsconfig.json", ".ts")]
     [TestCase("jsconfig.json", ".js")]
-    public void Parse_PathAliasAndEditedImportedDeclaration_UsesRealCurrentSemanticTypes(string configName, string extension)
+    public async System.Threading.Tasks.Task Parse_PathAliasAndEditedImportedDeclaration_UsesRealCurrentSemanticTypes(string configName, string extension)
     {
         var root = Path.Combine(Path.GetTempPath(), "cop-js-semantic-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
@@ -340,31 +342,35 @@ public class JavaScriptParityTests
             var main = Path.Combine(root, "main" + extension);
             const string source = "import { client } from '@client'; client.send('value');";
             var parser = new JavaScriptSourceParser();
-            using var scope = new Cop.Core.ToolchainExecutionScope();
-            var first = parser.Parse(main, source)!;
-            Assert.That(first.Statements.Single(s => s.Kind == "call").TypeName, Is.EqualTo("First"));
+            await using var scope = new Cop.Core.ToolchainExecutionScope();
+            var first = (await parser.ParseAsync(main, source, cancellationToken: CancellationToken.None))!;
+            Assert.That((await AsyncSourceFacts.TypeNameAsync(first.Statements.Single(s => s.Kind == "call"), CancellationToken.None)).TypeName, Is.EqualTo("First"));
             var firstCall = first.Statements.Single(s => s.Kind == "call");
-            Assert.That(firstCall.ReceiverType!.Name, Is.EqualTo("First"));
-            Assert.That(firstCall.ValueType!.Name, Is.EqualTo("number"));
-            Assert.That(firstCall.ReferencedCallable!.Signature, Is.EqualTo("(value: string): number"));
-            Assert.That(firstCall.ReferencedCallable.DeclaringType, Is.EqualTo("First"));
-            Assert.That(Path.GetFullPath(firstCall.ReferencedCallable.SourceFile!), Is.EqualTo(imported));
+            Assert.That((await AsyncSourceFacts.SemanticAsync(firstCall, CancellationToken.None)).ReceiverType!.Name, Is.EqualTo("First"));
+            Assert.That((await AsyncSourceFacts.SemanticAsync(firstCall, CancellationToken.None)).ValueType!.Name, Is.EqualTo("number"));
+            var firstCallable = firstCall.ReferencedCallable
+                ?? throw new AssertionException("Expected the initial imported call to resolve its declaration.");
+            Assert.That(firstCallable.Signature, Is.EqualTo("(value: string): number"));
+            Assert.That(firstCallable.DeclaringType, Is.EqualTo("First"));
+            Assert.That(Path.GetFullPath(firstCallable.SourceFile!), Is.EqualTo(imported));
             File.WriteAllText(imported, "class Second { send(value: string): boolean { return true; } } export const client = new Second();");
             File.SetLastWriteTimeUtc(imported, DateTime.UtcNow.AddSeconds(2));
-            var second = parser.Parse(main, source)!;
-            Assert.That(second.Statements.Single(s => s.Kind == "call").TypeName, Is.EqualTo("Second"));
+            var second = (await parser.ParseAsync(main, source, cancellationToken: CancellationToken.None))!;
+            Assert.That((await AsyncSourceFacts.TypeNameAsync(second.Statements.Single(s => s.Kind == "call"), CancellationToken.None)).TypeName, Is.EqualTo("Second"));
             var secondCall = second.Statements.Single(s => s.Kind == "call");
-            Assert.That(secondCall.ReceiverType!.Name, Is.EqualTo("Second"));
-            Assert.That(secondCall.ValueType!.Name, Is.EqualTo("boolean"));
-            Assert.That(secondCall.ReferencedCallable!.Signature, Is.EqualTo("(value: string): boolean"));
-            Assert.That(secondCall.ReferencedCallable.DeclaringType, Is.EqualTo("Second"));
+            Assert.That((await AsyncSourceFacts.SemanticAsync(secondCall, CancellationToken.None)).ReceiverType!.Name, Is.EqualTo("Second"));
+            Assert.That((await AsyncSourceFacts.SemanticAsync(secondCall, CancellationToken.None)).ValueType!.Name, Is.EqualTo("boolean"));
+            var secondCallable = secondCall.ReferencedCallable
+                ?? throw new AssertionException("Expected the changed imported call to resolve its declaration.");
+            Assert.That(secondCallable.Signature, Is.EqualTo("(value: string): boolean"));
+            Assert.That(secondCallable.DeclaringType, Is.EqualTo("Second"));
             Assert.That(parser.CanCache(main), Is.False, "Semantic dependencies are not source-only persistent cache keys.");
         }
         finally { Directory.Delete(root, true); }
     }
 
     [Test]
-    public void Parse_FiftyFilesInOneExecution_ProducesIdenticalExactFactsWithAmortizedCompilerStartup()
+    public async System.Threading.Tasks.Task Parse_FiftyFilesInOneExecution_ProducesIdenticalExactFactsWithAmortizedCompilerStartup()
     {
         var root = Path.Combine(Path.GetTempPath(), "cop-js-scale-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
@@ -376,13 +382,13 @@ public class JavaScriptParityTests
             for (int i = 0; i < sources.Length; i++)
                 File.WriteAllText(Path.Combine(root, $"scale-{i:D2}.ts"), sources[i]);
             var parser = new JavaScriptSourceParser();
-            using var scope = new Cop.Core.ToolchainExecutionScope();
+            await using var scope = new Cop.Core.ToolchainExecutionScope();
             var timer = System.Diagnostics.Stopwatch.StartNew();
             var files = new List<SourceFile>();
             long firstMilliseconds = 0;
             for (int i = 0; i < sources.Length; i++)
             {
-                files.Add(parser.Parse(Path.Combine(root, $"scale-{i:D2}.ts"), sources[i])!);
+                files.Add((await parser.ParseAsync(Path.Combine(root, $"scale-{i:D2}.ts"), sources[i], cancellationToken: CancellationToken.None))!);
                 if (i == 0) firstMilliseconds = timer.ElapsedMilliseconds;
             }
             timer.Stop();
@@ -398,7 +404,7 @@ public class JavaScriptParityTests
     }
 
     [Test]
-    public void Parse_UnsupportedLocalCompiler_DoesNotDisableAWorkingCompilerInAnotherPackage()
+    public async System.Threading.Tasks.Task Parse_UnsupportedLocalCompiler_DoesNotDisableAWorkingCompilerInAnotherPackage()
     {
         var installed = JavaScriptToolchain.Discover("module.ts")!;
         var root = Path.Combine(Path.GetTempPath(), "cop-js-compilers-" + Guid.NewGuid().ToString("N"));
@@ -412,13 +418,13 @@ public class JavaScriptParityTests
                     ? "module.exports = {};"
                     : "module.exports = require(" + System.Text.Json.JsonSerializer.Serialize(installed.CompilerPath) + ");");
             }
-            using var scope = new Cop.Core.ToolchainExecutionScope();
+            await using var scope = new Cop.Core.ToolchainExecutionScope();
             var parser = new JavaScriptSourceParser(Path.GetDirectoryName(installed.NodePath));
-            _ = parser.Parse(Path.Combine(root, "broken", "test.ts"), "function run() {}");
-            var working = parser.Parse(Path.Combine(root, "working", "test.ts"),
-                "export interface Resolved { execute(): string; }")!;
-            Assert.That(working.Types.Single().Methods.Single().Name, Is.EqualTo("execute"));
-            Assert.That(working.Types.Single().Methods.Single().ReturnType!.Name, Is.EqualTo("string"));
+            _ = (await parser.ParseAsync(Path.Combine(root, "broken", "test.ts"), "function run() {}", cancellationToken: CancellationToken.None));
+            var working = (await parser.ParseAsync(Path.Combine(root, "working", "test.ts"),
+                "export interface Resolved { execute(): string; }", cancellationToken: CancellationToken.None))!;
+            Assert.That((await AsyncSourceFacts.MembersAsync(working.Types.Single(), CancellationToken.None)).Methods.Single().Name, Is.EqualTo("execute"));
+            Assert.That((await AsyncSourceFacts.MembersAsync(working.Types.Single(), CancellationToken.None)).Methods.Single().ReturnType!.Name, Is.EqualTo("string"));
         }
         finally { Directory.Delete(root, true); }
     }
@@ -428,31 +434,31 @@ public class JavaScriptParityTests
 public class JavaScriptFallbackParityTests
 {
     [Test]
-    public void Parse_MissingToolchain_ReportsWarningAndKeepsModuleFunctionsAndNestedCalls()
+    public async Task Parse_MissingToolchain_ReportsWarningAndKeepsModuleFunctionsAndNestedCalls()
     {
         Cop.Core.ProviderWarnings.Clear();
         var parser = new JavaScriptSourceParser(toolchainSearchPath: "");
-        var file = parser.Parse("fallback.ts", """
+        var file = (await parser.ParseAsync("fallback.ts", """
             const value = 1
             export class AfterVariable { private run(): number { return value } }
             export function load(url: string): string { return outer(inner('ab')); }
             export const arrow = (n: number): number => outer(inner(n))
             topLevel('ready')
-            """)!;
+            """, cancellationToken: CancellationToken.None))!;
         Assert.That(file.Types.Select(t => t.Name), Is.EqualTo(new[] { "AfterVariable" }));
         Assert.That(file.Methods.Select(m => m.Name), Is.EqualTo(new[] { "load", "arrow" }));
         Assert.That(file.Methods[0].ReturnType!.Name, Is.EqualTo("string"));
         Assert.That(file.Methods[0].Parameters.Single().Line, Is.EqualTo(3));
-        Assert.That(file.Types.Single().Methods.Single().IsPrivate, Is.True);
+        Assert.That((await AsyncSourceFacts.MembersAsync(file.Types.Single(), CancellationToken.None)).Methods.Single().IsPrivate, Is.True);
         var calls = file.Statements.Where(s => s.Kind == "call").ToList();
         Assert.That(calls.Select(s => s.MemberName), Is.EqualTo(new[] { "outer", "inner", "outer", "inner", "topLevel" }));
         Assert.That(calls[1].Parent, Is.SameAs(calls[0]));
         Assert.That(calls[1].ArgumentExpressions.Single().StringValue, Is.EqualTo("ab"));
         Assert.That(calls[2].Method, Is.SameAs(file.Methods[1]));
         Assert.That(calls[4].IsInMethod, Is.False);
-        Assert.That(calls.Select(s => s.ReceiverType), Is.All.Null);
-        Assert.That(calls.Select(s => s.ValueType), Is.All.Null);
-        Assert.That(calls.Select(s => s.ReferencedCallable), Is.All.Null);
+        Assert.That((await calls.ToAsyncEnumerable().Select(async (Cop.Providers.SourceModel.StatementInfo s, CancellationToken cancellationToken) => (await AsyncSourceFacts.SemanticAsync(s, CancellationToken.None)).ReceiverType).ToArrayAsync()), Is.All.Null);
+        Assert.That((await calls.ToAsyncEnumerable().Select(async (Cop.Providers.SourceModel.StatementInfo s, CancellationToken cancellationToken) => (await AsyncSourceFacts.SemanticAsync(s, CancellationToken.None)).ValueType).ToArrayAsync()), Is.All.Null);
+        Assert.That((await calls.ToAsyncEnumerable().Select(async (Cop.Providers.SourceModel.StatementInfo s, CancellationToken cancellationToken) => (await AsyncSourceFacts.SemanticAsync(s, CancellationToken.None)).ReferencedCallable).ToArrayAsync()), Is.All.Null);
         Assert.That(Cop.Core.ProviderWarnings.Drain().Single(), Does.Contain("using simpler syntax analysis"));
     }
 
@@ -467,33 +473,33 @@ public class JavaScriptFallbackParityTests
     }
 
     [Test]
-    public void Parse_FallbackCleanControl_DoesNotInventCallsInsideStringsOrComments()
+    public async Task Parse_FallbackCleanControl_DoesNotInventCallsInsideStringsOrComments()
     {
-        var file = new JavaScriptSourceParser("").Parse("clean.js", """
+        var file = (await new JavaScriptSourceParser("").ParseAsync("clean.js", """
             // outer(inner('not a call'))
             const text = 'console.log("not a call")'
             function clean() { return text; }
-            """)!;
+            """, cancellationToken: CancellationToken.None))!;
         Assert.That(file.Methods.Select(m => m.Name), Is.EqualTo(new[] { "clean" }));
         Assert.That(file.Statements.Count(s => s.Kind == "call"), Is.EqualTo(0));
     }
 
     [Test]
-    public void Parse_FallbackSemicolonFreeAliasAndNestedGeneric_DoesNotSwallowTheFollowingClass()
+    public async Task Parse_FallbackSemicolonFreeAliasAndNestedGeneric_DoesNotSwallowTheFollowingClass()
     {
-        var file = new JavaScriptSourceParser("").Parse("aliases.ts", """
+        var file = (await new JavaScriptSourceParser("").ParseAsync("aliases.ts", """
             export type Alias<T> = Map<string, Array<T>>
             export class After { execute(): string { return 'ok' } }
-            """)!;
+            """, cancellationToken: CancellationToken.None))!;
         Assert.That(file.Types.Select(t => t.Name), Is.EqualTo(new[] { "Alias", "After" }));
         Assert.That(file.Types[0].Kind, Is.EqualTo(TypeKind.Alias));
         Assert.That(file.Types[0].AliasTarget!.OriginalText, Is.EqualTo("Map<string, Array<T>>"));
         Assert.That(file.Types[0].TypeParameters, Is.EqualTo(new[] { "T" }));
-        Assert.That(file.Types[1].Methods.Single().Name, Is.EqualTo("execute"));
+        Assert.That((await AsyncSourceFacts.MembersAsync(file.Types[1], CancellationToken.None)).Methods.Single().Name, Is.EqualTo("execute"));
     }
 
     [Test]
-    public void Parse_InstalledButUnsupportedCompiler_WarnsAndUsesFallback()
+    public async Task Parse_InstalledButUnsupportedCompiler_WarnsAndUsesFallback()
     {
         var node = Cop.Core.ToolchainProcess.FindExecutable("node");
         if (node is null) Assert.Ignore("Node.js is not installed.");
@@ -505,7 +511,7 @@ public class JavaScriptFallbackParityTests
             File.WriteAllText(Path.Combine(library, "typescript.js"), "module.exports = {};");
             Cop.Core.ProviderWarnings.Clear();
             var parser = new JavaScriptSourceParser(Path.GetDirectoryName(node!));
-            var file = parser.Parse(Path.Combine(root, "source.ts"), "function run() { outer(inner('ok')); }")!;
+            var file = (await parser.ParseAsync(Path.Combine(root, "source.ts"), "function run() { outer(inner('ok')); }", cancellationToken: CancellationToken.None))!;
             Assert.That(file.Methods.Single().Name, Is.EqualTo("run"));
             Assert.That(file.Statements.Where(s => s.Kind == "call").Select(s => s.MemberName),
                 Is.EqualTo(new[] { "outer", "inner" }));

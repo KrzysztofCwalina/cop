@@ -12,6 +12,9 @@ namespace Cop.Providers;
 /// </summary>
 public static class CodeBindings
 {
+    /// <summary>
+    /// Describes the shared source collections for query planning.
+    /// </summary>
     public static IReadOnlyDictionary<string, object?> SourceMetadata(ProviderQuery query, params string[] extensions) =>
         new Dictionary<string, object?>
         {
@@ -25,6 +28,9 @@ public static class CodeBindings
             }
         };
 
+    /// <summary>
+    /// Builds shared source-model property accessors and CLR type mappings.
+    /// </summary>
     public static RuntimeBindings Build()
     {
         return new RuntimeBindings
@@ -52,11 +58,12 @@ public static class CodeBindings
                 [typeof(CallableReference)] = "CallableReference",
             },
             Accessors = BuildAccessors(),
+            AsyncAccessors = BuildAsyncAccessors(),
             CollectionExtractors = BuildExtractors(),
             MethodEvaluators = new()
             {
                 [("Type", "inheritsFrom")] = (target, args) =>
-                    ((TypeDeclaration)target).InheritsFrom(args[0]?.ToString() ?? ""),
+                    ((TypeDeclaration)target).InheritsFrom(args[0]?.ToString() ?? string.Empty),
             },
             TextConverters = new()
             {
@@ -68,6 +75,77 @@ public static class CodeBindings
                 ["ProjectProperty"] = o => $"{((ProjectProperty)o).Name}={((ProjectProperty)o).Value}",
             },
         };
+    }
+
+    /// <summary>Copies asynchronous base-field bindings to language-specific model types.</summary>
+    public static void AddDerivedAsyncAccessors(RuntimeBindings bindings)
+    {
+        foreach ((Type clrType, string name) in bindings.ClrTypeMappings)
+        {
+            string? parent = typeof(TypeDeclaration).IsAssignableFrom(clrType) ? "Type"
+                : typeof(StatementInfo).IsAssignableFrom(clrType) ? "Statement"
+                : typeof(SourceFile).IsAssignableFrom(clrType) ? "File" : null;
+            if (parent is null || parent == name)
+            {
+                continue;
+            }
+            if (!bindings.AsyncAccessors.TryGetValue(name, out Dictionary<string,
+                    Func<object, CancellationToken, ValueTask<object?>>>? fields))
+            {
+                bindings.AsyncAccessors[name] = fields = new();
+            }
+            foreach ((string field, Func<object, CancellationToken, ValueTask<object?>> read)
+                     in bindings.AsyncAccessors[parent])
+            {
+                fields.TryAdd(field, read);
+            }
+        }
+    }
+
+    private static Dictionary<string,
+        Dictionary<string, Func<object, CancellationToken, ValueTask<object?>>>>
+        BuildAsyncAccessors()
+    {
+        Dictionary<string, Dictionary<string, Func<object, object?>>> accessors = BuildAccessors();
+        Dictionary<string, Dictionary<string,
+            Func<object, CancellationToken, ValueTask<object?>>>> result = new();
+        foreach ((string type, string[] fields) in new Dictionary<string, string[]>
+        {
+            ["Statement"] = ["ReceiverType", "ValueType", "ReferencedCallable",
+                "TypeName", "ConstructedTypeInterfaces"],
+            ["Type"] = ["Methods", "MethodNames", "Interfaces"],
+            ["File"] = ["Projects"]
+        })
+        {
+            Dictionary<string, Func<object, CancellationToken, ValueTask<object?>>> reads = new();
+            result[type] = reads;
+            foreach (string field in fields)
+            {
+                reads[field] = async (item, token) =>
+                {
+                    switch (item)
+                    {
+                        case StatementInfo statement when field == "TypeName":
+                            await statement.EnsureTypeNameAnalysisAsync(token).ConfigureAwait(false);
+                            break;
+                        case StatementInfo statement:
+                            await statement.EnsureSemanticAnalysisAsync(token).ConfigureAwait(false);
+                            break;
+                        case TypeDeclaration declaration when field is "Methods" or "MethodNames":
+                            await declaration.EnsureMembersAsync(token).ConfigureAwait(false);
+                            break;
+                        case TypeDeclaration declaration:
+                            await declaration.EnsureSemanticAnalysisAsync(token).ConfigureAwait(false);
+                            break;
+                        case SourceFile file:
+                            await file.EnsureProjectsAsync(token).ConfigureAwait(false);
+                            break;
+                    }
+                    return accessors[type][field](item);
+                };
+            }
+        }
+        return result;
     }
 
     internal static Dictionary<string, Dictionary<string, Func<object, object?>>> BuildAccessors()
@@ -210,7 +288,7 @@ public static class CodeBindings
                 ["Source"] = o => ((StatementInfo)o).Source,
                 ["Method"] = o => ((StatementInfo)o).Method,
                 ["Parent"] = o => ((StatementInfo)o).Parent,
-                ["Children"] = o => (object)((StatementInfo)o)._children,
+                ["Children"] = o => (object)((StatementInfo)o).MutableChildren,
                 ["Ancestors"] = o => (object)((StatementInfo)o).GetAncestors(),
                 ["Condition"] = o => ((StatementInfo)o).Condition,
                 ["Expression"] = o => ((StatementInfo)o).Expression,
@@ -332,6 +410,9 @@ public static class CodeBindings
         };
     }
 
+    /// <summary>
+    /// Builds collection extractors for parsed source files.
+    /// </summary>
     public static Dictionary<string, Func<object, List<object>>> BuildExtractors()
     {
         return new()
@@ -351,7 +432,7 @@ public static class CodeBindings
                 SourceFile file = (SourceFile)doc;
                 List<object> result = new List<object>();
                 ILookup<int, CommentInfo> comments = file.Comments.ToLookup(c => c.Line);
-                string pendingCopIgnore = "";
+                string pendingCopIgnore = string.Empty;
                 for (int i = 0; i < file.Lines.Count; i++)
                 {
                     string text = file.Lines[i];
@@ -364,14 +445,14 @@ public static class CodeBindings
                         File = file,
                         Kind = kind,
                         CopIgnore = pendingCopIgnore,
-                        PreviousText = i > 0 ? file.Lines[i - 1] : "",
-                        NextText = i < file.Lines.Count - 1 ? file.Lines[i + 1] : "",
+                        PreviousText = i > 0 ? file.Lines[i - 1] : string.Empty,
+                        NextText = i < file.Lines.Count - 1 ? file.Lines[i + 1] : string.Empty,
                         Comments = comments[lineNum].ToList()
                     };
                     result.Add(lineInfo);
 
                     // Detect cop-ignore: in comment lines — applies to NEXT line
-                    pendingCopIgnore = "";
+                    pendingCopIgnore = string.Empty;
                     if (kind == "comment")
                     {
                         int idx = text.IndexOf("cop-ignore:", StringComparison.Ordinal);

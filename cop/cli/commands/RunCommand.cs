@@ -91,7 +91,8 @@ public static class RunCommand
                                 string source = File.ReadAllText(impFile);
                                 importedFiles.Add(Cop.Lang.Parser.CopParser.ParseFile(source, impFile));
                             }
-                            catch (Exception ex) when (ex is not OutOfMemoryException)
+                            catch (Exception ex) when (ex is ParseException or IOException or
+                                UnauthorizedAccessException)
                             {
                                 importErrors.Add($"Failed to parse import file '{impFile}': {ex.Message}");
                             }
@@ -169,21 +170,30 @@ public static class RunCommand
         return 0;
     }
 
-    public static int Execute(string? command, string[]? programArgs = null, string? target = null, string? format = null, string? commands = null, bool diag = false, bool onlyIfModified = false, string[]? providers = null, bool profileRules = false, ReviewOptions? reviewOptions = null)
+    /// <summary>Restores dependencies and executes a local program or remote script.</summary>
+    public static async Task<int> ExecuteAsync(string? command, RunOptions? options = null)
     {
-        Engine.IsRuleProfilingEnabled = profileRules;
+        options ??= new RunOptions();
+        string[]? programArgs = options.Arguments?.ToArray();
+        string[]? providers = options.ProviderNames?.ToArray();
+        string? target = options.Target;
+        string? format = options.OutputFormat;
+        bool diag = options.IsDiagnosticEnabled;
+        bool onlyIfModified = options.ShouldSkipUnmodifiedTargets;
+        ReviewOptions? reviewOptions = options.ReviewOptions;
+        Engine.IsRuleProfilingEnabled = options.IsRuleProfilingEnabled;
         try { (reviewOptions ?? new ReviewOptions()).Validate(); }
         catch (ArgumentException ex) { Console.Error.WriteLine($"Error: {ex.Message}"); return 2; }
 
         // -om: skip analysis if no files modified in git working tree
-        if (onlyIfModified && !HasModifiedFiles(target ?? Directory.GetCurrentDirectory()))
+        if (onlyIfModified && !await HasModifiedFilesAsync(target ?? Directory.GetCurrentDirectory()))
         {
             return 0;
         }
 
         if (command != null && IsUri(command))
         {
-            return ExecuteFromUri(command, programArgs, target, format, commands, diag, reviewOptions);
+            return await ExecuteFromUriAsync(command, options);
         }
 
         string? commandName = null;
@@ -220,11 +230,7 @@ public static class RunCommand
         }
 
         // Parse -c filter
-        string[]? commandFilter = null;
-        if (!string.IsNullOrEmpty(commands))
-        {
-            commandFilter = commands.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-        }
+        string[]? commandFilter = options.CommandNames?.ToArray();
 
         // When a specific .cop file is named, scope commands to that file only
         string? implicitCommandFile = null;
@@ -262,7 +268,7 @@ public static class RunCommand
         Action<string>? diagLog = diag ? msg => Console.Error.WriteLine(ColorDiagLine(msg)) : null;
 
         // Auto-restore missing imports before execution
-        AutoRestoreImports(scriptsDir, diagLog);
+        await AutoRestoreImportsAsync(scriptsDir, diagLog);
 
         // Surface imported packages' instructions to coding agents by placing their
         // instructions/*.md into the analysis target's .github/instructions/ (idempotent — a no-op
@@ -273,7 +279,7 @@ public static class RunCommand
         }
 
         // Discover user-global check files (~/.cop/checks/) to include alongside project checks
-        string[] userCheckFiles = GetUserCheckFiles(diagLog);
+        string[] userCheckFiles = await GetUserCheckFilesAsync(diagLog);
 
         // Try streaming mode (auto-detect or by command name)
         try
@@ -281,7 +287,8 @@ public static class RunCommand
             using CancellationTokenSource cts = new CancellationTokenSource();
             Console.CancelKeyPress += (_, e) => { e.Cancel = true; cts.Cancel(); };
 
-            Engine.RunStreamingAsync(scriptsDir, commandName, cts.Token, diagLog, additionalFeedPaths: FindFeedPathsFromCwd()).GetAwaiter().GetResult();
+            await Engine.RunStreamingAsync(scriptsDir, commandName, cts.Token, diagLog,
+                additionalFeedPaths: FindFeedPathsFromCwd());
             return 0;
         }
         catch (InvalidOperationException ex)
@@ -311,7 +318,7 @@ public static class RunCommand
                 string[] projectFiles = Directory.GetFiles(scriptsDir, "*.cop", SearchOption.AllDirectories);
                 allScriptFiles = [.. projectFiles, .. userCheckFiles];
             }
-            AutoRestoreImports(UserChecksDirectory, diagLog);
+            await AutoRestoreImportsAsync(UserChecksDirectory, diagLog);
         }
         else if (scopeToFile != null)
         {
@@ -358,7 +365,7 @@ public static class RunCommand
                     Console.Error.WriteLine($"Error: Provider package '{providerName}' not found. Use -p with a valid package name.");
                     return 2;
                 }
-                PackageMetadata? metadata = PackageMetadata.TryLoadFromDirectory(pkgDir);
+                PackageMetadata? metadata = PackageMetadata.LoadFromDirectoryOrDefault(pkgDir);
                 if (metadata is null || !metadata.IsProvider)
                 {
                     Console.Error.WriteLine($"Error: Package '{providerName}' is not a provider (no lib/ with DLL).");
@@ -370,7 +377,7 @@ public static class RunCommand
 
         try
         {
-            EngineResult result = Engine.Run(scriptsDir, rootPath, new EngineRunOptions
+            EngineResult result = await Engine.RunAsync(scriptsDir, rootPath, new EngineRunOptions
             {
                 CommandName = commandName,
                 ProgramArgs = programArgs,
@@ -392,8 +399,7 @@ public static class RunCommand
         {
             if (implicitCommandFile is not null)
             {
-                try { File.Delete(implicitCommandFile); }
-                catch { /* best-effort cleanup */ }
+                DeleteTemporaryFile(implicitCommandFile);
             }
         }
     }
@@ -402,14 +408,21 @@ public static class RunCommand
     /// Runs named packages against the target directory (merged from cop check).
     /// Packages are auto-restored from configured GitHub feeds if not found locally.
     /// </summary>
-    public static int ExecutePackages(string[] packages, string? target = null, string[]? rules = null, string? format = null, bool diag = false, bool onlyIfModified = false, string[]? providers = null, ReviewOptions? reviewOptions = null)
+    public static async Task<int> ExecutePackagesAsync(
+        string[] packages, RunOptions? options = null)
     {
+        options ??= new RunOptions();
+        string? target = options.Target;
+        string? format = options.OutputFormat;
+        bool diag = options.IsDiagnosticEnabled;
+        bool onlyIfModified = options.ShouldSkipUnmodifiedTargets;
+        ReviewOptions? reviewOptions = options.ReviewOptions;
         string rootPath = target != null ? Path.GetFullPath(target) : Directory.GetCurrentDirectory();
         try { (reviewOptions ?? new ReviewOptions()).Validate(); }
         catch (ArgumentException ex) { Console.Error.WriteLine($"Error: {ex.Message}"); return 2; }
 
         // -om: skip analysis if no files modified in git working tree
-        if (onlyIfModified && !HasModifiedFiles(rootPath))
+        if (onlyIfModified && !await HasModifiedFilesAsync(rootPath))
         {
             return 0;
         }
@@ -435,7 +448,7 @@ public static class RunCommand
         List<string> missing = FindMissingPackages(packages, feedPaths, cachePath);
         if (missing.Count > 0)
         {
-            bool restored = AutoRestorePackagesAsync(missing, cachePath).GetAwaiter().GetResult();
+            bool restored = await AutoRestorePackagesAsync(missing, cachePath);
             if (!restored)
             {
                 return 2;
@@ -455,14 +468,21 @@ public static class RunCommand
         }
 
         // Convert rules filter
-        List<string> rulesList = rules?.ToList() ?? [];
+        List<string> rulesList = options.CommandNames?.ToList() ?? [];
 
         // Include user-global check files
-        string[] userCheckFiles = GetUserCheckFiles(diagLog);
+        string[] userCheckFiles = await GetUserCheckFilesAsync(diagLog);
 
         try
         {
-            EngineResult result = Engine.RunProject(feedPaths, [.. packages], rootPath, rulesList, diagLog: diagLog, additionalScriptFiles: userCheckFiles.Length > 0 ? userCheckFiles : null, providers: providers, reviewOptions: reviewOptions);
+            EngineResult result = await Engine.RunProjectAsync(
+                feedPaths, [.. packages], rootPath, rulesList, new EngineRunOptions
+                {
+                    DiagnosticLog = diagLog,
+                    ScriptFiles = userCheckFiles.Length > 0 ? userCheckFiles : null,
+                    ProviderNames = options.ProviderNames,
+                    ReviewOptions = reviewOptions
+                });
             return HandleResult(result, format, rootPath);
         }
         catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or IOException)
@@ -472,8 +492,13 @@ public static class RunCommand
         }
     }
 
-    private static int ExecuteFromUri(string uri, string[]? programArgs, string? target, string? format, string? commands, bool diag, ReviewOptions? reviewOptions)
+    private static async Task<int> ExecuteFromUriAsync(string uri, RunOptions options)
     {
+        string[]? programArgs = options.Arguments?.ToArray();
+        string? target = options.Target;
+        string? format = options.OutputFormat;
+        bool diag = options.IsDiagnosticEnabled;
+        ReviewOptions? reviewOptions = options.ReviewOptions;
         if (!uri.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
         {
             Console.Error.WriteLine("Error: Only HTTPS URLs are supported for remote .cop files");
@@ -487,14 +512,14 @@ public static class RunCommand
             using HttpClient httpClient = new HttpClient();
             httpClient.DefaultRequestHeaders.Add("User-Agent", "cop-cli");
 
-            HttpResponseMessage response = httpClient.GetAsync(uri).GetAwaiter().GetResult();
+            using HttpResponseMessage response = await httpClient.GetAsync(uri);
             if (!response.IsSuccessStatusCode)
             {
                 Console.Error.WriteLine($"Error: Failed to download '{uri}' (HTTP {(int)response.StatusCode})");
                 return 1;
             }
 
-            string content = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+            string content = await response.Content.ReadAsStringAsync();
 
             // Save to temp directory with .cop extension
             tempDir = Path.Combine(Path.GetTempPath(), $"cop-remote-{Guid.NewGuid():N}");
@@ -517,17 +542,13 @@ public static class RunCommand
             }
 
             // Parse -c filter
-            string[]? commandFilter = null;
-            if (!string.IsNullOrEmpty(commands))
-            {
-                commandFilter = commands.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-            }
+            string[]? commandFilter = options.CommandNames?.ToArray();
 
             // Pass CWD feed paths so locally-restored packages can resolve
             string[] additionalFeedPaths = FindFeedPathsFromCwd();
 
             Action<string>? diagLog = diag ? msg => Console.Error.WriteLine(ColorDiagLine(msg)) : null;
-            EngineResult result = Engine.Run(scriptsDir, rootPath, new EngineRunOptions
+            EngineResult result = await Engine.RunAsync(scriptsDir, rootPath, new EngineRunOptions
             {
                 CommandName = commandName,
                 ProgramArgs = programArgs,
@@ -548,8 +569,7 @@ public static class RunCommand
         {
             if (tempDir is not null && Directory.Exists(tempDir))
             {
-                try { Directory.Delete(tempDir, recursive: true); }
-                catch { /* best-effort cleanup */ }
+                DeleteTemporaryDirectory(tempDir);
             }
         }
     }
@@ -699,8 +719,9 @@ public static class RunCommand
         {
             source = File.ReadAllText(sourceFile);
         }
-        catch
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
+            Console.Error.WriteLine($"Error: Cannot read '{sourceFile}': {ex.Message}");
             return null;
         }
 
@@ -726,16 +747,10 @@ public static class RunCommand
             File.WriteAllText(generatedPath, generatedSource);
             return generatedPath;
         }
-        catch
+        catch (Exception ex) when (ex is ParseException or IOException or UnauthorizedAccessException)
         {
-            try
-            {
-                if (File.Exists(generatedPath))
-                {
-                    File.Delete(generatedPath);
-                }
-            }
-            catch { /* best-effort cleanup */ }
+            Console.Error.WriteLine($"Error: Cannot create an implicit command for '{sourceFile}': {ex.Message}");
+            DeleteTemporaryFile(generatedPath);
             return null;
         }
     }
@@ -880,7 +895,7 @@ public static class RunCommand
             Console.Error.WriteLine(ex.Message);
             return null;
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             Console.Error.WriteLine($"Error parsing '{filePath}': {ex.Message}");
             return null;
@@ -897,7 +912,7 @@ public static class RunCommand
     /// Set by the --no-user-checks CLI flag to skip including user/global check files
     /// (replaces the former COP_NO_USER_CHECKS env var).
     /// </summary>
-    internal static bool NoUserChecks;
+    internal static bool ShouldSkipUserChecks { get; set; }
 
     /// <summary>
     /// Discovers .cop files in ~/.cop/checks/ for user checks (hierarchical).
@@ -905,9 +920,9 @@ public static class RunCommand
     /// - Subdirectory *.cop files are repo-specific (only when repo name matches).
     /// Returns empty array if the directory doesn't exist or if --no-user-checks was passed.
     /// </summary>
-    private static string[] GetUserCheckFiles(Action<string>? diagLog)
+    private static async Task<string[]> GetUserCheckFilesAsync(Action<string>? diagLog)
     {
-        if (NoUserChecks)
+        if (ShouldSkipUserChecks)
         {
             return [];
         }
@@ -924,7 +939,7 @@ public static class RunCommand
         files.AddRange(Directory.GetFiles(checksDir, "*.cop", SearchOption.TopDirectoryOnly));
 
         // 2. Repo-specific subdirectory (only if repo name matches)
-        string? repoName = GetCurrentRepoName();
+        string? repoName = await GetCurrentRepoNameAsync();
         if (repoName != null)
         {
             string repoDir = Path.Combine(checksDir, repoName);
@@ -947,97 +962,51 @@ public static class RunCommand
     /// Determines the current repository name for matching user check subdirectories.
     /// Resolution order: git remote origin URL → git root dir name → CWD name.
     /// </summary>
-    private static string? _cachedRepoName;
-    private static bool _repoNameResolved;
-    private static string? GetCurrentRepoName()
+    private static async Task<string?> GetCurrentRepoNameAsync()
     {
-        if (_repoNameResolved)
+        string workingDirectory = Directory.GetCurrentDirectory();
+        ToolchainResult? remote = await RunGitAsync(workingDirectory,
+            ["remote", "get-url", "origin"]);
+        if (remote is { Status: ToolchainStatus.Success } &&
+            !string.IsNullOrWhiteSpace(remote.StandardOutput))
         {
-            return _cachedRepoName;
-        }
-
-        _repoNameResolved = true;
-
-        // Try git remote origin URL
-        _cachedRepoName = TryGetRepoNameFromGitRemote()
-            ?? TryGetRepoNameFromGitRoot()
-            ?? GetDirectoryName(Directory.GetCurrentDirectory());
-        return _cachedRepoName;
-    }
-
-    private static string? TryGetRepoNameFromGitRemote()
-    {
-        try
-        {
-            ProcessStartInfo psi = new System.Diagnostics.ProcessStartInfo("git", "remote get-url origin")
-            {
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                UseShellExecute = false,
-                CreateNoWindow = true
-            };
-            using Process? proc = System.Diagnostics.Process.Start(psi);
-            if (proc == null)
-            {
-                return null;
-            }
-
-            string output = proc.StandardOutput.ReadToEnd().Trim();
-            proc.WaitForExit(3000);
-            if (proc.ExitCode != 0 || string.IsNullOrEmpty(output))
-            {
-                return null;
-            }
-
-            // Parse repo name from URL: https://github.com/org/repo.git → repo
-            // Also handles: git@github.com:org/repo.git
-            string name = output.TrimEnd('/');
+            string name = remote.StandardOutput.Trim().TrimEnd('/');
             if (name.EndsWith(".git", StringComparison.OrdinalIgnoreCase))
             {
                 name = name[..^4];
             }
+            int separator = Math.Max(name.LastIndexOf('/'), name.LastIndexOf(':'));
+            if (separator >= 0 && separator < name.Length - 1)
+            {
+                return name[(separator + 1)..];
+            }
+        }
 
-            int lastSlash = name.LastIndexOf('/');
-            int lastColon = name.LastIndexOf(':');
-            int sep = Math.Max(lastSlash, lastColon);
-            return sep >= 0 ? name[(sep + 1)..] : null;
-        }
-        catch
-        {
-            return null;
-        }
+        ToolchainResult? root = await RunGitAsync(workingDirectory,
+            ["rev-parse", "--show-toplevel"]);
+        return root is { Status: ToolchainStatus.Success } &&
+            !string.IsNullOrWhiteSpace(root.StandardOutput)
+                ? GetDirectoryName(root.StandardOutput.Trim())
+                : GetDirectoryName(workingDirectory);
     }
 
-    private static string? TryGetRepoNameFromGitRoot()
+    private static async Task<ToolchainResult?> RunGitAsync(
+        string workingDirectory, IReadOnlyList<string> arguments)
     {
-        try
-        {
-            ProcessStartInfo psi = new System.Diagnostics.ProcessStartInfo("git", "rev-parse --show-toplevel")
-            {
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                UseShellExecute = false,
-                CreateNoWindow = true
-            };
-            using Process? proc = System.Diagnostics.Process.Start(psi);
-            if (proc == null)
-            {
-                return null;
-            }
-
-            string output = proc.StandardOutput.ReadToEnd().Trim();
-            proc.WaitForExit(3000);
-            if (proc.ExitCode != 0 || string.IsNullOrEmpty(output))
-            {
-                return null;
-            }
-
-            return GetDirectoryName(output);
-        }
-        catch
+        string? executable = ToolchainProcess.FindExecutable("git");
+        if (executable is null)
         {
             return null;
         }
+        ToolchainResult result = await ToolchainProcess.RunAsync(
+            new ToolchainCommand(executable, arguments, workingDirectory),
+            new ToolchainRunOptions { Timeout = TimeSpan.FromSeconds(5) });
+        if (result.Status != ToolchainStatus.Success && CopDiagnostics.Level > 0)
+        {
+            Console.Error.WriteLine(
+                $"[diag] Git discovery failed ({result.Status}, exit {result.ExitCode}).");
+        }
+        return result;
     }
 
     private static string? GetDirectoryName(string path)
@@ -1050,44 +1019,24 @@ public static class RunCommand
     /// Checks if the working tree has modified files using git status.
     /// Returns true if files are modified or if git is unavailable (safe fallback).
     /// </summary>
-    private static bool HasModifiedFiles(string workingDir)
+    private static async Task<bool> HasModifiedFilesAsync(string workingDir)
     {
-        try
+        ToolchainResult? result = await RunGitAsync(workingDir, ["status", "--porcelain"]);
+        if (result is not { Status: ToolchainStatus.Success })
         {
-            ProcessStartInfo psi = new System.Diagnostics.ProcessStartInfo("git", "status --porcelain")
-            {
-                WorkingDirectory = workingDir,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                UseShellExecute = false,
-                CreateNoWindow = true
-            };
-            using Process? proc = System.Diagnostics.Process.Start(psi);
-            if (proc == null)
-            {
-                return true;
-            }
-
-            string output = proc.StandardOutput.ReadToEnd();
-            proc.WaitForExit(5000);
-            if (proc.ExitCode != 0)
-            {
-                return true;
-            }
-
-            return !string.IsNullOrWhiteSpace(output);
+            Console.Error.WriteLine(
+                "Warning: Cannot read Git status; running checks without skipping unmodified targets.");
+            return true;
         }
-        catch
-        {
-            return true; // git not available → assume modified
-        }
+        return !string.IsNullOrWhiteSpace(result.StandardOutput);
     }
 
     /// <summary>
     /// Parses .cop files in the scripts directory, discovers imports, and auto-restores
     /// any missing packages into the current host version's cache.
     /// </summary>
-    private static void AutoRestoreImports(string scriptsDir, Action<string>? diagLog)
+    private static async Task AutoRestoreImportsAsync(
+        string scriptsDir, Action<string>? diagLog)
     {
         string cachePath = PackageResolver.GlobalCachePath;
 
@@ -1116,7 +1065,10 @@ public static class RunCommand
 
                 AddDeclaredFeedPaths(feedPaths, module, path);
             }
-            catch { /* skip unparseable files */ }
+            catch (Exception ex) when (ex is ParseException or IOException or UnauthorizedAccessException)
+            {
+                Console.Error.WriteLine($"Warning: Cannot inspect imports in '{path}': {ex.Message}");
+            }
         }
 
         if (imports.Count == 0)
@@ -1188,7 +1140,7 @@ public static class RunCommand
             return;
         }
 
-        string? githubToken = ResolveGitHubToken();
+        string? githubToken = await GitHubAuthentication.ResolveTokenAsync();
         using HttpClient httpClient = new HttpClient();
         GitHubPackageSource source2 = new GitHubPackageSource(httpClient, githubToken);
 
@@ -1245,7 +1197,8 @@ public static class RunCommand
                 {
                     PackageReference pkgRef = PackageReference.Parse($"{feed}/{pkgName}");
                     Console.Error.Write($"  Restoring '{pkgName}' from {feed}...");
-                    Dictionary<string, byte[]> files = source2.DownloadPackageFilesAsync(pkgRef).GetAwaiter().GetResult();
+                    Dictionary<string, byte[]> files =
+                        await source2.DownloadPackageFilesAsync(pkgRef);
 
                     if (files.Count == 0) { Console.Error.WriteLine(" no files"); continue; }
 
@@ -1273,11 +1226,9 @@ public static class RunCommand
                         // concurrently placed a complete package in the meantime.
                         PackageInstaller.PlaceRestoredPackage(tempDir, pkgDir);
                     }
-                    catch
+                    finally
                     {
-                        // Clean up temp dir on any failure
-                        try { if (Directory.Exists(tempDir)) { Directory.Delete(tempDir, recursive: true); } } catch { }
-                        throw;
+                        DeleteTemporaryDirectory(tempDir);
                     }
 
                     Console.Error.WriteLine(" ok");
@@ -1304,7 +1255,10 @@ public static class RunCommand
                                 }
                             }
                         }
-                        catch { /* skip unparseable files */ }
+                        catch (Exception ex) when (ex is ParseException or IOException or UnauthorizedAccessException)
+                        {
+                            Console.Error.WriteLine($"Warning: Cannot inspect imports in '{filePath}': {ex.Message}");
+                        }
                     }
                     break;
                 }
@@ -1313,7 +1267,9 @@ public static class RunCommand
                     Console.Error.WriteLine(" not found");
                     continue;
                 }
-                catch (Exception ex)
+                catch (Exception ex) when (ex is HttpRequestException or IOException or
+                    UnauthorizedAccessException or FormatException or InvalidOperationException or
+                    System.Text.Json.JsonException)
                 {
                     Console.Error.WriteLine($" failed: {ex.Message}");
                 }
@@ -1396,7 +1352,10 @@ public static class RunCommand
 
                         AddDeclaredFeedPaths(feedPaths, module, path);
                     }
-                    catch { /* skip unparseable files */ }
+                    catch (Exception ex) when (ex is ParseException or IOException or UnauthorizedAccessException)
+                    {
+                        Console.Error.WriteLine($"Warning: Cannot inspect imports in '{path}': {ex.Message}");
+                    }
                 }
             }
 
@@ -1432,9 +1391,9 @@ public static class RunCommand
                         diagLog?.Invoke($"[diag] Placed instructions for '{name}' -> {target}");
                     }
                 }
-                catch (Exception ex)
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
                 {
-                    diagLog?.Invoke($"[diag] Failed to place instructions for '{name}': {ex.Message}");
+                    Console.Error.WriteLine($"Warning: Cannot place instructions for '{name}': {ex.Message}");
                 }
 
                 // Follow the package's own imports (types/ takes priority over src/).
@@ -1442,9 +1401,9 @@ public static class RunCommand
                 EnqueueImportsFrom(Directory.Exists(typesDir) ? typesDir : Path.Combine(pkgDir, "src"));
             }
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            diagLog?.Invoke($"[diag] Instruction placement skipped: {ex.Message}");
+            Console.Error.WriteLine($"Warning: Instruction placement failed: {ex.Message}");
         }
     }
 
@@ -1494,6 +1453,7 @@ public static class RunCommand
             ? Path.GetFullPath(currentDirectory)
             : Path.GetFullPath(target);
 
+    /// <summary>Restores missing packages into the cache and reports whether all restores succeeded.</summary>
     public static async Task<bool> AutoRestorePackagesAsync(List<string> packageNames, string cachePath)
     {
         FeedManager feedManager = new FeedManager();
@@ -1509,7 +1469,7 @@ public static class RunCommand
             return false;
         }
 
-        string? githubToken = ResolveGitHubToken();
+        string? githubToken = await GitHubAuthentication.ResolveTokenAsync();
         using HttpClient httpClient = new HttpClient();
         GitHubPackageSource source = new GitHubPackageSource(httpClient, githubToken);
 
@@ -1575,10 +1535,9 @@ public static class RunCommand
                         // concurrently placed a complete package in the meantime.
                         PackageInstaller.PlaceRestoredPackage(tempDir, pkgDir);
                     }
-                    catch
+                    finally
                     {
-                        try { if (Directory.Exists(tempDir)) { Directory.Delete(tempDir, recursive: true); } } catch { }
-                        throw;
+                        DeleteTemporaryDirectory(tempDir);
                     }
 
                     Console.Error.WriteLine(" ok");
@@ -1604,7 +1563,10 @@ public static class RunCommand
                                 }
                             }
                         }
-                        catch { /* skip unparseable files */ }
+                        catch (Exception ex) when (ex is ParseException or IOException or UnauthorizedAccessException)
+                        {
+                            Console.Error.WriteLine($"Warning: Cannot inspect imports in '{filePath}': {ex.Message}");
+                        }
                     }
                     break;
                 }
@@ -1613,7 +1575,9 @@ public static class RunCommand
                     Console.Error.WriteLine(" not found");
                     continue;
                 }
-                catch (Exception ex)
+                catch (Exception ex) when (ex is HttpRequestException or IOException or
+                    UnauthorizedAccessException or FormatException or InvalidOperationException or
+                    System.Text.Json.JsonException)
                 {
                     Console.Error.WriteLine($" failed: {ex.Message}");
                 }
@@ -1652,37 +1616,31 @@ public static class RunCommand
         }
     }
 
-    internal static string? ResolveGitHubToken()
+    private static void DeleteTemporaryFile(string path)
     {
-        string? token = Environment.GetEnvironmentVariable("GITHUB_TOKEN");
-        if (!string.IsNullOrWhiteSpace(token))
-        {
-            return token;
-        }
-
         try
         {
-            ProcessStartInfo psi = new System.Diagnostics.ProcessStartInfo("gh", "auth token")
+            File.Delete(path);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            Console.Error.WriteLine($"Warning: Cannot remove temporary file '{path}': {ex.Message}");
+        }
+    }
+
+    private static void DeleteTemporaryDirectory(string path)
+    {
+        try
+        {
+            if (Directory.Exists(path))
             {
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                UseShellExecute = false,
-                CreateNoWindow = true
-            };
-            using Process? proc = System.Diagnostics.Process.Start(psi);
-            if (proc != null)
-            {
-                string output = proc.StandardOutput.ReadToEnd().Trim();
-                proc.WaitForExit(5000);
-                if (proc.ExitCode == 0 && !string.IsNullOrEmpty(output))
-                {
-                    return output;
-                }
+                Directory.Delete(path, recursive: true);
             }
         }
-        catch { }
-
-        return null;
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            Console.Error.WriteLine($"Warning: Cannot remove temporary directory '{path}': {ex.Message}");
+        }
     }
 
     /// <summary>

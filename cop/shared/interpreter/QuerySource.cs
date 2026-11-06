@@ -17,32 +17,48 @@ internal sealed class QuerySource
 {
     private readonly Expression _root;
     private readonly IReadOnlyList<FunctionDecl> _rootDefinitions;
-    private readonly Action<string>? _log;
-    private readonly string _context;
-    private readonly IReadOnlySet<string> _roots;
+    private readonly (string Description, Action<string>? Log, IReadOnlySet<string> Roots) _context;
+    /// <summary>
+    /// The ordered query transformations retained for source reconstruction.
+    /// </summary>
     public IReadOnlyList<QueryStep> Steps { get; }
 
     public QuerySource(string collection, string context, Action<string>? log = null)
-        : this(new IdentifierExpr(collection), [], [], context, log, new HashSet<string> { collection }) { }
+        : this(new IdentifierExpr(collection), [], [],
+            (context, log, new HashSet<string> { collection })) { }
 
     private QuerySource(Expression root, IReadOnlyList<FunctionDecl> definitions, IReadOnlyList<QueryStep> steps,
-        string context, Action<string>? log, IReadOnlySet<string> roots)
+        (string Description, Action<string>? Log, IReadOnlySet<string> Roots) context)
     {
         _root = root;
         _rootDefinitions = definitions;
         Steps = steps;
         _context = context;
-        _log = log;
-        _roots = roots;
     }
 
+    /// <summary>
+    /// Returns provenance extended with the supplied query transformations.
+    /// </summary>
     public QuerySource Append(QueryStep step) => Append([step]);
+    /// <summary>
+    /// Returns provenance extended with the supplied query transformations.
+    /// </summary>
     public QuerySource Append(IEnumerable<QueryStep> steps) =>
-        new(_root, _rootDefinitions, Steps.Concat(steps).ToArray(), _context, _log, _roots);
-    public QuerySource WithLog(Action<string>? log) => new(_root, _rootDefinitions, Steps, _context, log, _roots);
+        new(_root, _rootDefinitions, Steps.Concat(steps).ToArray(), _context);
+    /// <summary>
+    /// Returns the same query provenance with a replacement diagnostic sink.
+    /// </summary>
+    public QuerySource WithLog(Action<string>? log) =>
+        new(_root, _rootDefinitions, Steps, (_context.Description, log, _context.Roots));
+    /// <summary>
+    /// Replaces local steps with a portable filter step when it can be represented.
+    /// </summary>
     public QuerySource? ForFilter(FilterExpression filter) => FromFilter(filter) is { } step
-        ? new(_root, _rootDefinitions, [step], _context, _log, _roots) : null;
+        ? new(_root, _rootDefinitions, [step], _context) : null;
 
+    /// <summary>
+    /// Converts a provider filter into a portable query step, or returns null.
+    /// </summary>
     public static QueryStep? FromFilter(FilterExpression filter)
     {
         Expression? Convert(FilterExpression node) => node switch
@@ -95,6 +111,9 @@ internal sealed class QuerySource
             ? new QueryStep(new LambdaExpr([new Parameter("item")], body), [], Method: "Where") : null;
     }
 
+    /// <summary>
+    /// The executable Cop program representing this query's current provenance.
+    /// </summary>
     public string Program
     {
         get
@@ -105,18 +124,28 @@ internal sealed class QuerySource
         }
     }
 
-    public void ReportProvider() => _log?.Invoke($"[query-cop] {_context}\n{Program}");
+    /// <summary>
+    /// Writes the provider query's reconstructed Cop source to its diagnostic sink.
+    /// </summary>
+    public void ReportProvider() => _context.Log?.Invoke(
+        $"[query-cop] {_context.Description}\n{Program}");
 
+    /// <summary>
+    /// Tracks a local expression transformation and its reason without executing it.
+    /// </summary>
     public QuerySource Local(Func<Expression, Expression> operation, string reason)
     {
         (Expression? expression, IReadOnlyList<FunctionDecl>? definitions) = Build();
         Expression local = operation(expression);
         // Local expressions may be arbitrary Cop, not the portable/pushable source subset.
-        _log?.Invoke($"[query-local] {_context}: {reason}\n{(QuerySourceWriter.CanRender(local)
+        _context.Log?.Invoke($"[query-local] {_context.Description}: {reason}\n{(QuerySourceWriter.CanRender(local)
             ? QuerySourceWriter.Render(local) : $"Local {local.GetType().Name} at line {local.Line}; not a portable provider query")}");
-        return new(local, definitions, [], _context, _log, _roots);
+        return new(local, definitions, [], _context);
     }
 
+    /// <summary>
+    /// Retrieves source provenance from a deferred collection value when available.
+    /// </summary>
     public static QuerySource? Of(CopValue value) => value switch
     {
         CopQueryable query => query.Source,
@@ -126,6 +155,9 @@ internal sealed class QuerySource
         _ => null
     };
 
+    /// <summary>
+    /// Associates a locally transformed collection with its input's source provenance.
+    /// </summary>
     public static CopValue TrackLocal(CopValue input, CopValue result, Func<Expression, Expression> operation, string reason)
     {
         if (Of(input) is not { } source)
@@ -142,6 +174,9 @@ internal sealed class QuerySource
         return result;
     }
 
+    /// <summary>
+    /// Combines the portable provenance of two collections when both can be rendered.
+    /// </summary>
     public static QuerySource? Concat(CopValue left, CopValue right)
     {
         QuerySource? leftSource = Of(left);
@@ -152,19 +187,20 @@ internal sealed class QuerySource
             return null;
         }
 
-        HashSet<string> roots = new HashSet<string>((leftSource?._roots.AsEnumerable() ?? [])
-            .Concat(rightSource?._roots.AsEnumerable() ?? []));
+        HashSet<string> roots = new HashSet<string>((leftSource?._context.Roots.AsEnumerable() ?? [])
+            .Concat(rightSource?._context.Roots.AsEnumerable() ?? []));
         Builder builder = new Builder(roots);
         (Expression, IReadOnlyList<FunctionDecl>) a = leftSource?.Build() ?? (new IdentifierExpr("local"), (IReadOnlyList<FunctionDecl>)[]);
         (Expression, IReadOnlyList<FunctionDecl>) b = rightSource?.Build() ?? (new IdentifierExpr("local"), (IReadOnlyList<FunctionDecl>)[]);
         BinaryExpr expression = new BinaryExpr(builder.Import(a.Item1, a.Item2), BinaryOp.Add,
             builder.Import(b.Item1, b.Item2));
-        return new(expression, builder.Definitions.ToArray(), [], context._context, context._log, roots);
+        return new(expression, builder.Definitions.ToArray(), [],
+            (context._context.Description, context._context.Log, roots));
     }
 
     private (Expression, IReadOnlyList<FunctionDecl>) Build()
     {
-        Builder builder = new Builder(_roots);
+        Builder builder = new Builder(_context.Roots);
         Expression expression = builder.Import(_root, _rootDefinitions);
         foreach (QueryStep step in Steps)
         {
@@ -176,8 +212,15 @@ internal sealed class QuerySource
 
     private sealed class Builder(IReadOnlySet<string> roots)
     {
+        /// <summary>
+        /// The predicate declarations accumulated while importing query expressions.
+        /// </summary>
         public List<FunctionDecl> Definitions { get; } = [];
 
+        /// <summary>
+        /// Imports an expression and its predicate definitions with collision-free
+        /// names.
+        /// </summary>
         public Expression Import(Expression expression, IReadOnlyList<FunctionDecl> definitions)
         {
             Dictionary<string, string> names = new Dictionary<string, string>(StringComparer.Ordinal);

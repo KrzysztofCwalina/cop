@@ -16,7 +16,7 @@ internal sealed record JavaSemanticContext(string Path, List<string> Sources, Li
         string path = System.IO.Path.GetFullPath(string.IsNullOrEmpty(file.FullPath) ? file.Path : file.FullPath);
         string directory = System.IO.Path.GetDirectoryName(path)!;
         string packageRoot = directory;
-        foreach (string _ in (file.Namespace ?? "").Split('.', StringSplitOptions.RemoveEmptyEntries))
+        foreach (string _ in (file.Namespace ?? string.Empty).Split('.', StringSplitOptions.RemoveEmptyEntries))
         {
             packageRoot = System.IO.Path.GetDirectoryName(packageRoot) ?? packageRoot;
         }
@@ -105,9 +105,9 @@ internal sealed record JavaSemanticContext(string Path, List<string> Sources, Li
                     continue;
                 }
 
-                string group = Child(dependency, "groupId") ?? "";
-                string artifact = Child(dependency, "artifactId") ?? "";
-                string version = Child(dependency, "version") ?? "";
+                string group = Child(dependency, "groupId") ?? string.Empty;
+                string artifact = Child(dependency, "artifactId") ?? string.Empty;
+                string version = Child(dependency, "version") ?? string.Empty;
                 if (version.StartsWith("${") && version.EndsWith('}'))
                 {
                     version = properties.GetValueOrDefault(version[2..^1], version);

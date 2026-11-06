@@ -18,9 +18,11 @@ public sealed class DataObjectAdapter : IDynamicObjectAdapter
 
     private DataObjectAdapter() { }
 
+    /// <inheritdoc/>
     public override IEnumerable<string> GetFieldNames(object obj) =>
         obj is DataObject dataObj ? dataObj.Fields.Keys : [];
 
+    /// <inheritdoc/>
     public override CopValue GetField(object obj, string name)
     {
         if (obj is not DataObject dataObj)
@@ -32,6 +34,14 @@ public sealed class DataObjectAdapter : IDynamicObjectAdapter
         return Marshal(raw);
     }
 
+    /// <inheritdoc/>
+    public override async ValueTask<CopValue> GetFieldAsync(object obj, string name,
+        CancellationToken cancellationToken = default) =>
+        obj is DataObject data
+            ? Marshal(await data.GetFieldAsync(name, cancellationToken).ConfigureAwait(false))
+            : CopNull.Instance;
+
+    /// <inheritdoc/>
     public override string Display(object obj)
     {
         if (obj is DataObject dataObj)
@@ -44,6 +54,23 @@ public sealed class DataObjectAdapter : IDynamicObjectAdapter
         return obj.ToString() ?? "";
     }
 
+    /// <inheritdoc/>
+    public override async ValueTask<string> DisplayAsync(object obj,
+        CancellationToken cancellationToken = default)
+    {
+        if (obj is not DataObject data)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return obj.ToString() ?? "";
+        }
+        object? name = await data.GetFieldAsync("Name", cancellationToken).ConfigureAwait(false);
+        if (name is not null)
+        {
+            return name.ToString() ?? "";
+        }
+        object? path = await data.GetFieldAsync("Path", cancellationToken).ConfigureAwait(false);
+        return path?.ToString() ?? data.TypeName;
+    }
     /// <summary>
     /// Convert a raw CLR value (from DataObject fields) to a CopValue.
     /// </summary>

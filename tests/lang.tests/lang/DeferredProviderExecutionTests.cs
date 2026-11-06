@@ -28,28 +28,28 @@ public class DeferredProviderExecutionTests
     public void TearDown() => Directory.Delete(_root, true);
 
     [Test]
-    public void IgnoredPushdown_StillAppliesExactResidual()
+    public async Task IgnoredPushdown_StillAppliesExactResidual()
     {
         var provider = new RecordingQueryProvider();
         var service = Service(provider);
-        var result = service.QueryProvider("recording", new ProviderQuery
+        var result = (await service.QueryProviderAsync("recording", new ProviderQuery
         {
             RootPath = _root,
             Collection = "Items",
             Filter = new PropertyFilter("Active", true)
-        });
-        Assert.That(Names(result), Is.EqualTo(new[] { "Alpha" }));
+        }, cancellationToken: CancellationToken.None));
+        Assert.That((await Names(result)), Is.EqualTo(new[] { "Alpha" }));
     }
 
     [Test]
-    public void QueryableEnumeration_IsMemoized()
+    public async Task QueryableEnumeration_IsMemoized()
     {
         var provider = new RecordingQueryProvider();
         var service = Service(provider);
         var query = new CopQueryable("recording",
-            new ProviderQuery { RootPath = _root, Collection = "Items" }, service.QueryProvider);
-        Assert.That(Names(query), Is.EqualTo(new[] { "Alpha", "Beta" }));
-        Assert.That(Names(query), Is.EqualTo(new[] { "Alpha", "Beta" }));
+            new ProviderQuery { RootPath = _root, Collection = "Items" }, service.QueryProviderAsync);
+        Assert.That((await Names(query)), Is.EqualTo(new[] { "Alpha", "Beta" }));
+        Assert.That((await Names(query)), Is.EqualTo(new[] { "Alpha", "Beta" }));
         Assert.That(provider.Queries, Has.Count.EqualTo(1));
     }
 
@@ -61,52 +61,52 @@ public class DeferredProviderExecutionTests
     [TestCase("items[1].Name", "Beta")]
     [TestCase("items.take(1).Count", "1")]
     [TestCase("items.skip(1).first().Name", "Beta")]
-    public void QueryableTerminals_ReturnExactValues(string expression, string expected)
+    public async Task QueryableTerminals_ReturnExactValues(string expression, string expected)
     {
         var provider = new RecordingQueryProvider();
         var service = Service(provider);
         var evaluator = EvaluatorFor(new CopQueryable("recording",
-            new ProviderQuery { RootPath = _root, Collection = "Items" }, service.QueryProvider));
-        evaluator.EvalModule(CopParser.Parse($"command MAIN = {expression}"));
-        Assert.That(evaluator.RunCommand("MAIN").Display(), Is.EqualTo(expected));
+            new ProviderQuery { RootPath = _root, Collection = "Items" }, service.QueryProviderAsync));
+        await evaluator.EvalModuleAsync(CopParser.Parse($"command MAIN = {expression}"), cancellationToken: CancellationToken.None);
+        Assert.That((await (await evaluator.RunCommandAsync("MAIN", cancellationToken: CancellationToken.None)).DisplayAsync(cancellationToken: CancellationToken.None)), Is.EqualTo(expected));
         Assert.That(provider.Queries, Has.Count.EqualTo(1));
     }
 
     [Test]
-    public void NamedPredicate_ComposesWithoutExecutingProvider()
+    public async Task NamedPredicate_ComposesWithoutExecutingProvider()
     {
         var provider = new RecordingQueryProvider();
         var service = Service(provider);
         var evaluator = EvaluatorFor(new CopQueryable("recording",
-            new ProviderQuery { RootPath = _root, Collection = "Items" }, service.QueryProvider));
-        evaluator.EvalModule(CopParser.Parse("""
+            new ProviderQuery { RootPath = _root, Collection = "Items" }, service.QueryProviderAsync));
+        await evaluator.EvalModuleAsync(CopParser.Parse("""
             predicate selected(p) => p.Name == 'Alpha' && p.Active
             command MAIN = items:selected
-            """));
-        var result = evaluator.RunCommand("MAIN");
+            """), cancellationToken: CancellationToken.None);
+        var result = (await evaluator.RunCommandAsync("MAIN", cancellationToken: CancellationToken.None));
         Assert.That(provider.Queries, Is.Empty, "Composing a query must not fetch its source.");
-        Assert.That(Names(result), Is.EqualTo(new[] { "Alpha" }));
+        Assert.That((await Names(result)), Is.EqualTo(new[] { "Alpha" }));
         Assert.That(provider.Queries.Single().Filter, Is.InstanceOf<AndFilter>());
     }
 
     [Test]
-    public void UnsupportedPredicate_RemainsDeferredAndRunsLocally()
+    public async Task UnsupportedPredicate_RemainsDeferredAndRunsLocally()
     {
         var provider = new RecordingQueryProvider();
         var service = Service(provider);
         var evaluator = EvaluatorFor(new CopQueryable("recording",
-            new ProviderQuery { RootPath = _root, Collection = "Items" }, service.QueryProvider));
-        evaluator.EvalModule(CopParser.Parse("""
+            new ProviderQuery { RootPath = _root, Collection = "Items" }, service.QueryProviderAsync));
+        await evaluator.EvalModuleAsync(CopParser.Parse("""
             predicate selected(p) => p.Name.Length == 5
             command MAIN = items:selected
-            """));
-        var result = evaluator.RunCommand("MAIN");
+            """), cancellationToken: CancellationToken.None);
+        var result = (await evaluator.RunCommandAsync("MAIN", cancellationToken: CancellationToken.None));
         Assert.That(provider.Queries, Is.Empty);
-        Assert.That(Names(result), Is.EqualTo(new[] { "Alpha" }));
+        Assert.That((await Names(result)), Is.EqualTo(new[] { "Alpha" }));
     }
 
     [Test]
-    public void LazyFirst_DoesNotProduceRemainingItems()
+    public async Task LazyFirst_DoesNotProduceRemainingItems()
     {
         int produced = 0;
         var source = new CopLazyCollection(() => Enumerable.Range(0, 100).Select(i =>
@@ -114,17 +114,17 @@ public class DeferredProviderExecutionTests
             produced++;
             return (CopValue)new CopInt(i);
         }));
-        Assert.That(source.Enumerate().First().Display(), Is.EqualTo("0"));
+        Assert.That((await (await source.EnumerateAsync(cancellationToken: CancellationToken.None).FirstAsync(cancellationToken: CancellationToken.None)).DisplayAsync(cancellationToken: CancellationToken.None)), Is.EqualTo("0"));
         Assert.That(produced, Is.EqualTo(1));
-        Assert.That(source.Enumerate().Take(3).Select(v => v.Display()), Is.EqualTo(new[] { "0", "1", "2" }));
+        Assert.That((await source.EnumerateAsync(cancellationToken: CancellationToken.None).Take(3).Select(async (CopValue v, CancellationToken cancellationToken) => await v.DisplayAsync(cancellationToken)).ToArrayAsync()), Is.EqualTo(new[] { "0", "1", "2" }));
         Assert.That(produced, Is.EqualTo(3));
-        Assert.That(source.Enumerate().Count(), Is.EqualTo(100));
-        Assert.That(source.Enumerate().Count(), Is.EqualTo(100));
+        Assert.That((await source.EnumerateAsync(cancellationToken: CancellationToken.None).CountAsync(cancellationToken: CancellationToken.None)), Is.EqualTo(100));
+        Assert.That((await source.EnumerateAsync(cancellationToken: CancellationToken.None).CountAsync(cancellationToken: CancellationToken.None)), Is.EqualTo(100));
         Assert.That(produced, Is.EqualTo(100));
     }
 
     [Test]
-    public void LazyEnumeration_ConcurrentConsumersProduceEachItemExactlyOnce()
+    public async Task LazyEnumeration_ConcurrentConsumersProduceEachItemExactlyOnce()
     {
         int factories = 0;
         int produced = 0;
@@ -138,18 +138,18 @@ public class DeferredProviderExecutionTests
             });
         });
         var results = new int[4][];
-        Parallel.For(0, results.Length, i =>
-            results[i] = source.Enumerate().Cast<CopInt>().Select(v => v.Value).ToArray());
+        await Task.WhenAll(Enumerable.Range(0, results.Length).Select(async i =>
+            results[i] = await source.EnumerateAsync().Cast<CopInt>().Select(v => v.Value).ToArrayAsync()));
         foreach (var result in results)
             Assert.That(result, Is.EqualTo(Enumerable.Range(0, 1000)));
-        Assert.That(source.Enumerate().Cast<CopInt>().Select(v => v.Value),
+        Assert.That((await source.EnumerateAsync(cancellationToken: CancellationToken.None).Cast<CopInt>().Select(v => v.Value).ToArrayAsync()),
             Is.EqualTo(Enumerable.Range(0, 1000)));
         Assert.That(factories, Is.EqualTo(1));
         Assert.That(produced, Is.EqualTo(1000));
     }
 
     [Test]
-    public void LazyEnumeration_PreservesCachedPrefixAndOriginalFailure()
+    public async Task LazyEnumeration_PreservesCachedPrefixAndOriginalFailure()
     {
         int factories = 0;
         var error = new IOException("Unable to read second row.");
@@ -162,8 +162,8 @@ public class DeferredProviderExecutionTests
         var source = new CopLazyCollection(Rows);
         for (int i = 0; i < 2; i++)
         {
-            Assert.That(source.Enumerate().First().Display(), Is.EqualTo("7"));
-            Assert.That(Assert.Throws<IOException>(() => source.Enumerate().ToArray()), Is.SameAs(error));
+            Assert.That((await (await source.EnumerateAsync(cancellationToken: CancellationToken.None).FirstAsync(cancellationToken: CancellationToken.None)).DisplayAsync(cancellationToken: CancellationToken.None)), Is.EqualTo("7"));
+            Assert.That(Assert.ThrowsAsync<IOException>(async () => await source.EnumerateAsync(cancellationToken: CancellationToken.None).ToArrayAsync(cancellationToken: CancellationToken.None)), Is.SameAs(error));
         }
         Assert.That(factories, Is.EqualTo(1));
     }
@@ -187,17 +187,17 @@ public class DeferredProviderExecutionTests
 
     [TestCase(false)]
     [TestCase(true)]
-    public void EngineCollectionAccess_PushesNamedFilterAndPrunesOtherCollections(bool scoped)
+    public async Task EngineCollectionAccess_PushesNamedFilterAndPrunesOtherCollections(bool scoped)
     {
         var access = scoped ? "provider('recording', '.').Items" : "provider('recording').Items";
         var program = $"let items = {access}\npredicate selected(p) => p.Name == 'Alpha'\ncommand MAIN = foreach items:selected => '{{item.Name}}'";
         var script = Path.Combine(_root, "main.cop");
         File.WriteAllText(script, program);
-        var result = Engine.Run(_root, _root, new EngineRunOptions
+        var result = (await Engine.RunAsync(_root, _root, new EngineRunOptions
         {
             ScriptFiles = [script],
             ProviderPackages = [CreateRecordingPackage()],
-        });
+        }));
         Assert.That(result.Errors.Concat(result.ParseErrors), Is.Empty);
         Assert.That(result.Outputs.Select(o => o.Message), Is.EqualTo(new[] { "Alpha" }));
         using var query = JsonDocument.Parse(File.ReadAllLines(Path.Combine(_root, "queries.jsonl")).Single());
@@ -207,7 +207,7 @@ public class DeferredProviderExecutionTests
 
     [TestCase("items:hasPrefix:hasSuffix")]
     [TestCase("items:selected")]
-    public void PredicatesInSeparateFiles_ComposeIntoOneProviderQuery(string expression)
+    public async Task PredicatesInSeparateFiles_ComposeIntoOneProviderQuery(string expression)
     {
         File.WriteAllText(Path.Combine(_root, "prefix.cop"),
             "predicate hasPrefix(p) => p.Name:startsWith('A')");
@@ -218,10 +218,10 @@ public class DeferredProviderExecutionTests
             predicate selected(p) => hasPrefix && hasSuffix
             command MAIN = foreach {{expression}} => '{item.Name}'
             """);
-        var result = Engine.Run(_root, _root, new EngineRunOptions
+        var result = (await Engine.RunAsync(_root, _root, new EngineRunOptions
         {
             ProviderPackages = [CreateRecordingPackage()],
-        });
+        }));
         Assert.That(result.Errors.Concat(result.ParseErrors), Is.Empty);
         Assert.That(result.Outputs.Select(o => o.Message), Is.EqualTo(new[] { "Alpha" }));
         using var query = JsonDocument.Parse(File.ReadAllLines(Path.Combine(_root, "queries.jsonl")).Single());
@@ -257,7 +257,7 @@ public class DeferredProviderExecutionTests
     [TestCase("java", "input.java", "class Alpha {} class Beta {}")]
     [TestCase("rust", "input.rs", "pub struct Alpha {}\nstruct Beta {}\n")]
     [TestCase("cop", "input.cop", "type Alpha = { Name : string }\ntype Beta = { Name : string }\n")]
-    public void LanguagePackages_PreserveDeferredCollectionsAndPushNamedPredicates(string language, string file, string source)
+    public async Task LanguagePackages_PreserveDeferredCollectionsAndPushNamedPredicates(string language, string file, string source)
     {
         var target = Path.Combine(_root, "target");
         Directory.CreateDirectory(target);
@@ -271,12 +271,12 @@ public class DeferredProviderExecutionTests
             command MAIN = foreach cb.Types:selected => '{item.Name}'
             """);
         var diagnostics = new List<string>();
-        var result = Engine.Run(_root, target, new EngineRunOptions
+        var result = (await Engine.RunAsync(_root, target, new EngineRunOptions
         {
             ScriptFiles = [script],
             AdditionalFeedPaths = [Path.Combine(RepoRoot, "packages")],
             DiagnosticLog = diagnostics.Add,
-        });
+        }));
         Assert.That(result.Errors.Concat(result.ParseErrors), Is.Empty);
         Assert.That(result.Outputs.Select(o => o.Message), Is.EqualTo(new[] { "Alpha" }));
         Assert.That(diagnostics, Has.Some.Contains($"Query {language}.Types"));
@@ -287,7 +287,7 @@ public class DeferredProviderExecutionTests
     }
 
     [Test]
-    public void FilesystemPackage_PushesFilterToOnlyFiles()
+    public async Task FilesystemPackage_PushesFilterToOnlyFiles()
     {
         File.WriteAllText(Path.Combine(_root, "Alpha.txt"), "alpha");
         File.WriteAllText(Path.Combine(_root, "Beta.txt"), "beta");
@@ -298,12 +298,12 @@ public class DeferredProviderExecutionTests
             command MAIN = foreach files():selected => '{item.Name}'
             """);
         var diagnostics = new List<string>();
-        var result = Engine.Run(_root, _root, new EngineRunOptions
+        var result = (await Engine.RunAsync(_root, _root, new EngineRunOptions
         {
             ScriptFiles = [script],
             AdditionalFeedPaths = [Path.Combine(RepoRoot, "packages")],
             DiagnosticLog = diagnostics.Add,
-        });
+        }));
         Assert.That(result.Errors.Concat(result.ParseErrors), Is.Empty);
         Assert.That(result.Outputs.Select(o => o.Message), Is.EqualTo(new[] { "Alpha.txt" }));
         Assert.That(diagnostics, Has.Some.Contains("Query filesystem.Files"));
@@ -319,12 +319,14 @@ public class DeferredProviderExecutionTests
     }
 
     [Test]
-    public void ExistingProviderBinaries_CanCallOriginalCollectAndParseSignature()
+    public async Task CollectAndParseAsync_ExposesCancellationAwareProviderContract()
     {
-        var method = typeof(CodeCollectionBuilder).GetMethod(nameof(CodeCollectionBuilder.CollectAndParse),
-            [typeof(SourceParserRegistry), typeof(ProviderQuery)]);
-        Assert.That(method, Is.Not.Null, "Optional parameters must not replace existing binary signatures.");
-        var result = (Dictionary<string, List<object>>)method!.Invoke(null, [new SourceParserRegistry(), new ProviderQuery()])!;
+        var method = typeof(CodeCollectionBuilder).GetMethod(nameof(CodeCollectionBuilder.CollectAndParseAsync),
+            [typeof(SourceParserRegistry), typeof(ProviderQuery), typeof(CancellationToken)]);
+        Assert.That(method, Is.Not.Null, "Provider execution must expose its cancellation-aware async contract.");
+        var pending = (ValueTask<Dictionary<string, List<object>>>)method!.Invoke(null,
+            [new SourceParserRegistry(), new ProviderQuery(), CancellationToken.None])!;
+        var result = await pending;
         Assert.That(result, Is.Empty);
     }
 
@@ -348,7 +350,7 @@ public class DeferredProviderExecutionTests
     [TestCase("powershell", "input.ps1", "Write-Output Alpha\nGet-Date\n", "Commands", "PowerShellCommand", "Name", "Write-Output")]
     [TestCase("sql", "input.sql", "SELECT 1;\nDELETE FROM things;\n", "Statements", "SqlStatement", "Kind", "SELECT")]
     [TestCase("openapi", "input.json", """{"openapi":"3.0.0","info":{"title":"test","version":"1"},"paths":{"/alpha":{"get":{"operationId":"Alpha","responses":{}}},"/beta":{"get":{"operationId":"Beta","responses":{}}}}}""", "Operations", "OpenApiOperation", "OperationId", "Alpha")]
-    public void FormatPackages_FilterBeforeReturningRecords(string package, string file, string source,
+    public async Task FormatPackages_FilterBeforeReturningRecords(string package, string file, string source,
         string collection, string type, string property, string expected)
     {
         var target = Path.Combine(_root, "target");
@@ -362,12 +364,12 @@ public class DeferredProviderExecutionTests
             command MAIN = foreach parsed.{{collection}}:selected => '{item.{{property}}}'
             """);
         var diagnostics = new List<string>();
-        var result = Engine.Run(_root, target, new EngineRunOptions
+        var result = (await Engine.RunAsync(_root, target, new EngineRunOptions
         {
             ScriptFiles = [script],
             AdditionalFeedPaths = [Path.Combine(RepoRoot, "packages")],
             DiagnosticLog = diagnostics.Add,
-        });
+        }));
         Assert.That(result.Errors.Concat(result.ParseErrors), Is.Empty);
         Assert.That(result.Outputs.Select(o => o.Message), Is.EqualTo(new[] { expected }));
         Assert.That(diagnostics, Has.Some.Contains($"[query-result] {package}.{collection} returned=1"));
@@ -375,7 +377,7 @@ public class DeferredProviderExecutionTests
     }
 
     [Test]
-    public void MultiLanguageUnion_DistributesFilterIntoBothProviders()
+    public async Task MultiLanguageUnion_DistributesFilterIntoBothProviders()
     {
         File.WriteAllText(Path.Combine(_root, "input.cs"), "class Alpha {} class Beta {}");
         File.WriteAllText(Path.Combine(_root, "input.py"), "class Alpha:\n    pass\nclass Beta:\n    pass\n");
@@ -389,12 +391,12 @@ public class DeferredProviderExecutionTests
             command MAIN = foreach cb.Types:selected => '{item.Name}'
             """);
         var diagnostics = new List<string>();
-        var result = Engine.Run(_root, _root, new EngineRunOptions
+        var result = (await Engine.RunAsync(_root, _root, new EngineRunOptions
         {
             ScriptFiles = [script],
             AdditionalFeedPaths = [Path.Combine(RepoRoot, "packages")],
             DiagnosticLog = diagnostics.Add,
-        });
+        }));
         Assert.That(result.Errors.Concat(result.ParseErrors), Is.Empty);
         Assert.That(result.Outputs.Select(o => o.Message), Is.EqualTo(new[] { "Alpha", "Alpha" }));
         Assert.That(diagnostics, Has.Some.Contains("[query-result] csharp.Types returned=1"));
@@ -404,33 +406,33 @@ public class DeferredProviderExecutionTests
 
     [TestCase("items.Where(item.Name == 'Alpha')")]
     [TestCase("items.Where((p) => p.Name == 'Alpha')")]
-    public void Where_AccumulatesWithoutFetching(string expression)
+    public async Task Where_AccumulatesWithoutFetching(string expression)
     {
         var provider = new RecordingQueryProvider();
         var service = Service(provider);
         var evaluator = EvaluatorFor(new CopQueryable("recording",
-            new ProviderQuery { RootPath = _root, Collection = "Items" }, service.QueryProvider));
-        evaluator.EvalModule(CopParser.Parse($"command MAIN = {expression}"));
-        var result = evaluator.RunCommand("MAIN");
+            new ProviderQuery { RootPath = _root, Collection = "Items" }, service.QueryProviderAsync));
+        await evaluator.EvalModuleAsync(CopParser.Parse($"command MAIN = {expression}"), cancellationToken: CancellationToken.None);
+        var result = (await evaluator.RunCommandAsync("MAIN", cancellationToken: CancellationToken.None));
         Assert.That(provider.Queries, Is.Empty);
-        Assert.That(Names(result), Is.EqualTo(new[] { "Alpha" }));
+        Assert.That((await Names(result)), Is.EqualTo(new[] { "Alpha" }));
         Assert.That(provider.Queries.Single().Filter, Is.EqualTo(new StringOpFilter("Name", StringOp.ExactEquals, "Alpha")));
     }
 
     [Test]
-    public void FilterBranches_AreIndependentAndIdenticalQueriesReuseResults()
+    public async Task FilterBranches_AreIndependentAndIdenticalQueriesReuseResults()
     {
         var provider = new RecordingQueryProvider();
         var service = Service(provider);
-        var source = new CopQueryable("recording", new ProviderQuery { RootPath = _root, Collection = "Items" }, service.QueryProvider);
+        var source = new CopQueryable("recording", new ProviderQuery { RootPath = _root, Collection = "Items" }, service.QueryProviderAsync);
         var active = source.WithFilter(new PropertyFilter("Active", true));
         var inactive = source.WithFilter(new PropertyFilter("Active", false));
         Assert.That(provider.Queries, Is.Empty);
-        Assert.That(Names(active), Is.EqualTo(new[] { "Alpha" }));
-        Assert.That(Names(inactive), Is.EqualTo(new[] { "Beta" }));
-        Assert.That(Names(source.WithFilter(new PropertyFilter("Active", true))), Is.EqualTo(new[] { "Alpha" }));
+        Assert.That((await Names(active)), Is.EqualTo(new[] { "Alpha" }));
+        Assert.That((await Names(inactive)), Is.EqualTo(new[] { "Beta" }));
+        Assert.That((await Names(source.WithFilter(new PropertyFilter("Active", true)))), Is.EqualTo(new[] { "Alpha" }));
         Assert.That(provider.Queries, Has.Count.EqualTo(2));
-        Assert.That(Names(source), Is.EqualTo(new[] { "Alpha", "Beta" }));
+        Assert.That((await Names(source)), Is.EqualTo(new[] { "Alpha", "Beta" }));
     }
 
     [TestCase(false)]
@@ -444,7 +446,7 @@ public class DeferredProviderExecutionTests
     }
 
     [Test]
-    public void ExactEqualityAndNegation_PreserveCaseAndNullSemantics()
+    public async Task ExactEqualityAndNegation_PreserveCaseAndNullSemantics()
     {
         var values = new CopList(
         [
@@ -452,10 +454,10 @@ public class DeferredProviderExecutionTests
             new CopObject(new Dictionary<string, CopValue> { ["Name"] = new CopString("alpha") }),
             new CopObject(new Dictionary<string, CopValue> { ["Name"] = CopNull.Instance })
         ]);
-        var source = new CopQueryable("fixture", new(), (_, _) => values);
+        var source = new CopQueryable("fixture", new(), (_, _, cancellationToken) => ValueTask.FromResult<CopValue>(values));
         var exact = new StringOpFilter("Name", StringOp.ExactEquals, "Alpha");
-        Assert.That(Names(source.WithFilter(exact)), Is.EqualTo(new[] { "Alpha" }));
-        Assert.That(Names(source.WithFilter(new NotFilter(exact))), Is.EqualTo(new[] { "alpha", "null" }));
+        Assert.That((await Names(source.WithFilter(exact))), Is.EqualTo(new[] { "Alpha" }));
+        Assert.That((await Names(source.WithFilter(new NotFilter(exact)))), Is.EqualTo(new[] { "alpha", "null" }));
     }
 
     private static Evaluator EvaluatorFor(CopValue items)
@@ -467,18 +469,18 @@ public class DeferredProviderExecutionTests
         return evaluator;
     }
 
-    private static string[] Names(CopValue value) => (value switch
+    private static async Task<string[]> Names(CopValue value) => await (value switch
     {
-        CopQueryable q => q.Enumerate(),
-        CopLazyCollection l => l.Enumerate(),
-        CopList l => l.Items,
+        CopQueryable q => q.EnumerateAsync(cancellationToken: CancellationToken.None),
+        CopLazyCollection l => l.EnumerateAsync(cancellationToken: CancellationToken.None),
+        CopList l => l.Items.ToAsyncEnumerable(),
         _ => throw new AssertionException($"Expected collection, got {value.GetType().Name}")
-    }).Select(v => v switch
+    }).Select(async (Cop.Lang.Interpreter.CopValue v, CancellationToken asyncCancellationToken23728) => v switch
     {
-        CopDynamicObject d => d.GetField("Name").Display(),
-        CopObject o => o.GetField("Name").Display(),
+        CopDynamicObject d => (await (await d.GetFieldAsync("Name", cancellationToken: asyncCancellationToken23728)).DisplayAsync(cancellationToken: asyncCancellationToken23728)),
+        CopObject o => (await o.GetField("Name").DisplayAsync(cancellationToken: asyncCancellationToken23728)),
         _ => throw new AssertionException("Expected object")
-    }).ToArray();
+    }).ToArrayAsync();
 
     private static string FindRepoRoot()
     {
@@ -506,13 +508,14 @@ public sealed class RecordingQueryProvider : DataProvider
         ]
     }.ToJson();
 
-    public override object Query(ProviderQuery query)
+    public override ValueTask<object?> QueryAsync(ProviderQuery query,
+        CancellationToken cancellationToken = default)
     {
         Queries.Add(query);
         if (query.RootPath is not null)
             File.AppendAllText(Path.Combine(query.RootPath, "queries.jsonl"),
                 JsonSerializer.Serialize(new { query.Collection, Filter = query.Filter is null ? null : FilterExpression.Format(query.Filter) }) + "\n");
-        return new Dictionary<string, List<object>>
+        return ValueTask.FromResult<object?>(new Dictionary<string, List<object>>
         {
             ["Items"] =
             [
@@ -520,6 +523,6 @@ public sealed class RecordingQueryProvider : DataProvider
                 new DataObject("QueryItem", new() { ["Name"] = "Beta", ["Active"] = false })
             ],
             ["Extras"] = [new DataObject("QueryItem", new() { ["Name"] = "Unused", ["Active"] = false })]
-        };
+        });
     }
 }

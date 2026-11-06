@@ -76,7 +76,8 @@ internal static class PackageResolver
     /// <summary>
     /// Resolves a package name to its directory, auto-restoring from GitHub feeds if not found locally.
     /// </summary>
-    public static string? ResolvePackageDir(string packageName, List<string>? feedPaths = null)
+    public static async Task<string?> ResolvePackageDirAsync(
+        string packageName, List<string>? feedPaths = null)
     {
         feedPaths ??= GetFeedPaths();
 
@@ -88,7 +89,7 @@ internal static class PackageResolver
 
         // Auto-restore from configured feeds
         string cachePath = GlobalCachePath;
-        bool restored = RunCommand.AutoRestorePackagesAsync([packageName], cachePath).GetAwaiter().GetResult();
+        bool restored = await RunCommand.AutoRestorePackagesAsync([packageName], cachePath);
         if (restored)
         {
             return ImportResolver.FindPackageDir(cachePath, packageName);

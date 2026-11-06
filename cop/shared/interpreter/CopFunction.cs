@@ -10,7 +10,13 @@ namespace Cop.Lang.Interpreter;
 /// </summary>
 public sealed class CopFunction : CopValue, ICopCallable
 {
+    /// <summary>
+    /// The parsed declaration that supplies the function's parameters and body.
+    /// </summary>
     public Ast.FunctionDecl Declaration { get; }
+    /// <summary>
+    /// The lexical environment captured when the function was declared.
+    /// </summary>
     public Environment Closure { get; }
 
     public CopFunction(Ast.FunctionDecl declaration, Environment closure)
@@ -19,13 +25,19 @@ public sealed class CopFunction : CopValue, ICopCallable
         Closure = closure;
     }
 
+    /// <summary>
+    /// The number of arguments still required to invoke this callable.
+    /// </summary>
     public int Arity => Declaration.Params.Count;
 
-    public CopValue Invoke(IReadOnlyList<CopValue> args, Evaluator evaluator, Environment env)
+    /// <inheritdoc cref="ICopCallable.InvokeAsync"/>
+    public async ValueTask<CopValue> InvokeAsync(IReadOnlyList<CopValue> args, Evaluator evaluator, Environment env, CancellationToken cancellationToken = default)
     {
-        return evaluator.CallUserFunction(this, args);
+        return (await evaluator.CallUserFunctionAsync(this, args, cancellationToken: cancellationToken));
     }
 
+    /// <inheritdoc/>
     public override string Display() => $"<function {Declaration.Name}>";
+    /// <inheritdoc/>
     public override string ToString() => Display();
 }

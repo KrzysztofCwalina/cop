@@ -10,6 +10,17 @@ namespace Cop.Lang;
 /// </summary>
 public class TypeRegistry
 {
+    private readonly Dictionary<string, Dictionary<string,
+        Func<object, CancellationToken, ValueTask<object?>>>> _asyncAccessors = new();
+
+    /// <summary>Registers demand-driven asynchronous members for a provider type.</summary>
+    public void RegisterAsyncAccessors(string typeName, Dictionary<string,
+        Func<object, CancellationToken, ValueTask<object?>>> accessors) =>
+        _asyncAccessors[typeName] = accessors;
+
+    /// <summary>Returns asynchronous member accessors without preparing provider data.</summary>
+    public Dictionary<string, Func<object, CancellationToken, ValueTask<object?>>>?
+        GetAsyncAccessors(string typeName) => _asyncAccessors.GetValueOrDefault(typeName);
     private readonly Dictionary<string, TypeDescriptor> _types = new();
     private readonly Dictionary<string, CollectionDeclaration> _collections = new();
     private readonly Dictionary<string, FlagsDefinition> _flagsTypes = new();
@@ -104,7 +115,7 @@ public class TypeRegistry
     /// Tries to resolve a bare identifier as a flags constant.
     /// Returns the integer bit value, or null if not a known flags member.
     /// </summary>
-    public int? TryResolveFlagsConstant(string name) =>
+    public int? FindFlagsConstant(string name) =>
         _flagsConstants.TryGetValue(name, out int value) ? value : null;
 
     /// <summary>
@@ -122,7 +133,7 @@ public class TypeRegistry
     /// Resolves a qualified flags constant (e.g., "Modifier", "Public" → 1).
     /// Returns the bit value, or null if the type or member is not found.
     /// </summary>
-    public int? TryResolveQualifiedFlagsConstant(string typeName, string memberName)
+    public int? FindQualifiedFlagsConstant(string typeName, string memberName)
     {
         if (!_flagsTypes.TryGetValue(typeName, out FlagsDefinition? fd))
         {
@@ -241,7 +252,7 @@ public class TypeRegistry
     /// Tries to resolve a bare identifier as an enum constant.
     /// Returns the string value (member name), or null if not a known enum member.
     /// </summary>
-    public string? TryResolveEnumConstant(string name) =>
+    public string? FindEnumConstant(string name) =>
         _enumConstants.TryGetValue(name, out string? value) ? value : null;
 
     /// <summary>
@@ -259,7 +270,7 @@ public class TypeRegistry
     /// Resolves a qualified enum constant (e.g., "TypeKind", "Class" → "Class").
     /// Returns the member string, or null if the type or member is not found.
     /// </summary>
-    public string? TryResolveQualifiedEnumConstant(string typeName, string memberName)
+    public string? FindQualifiedEnumConstant(string typeName, string memberName)
     {
         if (!_enumTypes.TryGetValue(typeName, out EnumDefinition? ed))
         {
@@ -725,7 +736,7 @@ public class TypeRegistry
     /// Attempts to parse a file using a registered parser for its extension.
     /// Returns null if no parser is registered for the file's extension.
     /// </summary>
-    public List<object>? TryParseFile(string filePath, string typeName)
+    public List<object>? ParseFileOrDefault(string filePath, string typeName)
     {
         string ext = Path.GetExtension(filePath).TrimStart('.');
         if (_fileParsers.TryGetValue(ext, out Func<string, string, List<object>>? parser))
@@ -753,8 +764,8 @@ public class TypeRegistry
             {
                 Name = propName,
                 Type = prop.TypeName ?? "string",
-                Optional = prop.IsOptional,
-                Collection = prop.IsCollection
+                IsOptional = prop.IsOptional,
+                IsCollection = prop.IsCollection
             });
         }
 
@@ -1098,7 +1109,7 @@ public class TypeRegistry
     /// Tries to evaluate a registered method on a value. Returns null if no evaluator found.
     /// Walks up the type hierarchy to find inherited method evaluators.
     /// </summary>
-    public object? TryEvaluateMethod(object target, string methodName, List<object?> args)
+    public object? EvaluateMethodOrDefault(object target, string methodName, List<object?> args)
     {
         string? typeName = InferTypeName(target);
         if (typeName is null)
@@ -1284,7 +1295,7 @@ public class TypeRegistry
             foreach (ProviderPropertySchema ps in ts.Properties)
             {
                 ValidatePropertyCasing(ts.Name, ps.Name);
-                desc.Properties[ps.Name] = new PropertyDescriptor(ps.Name, ps.Type, ps.Optional, ps.Collection);
+                desc.Properties[ps.Name] = new PropertyDescriptor(ps.Name, ps.Type, ps.IsOptional, ps.IsCollection);
             }
             Register(desc);
         }
@@ -1341,7 +1352,7 @@ public class TypeRegistry
                 int capturedSlot = slot; // capture for closure
                 bool isPrimitive = prop.Type is "string" or "int" or "bool";
 
-                if (!prop.Collection && isPrimitive)
+                if (!prop.IsCollection && isPrimitive)
                 {
                     // Scalar primitive — works for both required and optional
                     accessors[prop.Name] = prop.Type switch
@@ -1409,7 +1420,7 @@ public class TypeRegistry
                 int capturedSlot = slot;
                 bool isPrimitive = prop.Type is "string" or "int" or "bool";
 
-                if (prop.Collection)
+                if (prop.IsCollection)
                 {
                     if (isPrimitive)
                     {

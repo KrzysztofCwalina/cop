@@ -28,7 +28,8 @@ public static class FeedCommand
         {
             addUrlArg
         };
-        addCommand.SetAction(parseResult => ExecuteAdd(parseResult.GetValue(addUrlArg)));
+        addCommand.SetAction(parseResult => ExecuteAdd(parseResult.GetValue(addUrlArg)
+            ?? throw new InvalidOperationException("The required feed URL is missing.")));
         feedCommand.Add(addCommand);
 
         // feed remove <url>
@@ -37,7 +38,8 @@ public static class FeedCommand
         {
             removeUrlArg
         };
-        removeCommand.SetAction(parseResult => ExecuteRemove(parseResult.GetValue(removeUrlArg)));
+        removeCommand.SetAction(parseResult => ExecuteRemove(parseResult.GetValue(removeUrlArg)
+            ?? throw new InvalidOperationException("The required feed URL is missing.")));
         feedCommand.Add(removeCommand);
 
         // feed list
@@ -70,7 +72,8 @@ public static class FeedCommand
             Console.Error.WriteLine($"Error: {ex.Message}");
             return 1;
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or
+            System.Text.Json.JsonException or System.Security.SecurityException)
         {
             Console.Error.WriteLine($"Error adding feed: {ex.Message}");
             return 1;
@@ -99,7 +102,8 @@ public static class FeedCommand
             Console.Error.WriteLine($"Error: {ex.Message}");
             return 1;
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or
+            System.Text.Json.JsonException or System.Security.SecurityException)
         {
             Console.Error.WriteLine($"Error removing feed: {ex.Message}");
             return 1;
@@ -133,7 +137,8 @@ public static class FeedCommand
 
             return 0;
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or
+            System.Text.Json.JsonException or System.Security.SecurityException)
         {
             Console.Error.WriteLine($"Error listing feeds: {ex.Message}");
             return 1;

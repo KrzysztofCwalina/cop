@@ -30,7 +30,7 @@ public class PackageReference
     public string GitHubApiBaseUrl => $"https://api.github.com/repos/{Owner}/{Repo}";
 
     /// <summary>The package-specific release tag for a versioned reference.</summary>
-    public string TagName => Version == null 
+    public string TagName => Version == null
         ? throw new InvalidOperationException("Cannot get TagName when Version is null")
         : $"{PackageName}/{Version}";
 
@@ -80,7 +80,7 @@ public class PackageReference
 
         // Split the path on "/" to extract components
         string[] segments = path.Split('/', StringSplitOptions.RemoveEmptyEntries);
-        
+
         if (segments.Length < 4)
         {
             throw new ArgumentException($"Invalid reference format: '{reference}'. Path must have at least 4 segments (host/owner/repo/package)", nameof(reference));

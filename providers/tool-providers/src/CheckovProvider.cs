@@ -12,9 +12,12 @@ public class CheckovProvider : ToolProvider
 {
     protected override string ToolName => "checkov";
 
-    protected override List<object> RunTool(string rootPath, IReadOnlySet<string> excluded)
+    protected override async ValueTask<List<object>> RunToolAsync(
+        string rootPath, IReadOnlySet<string> excluded, CancellationToken cancellationToken)
     {
-        (string? stdout, string _, int _) = RunProcess("checkov", "-d . -o json --quiet --compact", rootPath, shell: true);
+        (string? stdout, string _, int _) = await RunProcessAsync(
+            new("checkov", "-d . -o json --quiet --compact", rootPath)
+            { Mode = ToolInvocationMode.Shell }, cancellationToken).ConfigureAwait(false);
         if (string.IsNullOrWhiteSpace(stdout))
         {
             return [];
@@ -43,7 +46,7 @@ public class CheckovProvider : ToolProvider
             foreach (JsonElement item in failedChecks.EnumerateArray())
             {
                 string filePath = NormalizePath(
-                    item.TryGetProperty("file_path", out JsonElement fp) ? fp.GetString() ?? "" : "", rootPath);
+                    item.TryGetProperty("file_path", out JsonElement fp) ? fp.GetString() ?? string.Empty : string.Empty, rootPath);
                 if (string.IsNullOrEmpty(filePath) || IsExcluded(filePath, excluded))
                 {
                     continue;
@@ -56,15 +59,15 @@ public class CheckovProvider : ToolProvider
                     line = lineRange[0].GetInt32();
                 }
 
-                string? ruleId = item.TryGetProperty("check_id", out JsonElement cid) ? cid.GetString() : "";
-                string? message = item.TryGetProperty("check_name", out JsonElement cn) ? cn.GetString() : "";
+                string? ruleId = item.TryGetProperty("check_id", out JsonElement cid) ? cid.GetString() : string.Empty;
+                string? message = item.TryGetProperty("check_name", out JsonElement cn) ? cn.GetString() : string.Empty;
 
                 violations.Add(new ToolViolation
                 {
                     File = filePath,
                     Line = line,
                     Severity = "warning",
-                    Message = !string.IsNullOrEmpty(ruleId) ? $"{ruleId}: {message}" : message ?? "",
+                    Message = !string.IsNullOrEmpty(ruleId) ? $"{ruleId}: {message}" : message ?? string.Empty,
                     Source = "checkov"
                 });
             }

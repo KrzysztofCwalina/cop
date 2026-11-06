@@ -1,5 +1,7 @@
 // Reports installed files, processed packages, and warnings from a package restore.
 
+using System.Text.Json.Serialization;
+
 namespace Cop.Core;
 
 /// <summary>Result of a package restore operation.</summary>
@@ -18,7 +20,8 @@ public class RestoreResult
     public List<string> Warnings { get; init; } = [];
 
     /// <summary>Whether the restore succeeded.</summary>
-    public bool Success { get; init; }
+    [JsonPropertyName("Success")]
+    public bool IsSuccessful { get; init; }
 
     /// <summary>Formats the package and file counts for command output.</summary>
     public override string ToString()

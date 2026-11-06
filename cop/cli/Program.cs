@@ -30,7 +30,7 @@ if (args.Contains("--no-color"))
 // --no-user-checks replaces the former COP_NO_USER_CHECKS env var.
 if (args.Contains("--no-user-checks"))
 {
-    RunCommand.NoUserChecks = true;
+    RunCommand.ShouldSkipUserChecks = true;
 }
 
 // Known verbs (subcommands) — anything else is treated as a program to run
@@ -45,7 +45,7 @@ HashSet<string> knownVerbs = new HashSet<string>(StringComparer.OrdinalIgnoreCas
 // only the "unknown command" error instead of a stale post-update summary.
 if (!Console.IsErrorRedirected && StartupNotices.ShouldShow(args, knownVerbs, ResolvesToRunnable))
 {
-    VersionNotifier.Notify();
+    await VersionNotifier.NotifyAsync();
 }
 
 long clrStartupMs = 0;
@@ -81,7 +81,7 @@ if (args.Length >= 2 && knownVerbs.Contains(args[0]) &&
 if (args[0] == "help")
 {
     string? helpArg = args.Length >= 2 ? args[1] : null;
-    return HelpCommand.Execute(helpArg);
+    return await HelpCommand.ExecuteAsync(helpArg);
 }
 
 // cop init — generate agent instruction files
@@ -120,33 +120,46 @@ if (args[0] == "init")
     // cop init --checks — shell out to a coding agent to convert existing instructions into cop rules
     if (args.Contains("--checks"))
     {
-        return ChecksCommand.Execute(args.Contains("--claude"));
+        return await ChecksCommand.ExecuteAsync(
+            args.Contains("--claude") ? InstructionAgent.Claude : InstructionAgent.Copilot);
     }
     bool localHook = args.Contains("--al");
     bool globalHook = args.Contains("--ag");
     bool copilotHook = args.Contains("--ch");
     // Default generates GitHub Copilot instructions; --claude (or a Claude hook flag) switches to Claude Code.
     bool claude = args.Contains("--claude") || localHook || globalHook;
-    return InitCommand.Execute(claude, localHook, globalHook, copilotHook, copCmd);
+    return InitCommand.Execute(new InitializationOptions
+    {
+        Agent = claude ? InstructionAgent.Claude : InstructionAgent.Copilot,
+        IsLocalHookEnabled = localHook,
+        IsGlobalHookEnabled = globalHook,
+        IsCopilotHookEnabled = copilotHook,
+        CopCommand = copCmd
+    });
 }
 
 // cop update — self-update from GitHub releases
 if (args[0] == "update")
 {
-    return UpdateCommand.Execute(args.Contains("--force") || args.Contains("-f"), args.Contains("--local"));
+    return await UpdateCommand.ExecuteAsync(new UpdateOptions
+    {
+        IsForced = args.Contains("--force") || args.Contains("-f"),
+        IsLocal = args.Contains("--local")
+    });
 }
 
 // cop vscode — install VS Code extension
 if (args[0] == "vscode")
 {
-    return VscodeCommand.Execute();
+    return await VscodeCommand.ExecuteAsync();
 }
 
 // Explicit run: `cop run <package|file.cop|url|command>` resolves and runs anything,
 // including auto-restoring a package from a feed.
 if (args[0].Equals("run", StringComparison.OrdinalIgnoreCase))
 {
-    return ResolveAndRun(args.Length > 1 ? args[1..] : Array.Empty<string>(), diag, allowPackages: true);
+    return await ResolveAndRunAsync(
+        args.Length > 1 ? args[1..] : Array.Empty<string>(), diag, allowPackages: true);
 }
 
 // Bare `cop <name>` for a non-verb, non-switch token: run a local .cop file, URL, or a
@@ -155,7 +168,7 @@ if (args[0].Equals("run", StringComparison.OrdinalIgnoreCase))
 // a confusing "package not found" feed restore.
 if (!knownVerbs.Contains(args[0]) && !args[0].StartsWith('-') && !args[0].StartsWith('/'))
 {
-    return ResolveAndRun(args, diag, allowPackages: false);
+    return await ResolveAndRunAsync(args, diag, allowPackages: false);
 }
 
 RootCommand rootCommand = new RootCommand
@@ -191,11 +204,11 @@ rootCommand.Add(UnlockCommand.Create());
 
 // cop repl — launch interactive REPL
 Command replCommand = new Command("repl", "Launch interactive REPL");
-replCommand.SetAction(_ =>
+replCommand.SetAction(async (_, cancellationToken) =>
 {
     string scriptsDir = Directory.GetCurrentDirectory();
-    ReplSession session = new ReplSession(scriptsDir, scriptsDir);
-    return session.Run();
+    await using ReplSession session = new ReplSession(scriptsDir, scriptsDir);
+    return await session.RunAsync(cancellationToken);
 });
 rootCommand.Add(replCommand);
 
@@ -227,7 +240,7 @@ if (parseResult.CommandResult.Command == rootCommand && parseResult.Action != ve
     CliHelp.PrintMainHelp();
     return helpRequested ? 0 : 1;
 }
-return parseResult.Invoke();
+return await parseResult.InvokeAsync();
 
 /// <summary>
 /// Resolves and runs a target: a local .cop file, an HTTPS URL, a local UPPERCASE command,
@@ -235,7 +248,7 @@ return parseResult.Invoke();
 /// auto-restored from a feed. When packages aren't allowed and nothing else matches, prints a
 /// clear "Unknown command" error instead of attempting a package restore.
 /// </summary>
-static int ResolveAndRun(string[] runArgs, bool diag, bool allowPackages)
+static async Task<int> ResolveAndRunAsync(string[] runArgs, bool diag, bool allowPackages)
 {
     Cop.Core.ReviewOptions reviewOptions;
     try
@@ -315,7 +328,19 @@ static int ResolveAndRun(string[] runArgs, bool diag, bool allowPackages)
                 programArgs.Add(remaining[i]);
             }
         }
-        return RunCommand.Execute(firstArg, programArgs.Count > 0 ? programArgs.ToArray() : null, copTarget, copFormat, copCommands, copDiag, copOnlyIfModified, copProviders.Count > 0 ? copProviders.ToArray() : null, copProfile, reviewOptions);
+        return await RunCommand.ExecuteAsync(firstArg, new RunOptions
+        {
+            Arguments = programArgs.Count > 0 ? programArgs : null,
+            Target = copTarget,
+            OutputFormat = copFormat,
+            CommandNames = string.IsNullOrEmpty(copCommands) ? null : copCommands.Split(
+                ',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries),
+            IsDiagnosticEnabled = copDiag,
+            ShouldSkipUnmodifiedTargets = copOnlyIfModified,
+            ProviderNames = copProviders.Count > 0 ? copProviders : null,
+            IsRuleProfilingEnabled = copProfile,
+            ReviewOptions = reviewOptions
+        });
     }
 
     // 4. Otherwise → treat all leading non-switch args as package names
@@ -378,7 +403,16 @@ static int ResolveAndRun(string[] runArgs, bool diag, bool allowPackages)
         rulesFilter = rules.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
     }
 
-    return RunCommand.ExecutePackages(packages, rootPath, rulesFilter, format, isDiag, isOnlyIfModified, pkgProviders.Count > 0 ? pkgProviders.ToArray() : null, reviewOptions);
+    return await RunCommand.ExecutePackagesAsync(packages, new RunOptions
+    {
+        Target = rootPath,
+        CommandNames = rulesFilter,
+        OutputFormat = format,
+        IsDiagnosticEnabled = isDiag,
+        ShouldSkipUnmodifiedTargets = isOnlyIfModified,
+        ProviderNames = pkgProviders.Count > 0 ? pkgProviders : null,
+        ReviewOptions = reviewOptions
+    });
 }
 
 static bool IsHelpFlag(string arg) => arg is "-h" or "--help" or "-help" or "-?" or "/?";

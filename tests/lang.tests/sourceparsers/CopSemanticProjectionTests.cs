@@ -26,14 +26,15 @@ public class CopSemanticProjectionTests
         ProviderErrors.Clear();
     }
 
-    private static IEnumerable<StatementInfo> Calls(CopProvider provider, string target)
+    private static async Task<IAsyncEnumerable<StatementInfo>> CallsAsync(CopProvider provider, string target, CancellationToken cancellationToken = default)
     {
-        var deferred = (DeferredProviderResult)provider.QueryDeferred(new ProviderQuery { RootPath = target, Collection = "Calls" });
+        var deferred = (DeferredProviderResult?)(await provider.QueryDeferredAsync(new ProviderQuery { RootPath = target, Collection = "Calls" }, cancellationToken: cancellationToken))
+            ?? throw new AssertionException("Expected a deferred provider result.");
         return deferred.Collections["Calls"].Cast<StatementInfo>();
     }
 
     [Test]
-    public void NegativeParserFixturesDoNotBreakSiblingSemanticAnalysisOnColdAndWarmRuns()
+    public async Task NegativeParserFixturesDoNotBreakSiblingSemanticAnalysisOnColdAndWarmRuns()
     {
         File.WriteAllText(Path.Combine(Target, "main.cop"), """
             function identity(value : string) : string => value
@@ -44,16 +45,16 @@ public class CopSemanticProjectionTests
 
         for (int run = 0; run < 2; run++)
         {
-            var call = Calls(new CopProvider(), Target).Single();
+            var call = (await (await CallsAsync(new CopProvider(), Target, cancellationToken: CancellationToken.None)).SingleAsync());
             Assert.That(call.MemberName, Is.EqualTo("identity"));
-            Assert.That(call.ValueType?.OriginalText, Is.EqualTo("string"));
-            Assert.That(call.ReferencedCallable?.Name, Is.EqualTo("identity"));
+            Assert.That((await AsyncSourceFacts.SemanticAsync(call, CancellationToken.None)).ValueType?.OriginalText, Is.EqualTo("string"));
+            Assert.That((await AsyncSourceFacts.SemanticAsync(call, CancellationToken.None)).ReferencedCallable?.Name, Is.EqualTo("identity"));
             Assert.That(ProviderErrors.Drain(), Is.Empty);
         }
     }
 
     [Test]
-    public void ExactOverloadsAndGenericsHaveInstantiatedFactsOnColdAndWarmRuns()
+    public async Task ExactOverloadsAndGenericsHaveInstantiatedFactsOnColdAndWarmRuns()
     {
         File.WriteAllText(Path.Combine(Target, "main.cop"), """
             function choose(value : string) : string => value
@@ -65,32 +66,32 @@ public class CopSemanticProjectionTests
             """);
         for (int run = 0; run < 2; run++)
         {
-            var calls = Calls(new CopProvider(), Target).ToArray();
-            Assert.That(calls.Select(call => call.ValueType?.OriginalText), Is.EqualTo(new[] { "string", "int", "string" }));
-            Assert.That(calls.Select(call => call.ReferencedCallable?.Line), Is.EqualTo(new int?[] { 1, 2, 3 }));
-            Assert.That(calls.Select(call => call.ReferencedCallable?.Parameters.Single().OriginalText),
+            var calls = (await (await CallsAsync(new CopProvider(), Target, cancellationToken: CancellationToken.None)).ToArrayAsync());
+            Assert.That((await calls.ToAsyncEnumerable().Select(async (Cop.Providers.SourceModel.StatementInfo call, CancellationToken cancellationToken) => (await AsyncSourceFacts.SemanticAsync(call, CancellationToken.None)).ValueType?.OriginalText).ToArrayAsync()), Is.EqualTo(new[] { "string", "int", "string" }));
+            Assert.That((await calls.ToAsyncEnumerable().Select(async (Cop.Providers.SourceModel.StatementInfo call, CancellationToken cancellationToken) => (await AsyncSourceFacts.SemanticAsync(call, CancellationToken.None)).ReferencedCallable?.Line).ToArrayAsync()), Is.EqualTo(new int?[] { 1, 2, 3 }));
+            Assert.That((await calls.ToAsyncEnumerable().Select(async (Cop.Providers.SourceModel.StatementInfo call, CancellationToken cancellationToken) => (await AsyncSourceFacts.SemanticAsync(call, CancellationToken.None)).ReferencedCallable?.Parameters.Single().OriginalText).ToArrayAsync()),
                 Is.EqualTo(new[] { "string", "int", "string" }));
-            Assert.That(calls.Select(call => call.ReceiverType), Is.EqualTo(new TypeReference?[] { null, null, null }));
+            Assert.That((await calls.ToAsyncEnumerable().Select(async (Cop.Providers.SourceModel.StatementInfo call, CancellationToken cancellationToken) => (await AsyncSourceFacts.SemanticAsync(call, CancellationToken.None)).ReceiverType).ToArrayAsync()), Is.EqualTo(new TypeReference?[] { null, null, null }));
             Assert.That(ProviderErrors.Drain(), Is.Empty);
         }
     }
 
     [Test]
-    public void UnknownRequiredSlotSuppressesWholeCallableButKeepsKnownResult()
+    public async Task UnknownRequiredSlotSuppressesWholeCallableButKeepsKnownResult()
     {
         File.WriteAllText(Path.Combine(Target, "main.cop"), """
             function opaque(value) : string => 'known'
             let result = opaque(missing)
             """);
-        var call = Calls(new CopProvider(), Target).Single();
-        Assert.That(call.ReferencedCallable, Is.Null);
-        Assert.That(call.ValueType?.OriginalText, Is.EqualTo("string"));
-        Assert.That(call.ReceiverType, Is.Null);
+        var call = (await (await CallsAsync(new CopProvider(), Target, cancellationToken: CancellationToken.None)).SingleAsync());
+        Assert.That((await AsyncSourceFacts.SemanticAsync(call, CancellationToken.None)).ReferencedCallable, Is.Null);
+        Assert.That((await AsyncSourceFacts.SemanticAsync(call, CancellationToken.None)).ValueType?.OriginalText, Is.EqualTo("string"));
+        Assert.That((await AsyncSourceFacts.SemanticAsync(call, CancellationToken.None)).ReceiverType, Is.Null);
         Assert.That(ProviderErrors.Drain(), Is.Empty);
     }
 
     [Test]
-    public void UnknownOverloadAndDynamicParameterStayUnknownInsteadOfChoosingFirst()
+    public async Task UnknownOverloadAndDynamicParameterStayUnknownInsteadOfChoosingFirst()
     {
         File.WriteAllText(Path.Combine(Target, "main.cop"), """
             function choose(value : string) : string => value
@@ -98,14 +99,14 @@ public class CopSemanticProjectionTests
             function dynamic(choose) => choose('hello')
             let result = choose(missing)
             """);
-        var calls = Calls(new CopProvider(), Target).ToArray();
+        var calls = (await (await CallsAsync(new CopProvider(), Target, cancellationToken: CancellationToken.None)).ToArrayAsync());
         Assert.That(calls, Has.Length.EqualTo(2));
-        Assert.That(calls.Select(call => call.ReferencedCallable), Is.EqualTo(new CallableReference?[] { null, null }));
-        Assert.That(calls.Select(call => call.ValueType), Is.EqualTo(new TypeReference?[] { null, null }));
+        Assert.That((await calls.ToAsyncEnumerable().Select(async (Cop.Providers.SourceModel.StatementInfo call, CancellationToken cancellationToken) => (await AsyncSourceFacts.SemanticAsync(call, CancellationToken.None)).ReferencedCallable).ToArrayAsync()), Is.EqualTo(new CallableReference?[] { null, null }));
+        Assert.That((await calls.ToAsyncEnumerable().Select(async (Cop.Providers.SourceModel.StatementInfo call, CancellationToken cancellationToken) => (await AsyncSourceFacts.SemanticAsync(call, CancellationToken.None)).ValueType).ToArrayAsync()), Is.EqualTo(new TypeReference?[] { null, null }));
     }
 
     [Test]
-    public void LocalScopesAndScalarApplicationDistinguishReceiverFromResult()
+    public async Task LocalScopesAndScalarApplicationDistinguishReceiverFromResult()
     {
         File.WriteAllText(Path.Combine(Target, "main.cop"), """
             function decorate(value : string, suffix : int) : string => value
@@ -114,15 +115,15 @@ public class CopSemanticProjectionTests
                 let result = 'hello':decorate(suffix)
             }
             """);
-        var call = Calls(new CopProvider(), Target).Single();
-        Assert.That(call.ReceiverType?.OriginalText, Is.EqualTo("string"));
-        Assert.That(call.ValueType?.OriginalText, Is.EqualTo("string"));
-        Assert.That(call.ReferencedCallable?.Parameters.Select(type => type.OriginalText),
+        var call = (await (await CallsAsync(new CopProvider(), Target, cancellationToken: CancellationToken.None)).SingleAsync());
+        Assert.That((await AsyncSourceFacts.SemanticAsync(call, CancellationToken.None)).ReceiverType?.OriginalText, Is.EqualTo("string"));
+        Assert.That((await AsyncSourceFacts.SemanticAsync(call, CancellationToken.None)).ValueType?.OriginalText, Is.EqualTo("string"));
+        Assert.That((await AsyncSourceFacts.SemanticAsync(call, CancellationToken.None)).ReferencedCallable?.Parameters.Select(type => type.OriginalText),
             Is.EqualTo(new[] { "string", "int" }));
     }
 
     [Test]
-    public void ImportedSourceSignaturesRefreshAfterDependencyOnlyEditAndNeverEvaluateBodies()
+    public async Task ImportedSourceSignaturesRefreshAfterDependencyOnlyEditAndNeverEvaluateBodies()
     {
         var source = Path.Combine(_root, "packages", "library", "src");
         Directory.CreateDirectory(source);
@@ -135,18 +136,18 @@ public class CopSemanticProjectionTests
         foreach (var expected in new[] { "string", "int" })
         {
             File.WriteAllText(dependency, $"export function transform(value : string) : {expected} => missing('never execute')");
-            var call = Calls(new CopProvider(), Target).Single();
-            Assert.That(call.ValueType?.OriginalText, Is.EqualTo(expected));
-            Assert.That(call.ReferencedCallable?.ReturnType?.OriginalText, Is.EqualTo(expected));
-            Assert.That(call.ReferencedCallable?.Namespace, Is.EqualTo("library"));
-            Assert.That(call.ReferencedCallable?.SourceFile, Is.EqualTo("../packages/library/src/library.cop"));
-            Assert.That(call.ReceiverType, Is.Null, "Package namespaces are not value receivers.");
+            var call = (await (await CallsAsync(new CopProvider(), Target, cancellationToken: CancellationToken.None)).SingleAsync());
+            Assert.That((await AsyncSourceFacts.SemanticAsync(call, CancellationToken.None)).ValueType?.OriginalText, Is.EqualTo(expected));
+            Assert.That((await AsyncSourceFacts.SemanticAsync(call, CancellationToken.None)).ReferencedCallable?.ReturnType?.OriginalText, Is.EqualTo(expected));
+            Assert.That((await AsyncSourceFacts.SemanticAsync(call, CancellationToken.None)).ReferencedCallable?.Namespace, Is.EqualTo("library"));
+            Assert.That((await AsyncSourceFacts.SemanticAsync(call, CancellationToken.None)).ReferencedCallable?.SourceFile, Is.EqualTo("../packages/library/src/library.cop"));
+            Assert.That((await AsyncSourceFacts.SemanticAsync(call, CancellationToken.None)).ReceiverType, Is.Null, "Package namespaces are not value receivers.");
             Assert.That(ProviderErrors.Drain(), Is.Empty);
         }
     }
 
     [Test]
-    public void InputStatisticsRespectDeferredDemandAndCountCachedFilesOncePerExecution()
+    public async Task InputStatisticsRespectDeferredDemandAndCountCachedFilesOncePerExecution()
     {
         File.WriteAllText(Path.Combine(Target, "a.cop"), "type First = { Name : string }");
         File.WriteAllText(Path.Combine(Target, "z.cop"), "type Second = { Name : string }");
@@ -155,19 +156,20 @@ public class CopSemanticProjectionTests
         {
             using var statistics = new ExecutionStatistics();
             var query = new ProviderQuery { RootPath = Target, Collection = "Types" };
-            var result = (DeferredProviderResult)provider.QueryDeferred(query);
+            var result = (DeferredProviderResult?)(await provider.QueryDeferredAsync(query, cancellationToken: CancellationToken.None))
+                ?? throw new AssertionException("Expected a deferred provider result.");
             Assert.That(statistics.Snapshot().InputFiles, Is.EqualTo(0));
-            Assert.That(result.Collections["Types"].Take(1).Count(), Is.EqualTo(1));
+            Assert.That((await result.Collections["Types"].Take(1).CountAsync()), Is.EqualTo(1));
             Assert.That(statistics.Snapshot().InputFiles, Is.EqualTo(1));
-            Assert.That(result.Collections["Types"].Count(), Is.EqualTo(2));
-            Assert.That(result.Collections["Types"].Count(), Is.EqualTo(2));
+            Assert.That((await result.Collections["Types"].CountAsync()), Is.EqualTo(2));
+            Assert.That((await result.Collections["Types"].CountAsync()), Is.EqualTo(2));
             Assert.That(statistics.Snapshot().InputFiles, Is.EqualTo(2));
             Assert.That(ProviderErrors.Drain(), Is.Empty);
         }
     }
 
     [Test]
-    public void StructuralFirstDefersSemanticContextAndUnreadLaterFiles()
+    public async Task StructuralFirstDefersSemanticContextAndUnreadLaterFiles()
     {
         File.WriteAllText(Path.Combine(Target, "a.cop"), """
             import unavailable
@@ -175,36 +177,37 @@ public class CopSemanticProjectionTests
             let result = first('hello')
             """);
         File.WriteAllText(Path.Combine(Target, "z.cop"), "type Broken = {");
-        var call = Calls(new CopProvider(), Target).First();
+        var call = (await (await CallsAsync(new CopProvider(), Target, cancellationToken: CancellationToken.None)).FirstAsync());
         Assert.That(call.MemberName, Is.EqualTo("first"));
         Assert.That(ProviderErrors.Drain(), Is.Empty);
-        Assert.That(call.ValueType?.OriginalText, Is.EqualTo("string"));
+        Assert.That((await AsyncSourceFacts.SemanticAsync(call, CancellationToken.None)).ValueType?.OriginalText, Is.EqualTo("string"));
         var errors = ProviderErrors.Drain();
         Assert.That(errors, Has.Count.EqualTo(2));
         Assert.That(errors[0], Does.Contain("z.cop"));
         Assert.That(errors[1], Does.Contain("Import 'unavailable'"));
-        Assert.That(call.ValueType?.OriginalText, Is.EqualTo("string"));
+        Assert.That((await AsyncSourceFacts.SemanticAsync(call, CancellationToken.None)).ValueType?.OriginalText, Is.EqualTo("string"));
         Assert.That(ProviderErrors.Drain(), Is.Empty, "One execution context should report errors only once.");
     }
 
     [Test]
-    public void MethodStatementNavigationAlsoAttachesDeferredFacts()
+    public async Task MethodStatementNavigationAlsoAttachesDeferredFacts()
     {
         File.WriteAllText(Path.Combine(Target, "main.cop"), """
             function identity(value : string) : string => value
             function caller(value : string) => identity(value)
             """);
-        var result = (DeferredProviderResult)new CopProvider().QueryDeferred(new ProviderQuery
+        var result = (DeferredProviderResult?)(await new CopProvider().QueryDeferredAsync(new ProviderQuery
         {
             RootPath = Target, Collection = "Methods"
-        });
-        var method = result.Collections["Methods"].Cast<MethodDeclaration>().Single(m => m.Name == "caller");
-        Assert.That(method.Statements.Single().ReferencedCallable?.Name, Is.EqualTo("identity"));
-        Assert.That(method.Statements.Single().ValueType?.OriginalText, Is.EqualTo("string"));
+        }, cancellationToken: CancellationToken.None))
+            ?? throw new AssertionException("Expected a deferred provider result.");
+        var method = (await result.Collections["Methods"].Cast<MethodDeclaration>().SingleAsync(m => m.Name == "caller"));
+        Assert.That((await AsyncSourceFacts.SemanticAsync(method.Statements.Single(), CancellationToken.None)).ReferencedCallable?.Name, Is.EqualTo("identity"));
+        Assert.That((await AsyncSourceFacts.SemanticAsync(method.Statements.Single(), CancellationToken.None)).ValueType?.OriginalText, Is.EqualTo("string"));
     }
 
     [Test]
-    public void SemanticPushdownRunsAfterDeferredBindingIsAttached()
+    public async Task SemanticPushdownRunsAfterDeferredBindingIsAttached()
     {
         File.WriteAllText(Path.Combine(Target, "main.cop"), """
             function identity(value : string) : string => value
@@ -212,17 +215,18 @@ public class CopSemanticProjectionTests
             let result = identity('hello')
             let other = numeric(3)
             """);
-        var result = (DeferredProviderResult)new CopProvider().QueryDeferred(new ProviderQuery
+        var result = (DeferredProviderResult?)(await new CopProvider().QueryDeferredAsync(new ProviderQuery
         {
             RootPath = Target, Collection = "Calls",
             Filter = new StringOpFilter("ValueType", StringOp.Equals, "string")
-        });
-        Assert.That(result.Collections["Calls"].Cast<StatementInfo>().Select(call => call.MemberName),
+        }, cancellationToken: CancellationToken.None))
+            ?? throw new AssertionException("Expected a deferred provider result.");
+        Assert.That((await result.Collections["Calls"].Cast<StatementInfo>().Select(call => call.MemberName).ToArrayAsync()),
             Is.EqualTo(new[] { "identity" }));
     }
 
     [Test]
-    public void ImportedGenericUsesArgumentsButPrivateBodyInferenceStaysUnknown()
+    public async Task ImportedGenericUsesArgumentsButPrivateBodyInferenceStaysUnknown()
     {
         var source = Path.Combine(_root, "packages", "library", "src");
         Directory.CreateDirectory(source);
@@ -237,15 +241,15 @@ public class CopSemanticProjectionTests
             let first = library.identity(3)
             let second = library.privateResult('hello')
             """);
-        var calls = Calls(new CopProvider(), Target).ToArray();
-        Assert.That(calls.Select(call => call.ValueType?.OriginalText), Is.EqualTo(new string?[] { "int", null }));
-        Assert.That(calls.Select(call => call.ReferencedCallable?.Parameters.Single().OriginalText),
+        var calls = (await (await CallsAsync(new CopProvider(), Target, cancellationToken: CancellationToken.None)).ToArrayAsync());
+        Assert.That((await calls.ToAsyncEnumerable().Select(async (Cop.Providers.SourceModel.StatementInfo call, CancellationToken cancellationToken) => (await AsyncSourceFacts.SemanticAsync(call, CancellationToken.None)).ValueType?.OriginalText).ToArrayAsync()), Is.EqualTo(new string?[] { "int", null }));
+        Assert.That((await calls.ToAsyncEnumerable().Select(async (Cop.Providers.SourceModel.StatementInfo call, CancellationToken cancellationToken) => (await AsyncSourceFacts.SemanticAsync(call, CancellationToken.None)).ReferencedCallable?.Parameters.Single().OriginalText).ToArrayAsync()),
             Is.EqualTo(new[] { "int", "string" }));
         Assert.That(ProviderErrors.Drain(), Is.Empty);
     }
 
     [Test]
-    public void SourceTopLevelLetsCommandsAndImportedInitializersNeverExecute()
+    public async Task SourceTopLevelLetsCommandsAndImportedInitializersNeverExecute()
     {
         var sentinel = Path.Combine(_root, "executed.txt");
         var literal = sentinel.Replace("\\", "\\\\", StringComparison.Ordinal);
@@ -264,9 +268,9 @@ public class CopSemanticProjectionTests
             let result = library.known('hello')
             """);
         Assert.That(File.Exists(sentinel), Is.False);
-        var call = Calls(new CopProvider(), Target).Single(call => call.MemberName == "known");
-        Assert.That(call.ValueType?.OriginalText, Is.EqualTo("string"));
-        Assert.That(call.ReferencedCallable?.Name, Is.EqualTo("known"));
+        var call = (await (await CallsAsync(new CopProvider(), Target, cancellationToken: CancellationToken.None)).SingleAsync(call => call.MemberName == "known"));
+        Assert.That((await AsyncSourceFacts.SemanticAsync(call, CancellationToken.None)).ValueType?.OriginalText, Is.EqualTo("string"));
+        Assert.That((await AsyncSourceFacts.SemanticAsync(call, CancellationToken.None)).ReferencedCallable?.Name, Is.EqualTo("known"));
         Assert.That(File.Exists(sentinel), Is.False, "Semantic demand must not force target lets, commands, or package initializers.");
         Assert.That(ProviderErrors.Drain(), Is.Empty);
     }

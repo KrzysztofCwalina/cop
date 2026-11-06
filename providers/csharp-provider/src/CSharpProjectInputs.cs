@@ -81,7 +81,8 @@ internal static class CSharpProjectInputs
             StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .Any(pattern => PathGlob.IsMatch(path, Path.GetFullPath(
                 pattern.Replace('\\', Path.DirectorySeparatorChar).Replace('/', Path.DirectorySeparatorChar), directory),
-                OperatingSystem.IsWindows()));
+                OperatingSystem.IsWindows()
+                    ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal));
 
         HashSet<string> selected = new HashSet<string>(comparer);
         if (!string.Equals(Property("EnableDefaultItems"), "false", StringComparison.OrdinalIgnoreCase)
@@ -102,8 +103,8 @@ internal static class CSharpProjectInputs
                     continue;
                 }
 
-                if (Matches(path, Property("DefaultItemExcludes") ?? "")
-                    || Matches(path, Property("DefaultExcludesInProjectFolder") ?? ""))
+                if (Matches(path, Property("DefaultItemExcludes") ?? string.Empty)
+                    || Matches(path, Property("DefaultExcludesInProjectFolder") ?? string.Empty))
                 {
                     continue;
                 }
@@ -135,7 +136,7 @@ internal static class CSharpProjectInputs
                     }
                 }
                 foreach (string? path in sourceFiles.Where(path => Matches(path, include)
-                    && !Matches(path, item.Attribute("Exclude")?.Value ?? "")))
+                    && !Matches(path, item.Attribute("Exclude")?.Value ?? string.Empty)))
                 {
                     selected.Add(path);
                 }

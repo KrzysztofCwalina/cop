@@ -17,7 +17,7 @@ public class FilesystemProvider : DataProvider
     /// <inheritdoc />
     public override ReadOnlyMemory<byte> GetSchema()
     {
-        MemoryStream buffer = new MemoryStream();
+        using MemoryStream buffer = new MemoryStream();
         using Utf8JsonWriter w = new Utf8JsonWriter(buffer);
         w.WriteStartObject();
 
@@ -88,8 +88,10 @@ public class FilesystemProvider : DataProvider
     }
 
     /// <inheritdoc />
-    public override object? Query(ProviderQuery query)
+    public override ValueTask<object?> QueryAsync(
+        ProviderQuery query, CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         string rootPath = Path.GetFullPath(query.RootPath
             ?? throw new ArgumentException("RootPath is required for FilesystemProvider."));
 
@@ -110,15 +112,40 @@ public class FilesystemProvider : DataProvider
         DataTableBuilder? files = wantFiles ? db.AddTable("Files", "File", stride: 8) : null;
         DataTableBuilder? folders = wantFolders ? db.AddTable("Folders", "Folder", stride: 8) : null;
 
-        ScanDirectory(rootPath, rootPath, files, folders, query.ExcludedDirectories, fileFilter, folderFilter, maxDepth, DateTime.UtcNow, depth: 0);
+        FileScanContext context = new(rootPath)
+        {
+            Files = files, Folders = folders, ExcludedDirectories = query.ExcludedDirectories,
+            FileFilter = fileFilter, FolderFilter = folderFilter, MaxDepth = maxDepth,
+            CancellationToken = cancellationToken
+        };
+        ScanDirectory(rootPath, context, depth: 0);
 
-        return db.Build();
+        return ValueTask.FromResult<object?>(db.Build());
     }
 
-    private static void ScanDirectory(string dir, string root,
-        DataTableBuilder? files, DataTableBuilder? folders,
-        IReadOnlySet<string>? excludedDirs, FilterExpression? fileFilter, FilterExpression? folderFilter, int maxDepth, DateTime now, int depth)
+    private sealed record FileScanContext(string Root)
     {
+        internal DataTableBuilder? Files { get; init; }
+        internal DataTableBuilder? Folders { get; init; }
+        internal IReadOnlySet<string>? ExcludedDirectories { get; init; }
+        internal FilterExpression? FileFilter { get; init; }
+        internal FilterExpression? FolderFilter { get; init; }
+        internal int MaxDepth { get; init; }
+        internal DateTime Now { get; } = DateTime.UtcNow;
+        internal CancellationToken CancellationToken { get; init; }
+    }
+
+    private static void ScanDirectory(string dir, FileScanContext context, int depth)
+    {
+        context.CancellationToken.ThrowIfCancellationRequested();
+        string root = context.Root;
+        DataTableBuilder? files = context.Files;
+        DataTableBuilder? folders = context.Folders;
+        IReadOnlySet<string>? excludedDirs = context.ExcludedDirectories;
+        FilterExpression? fileFilter = context.FileFilter;
+        FilterExpression? folderFilter = context.FolderFilter;
+        int maxDepth = context.MaxDepth;
+        DateTime now = context.Now;
         if (maxDepth >= 0 && depth > maxDepth)
         {
             return;
@@ -129,16 +156,20 @@ public class FilesystemProvider : DataProvider
 
         try
         {
-            childDirs = Directory.EnumerateDirectories(dir);
-            childFiles = Directory.EnumerateFiles(dir);
+            childDirs = Directory.GetDirectories(dir);
+            childFiles = Directory.GetFiles(dir);
         }
-        catch (UnauthorizedAccessException) { return; }
-        catch (IOException) { return; }
+        catch (Exception ex) when (ex is UnauthorizedAccessException or IOException)
+        {
+            ProviderWarnings.ReportOnce("files", dir,
+                $"Could not enumerate directory '{dir}': {ex.Message}");
+            return;
+        }
 
         string relativePath = Path.GetRelativePath(root, dir).Replace('\\', '/');
         if (relativePath == ".")
         {
-            relativePath = "";
+            relativePath = string.Empty;
         }
 
         // Write files directly to the DataTableBuilder
@@ -147,6 +178,7 @@ public class FilesystemProvider : DataProvider
         {
             foreach (string filePath in childFiles)
             {
+                context.CancellationToken.ThrowIfCancellationRequested();
                 fileCount++;
                 FileInfo fi = new FileInfo(filePath);
                 string fileRelPath = Path.GetRelativePath(root, filePath).Replace('\\', '/');
@@ -188,6 +220,7 @@ public class FilesystemProvider : DataProvider
         {
             foreach (string path in childFiles)
             {
+                context.CancellationToken.ThrowIfCancellationRequested();
                 fileCount++;
                 ExecutionStatistics.RecordInputFile(path);
             }
@@ -198,6 +231,7 @@ public class FilesystemProvider : DataProvider
         int subfolderCount = 0;
         foreach (string childDir in childDirs)
         {
+            context.CancellationToken.ThrowIfCancellationRequested();
             subfolderCount++;
             string dirName = Path.GetFileName(childDir);
             if (excludedDirs is null || !excludedDirs.Contains(dirName))
@@ -242,7 +276,7 @@ public class FilesystemProvider : DataProvider
 
         foreach (string childDir in includedDirs)
         {
-            ScanDirectory(childDir, root, files, folders, excludedDirs, fileFilter, folderFilter, maxDepth, now, depth + 1);
+            ScanDirectory(childDir, context, depth + 1);
         }
     }
 

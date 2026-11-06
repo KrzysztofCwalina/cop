@@ -19,9 +19,9 @@ public static class ProviderErrors
     // corrupted each other's error lists — one run's Clear() discarded the other's reports. An
     // AsyncLocal isolates each run's queue. Engine.Run calls Clear() first, which establishes the
     // queue in the run's context so the providers it then invokes report into that same queue.
-    private static readonly System.Threading.AsyncLocal<System.Collections.Concurrent.ConcurrentQueue<string>?> _errors = new();
+    private static readonly System.Threading.AsyncLocal<System.Collections.Concurrent.ConcurrentQueue<string>?> s_errors = new();
 
-    private static System.Collections.Concurrent.ConcurrentQueue<string> Queue => _errors.Value ??= new();
+    private static System.Collections.Concurrent.ConcurrentQueue<string> Queue => s_errors.Value ??= new();
 
     /// <summary>Reports a provider-side error so the engine can surface it.</summary>
     public static void Report(string message) => Queue.Enqueue(message);
@@ -44,5 +44,5 @@ public static class ProviderErrors
     }
 
     /// <summary>Resets the current run's provider errors (called at the start of each run).</summary>
-    public static void Clear() => _errors.Value = new System.Collections.Concurrent.ConcurrentQueue<string>();
+    public static void Clear() => s_errors.Value = new System.Collections.Concurrent.ConcurrentQueue<string>();
 }

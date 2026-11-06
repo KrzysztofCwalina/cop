@@ -7,7 +7,7 @@ namespace Cop.Tests;
 public class PythonCodebaseRegressionTests
 {
     [Test]
-    public void Issue060_PythonParseReturnsCodebase()
+    public async Task Issue060_PythonParseReturnsCodebase()
     {
         var repo = TestContext.CurrentContext.TestDirectory;
         while (repo is not null && !File.Exists(Path.Combine(repo, "cop.sln")))
@@ -27,10 +27,10 @@ public class PythonCodebaseRegressionTests
                 let cb = python.parse()
                 command MAIN = print('{cb.Files.Count}:{cb.Types.Count}')
                 """);
-            var result = Engine.Run(scripts, target, new EngineRunOptions
+            var result = (await Engine.RunAsync(scripts, target, new EngineRunOptions
             {
                 AdditionalFeedPaths = [Path.Combine(repo!, "packages")],
-            });
+            }));
             Assert.That(result.ParseErrors, Is.Empty);
             Assert.That(result.Errors, Is.Empty);
             Assert.That(result.Outputs.Select(output => output.Message), Is.EqualTo(new[] { "1:1" }));
@@ -43,7 +43,7 @@ public class PythonCodebaseRegressionTests
     }
 
     [Test]
-    public void Issue083_ClassCompoundStatementTerminatesWithExpectedClassMember()
+    public async Task Issue083_ClassCompoundStatementTerminatesWithExpectedClassMember()
     {
         var repo = Path.GetFullPath(Path.Combine(TestContext.CurrentContext.TestDirectory, "..", "..", "..", "..", ".."));
         var root = Path.Combine(Path.GetTempPath(), "cop-issue083-" + Guid.NewGuid().ToString("N"));
@@ -59,12 +59,11 @@ public class PythonCodebaseRegressionTests
                 let cb = python.parse()
                 command MAIN = print('{cb.Types.Count}:{cb.Types[0].Name}:{cb.Types[0].Methods[0].Name}:{cb.Calls.Count}')
                 """);
-            var execution = Task.Run(() => Engine.Run(checks, target, new EngineRunOptions
+            var execution = Task.Run(() => Engine.RunAsync(checks, target, new EngineRunOptions
             {
                 AdditionalFeedPaths = [Path.Combine(repo, "packages")],
             }));
-            Assert.That(execution.Wait(TimeSpan.FromSeconds(15)), Is.True, "Valid class-level control flow must never hang parsing.");
-            var result = execution.Result;
+            var result = await execution.WaitAsync(TimeSpan.FromSeconds(15));
             Assert.That(result.ParseErrors, Is.Empty);
             Assert.That(result.Errors, Is.Empty);
             Assert.That(result.Outputs.Select(o => o.Message), Is.EqualTo(new[] { "1:C:method:1" }));

@@ -15,7 +15,7 @@ public static class TypeValidator
     /// Checks arity and parameter types. For generic functions, infers type bindings
     /// and validates against substituted types.
     /// </summary>
-    public static void ValidateArguments(FunctionDecl decl, IReadOnlyList<CopValue> args, TypeRegistry? registry = null)
+    public static async ValueTask ValidateArgumentsAsync(FunctionDecl decl, IReadOnlyList<CopValue> args, TypeRegistry? registry = null, CancellationToken cancellationToken = default)
     {
         // Arity check: too many arguments (unless last param is a collection = param array)
         if (args.Count > decl.Params.Count && decl.Params.Count > 0)
@@ -32,7 +32,7 @@ public static class TypeValidator
         // For generic functions, infer bindings and validate with substituted types
         if (GenericInference.HasTypeParameters(decl))
         {
-            ValidateGenericArguments(decl, args, registry);
+            await ValidateGenericArgumentsAsync(decl, args, registry, cancellationToken: cancellationToken);
             return;
         }
 
@@ -52,7 +52,7 @@ public static class TypeValidator
                 continue;
             }
 
-            CopValue arg = ForceValue(args[i]);
+            CopValue arg = (await ForceValueAsync(args[i], cancellationToken: cancellationToken));
             if (!IsCompatible(arg, param.Type, registry))
             {
                 throw new CopEvaluationException(
@@ -67,9 +67,9 @@ public static class TypeValidator
     /// Validates arguments for a generic function using inferred type bindings.
     /// Substitutes type variables with inferred concrete types before checking compatibility.
     /// </summary>
-    private static void ValidateGenericArguments(FunctionDecl decl, IReadOnlyList<CopValue> args, TypeRegistry? registry)
+    private static async ValueTask ValidateGenericArgumentsAsync(FunctionDecl decl, IReadOnlyList<CopValue> args, TypeRegistry? registry, CancellationToken cancellationToken = default)
     {
-        Dictionary<string, string> bindings = GenericInference.InferBindings(decl, args);
+        Dictionary<string, string> bindings = (await GenericInference.InferBindingsAsync(decl, args, cancellationToken: cancellationToken));
 
         // Validate trait constraints if a registry is available
         if (registry is not null)
@@ -101,7 +101,7 @@ public static class TypeValidator
                 continue;
             }
 
-            CopValue arg = ForceValue(args[i]);
+            CopValue arg = (await ForceValueAsync(args[i], cancellationToken: cancellationToken));
             // Skip lambda values — they're validated at invocation time
             if (arg is ICopCallable)
             {
@@ -123,7 +123,7 @@ public static class TypeValidator
     /// Only checks if the function has a declared return type.
     /// For generic functions, infers the concrete return type from type bindings.
     /// </summary>
-    public static void ValidateReturn(FunctionDecl decl, CopValue result)
+    public static async ValueTask ValidateReturnAsync(FunctionDecl decl, CopValue result, CancellationToken cancellationToken = default)
     {
         if (decl.ReturnType is null)
         {
@@ -150,7 +150,7 @@ public static class TypeValidator
             return;
         }
 
-        CopValue value = ForceValue(result);
+        CopValue value = (await ForceValueAsync(result, cancellationToken: cancellationToken));
         if (!IsCompatible(value, decl.ReturnType))
         {
             throw new CopEvaluationException(
@@ -224,11 +224,11 @@ public static class TypeValidator
     /// <summary>
     /// Forces thunks to their concrete values for type checking.
     /// </summary>
-    private static CopValue ForceValue(CopValue value)
+    private static async ValueTask<CopValue> ForceValueAsync(CopValue value, CancellationToken cancellationToken = default)
     {
         while (value is CopThunk thunk)
         {
-            value = thunk.Force();
+            value = (await thunk.ForceAsync(cancellationToken: cancellationToken));
         }
 
         return value;

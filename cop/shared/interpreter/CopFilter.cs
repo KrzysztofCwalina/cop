@@ -1,48 +1,129 @@
-// Evaluates provider filter expressions against interpreter values.
+// Evaluates provider filters after awaiting only the members demanded by each branch.
 
 using Cop.Core;
 
 namespace Cop.Lang.Interpreter;
 
-/// <summary>
-/// Evaluates provider filter expressions against interpreter values.
-/// </summary>
+/// <summary>Evaluates provider filters against asynchronously prepared language values.</summary>
 internal static class CopFilter
 {
-    public static bool Matches(FilterExpression filter, CopValue item) => filter switch
+    /// <summary>
+    /// Tests a provider filter against a value, awaiting only fields and collection
+    /// elements demanded by the filter and short-circuiting logical branches.
+    /// </summary>
+    /// <param name="filter">The provider filter to evaluate.</param>
+    /// <param name="item">The language value to test.</param>
+    /// <param name="cancellationToken">Cancels field preparation and collection enumeration.</param>
+    /// <returns>Whether the value satisfies the filter.</returns>
+    public static async ValueTask<bool> MatchesAsync(FilterExpression filter, CopValue item,
+        CancellationToken cancellationToken = default)
     {
-        AndFilter and => and.Conditions.All(f => Matches(f, item)),
-        OrFilter or => or.Conditions.Any(f => Matches(f, item)),
-        NotFilter not => !Matches(not.Inner, item),
-        CollectionAnyFilter any => CollectionValues.Enumerate(Field(item, any.Property))
-            .Any(child => Matches(any.ItemFilter, child)),
-        _ => FilterEvaluator.Matches(filter, name => Raw(Field(item, name)))
-    };
+        cancellationToken.ThrowIfCancellationRequested();
+        switch (filter)
+        {
+            case AndFilter and:
+                foreach (FilterExpression condition in and.Conditions)
+                {
+                    if (!await MatchesAsync(condition, item, cancellationToken).ConfigureAwait(false))
+                    {
+                        return false;
+                    }
+                }
+                return true;
+            case OrFilter or:
+                foreach (FilterExpression condition in or.Conditions)
+                {
+                    if (await MatchesAsync(condition, item, cancellationToken).ConfigureAwait(false))
+                    {
+                        return true;
+                    }
+                }
+                return false;
+            case NotFilter not:
+                return !await MatchesAsync(not.Inner, item, cancellationToken).ConfigureAwait(false);
+            case CollectionAnyFilter any:
+                CopValue collection = await FieldAsync(item, any.Property, cancellationToken)
+                    .ConfigureAwait(false);
+                await foreach (CopValue child in CollectionValues.EnumerateAsync(collection,
+                    cancellationToken).ConfigureAwait(false))
+                {
+                    if (await MatchesAsync(any.ItemFilter, child, cancellationToken).ConfigureAwait(false))
+                    {
+                        return true;
+                    }
+                }
+                return false;
+        }
 
-    private static CopValue Field(CopValue value, string path)
+        string? property = filter switch
+        {
+            PropertyFilter value => value.Property,
+            StringOpFilter value => value.Property,
+            ComparisonFilter value => value.Property,
+            InFilter value => value.Property,
+            ContainsAnyFilter value => value.Property,
+            CollectionContainsFilter value => value.Property,
+            CollectionCountFilter value => value.Property,
+            FlagsFilter value => value.Property,
+            _ => null
+        };
+        if (property is null)
+        {
+            return false;
+        }
+
+        object? raw = await RawAsync(
+            await FieldAsync(item, property, cancellationToken).ConfigureAwait(false),
+            cancellationToken).ConfigureAwait(false);
+        return FilterEvaluator.Matches(filter, _ => raw);
+    }
+
+    private static async ValueTask<CopValue> FieldAsync(CopValue value, string path,
+        CancellationToken cancellationToken)
     {
         foreach (string name in path.Split('.'))
         {
-            value = Evaluator.ForceValue(value);
+            while (value is CopThunk thunk)
+            {
+                value = await thunk.ForceAsync(cancellationToken).ConfigureAwait(false);
+            }
             value = value switch
             {
-                CopDynamicObject obj => obj.GetField(name),
+                CopDynamicObject obj => await obj.GetFieldAsync(name, cancellationToken)
+                    .ConfigureAwait(false),
                 CopObject obj => obj.GetField(name),
                 CopNull => CopNull.Instance,
                 _ => throw new CopEvaluationException($"Unknown query property '{path}'.")
             };
         }
-        return Evaluator.ForceValue(value);
+        while (value is CopThunk thunk)
+        {
+            value = await thunk.ForceAsync(cancellationToken).ConfigureAwait(false);
+        }
+        return value;
     }
 
-    private static object? Raw(CopValue value) => value switch
+    private static async ValueTask<object?> RawAsync(CopValue value,
+        CancellationToken cancellationToken)
     {
-        CopNull => null,
-        CopString s => s.Value,
-        CopInt i => i.Value,
-        CopNumber n => n.Value,
-        CopBool b => b.Value,
-        CopList or CopLazyCollection or CopQueryable => CollectionValues.Enumerate(value).Select(Raw).ToList(),
-        _ => value.Display()
-    };
+        if (value is CopList or CopLazyCollection or CopQueryable)
+        {
+            List<object?> items = [];
+            await foreach (CopValue item in CollectionValues.EnumerateAsync(value,
+                cancellationToken).ConfigureAwait(false))
+            {
+                items.Add(await RawAsync(item, cancellationToken).ConfigureAwait(false));
+            }
+            return items;
+        }
+        return value switch
+        {
+            CopNull => null,
+            CopString text => text.Value,
+            CopInt integer => integer.Value,
+            CopNumber number => number.Value,
+            CopBool boolean => boolean.IsTrue,
+            _ => await value.DisplayAsync(cancellationToken).ConfigureAwait(false)
+        };
+    }
 }

@@ -11,12 +11,16 @@ public class CSharpStyleCopProvider : ToolProvider
 {
     protected override string ToolName => "dotnet";
 
-    protected override List<object> RunTool(string rootPath, IReadOnlySet<string> excluded)
+    protected override async ValueTask<List<object>> RunToolAsync(
+        string rootPath, IReadOnlySet<string> excluded, CancellationToken cancellationToken)
     {
         // Clean first to force analyzer re-run
-        RunProcess("dotnet", "clean --nologo -v q", rootPath);
+        await RunProcessAsync(new("dotnet", "clean --nologo -v q", rootPath),
+            cancellationToken).ConfigureAwait(false);
 
-        (string? stdout, string? stderr, int _) = RunProcess("dotnet", "build -consoleloggerparameters:NoSummary", rootPath);
+        (string? stdout, string? stderr, int _) = await RunProcessAsync(
+            new("dotnet", "build -consoleloggerparameters:NoSummary", rootPath),
+            cancellationToken).ConfigureAwait(false);
         string output = stdout + "\n" + stderr;
 
         List<object> violations = new List<object>();

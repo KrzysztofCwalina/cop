@@ -13,11 +13,11 @@ public class ReplCompleter
     private readonly ReplEvaluator _evaluator;
 
     // Built-in names for completion, derived from the single IntrinsicRegistry so they cannot drift.
-    private static readonly string[] BuiltinPredicates = Cop.Lang.IntrinsicRegistry.PredicateNames().ToArray();
+    private static readonly string[] s_builtinPredicates = Cop.Lang.IntrinsicRegistry.PredicateNames().ToArray();
 
-    private static readonly string[] BuiltinTransforms = Cop.Lang.IntrinsicRegistry.TransformNames().ToArray();
+    private static readonly string[] s_builtinTransforms = Cop.Lang.IntrinsicRegistry.TransformNames().ToArray();
 
-    private static readonly string[] BuiltinProperties = Cop.Lang.IntrinsicRegistry.PropertyNames().ToArray();
+    private static readonly string[] s_builtinProperties = Cop.Lang.IntrinsicRegistry.PropertyNames().ToArray();
 
     public ReplCompleter(ReplEvaluator evaluator)
     {
@@ -92,7 +92,7 @@ public class ReplCompleter
 
     private List<string> GetPredicateCandidates()
     {
-        List<string> candidates = new List<string>(BuiltinPredicates);
+        List<string> candidates = new List<string>(s_builtinPredicates);
         candidates.AddRange(_evaluator.GetPredicateNames());
         return candidates.Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(s => s).ToList();
     }
@@ -122,8 +122,8 @@ public class ReplCompleter
             }
         }
 
-        List<string> candidates = new List<string>(BuiltinTransforms);
-        candidates.AddRange(BuiltinProperties);
+        List<string> candidates = new List<string>(s_builtinTransforms);
+        candidates.AddRange(s_builtinProperties);
 
         // Try to determine the type from context
         string? typeName = InferTypeFromContext(textUpToCursor);
@@ -137,7 +137,7 @@ public class ReplCompleter
     }
 
     // Element-extracting transforms that unwrap a collection to its item type
-    private static readonly HashSet<string> ElementTransforms = new(StringComparer.OrdinalIgnoreCase)
+    private static readonly HashSet<string> s_elementTransforms = new(StringComparer.OrdinalIgnoreCase)
     {
         "First", "Last", "Single", "ElementAt"
     };
@@ -193,7 +193,7 @@ public class ReplCompleter
         {
             string step = parts[i];
 
-            if (ElementTransforms.Contains(step))
+            if (s_elementTransforms.Contains(step))
             {
                 continue; // still the same item type, just unwrapped
             }

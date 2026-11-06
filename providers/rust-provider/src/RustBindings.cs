@@ -55,6 +55,7 @@ public static class RustBindings
         };
         bindings.Accessors["RustStatement"] = rustStatementAccessors;
 
+        CodeBindings.AddDerivedAsyncAccessors(bindings);
         return bindings;
     }
 }

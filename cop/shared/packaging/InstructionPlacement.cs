@@ -24,7 +24,7 @@ namespace Cop.Core;
 /// </summary>
 public static class InstructionPlacement
 {
-    private static readonly UTF8Encoding Utf8NoBom = new(encoderShouldEmitUTF8Identifier: false);
+    private static readonly UTF8Encoding s_utf8NoBom = new(encoderShouldEmitUTF8Identifier: false);
 
     /// <summary>
     /// Builds the combined instruction content (front-matter + bodies) for the given files.
@@ -57,15 +57,15 @@ public static class InstructionPlacement
     /// Returns the target path (whether or not a write occurred), or <c>null</c> when there are no
     /// instruction files. The write is skipped when the existing file is byte-identical.
     /// </summary>
-    /// <param name="wrote">True when the file was created or its content changed.</param>
+    /// <param name="wasWritten">True when the file was created or its content changed.</param>
     public static string? Place(
         string repoRoot,
         string packageName,
         string applyTo,
         IReadOnlyList<(string FileName, string Content)> files,
-        out bool wrote)
+        out bool wasWritten)
     {
-        wrote = false;
+        wasWritten = false;
         if (files == null || files.Count == 0)
         {
             return null;
@@ -75,7 +75,7 @@ public static class InstructionPlacement
         string targetPath = Path.Combine(instructionsDir, $"{packageName}.instructions.md");
 
         string content = BuildContent(applyTo, files);
-        byte[] bytes = Utf8NoBom.GetBytes(content);
+        byte[] bytes = s_utf8NoBom.GetBytes(content);
 
         if (File.Exists(targetPath))
         {
@@ -88,7 +88,7 @@ public static class InstructionPlacement
 
         Directory.CreateDirectory(instructionsDir);
         File.WriteAllBytes(targetPath, bytes);
-        wrote = true;
+        wasWritten = true;
         return targetPath;
     }
 
@@ -97,9 +97,9 @@ public static class InstructionPlacement
     /// and <c>cop.json</c> from disk and places them. Returns the target path or <c>null</c> when the
     /// package has no instructions.
     /// </summary>
-    public static string? PlaceFromPackageDir(string repoRoot, string packageDir, out bool wrote)
+    public static string? PlaceFromPackageDir(string repoRoot, string packageDir, out bool wasWritten)
     {
-        wrote = false;
+        wasWritten = false;
         string instrDir = Path.Combine(packageDir, "instructions");
         if (!Directory.Exists(instrDir))
         {
@@ -112,7 +112,7 @@ public static class InstructionPlacement
             return null;
         }
 
-        PackageMetadata? meta = PackageMetadata.TryLoadFromDirectory(packageDir);
+        PackageMetadata? meta = PackageMetadata.LoadFromDirectoryOrDefault(packageDir);
         string? name = meta?.Name;
         if (string.IsNullOrEmpty(name))
         {
@@ -125,7 +125,7 @@ public static class InstructionPlacement
             .Select(f => (Path.GetFileName(f), File.ReadAllText(f)))
             .ToList();
 
-        return Place(repoRoot, name!, applyTo, files, out wrote);
+        return Place(repoRoot, name!, applyTo, files, out wasWritten);
     }
 
     /// <summary>

@@ -27,7 +27,8 @@ public class CopProvider : DataProvider
     public override string QueryResultType => "Codebase";
 
     /// <inheritdoc />
-    public override object QueryDeferred(ProviderQuery query)
+    public override ValueTask<object?> QueryDeferredAsync(
+        ProviderQuery query, CancellationToken cancellationToken = default)
     {
         SourceParserRegistry parsers = new SourceParserRegistry();
         parsers.Register(new CopSourceParser());
@@ -39,7 +40,7 @@ public class CopProvider : DataProvider
         }, this);
         if (query.RootPath is null)
         {
-            return result;
+            return ValueTask.FromResult<object?>(result);
         }
 
         string key = Path.GetFullPath(query.RootPath);
@@ -48,9 +49,12 @@ public class CopProvider : DataProvider
             _semantics.Add(key, semantics = new(key));
         }
 
-        IEnumerable<object> Attach(IEnumerable<object> items)
+        async IAsyncEnumerable<object> Attach(
+            IAsyncEnumerable<object> items,
+            [System.Runtime.CompilerServices.EnumeratorCancellation]
+            CancellationToken token = default)
         {
-            foreach (object item in items)
+            await foreach (object item in items.WithCancellation(token).ConfigureAwait(false))
             {
                 semantics.Attach(item);
                 yield return item;
@@ -59,26 +63,44 @@ public class CopProvider : DataProvider
         Dictionary<string, string> itemTypes = ProviderSchema.FromJson(GetSchema()).Collections.ToDictionary(collection => collection.Name,
             collection => collection.ItemType, StringComparer.Ordinal);
         Dictionary<string, Dictionary<string, Func<object, object?>>> accessors = GetRuntimeBindings().Accessors;
-        Dictionary<string, IEnumerable<object>> collections = new Dictionary<string, IEnumerable<object>>(StringComparer.Ordinal);
-        foreach ((string? name, IEnumerable<object>? items) in result.Collections)
+        Dictionary<string, IAsyncEnumerable<object>> collections = new(StringComparer.Ordinal);
+        AsyncProviderFilter evaluator = new(GetRuntimeBindings());
+        async IAsyncEnumerable<object> Filter(
+            IAsyncEnumerable<object> values, FilterExpression? filter,
+            [System.Runtime.CompilerServices.EnumeratorCancellation]
+            CancellationToken token = default)
         {
-            IEnumerable<object> values = Attach(items);
+            await foreach (object value in values.WithCancellation(token).ConfigureAwait(false))
+            {
+                if (await evaluator.MatchesAsync(value, filter, token).ConfigureAwait(false))
+                {
+                    yield return value;
+                }
+            }
+        }
+        foreach ((string name, IAsyncEnumerable<object> items) in result.Collections)
+        {
+            IAsyncEnumerable<object> values = Attach(items);
             FilterExpression? filter = query.CollectionFilters?.GetValueOrDefault(name) ?? query.Filter;
             if (filter is not null && itemTypes.TryGetValue(name, out string? itemType)
                 && accessors.TryGetValue(itemType, out Dictionary<string, Func<object, object?>>? fields))
             {
-                values = values.Where(Cop.Lang.FilterCompiler.Compile(filter, fields));
+                values = Filter(values, filter);
             }
 
             collections.Add(name, values);
         }
-        return new DeferredProviderResult(collections);
+        cancellationToken.ThrowIfCancellationRequested();
+        return ValueTask.FromResult<object?>(new DeferredProviderResult(collections));
     }
 
     /// <inheritdoc />
-    public override object? Query(ProviderQuery query)
+    public override async ValueTask<object?> QueryAsync(
+        ProviderQuery query, CancellationToken cancellationToken = default)
     {
-        DeferredProviderResult result = (DeferredProviderResult)QueryDeferred(query);
-        return result.Collections.ToDictionary(pair => pair.Key, pair => pair.Value.ToList(), StringComparer.Ordinal);
+        DeferredProviderResult result = (DeferredProviderResult)
+            (await QueryDeferredAsync(query, cancellationToken).ConfigureAwait(false))!;
+        return await ProviderCollections.MaterializeAsync(result, cancellationToken)
+            .ConfigureAwait(false);
     }
 }

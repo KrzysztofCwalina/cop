@@ -11,10 +11,7 @@ public sealed class JavaScriptStatementInfo : StatementInfo
     /// <summary>
     /// Creates a JavaScript statement from parsed syntax and source facts.
     /// </summary>
-    public JavaScriptStatementInfo(
-        string kind, List<string> keywords, string? typeName, string? memberName,
-        List<string> arguments, int line, bool isInMethod)
-        : base(kind, keywords, typeName, memberName, arguments, line, isInMethod) { }
+    public JavaScriptStatementInfo(StatementInfo source) : base(source) { }
 
     /// <summary>True for a JavaScript <c>for (... of ...)</c> statement.</summary>
     public bool IsForOf => Kind == "for-of";
@@ -41,29 +38,5 @@ public sealed class JavaScriptStatementInfo : StatementInfo
     /// Registers restoration of JavaScript statements from cached source facts.
     /// </summary>
     public static void RegisterCacheFactory() =>
-        StatementTypeRegistry.Register("javascript", (baseDecl, _) => new JavaScriptStatementInfo(
-            baseDecl.Kind,
-            baseDecl.Keywords,
-            baseDecl.TypeName,
-            baseDecl.MemberName,
-            baseDecl.Arguments,
-            baseDecl.Line,
-            baseDecl.IsInMethod)
-        {
-            HasRethrow = baseDecl.HasRethrow,
-            IsErrorHandler = baseDecl.IsErrorHandler,
-            IsGenericErrorHandler = baseDecl.IsGenericErrorHandler,
-            IsBraced = baseDecl.IsBraced,
-            CopIgnore = baseDecl.CopIgnore,
-            Condition = baseDecl.Condition,
-            Expression = baseDecl.Expression,
-            CallTarget = baseDecl.CallTarget,
-            ArgumentExpressions = baseDecl.ArgumentExpressions,
-            ValueExpression = baseDecl.ValueExpression,
-            Column = baseDecl.Column,
-            EndLine = baseDecl.EndLine,
-            EndColumn = baseDecl.EndColumn,
-            _children = baseDecl._children,
-            ConstructedTypeInterfaces = baseDecl.ConstructedTypeInterfaces,
-        });
+        StatementTypeRegistry.Register("javascript", (baseDecl, _) => new JavaScriptStatementInfo(baseDecl));
 }

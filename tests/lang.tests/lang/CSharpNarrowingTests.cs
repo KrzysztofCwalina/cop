@@ -41,7 +41,7 @@ public class CSharpNarrowingTests
     }
 
     [Test]
-    public void AsCSharp_IsRecord_FlagsOnlyRecords()
+    public async Task AsCSharp_IsRecord_FlagsOnlyRecords()
     {
         const string csharp = """
             namespace Demo;
@@ -67,11 +67,11 @@ public class CSharpNarrowingTests
         try
         {
             var diag = new List<string>();
-            var result = Engine.Run(programDir, targetDir, new EngineRunOptions
+            var result = (await Engine.RunAsync(programDir, targetDir, new EngineRunOptions
             {
                 DiagnosticLog = diag.Add,
                 AdditionalFeedPaths = [PackagesDir],
-            });
+            }));
 
             Assert.That(result.HasFatalErrors, Is.False,
                 "Errors: " + string.Join("; ", result.Errors) + ". Diag: " + string.Join("; ", diag));
@@ -94,7 +94,7 @@ public class CSharpNarrowingTests
     }
 
     [Test]
-    public void AsCSharp_IsPartial_FlagsOnlyPartialTypes()
+    public async Task AsCSharp_IsPartial_FlagsOnlyPartialTypes()
     {
         const string csharp = """
             namespace Demo;
@@ -119,11 +119,11 @@ public class CSharpNarrowingTests
         try
         {
             var diag = new List<string>();
-            var result = Engine.Run(programDir, targetDir, new EngineRunOptions
+            var result = (await Engine.RunAsync(programDir, targetDir, new EngineRunOptions
             {
                 DiagnosticLog = diag.Add,
                 AdditionalFeedPaths = [PackagesDir],
-            });
+            }));
 
             Assert.That(result.HasFatalErrors, Is.False,
                 "Errors: " + string.Join("; ", result.Errors) + ". Diag: " + string.Join("; ", diag));

@@ -79,13 +79,13 @@ internal sealed class RustAstProjection
             (int Line, int Column, int EndLine, int EndColumn) span = Span(node);
             bool impl = node.Kind == "IMPL";
             Node? selfType = node.Children.LastOrDefault(IsType);
-            string trait = impl && node.Children.Count(IsType) > 1 ? Text(node.Children.First(IsType)) : "";
+            string trait = impl && node.Children.Count(IsType) > 1 ? Text(node.Children.First(IsType)) : string.Empty;
             string name = impl ? Text(selfType) + (trait.Length == 0 ? " (impl)" : $" (impl {trait})") : Name(node);
             List<FieldDeclaration> fields = node.Children.SelectMany(n => n.Kind is "RECORD_FIELD_LIST" or "TUPLE_FIELD_LIST" ? n.Children : [])
                 .Where(n => n.Kind is "RECORD_FIELD" or "TUPLE_FIELD").Select((field, index) =>
                     new FieldDeclaration(field.Kind == "TUPLE_FIELD" ? index.ToString() : Name(field),
                         Type(field.Children.FirstOrDefault(IsType)), Modifiers(field), Span(field).Line)).ToList();
-            RustTypeDeclaration type = new TypeDeclaration(name, node.Kind switch
+            RustTypeDeclaration type = new RustTypeDeclaration(new TypeDeclaration(name, node.Kind switch
             { "STRUCT" or "UNION" => TypeKind.Struct, "ENUM" => TypeKind.Enum,
                 "TRAIT" => TypeKind.Interface, "TYPE_ALIAS" => TypeKind.Alias, _ => TypeKind.Class },
                 Modifiers(node), impl ? node.Children.Where(IsType).SkipLast(1).Select(Text).ToList()
@@ -98,10 +98,13 @@ internal sealed class RustAstProjection
                 EndLine = span.EndLine, EndColumn = span.EndColumn, TypeParameters = Generics(node),
                 AliasTarget = node.Kind == "TYPE_ALIAS" ? Type(selfType) : null,
                 EnumValues = node.Child("VARIANT_LIST")?.Children.Where(n => n.Kind == "VARIANT").Select(Name).ToList() ?? []
-            }.AsRust(isTrait: node.Kind == "TRAIT", isImpl: impl, isUnsafe: node.Tokens.Contains("unsafe"),
-                isUnion: node.Kind == "UNION", isTupleStruct: node.Child("TUPLE_FIELD_LIST") is not null,
-                isUnitStruct: node.Kind == "STRUCT" && fields.Count == 0 && node.Tokens.Contains(";"),
-                isNegativeImpl: impl && node.Tokens.Contains("!"));
+            })
+            {
+                IsTrait = node.Kind == "TRAIT", IsImpl = impl, IsUnsafe = node.Tokens.Contains("unsafe"),
+                IsUnion = node.Kind == "UNION", IsTupleStruct = node.Child("TUPLE_FIELD_LIST") is not null,
+                IsUnitStruct = node.Kind == "STRUCT" && fields.Count == 0 && node.Tokens.Contains(";"),
+                IsNegativeImpl = impl && node.Tokens.Contains("!")
+            };
             types.Add(type); _types.Add(node, type);
             if (node.Kind == "ENUM")
             {
@@ -210,9 +213,9 @@ internal sealed class RustAstProjection
             List<Node> args = node.Child("ARG_LIST")?.Children.Where(IsExpression).ToList() ?? [];
             Node? condition = node.Kind is "IF_EXPR" or "WHILE_EXPR" or "FOR_EXPR" or "MATCH_EXPR"
                 ? node.Children.FirstOrDefault(IsExpression) : null;
-            RustStatementInfo statement = new RustStatementInfo(kind, node.Tokens.Where(t => t.All(char.IsLetter)).ToList(),
+            RustStatementInfo statement = new RustStatementInfo(new StatementInfo(kind, node.Tokens.Where(t => t.All(char.IsLetter)).ToList(),
                 node.Kind == "CALL_EXPR" ? Text(node.Children.FirstOrDefault(IsExpression)?.Child("PATH")?.Child("PATH")) is { Length: > 0 } qualifier
-                    ? qualifier : null : null, name, args.Select(Text).ToList(), span.Line, node.Ancestors().Any(n => n.Kind == "FN"))
+                    ? qualifier : null : null, name, args.Select(Text).ToList(), span.Line, node.Ancestors().Any(n => n.Kind == "FN")))
             {
                 Column = span.Column, EndLine = span.EndLine, EndColumn = span.EndColumn,
                 CallTarget = kind is "call" or "throw" ? expression?.Target : null,
@@ -238,7 +241,7 @@ internal sealed class RustAstProjection
             };
             (int Line, int Column, int EndLine, int EndColumn) span = Span(branch);
             _branches.Add(branch, synthetic);
-            _statements.Add(synthetic, new RustStatementInfo("else", ["else"], null, null, [], span.Line, true)
+            _statements.Add(synthetic, new RustStatementInfo(new StatementInfo("else", ["else"], null, null, [], span.Line, true))
             {
                 Column = span.Column, EndLine = span.EndLine, EndColumn = span.EndColumn,
                 IsBraced = branch.Kind == "BLOCK_EXPR"
@@ -255,7 +258,7 @@ internal sealed class RustAstProjection
             }
 
             if (parent is not null)
-            { statement.Parent = _statements[parent]; statement.Parent._children.Add(statement); }
+            { statement.Parent = _statements[parent]; statement.Parent.MutableChildren.Add(statement); }
             Node? method = node.Ancestors().FirstOrDefault(n => n.Kind == "FN");
             if (method is not null)
             { statement.Method = _methods[method]; statement.Method.Statements.Add(statement); }
@@ -392,7 +395,7 @@ internal sealed class RustAstProjection
     private string MacroName(Node node) => Text(node.Child("MACRO_CALL")?.Child("PATH")) + "!";
     private string CallName(Node? node) => node?.Kind == "PATH_EXPR"
         ? Text(node.Child("PATH")?.Children.LastOrDefault(n => n.Kind == "PATH_SEGMENT")?.Child("NAME_REF"))
-        : node?.Kind == "FIELD_EXPR" ? Text(node.Child("NAME_REF")) : "";
+        : node?.Kind == "FIELD_EXPR" ? Text(node.Child("NAME_REF")) : string.Empty;
     private string Name(Node node)
     {
         string name = Text(node.Child("NAME"));
@@ -402,7 +405,7 @@ internal sealed class RustAstProjection
         ? string.Join("\n", node.Children.Where(n => n.Kind == "DOC_COMMENT").Select(Text)) : null;
     private string UsePath(Node node) => string.Join("::", node.Ancestors().Where(n => n.Kind == "USE_TREE").Reverse()
         .Append(node).Select(n => Text(n.Child("PATH"))).Where(p => p.Length != 0));
-    private string Text(Node? node) => node is null ? "" : _text[_positions.Character(node.Start).._positions.Character(node.End)];
+    private string Text(Node? node) => node is null ? string.Empty : _text[_positions.Character(node.Start).._positions.Character(node.End)];
     private TypeReference? Type(Node? node) => node is null ? null : RustTypeReferences.Parse(Text(node),
         () => throw new InvalidDataException("Rust AST type projection exceeded depth limit."));
     private (int Line, int Column, int EndLine, int EndColumn) Span(Node node) => _positions.Span(node.Start, node.End);

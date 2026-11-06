@@ -22,6 +22,13 @@ public class RuntimeBindings
     public Dictionary<string, Dictionary<string, Func<object, object?>>> Accessors { get; init; } = new();
 
     /// <summary>
+    /// Demand-driven accessors that await semantic data before reading a member.
+    /// These take precedence over synchronous accessors for the same type and name.
+    /// </summary>
+    public Dictionary<string, Dictionary<string,
+        Func<object, CancellationToken, ValueTask<object?>>>> AsyncAccessors { get; init; } = new();
+
+    /// <summary>
     /// Per-document collection extractors (e.g., extract Types from a SourceFile document).
     /// Keyed by collection name. Only used by providers whose data comes from parsed documents.
     /// </summary>

@@ -71,7 +71,11 @@ try
         dir = dir.Parent;
     }
 }
-catch { /* ignore */ }
+catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or
+    System.Security.SecurityException)
+{
+    Console.Error.WriteLine($"Warning: Could not locate source repository: {ex.Message}");
+}
 
 if (repoRoot != null)
 {
@@ -96,7 +100,11 @@ if (repoRoot != null)
                 }
             }
         }
-        catch { /* ignore */ }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or
+            System.Security.SecurityException)
+        {
+            Console.Error.WriteLine($"Warning: Could not read repository URL: {ex.Message}");
+        }
     }
 }
 

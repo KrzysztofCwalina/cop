@@ -15,30 +15,38 @@ namespace Cop.Providers.Ai;
 /// </summary>
 public partial class AiProvider : DataProvider
 {
-    private static readonly HttpClient _http = new() { Timeout = TimeSpan.FromSeconds(120) };
+    private static readonly HttpClient s_http = new() { Timeout = TimeSpan.FromSeconds(120) };
 
     /// <inheritdoc />
     public override ReadOnlyMemory<byte> GetSchema()
         => new ProviderSchema { Types = [], Collections = [] }.ToJson();
 
     /// <inheritdoc />
-    public override object? Query(ProviderQuery query) => null;
+    public override ValueTask<object?> QueryAsync(
+        ProviderQuery query, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return ValueTask.FromResult<object?>(null);
+    }
 
     /// <inheritdoc />
-    public override Dictionary<string, Func<List<object?>, Task<object?>>>? GetFunctions()
+    public override Dictionary<string,
+        Func<List<object?>, CancellationToken, ValueTask<object?>>>? GetFunctions()
         => new(StringComparer.OrdinalIgnoreCase)
         {
-            ["judge"] = args => JudgeArgumentsAsync(args, null),
+            ["judge"] = (args, token) => JudgeArgumentsAsync(args, null, token),
         };
 
     /// <inheritdoc />
-    public override Dictionary<string, Func<List<object?>, Task<object?>>>? GetFunctions(AnalysisContext context)
+    public override Dictionary<string,
+        Func<List<object?>, CancellationToken, ValueTask<object?>>>? GetFunctions(AnalysisContext context)
         => new(StringComparer.OrdinalIgnoreCase)
         {
-            ["judge"] = args => JudgeArgumentsAsync(args, context),
+            ["judge"] = (args, token) => JudgeArgumentsAsync(args, context, token),
         };
 
-    private static Task<object?> JudgeArgumentsAsync(List<object?> args, AnalysisContext? context)
+    private static ValueTask<object?> JudgeArgumentsAsync(
+        List<object?> args, AnalysisContext? context, CancellationToken cancellationToken)
     {
         if (args.Count == 3)
         {
@@ -48,14 +56,16 @@ public partial class AiProvider : DataProvider
             }
             catch (ArgumentException ex)
             {
-                return Task.FromResult<object?>(One($"ai.judge: {ex.Message}"));
+                return ValueTask.FromResult<object?>(One($"ai.judge: {ex.Message}"));
             }
         }
         return context is not null && context.Options.Scope != "full"
-            ? JudgeChangesAsync(args, context) : JudgeAsync(args, context?.Options.AiConfigPath);
+            ? JudgeChangesAsync(args, context, cancellationToken)
+            : JudgeAsync(args, context?.Options.AiConfigPath, cancellationToken);
     }
 
-    private static async Task<object?> JudgeAsync(List<object?> args, string? configPath)
+    private static async ValueTask<object?> JudgeAsync(
+        List<object?> args, string? configPath, CancellationToken cancellationToken)
     {
         if (args.Count != 2 || args[0] is not string prompt || string.IsNullOrWhiteSpace(prompt))
         {
@@ -65,7 +75,7 @@ public partial class AiProvider : DataProvider
         string code;
         try
         {
-            code = SerializeCodebase(args[1]);
+            code = await SerializeCodebaseAsync(args[1], cancellationToken).ConfigureAwait(false);
         }
         catch (ArgumentException ex)
         {
@@ -109,8 +119,10 @@ public partial class AiProvider : DataProvider
 
             req.Content = new StringContent(requestBody, Encoding.UTF8, "application/json");
 
-            using HttpResponseMessage resp = await _http.SendAsync(req);
-            string respText = await resp.Content.ReadAsStringAsync();
+            using HttpResponseMessage resp = await s_http.SendAsync(req, cancellationToken)
+                .ConfigureAwait(false);
+            string respText = await resp.Content.ReadAsStringAsync(cancellationToken)
+                .ConfigureAwait(false);
             if (!resp.IsSuccessStatusCode)
             {
                 LogInteraction(config, system, user, $"{(int)resp.StatusCode} FAILED", respText);
@@ -144,7 +156,13 @@ public partial class AiProvider : DataProvider
             }
             return findings;
         }
-        catch (Exception ex) when (ex is not OutOfMemoryException)
+        catch (OperationCanceledException ex) when (!cancellationToken.IsCancellationRequested)
+        {
+            return One($"ai.judge timed out: {ex.Message}");
+        }
+        catch (Exception ex) when (ex is HttpRequestException or JsonException
+            or InvalidOperationException or ArgumentException or KeyNotFoundException
+            or IOException or UnauthorizedAccessException)
         {
             return One($"ai.judge error: {ex.Message}");
         }
@@ -178,7 +196,12 @@ public partial class AiProvider : DataProvider
         sb.AppendLine(assistant);
         sb.AppendLine("=========================================================");
         sb.AppendLine();
-        try { File.AppendAllText(path, sb.ToString()); } catch { /* logging is best-effort */ }
+        try { File.AppendAllText(path, sb.ToString()); }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            ProviderWarnings.ReportOnce("ai", path,
+                $"Could not write AI interaction log '{path}': {ex.Message}");
+        }
     }
 
     private static string SafeEndpoint(string endpoint)
@@ -188,23 +211,38 @@ public partial class AiProvider : DataProvider
             return "(invalid endpoint)";
         }
 
-        return new UriBuilder(uri) { UserName = "", Password = "", Query = "", Fragment = "" }
+        return new UriBuilder(uri) { UserName = string.Empty, Password = string.Empty, Query = string.Empty, Fragment = string.Empty }
             .Uri.GetLeftPart(UriPartial.Path);
     }
 
-    private static string SerializeCodebase(object? arg, bool allowEmpty = false)
+    private enum CodebasePopulation { Populated, MayBeEmpty }
+
+    private static async ValueTask<string> SerializeCodebaseAsync(
+        object? arg, CancellationToken cancellationToken,
+        CodebasePopulation population = CodebasePopulation.Populated)
     {
         string[] collections = ["Files", "Types", "Methods", "Statements", "Calls", "Lines", "Regions", "Projects"];
-        if (arg is not DataObject codebase || collections.Any(name =>
+        if (arg is not DataObject codebase)
+        {
+            throw new ArgumentException(
+                "expected a Codebase from a language parse() function or codebase(...); " +
+                "strings and individual collections are not supported");
+        }
+        foreach (string collection in collections)
+        {
+            await codebase.GetFieldAsync(collection, cancellationToken).ConfigureAwait(false);
+        }
+        if (collections.Any(name =>
             codebase.GetField(name) is not System.Collections.IEnumerable or string))
         {
             throw new ArgumentException(
                 "expected a Codebase from a language parse() function or codebase(...); " +
                 "strings and individual collections are not supported");
         }
+        await PrepareReviewFactsAsync(codebase, cancellationToken).ConfigureAwait(false);
 
         List<object> files = Items(codebase, "Files").OrderBy(FilePath, StringComparer.Ordinal).ToList();
-        if (files.Count == 0 && !allowEmpty)
+        if (files.Count == 0 && population == CodebasePopulation.Populated)
         {
             throw new ArgumentException("the Codebase contains no files; check the parser and target path");
         }
@@ -297,6 +335,69 @@ public partial class AiProvider : DataProvider
         });
     }
 
+    private static async ValueTask PrepareReviewFactsAsync(
+        DataObject codebase, CancellationToken cancellationToken)
+    {
+        Dictionary<string, string[]> demandedFields = new()
+        {
+            ["Files"] = ["Path", "FullPath", "Language", "Namespace", "Usings"],
+            ["Lines"] = ["File", "Number", "Text"],
+            ["Types"] = ["Name", "Kind", "File", "Line", "Modifiers", "BaseTypes", "Interfaces"],
+            ["Methods"] = ["Name", "File", "Line", "ReturnType", "Parameters"],
+            ["Calls"] = ["File", "Line", "TypeName", "MemberName"],
+            ["Projects"] = ["Name", "Path", "References", "Packages", "Frameworks"]
+        };
+        foreach ((string collection, string[] fields) in demandedFields)
+        {
+            foreach (object item in Items(codebase, collection))
+            {
+                foreach (string field in fields)
+                {
+                    await PrepareMemberAsync(item, field, cancellationToken).ConfigureAwait(false);
+                }
+                if (fields.Contains("File"))
+                {
+                    object? file = Member(item, "File");
+                    await PrepareMemberAsync(file, "Path", cancellationToken).ConfigureAwait(false);
+                    await PrepareMemberAsync(file, "FullPath", cancellationToken).ConfigureAwait(false);
+                }
+                if (collection == "Methods")
+                {
+                    await PrepareMemberAsync(Member(item, "ReturnType"), "Name", cancellationToken)
+                        .ConfigureAwait(false);
+                    foreach (object parameter in Items(item, "Parameters"))
+                    {
+                        await PrepareMemberAsync(parameter, "Name", cancellationToken)
+                            .ConfigureAwait(false);
+                        object? type = await PrepareMemberAsync(
+                            parameter, "Type", cancellationToken).ConfigureAwait(false);
+                        await PrepareMemberAsync(type, "Name", cancellationToken)
+                            .ConfigureAwait(false);
+                    }
+                }
+            }
+        }
+    }
+
+    private static async ValueTask<object?> PrepareMemberAsync(
+        object? item, string field, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (item is DataObject data)
+        {
+            return await data.GetFieldAsync(field, cancellationToken).ConfigureAwait(false);
+        }
+        if (item is Cop.Providers.SourceModel.TypeDeclaration declaration && field == "Interfaces")
+        {
+            await declaration.EnsureSemanticAnalysisAsync(cancellationToken).ConfigureAwait(false);
+        }
+        if (item is Cop.Providers.SourceModel.StatementInfo statement && field == "TypeName")
+        {
+            await statement.EnsureTypeNameAnalysisAsync(cancellationToken).ConfigureAwait(false);
+        }
+        return Member(item, field);
+    }
+
     private static IEnumerable<object> Items(object obj, string name)
     {
         object? value = Member(obj, name);
@@ -368,7 +469,7 @@ public partial class AiProvider : DataProvider
 
     private static List<object?> One(string message)
     {
-        DataObject violation = MakeViolation(message, 1.0, "", 0, 1.0);
+        DataObject violation = MakeViolation(message, 1.0, string.Empty, 0, 1.0);
         violation.Set("IsInfrastructureError", true);
         return [violation];
     }
@@ -382,13 +483,13 @@ public partial class AiProvider : DataProvider
         v.Set("File", file);
         v.Set("Line", line);
         v.Set("Source", "ai.judge");
-        v.Set("Check", "");
+        v.Set("Check", string.Empty);
         return v;
     }
 
     private static AiConfig? LoadConfig(string? path, out string error)
     {
-        error = "";
+        error = string.Empty;
         path ??= Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".cop", "ai.json");
         if (!File.Exists(path))
         {
@@ -406,7 +507,8 @@ public partial class AiProvider : DataProvider
                 ApiKey = GetStr(root, "apiKey"),
             };
         }
-        catch (Exception ex) when (ex is not OutOfMemoryException)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException
+            or JsonException or InvalidOperationException or ArgumentException)
         {
             error = $"invalid {path}: {ex.Message}";
             return null;
@@ -414,7 +516,7 @@ public partial class AiProvider : DataProvider
     }
 
     private static string GetStr(JsonElement root, string name)
-        => root.TryGetProperty(name, out JsonElement e) && e.ValueKind == JsonValueKind.String ? e.GetString() ?? "" : "";
+        => root.TryGetProperty(name, out JsonElement e) && e.ValueKind == JsonValueKind.String ? e.GetString() ?? string.Empty : string.Empty;
 
     private static string StripFences(string s)
     {
@@ -440,10 +542,10 @@ public partial class AiProvider : DataProvider
     private sealed class AiConfig
     {
         /// <summary>Gets the model service's chat-completions endpoint.</summary>
-        public string Endpoint { get; init; } = "";
+        public string Endpoint { get; init; } = string.Empty;
         /// <summary>Gets the model identifier sent to the configured endpoint.</summary>
-        public string Model { get; init; } = "";
+        public string Model { get; init; } = string.Empty;
         /// <summary>Gets the credential used to authenticate model requests.</summary>
-        public string ApiKey { get; init; } = "";
+        public string ApiKey { get; init; } = string.Empty;
     }
 }

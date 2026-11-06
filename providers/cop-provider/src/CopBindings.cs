@@ -21,6 +21,7 @@ public static class CopBindings
             ["IsExported"] = o => ((CopFunctionDeclaration)o).IsExported,
             ["HasGuard"] = o => ((CopFunctionDeclaration)o).HasGuard
         };
+        CodeBindings.AddDerivedAsyncAccessors(bindings);
         return bindings;
     }
 }

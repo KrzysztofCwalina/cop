@@ -3499,7 +3499,32 @@ const packages = {
             "desc": ""
           },
           {
+            "name": "IsCancellationHandler",
+            "type": "bool",
+            "desc": ""
+          },
+          {
+            "name": "IsCallerCancellationPreserved",
+            "type": "bool",
+            "desc": ""
+          },
+          {
             "name": "IsUsingResource",
+            "type": "bool",
+            "desc": ""
+          },
+          {
+            "name": "HasTypeRestrictedCatchFilter",
+            "type": "bool",
+            "desc": ""
+          },
+          {
+            "name": "IsOwnershipTransferred",
+            "type": "bool",
+            "desc": ""
+          },
+          {
+            "name": "IsOriginalExceptionAlwaysRethrown",
             "type": "bool",
             "desc": ""
           }
@@ -3661,9 +3686,34 @@ const packages = {
         "desc": "True for a `catch` clause with an exception filter (`when (...)`)."
       },
       {
+        "name": "isCancellationHandler",
+        "appliesTo": "CSharpStatement",
+        "desc": "True for a bound OperationCanceledException or derived typed catch, including aliases."
+      },
+      {
+        "name": "isCallerCancellationPreserved",
+        "appliesTo": "CSharpStatement",
+        "desc": "Proves supported explicit caller-cancellation paths, not implicit exception effects.\nRecognizes original rethrows, operation-linked caller-token guards and exclusions,\nconsumed fresh canceled completion sources, and exclusively internal-token awaits.\nNested cleanup must preserve cancellation on every explicit handler path.\nKnown caller lineage survives linking to independent lifetime/deadline tokens.\nUnknown token provenance, unsupported flow, and unconsumed completions are false."
+      },
+      {
         "name": "isUsingResource",
         "appliesTo": "CSharpStatement",
         "desc": "True for a call directly initializing a `using` or `await using` resource.\nCalls nested in its arguments or body are not themselves using resources."
+      },
+      {
+        "name": "hasTypeRestrictedCatchFilter",
+        "appliesTo": "CSharpStatement",
+        "desc": "True when a catch filter restricts the caught exception to specific exception types.\nArbitrary conditions, broad base types, and negative type tests do not qualify."
+      },
+      {
+        "name": "alwaysRethrowsOriginalException",
+        "appliesTo": "CSharpStatement",
+        "desc": "True when every path through a catch body rethrows the original exception.\nA conditional rethrow, replacement exception, or nested function does not qualify."
+      },
+      {
+        "name": "transfersResourceOwnership",
+        "appliesTo": "CSharpStatement",
+        "desc": "True when a created resource is returned or stored in an owning member.\nLocal assignments and ordinary method arguments are not ownership transfers."
       }
     ],
     "functions": [
@@ -4010,7 +4060,7 @@ const packages = {
         "name": "shouldBeStatic",
         "params": "cb: Codebase",
         "returns": "[Violation]",
-        "desc": "FDG: Classes with only static members should be static"
+        "desc": "FDG: Classes with only static members should be static\nAn instance member or base type in another partial declaration also prevents this suggestion."
       },
       {
         "name": "structSize",
@@ -4049,10 +4099,16 @@ const packages = {
         "desc": "FDG: Constructors should not have too many parameters"
       },
       {
+        "name": "boolParameterNaming",
+        "params": "cb: Codebase",
+        "returns": "[Violation]",
+        "desc": "Boolean parameters are allowed when named affirmatively or descriptively, including `value`.\nVague names such as `flag`, `b`, and `arg` do not communicate their meaning."
+      },
+      {
         "name": "avoidBoolParams",
         "params": "cb: Codebase",
         "returns": "[Violation]",
-        "desc": "FDG: Avoid bool parameters in public methods"
+        "desc": "Compatibility name for boolParameterNaming; bool inputs are no longer prohibited."
       },
       {
         "name": "noArrayProperties",
@@ -4094,7 +4150,7 @@ const packages = {
         "name": "noSwallowCancellation",
         "params": "cb: Codebase",
         "returns": "[Violation]",
-        "desc": "FDG: Do not swallow OperationCanceledException"
+        "desc": "FDG: Preserve caller cancellation through supported bound cancellation paths."
       },
       {
         "name": "fdgExceptions",

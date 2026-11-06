@@ -12,9 +12,12 @@ public class TrivyProvider : ToolProvider
 {
     protected override string ToolName => "trivy";
 
-    protected override List<object> RunTool(string rootPath, IReadOnlySet<string> excluded)
+    protected override async ValueTask<List<object>> RunToolAsync(
+        string rootPath, IReadOnlySet<string> excluded, CancellationToken cancellationToken)
     {
-        (string? stdout, string _, int _) = RunProcess("trivy", "fs --format json --scanners vuln,misconfig .", rootPath);
+        (string? stdout, string _, int _) = await RunProcessAsync(
+            new("trivy", "fs --format json --scanners vuln,misconfig .", rootPath),
+            cancellationToken).ConfigureAwait(false);
         if (string.IsNullOrWhiteSpace(stdout))
         {
             return [];
@@ -31,7 +34,7 @@ public class TrivyProvider : ToolProvider
         foreach (JsonElement result in results.EnumerateArray())
         {
             string filePath = NormalizePath(
-                result.TryGetProperty("Target", out JsonElement target) ? target.GetString() ?? "" : "", rootPath);
+                result.TryGetProperty("Target", out JsonElement target) ? target.GetString() ?? string.Empty : string.Empty, rootPath);
             if (string.IsNullOrEmpty(filePath) || IsExcluded(filePath, excluded))
             {
                 continue;
@@ -42,9 +45,9 @@ public class TrivyProvider : ToolProvider
             {
                 foreach (JsonElement vuln in vulns.EnumerateArray())
                 {
-                    string? ruleId = vuln.TryGetProperty("VulnerabilityID", out JsonElement vid) ? vid.GetString() : "";
+                    string? ruleId = vuln.TryGetProperty("VulnerabilityID", out JsonElement vid) ? vid.GetString() : string.Empty;
                     string message = BuildVulnMessage(vuln);
-                    string severity = MapSeverity(vuln.TryGetProperty("Severity", out JsonElement s) ? s.GetString() : "");
+                    string severity = MapSeverity(vuln.TryGetProperty("Severity", out JsonElement s) ? s.GetString() : string.Empty);
 
                     violations.Add(new ToolViolation
                     {
@@ -70,17 +73,17 @@ public class TrivyProvider : ToolProvider
                     }
 
                     string? ruleId = mc.TryGetProperty("ID", out JsonElement id) ? id.GetString() :
-                        mc.TryGetProperty("AVDID", out JsonElement avd) ? avd.GetString() : "";
+                        mc.TryGetProperty("AVDID", out JsonElement avd) ? avd.GetString() : string.Empty;
                     string? message = mc.TryGetProperty("Title", out JsonElement t) ? t.GetString() :
-                        mc.TryGetProperty("Message", out JsonElement m) ? m.GetString() : "";
-                    string severity = MapSeverity(mc.TryGetProperty("Severity", out JsonElement s) ? s.GetString() : "");
+                        mc.TryGetProperty("Message", out JsonElement m) ? m.GetString() : string.Empty;
+                    string severity = MapSeverity(mc.TryGetProperty("Severity", out JsonElement s) ? s.GetString() : string.Empty);
 
                     violations.Add(new ToolViolation
                     {
                         File = filePath,
                         Line = line,
                         Severity = severity,
-                        Message = !string.IsNullOrEmpty(ruleId) ? $"{ruleId}: {message}" : message ?? "",
+                        Message = !string.IsNullOrEmpty(ruleId) ? $"{ruleId}: {message}" : message ?? string.Empty,
                         Source = "trivy"
                     });
                 }

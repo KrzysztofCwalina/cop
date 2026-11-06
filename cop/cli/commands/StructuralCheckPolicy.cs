@@ -17,18 +17,18 @@ internal sealed class StructuralCheckPolicy
 {
     private sealed record Entry(Declaration Declaration, string File, string Source, bool Local);
 
-    private static readonly HashSet<string> RawMembers = new(StringComparer.Ordinal)
+    private static readonly HashSet<string> s_rawMembers = new(StringComparer.Ordinal)
     {
         "Source", "Text", "PreviousText", "NextText", "Content", "ContentHash",
         "Condition", "Expression", "Arguments", "Signature", "ApiAsText", "DefaultValue",
         "Documentation", "Message"
     };
 
-    private static readonly HashSet<string> MessageFunctions = new(StringComparer.Ordinal)
+    private static readonly HashSet<string> s_messageFunctions = new(StringComparer.Ordinal)
     {
         "toError", "toWarning", "toInfo", "toViolation"
     };
-    private static readonly HashSet<string> TextOperations = IntrinsicRegistry.NameSet(op =>
+    private static readonly HashSet<string> s_textOperations = IntrinsicRegistry.NameSet(op =>
         op.Kind is IntrinsicKind.StringPredicate or IntrinsicKind.StringTransform or IntrinsicKind.StringProperty);
 
     private readonly Dictionary<string, List<Entry>> _entries = new(StringComparer.Ordinal);
@@ -215,7 +215,7 @@ internal sealed class StructuralCheckPolicy
             TypeInfo? type = receiver is null
                 ? (_locals.TryGetValue("item", out TypeInfo item) ? item : null)
                 : Infer(receiver);
-            return RawMembers.Contains(member) &&
+            return s_rawMembers.Contains(member) &&
                 !(member == "Content" && type is { Name: { } name } &&
                     name.TrimEnd('?') == "Comment");
         }
@@ -308,7 +308,7 @@ internal sealed class StructuralCheckPolicy
                 Reject(node, node.Member);
             }
 
-            if (TextOperations.Contains(node.Member))
+            if (s_textOperations.Contains(node.Member))
             {
                 CheckTextConversion(node.Object, requireKnown: true);
             }
@@ -344,7 +344,7 @@ internal sealed class StructuralCheckPolicy
                 CallExpr { Callee: IdentifierExpr id } => id.Name,
                 _ => null
             };
-            if (name is not null && (TextOperations.Contains(name) || name is "text" or "string" ||
+            if (name is not null && (s_textOperations.Contains(name) || name is "text" or "string" ||
                 policy._model.Callable(name)?.ParamTypes.FirstOrDefault() == "string"))
             {
                 CheckTextConversion(node.Collection, requireKnown: true);
@@ -406,7 +406,7 @@ internal sealed class StructuralCheckPolicy
                 {
                     bool saved = _reporting;
                     // Only the message argument is presentation; check names/severities stay structural.
-                    if (name is not null && MessageFunctions.Contains(name) &&
+                    if (name is not null && s_messageFunctions.Contains(name) &&
                         (!policy._entries.TryGetValue(name, out List<Entry>? overloads) || !overloads.Any(e => e.Local)))
                     {
                         _reporting |= i == messageIndex;

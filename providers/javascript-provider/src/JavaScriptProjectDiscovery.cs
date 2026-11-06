@@ -13,8 +13,9 @@ public static class JavaScriptProjectDiscovery
     /// <summary>
     /// Discovers JavaScript projects and their package or compiler references.
     /// </summary>
-    public static List<ProjectInfo> Discover(string rootPath, IReadOnlySet<string>? excludedDirs,
-        string? toolchainSearchPath = null)
+    public static async ValueTask<List<ProjectInfo>> DiscoverAsync(
+        string rootPath, IReadOnlySet<string>? excludedDirs,
+        string? toolchainSearchPath = null, CancellationToken cancellationToken = default)
     {
         List<string> paths = new List<string>();
         CollectManifests(Path.GetFullPath(rootPath), excludedDirs, paths);
@@ -49,7 +50,8 @@ public static class JavaScriptProjectDiscovery
         }, OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
         foreach (string path in configurations)
         {
-            TypeScriptProjection.ProjectConfiguration? config = compiler.ReadProject(path);
+            TypeScriptProjection.ProjectConfiguration? config =
+                await compiler.ReadProjectAsync(path, cancellationToken).ConfigureAwait(false);
             if (config is null)
             {
                 ProviderWarnings.ReportOnce("javascript", "typescript-projects",
@@ -71,7 +73,7 @@ public static class JavaScriptProjectDiscovery
                 {
                     ["DiscoveryScope"] = "TypeScript compiler config (include/exclude/files/extends/references)",
                     ["PathAliases"] = JsonSerializer.Serialize(config.PathAliases),
-                    ["BaseUrl"] = config.BaseUrl ?? ""
+                    ["BaseUrl"] = config.BaseUrl ?? string.Empty
                 }
             });
         }

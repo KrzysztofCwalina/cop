@@ -20,8 +20,10 @@ public class ListAppendSink : SinkProvider
         _target = target ?? throw new ArgumentNullException(nameof(target));
     }
 
+    /// <inheritdoc/>
     public override string Name => "ListAppend";
 
+    /// <inheritdoc/>
     public override Task WriteAsync(object? originalItem, object result)
     {
         lock (_lock)

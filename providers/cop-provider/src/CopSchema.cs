@@ -7,10 +7,10 @@ namespace Cop.Providers;
 /// <summary>Describes the runtime schema for Cop-specific source declarations.</summary>
 public static class CopSchema
 {
-    private static readonly ProviderSchema _schema = Build();
+    private static readonly ProviderSchema s_schema = Build();
 
     /// <summary>Serializes the Cop provider schema as UTF-8 JSON.</summary>
-    public static ReadOnlyMemory<byte> GetJson() => _schema.ToJson();
+    public static ReadOnlyMemory<byte> GetJson() => s_schema.ToJson();
 
     private static ProviderSchema Build()
     {

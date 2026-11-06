@@ -114,7 +114,7 @@ internal sealed class PythonLexer
                 if (indent > top)
                 {
                     _indentStack.Push(indent);
-                    return new Tok(TK.Indent, "", bolLine, 1);
+                    return new Tok(TK.Indent, string.Empty, bolLine, 1);
                 }
                 if (indent < top)
                 {
@@ -123,7 +123,7 @@ internal sealed class PythonLexer
                     while (_indentStack.Count > 1 && _indentStack.Peek() > indent)
                     {
                         _indentStack.Pop();
-                        _pending.Enqueue(new Tok(TK.Dedent, "", bolLine, 1));
+                        _pending.Enqueue(new Tok(TK.Dedent, string.Empty, bolLine, 1));
                     }
                     if (_indentStack.Peek() != indent)
                     {
@@ -135,7 +135,7 @@ internal sealed class PythonLexer
 
                         _indentStack.Push(indent); // recover
                     }
-                    return new Tok(TK.Dedent, "", bolLine, 1);
+                    return new Tok(TK.Dedent, string.Empty, bolLine, 1);
                 }
                 // same level: fall through to token reading
             }
@@ -215,9 +215,9 @@ internal sealed class PythonLexer
         while (_indentStack.Count > 1)
         {
             _indentStack.Pop();
-            _pending.Enqueue(new Tok(TK.Dedent, "", _line, _col));
+            _pending.Enqueue(new Tok(TK.Dedent, string.Empty, _line, _col));
         }
-        _pending.Enqueue(new Tok(TK.Eof, "", _line, _col));
+        _pending.Enqueue(new Tok(TK.Eof, string.Empty, _line, _col));
         return _pending.Dequeue();
     }
 

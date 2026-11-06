@@ -2,6 +2,7 @@
 
 using Cop.Core;
 using Cop.Lang.Ast;
+using System.Runtime.CompilerServices;
 
 namespace Cop.Lang.Interpreter;
 
@@ -12,13 +13,28 @@ namespace Cop.Lang.Interpreter;
 /// </summary>
 public sealed class CopQueryable : CopValue
 {
+    /// <summary>
+    /// The provider namespace responsible for executing the deferred query.
+    /// </summary>
     public string ProviderName { get; }
+    /// <summary>
+    /// The provider request whose execution is deferred until materialization.
+    /// </summary>
     public Cop.Core.ProviderQuery Query { get; }
-    private readonly Func<string, Cop.Core.ProviderQuery, CopValue>? _queryProvider;
+    private readonly Func<string, Cop.Core.ProviderQuery, CancellationToken,
+        ValueTask<CopValue>>? _queryProvider;
+    private readonly System.Threading.Lock _materializationGate = new();
+    private Lazy<Task<CopValue>>? _materialization;
     private readonly (CopValue Left, CopValue Right)? _concatInputs;
     private Action<string>? _queryLog;
     private CopValue? _materialized;
+    /// <summary>
+    /// The combined predicate accumulated for provider-side execution.
+    /// </summary>
     public Cop.Core.FilterExpression? AccumulatedFilter { get; }
+    /// <summary>
+    /// The optional Cop type name of the collection's elements.
+    /// </summary>
     public string? ItemType { get; }
     private readonly IReadOnlyDictionary<string, string>? _scalarProperties;
     private QueryReuseScope _reuse;
@@ -29,14 +45,19 @@ public sealed class CopQueryable : CopValue
     public string CopQuery => Query.Collection is not null && Source is { } source ? source.Program
         : throw new NotSupportedException("Cop source requires one named provider collection. Use -d for concatenation's individual provider queries; some programmatic filters also have no portable source.");
 
-    public CopQueryable(string providerName, Cop.Core.ProviderQuery query, Func<string, Cop.Core.ProviderQuery, CopValue> queryProvider, Cop.Core.FilterExpression? filter = null, string? itemType = null, IReadOnlyDictionary<string, string>? scalarProperties = null)
+    /// <summary>
+    /// Defers execution of a provider collection with optional filter and element metadata.
+    /// </summary>
+    public CopQueryable(string providerName, Cop.Core.ProviderQuery query,
+        Func<string, Cop.Core.ProviderQuery, CancellationToken, ValueTask<CopValue>> queryProvider,
+        CopQueryableOptions? options = null)
     {
         ProviderName = providerName;
         Query = query;
         _queryProvider = queryProvider;
-        AccumulatedFilter = filter ?? query.Filter;
-        ItemType = itemType;
-        _scalarProperties = scalarProperties;
+        AccumulatedFilter = options?.Filter ?? query.Filter;
+        ItemType = options?.ItemType;
+        _scalarProperties = options?.ScalarProperties;
         _reuse = new();
         Source = query.Collection is { } collection
             ? new QuerySource(collection, $"{providerName}.{collection} root={query.RootPath}") : null;
@@ -76,7 +97,7 @@ public sealed class CopQueryable : CopValue
                     : query.Source?.Append(source.Steps.Skip(original.Source?.Steps.Count ?? 0)));
             }
 
-            return new CopLazyCollection(() =>
+            return new CopLazyCollection(token =>
             {
                 if (QuerySource.FromFilter(filter) is { } step)
                 {
@@ -84,7 +105,7 @@ public sealed class CopQueryable : CopValue
                         "filter after a local concatenation input");
                 }
 
-                return CollectionValues.Enumerate(input).Where(item => CopFilter.Matches(filter, item));
+                return FilterAsync(input, filter, token);
             });
         }
     }
@@ -126,6 +147,9 @@ public sealed class CopQueryable : CopValue
         }
     }
 
+    /// <summary>
+    /// Tests whether all filter operations target supported scalar properties.
+    /// </summary>
     public bool CanPushFilter(Cop.Core.FilterExpression filter) => _scalarProperties is null || filter switch
     {
         Cop.Core.PropertyFilter f => _scalarProperties.GetValueOrDefault(f.Property) == "bool",
@@ -154,7 +178,39 @@ public sealed class CopQueryable : CopValue
     /// Materializes the queryable by calling the provider with accumulated filters.
     /// Returns the provider result as a CopValue (typically CopList).
     /// </summary>
-    public CopValue Materialize()
+    public async ValueTask<CopValue> MaterializeAsync(
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        Lazy<Task<CopValue>> pending;
+        lock (_materializationGate)
+        {
+            if (_materialized is not null)
+            {
+                return _materialized;
+            }
+            pending = _materialization ??= new(() => MaterializeCoreAsync(cancellationToken));
+        }
+        try
+        {
+            return await pending.Value.WaitAsync(cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            if (pending.IsValueCreated && pending.Value.IsCompleted)
+            {
+                lock (_materializationGate)
+                {
+                    if (ReferenceEquals(_materialization, pending))
+                    {
+                        _materialization = null;
+                    }
+                }
+            }
+        }
+    }
+
+    private async Task<CopValue> MaterializeCoreAsync(CancellationToken cancellationToken)
     {
         if (_materialized is not null)
         {
@@ -167,14 +223,17 @@ public sealed class CopQueryable : CopValue
             _materialized = new CopLazyCollection(EnumerateInputs);
             return _materialized;
 
-            IEnumerable<CopValue> EnumerateInputs()
+            async IAsyncEnumerable<CopValue> EnumerateInputs(
+                [EnumeratorCancellation] CancellationToken token)
             {
-                foreach (CopValue item in CollectionValues.Enumerate(inputs.Left))
+                await foreach (CopValue item in CollectionValues.EnumerateAsync(inputs.Left, token)
+                    .ConfigureAwait(false))
                 {
                     yield return item;
                 }
 
-                foreach (CopValue item in CollectionValues.Enumerate(inputs.Right))
+                await foreach (CopValue item in CollectionValues.EnumerateAsync(inputs.Right, token)
+                    .ConfigureAwait(false))
                 {
                     yield return item;
                 }
@@ -187,14 +246,17 @@ public sealed class CopQueryable : CopValue
 
         if (_stage is not null)
         {
-            return _materialized = _stage.Materialize(ExecuteProvider, Source);
+            return _materialized = await _stage.MaterializeAsync(ExecuteProviderAsync, Source,
+                cancellationToken).ConfigureAwait(false);
         }
 
         Source?.ReportProvider();
-        return _materialized = ExecuteProvider(AccumulatedFilter);
+        return _materialized = await ExecuteProviderAsync(AccumulatedFilter, cancellationToken)
+            .ConfigureAwait(false);
     }
 
-    private CopValue ExecuteProvider(Cop.Core.FilterExpression? filter)
+    private async ValueTask<CopValue> ExecuteProviderAsync(Cop.Core.FilterExpression? filter,
+        CancellationToken cancellationToken)
     {
         ProviderQuery queryWithFilter = new Cop.Core.ProviderQuery
         {
@@ -205,33 +267,52 @@ public sealed class CopQueryable : CopValue
             ExcludedDirectories = Query.ExcludedDirectories,
             Options = Query.Options
         };
-        CopValue result = _queryProvider!(ProviderName, queryWithFilter);
+        CopValue result = await _queryProvider!(ProviderName, queryWithFilter, cancellationToken)
+            .ConfigureAwait(false);
         if (filter is null || result is CopLazyCollection lazy && QueryReuseScope.SameFilter(lazy.AppliedFilter, filter))
         {
             return result;
         }
 
-        return new CopLazyCollection(() => CollectionValues.Enumerate(result)
-            .Where(item => CopFilter.Matches(filter, item))) { AppliedFilter = filter };
+        return new CopLazyCollection(token => FilterAsync(result, filter, token))
+            { AppliedFilter = filter };
     }
 
     /// <summary>
     /// Materializes and returns items as an enumerable of CopValues.
     /// </summary>
-    public IEnumerable<CopValue> Enumerate()
+    public async IAsyncEnumerable<CopValue> EnumerateAsync(
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
-        CopValue result = Materialize();
-        return result switch
+        CopValue result = await MaterializeAsync(cancellationToken).ConfigureAwait(false);
+        await foreach (CopValue item in CollectionValues.EnumerateAsync(result, cancellationToken)
+            .ConfigureAwait(false))
         {
-            CopList list => list.Items,
-            CopLazyCollection lazy => lazy.Enumerate(),
-            _ => [result]
-        };
+            yield return item;
+        }
     }
 
+    internal static async IAsyncEnumerable<CopValue> FilterAsync(CopValue source,
+        FilterExpression filter, [EnumeratorCancellation] CancellationToken cancellationToken)
+    {
+        await foreach (CopValue item in CollectionValues.EnumerateAsync(source, cancellationToken)
+            .ConfigureAwait(false))
+        {
+            if (await CopFilter.MatchesAsync(filter, item, cancellationToken).ConfigureAwait(false))
+            {
+                yield return item;
+            }
+        }
+    }
+
+    /// <inheritdoc/>
     public override string Display() => $"<queryable {ProviderName}>";
+    /// <inheritdoc/>
     public override string ToString() => Display();
 
+    /// <summary>
+    /// Combines collections while retaining deferred execution and source provenance.
+    /// </summary>
     public static CopQueryable Concat(CopValue left, CopValue right)
         => new(left, right);
 }

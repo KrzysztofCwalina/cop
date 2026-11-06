@@ -14,6 +14,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\cop\cli\cop.csproj" />
+    <ProjectReference Include="..\..\examples\providers\sample-provider\sample-provider.csproj" />
     <ProjectReference Include="..\..\providers\typespec-provider\typespec-provider.csproj" />
     <ProjectReference Include="..\..\providers\ai-provider\src\AiProvider.csproj" />
     <ProjectReference Include="..\..\tools\copmeta\copmeta.csproj" />

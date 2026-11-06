@@ -9,7 +9,13 @@ using Cop.Lang.Ast;
 /// </summary>
 public sealed class VariableSymbol : Symbol
 {
+    /// <summary>
+    /// The binding's source type annotation, when present.
+    /// </summary>
     public TypeRef? DeclaredType { get; }
+    /// <summary>
+    /// Whether the binding may be assigned after its initial definition.
+    /// </summary>
     public bool IsReadOnly { get; }
 
     public VariableSymbol(string name, TypeRef? declaredType = null, bool isReadOnly = true)

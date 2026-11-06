@@ -25,7 +25,7 @@ public class MarkdownProviderExecutionTests
 
     [TestCase("")]
     [TestCase("'rules.md'")]
-    public void Parse_DefaultDirectoryAndExplicitFileExposeBothTreesAndFlatCollections(string argument)
+    public async Task Parse_DefaultDirectoryAndExplicitFileExposeBothTreesAndFlatCollections(string argument)
     {
         File.WriteAllText(Path.Combine(_root, "main.cop"), $$"""
             import markdown
@@ -35,10 +35,10 @@ public class MarkdownProviderExecutionTests
                 foreach parsed.Headings => '{item.Level}|{item.Text}'
             }
             """);
-        var result = Engine.Run(_root, _root, new EngineRunOptions
+        var result = (await Engine.RunAsync(_root, _root, new EngineRunOptions
         {
             AdditionalFeedPaths = [_packages],
-        });
+        }));
         Assert.That(result.ParseErrors, Is.Empty);
         Assert.That(result.Errors, Is.Empty, string.Join("\n", result.Errors));
         Assert.That(result.Outputs.Select(output => output.Message),
@@ -46,7 +46,7 @@ public class MarkdownProviderExecutionTests
     }
 
     [Test]
-    public void Parse_DirectoryKeepsDocumentsSeparateAndOrdered()
+    public async Task Parse_DirectoryKeepsDocumentsSeparateAndOrdered()
     {
         File.WriteAllText(Path.Combine(_root, "a.md"), "# Other\n## Rule\nOther policy.\n");
         File.WriteAllText(Path.Combine(_root, "main.cop"), """
@@ -54,26 +54,26 @@ public class MarkdownProviderExecutionTests
             command MAIN = foreach markdown.parse().Documents
                 => '{item.File.Path}|{item.Children.Count}'
             """);
-        var result = Engine.Run(_root, _root, new EngineRunOptions
+        var result = (await Engine.RunAsync(_root, _root, new EngineRunOptions
         {
             AdditionalFeedPaths = [_packages],
-        });
+        }));
         Assert.That(result.Errors, Is.Empty, string.Join("\n", result.Errors));
         Assert.That(result.Outputs.Select(output => output.Message),
             Is.EqualTo(new[] { "a.md|1", "rules.md|1" }));
     }
 
     [Test]
-    public void Parse_MissingFileIsFatalNotAnEmptySuccess()
+    public async Task Parse_MissingFileIsFatalNotAnEmptySuccess()
     {
         File.WriteAllText(Path.Combine(_root, "main.cop"), """
             import markdown
             command MAIN = foreach markdown.parse('missing.md').Documents => item.Text
             """);
-        var result = Engine.Run(_root, _root, new EngineRunOptions
+        var result = (await Engine.RunAsync(_root, _root, new EngineRunOptions
         {
             AdditionalFeedPaths = [_packages],
-        });
+        }));
         Assert.That(result.HasFatalErrors, Is.True);
         Assert.That(string.Join("\n", result.Errors), Does.Contain("Markdown path not found"));
         Assert.That(result.Outputs, Is.Empty);

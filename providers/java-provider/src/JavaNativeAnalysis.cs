@@ -11,10 +11,10 @@ namespace Cop.Providers.SourceParsers;
 
 internal static class JavaNativeAnalysis
 {
-    private static readonly ConcurrentDictionary<string, Lazy<string?>> Helpers = new();
-    private static readonly JsonSerializerOptions Json = new() { PropertyNameCaseInsensitive = true };
-    private static readonly JsonSerializerOptions RequestJson = new() { Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
-    private static readonly Dictionary<string, string?> EnvironmentOverrides = new()
+    private static readonly ConcurrentDictionary<string, AsyncProviderValue<string?>> s_helpers = new();
+    private static readonly JsonSerializerOptions s_json = new() { PropertyNameCaseInsensitive = true };
+    private static readonly JsonSerializerOptions s_requestJson = new() { Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
+    private static readonly Dictionary<string, string?> s_environmentOverrides = new()
     {
         ["JAVA_TOOL_OPTIONS"] = null,
         ["JDK_JAVA_OPTIONS"] = null,
@@ -25,9 +25,10 @@ internal static class JavaNativeAnalysis
     /// <summary>
     /// Identifies the native Java analysis configuration for source caching.
     /// </summary>
-    public static string Identity(string? searchPath, bool injected)
+    public static string Identity(string? searchPath,
+        Func<string, CancellationToken, ValueTask<ToolchainResult>>? request)
     {
-        if (injected)
+        if (request is not null)
         {
             return "native-protocol";
         }
@@ -35,25 +36,23 @@ internal static class JavaNativeAnalysis
         string? javac = ToolchainProcess.FindExecutable("javac", searchPath);
         if (javac is not null && JavaExecutable(javac) is not null)
         {
-            string? helper = Helper(javac);
-            if (helper is not null)
-            {
-                return "jdk-tree:" + helper;
-            }
+            return "jdk-tree:" + javac;
         }
-        Warn(javac is null ? "JDK compiler toolchain is not installed" : "JDK native helper is unavailable");
         return "java-syntax-fallback";
     }
 
     /// <summary>
     /// Adds native Java type and binding facts to a parsed source file.
     /// </summary>
-    public static SourceFile Enrich(SourceFile file, string? searchPath, Func<string, ToolchainResult>? request)
+    public static async ValueTask<SourceFile> EnrichAsync(
+        SourceFile file, string? searchPath,
+        Func<string, CancellationToken, ValueTask<ToolchainResult>>? request,
+        CancellationToken cancellationToken)
     {
         ToolchainResult result;
         if (request is not null)
         {
-            result = request(Request(file));
+            result = await request(Request(file), cancellationToken).ConfigureAwait(false);
         }
         else
         {
@@ -64,10 +63,13 @@ internal static class JavaNativeAnalysis
                 Warn("JDK compiler toolchain is not installed");
                 return file;
             }
-            string? directory = Helper(javac);
+            string? directory = await HelperAsync(javac, cancellationToken).ConfigureAwait(false);
             if (directory is null) { Warn("JDK cannot compile the bundled parse-only helper"); return file; }
-            result = ToolchainExecutionScope.RequestAsync(java, ["-cp", directory, "CopJavaAnalysis"], directory, Request(file),
-                timeout: TimeSpan.FromSeconds(30), environment: EnvironmentOverrides).GetAwaiter().GetResult();
+            result = await ToolchainExecutionScope.RequestAsync(
+                new ToolchainCommand(java, ["-cp", directory, "CopJavaAnalysis"],
+                    directory, s_environmentOverrides), Request(file),
+                new ToolchainRunOptions { Timeout = TimeSpan.FromSeconds(30) },
+                cancellationToken).ConfigureAwait(false);
         }
         if (result.Status != ToolchainStatus.Success)
         {
@@ -75,7 +77,7 @@ internal static class JavaNativeAnalysis
         }
 
         NativeResponse response;
-        try { response = JsonSerializer.Deserialize<NativeResponse>(result.StandardOutput, Json) ?? throw new JsonException("null response"); }
+        try { response = JsonSerializer.Deserialize<NativeResponse>(result.StandardOutput, s_json) ?? throw new JsonException("null response"); }
         catch (JsonException ex) { throw new InvalidOperationException("Java native analysis returned invalid JSON.", ex); }
         if (response.Calls is null || response.Errors is null || response.Types is null || response.Imports is null)
         {
@@ -100,13 +102,14 @@ internal static class JavaNativeAnalysis
 
     private static void AttachSemantics(SourceFile file, string? searchPath)
     {
-        Lazy<bool> analysis = new Lazy<bool>(() =>
+        AsyncProviderValue<bool> analysis = new(async cancellationToken =>
         {
             string javac = ToolchainProcess.FindExecutable("javac", searchPath)
                 ?? throw new InvalidOperationException("Java semantic compiler disappeared after native parsing.");
             string java = JavaExecutable(javac)
                 ?? throw new InvalidOperationException("Java semantic launcher is unavailable.");
-            string helper = Helper(javac) ?? throw new InvalidOperationException("Java semantic helper is unavailable.");
+            string helper = await HelperAsync(javac, cancellationToken).ConfigureAwait(false)
+                ?? throw new InvalidOperationException("Java semantic helper is unavailable.");
             JavaSemanticContext context = JavaSemanticContext.Discover(file);
             string request = JsonSerializer.Serialize(new
             {
@@ -116,15 +119,18 @@ internal static class JavaNativeAnalysis
                 Sources = Convert.ToBase64String(Encoding.UTF8.GetBytes(string.Join("\n", context.Sources))),
                 Classpath = Convert.ToBase64String(Encoding.UTF8.GetBytes(string.Join(Path.PathSeparator, context.Classpath))),
                 Sourcepath = Convert.ToBase64String(Encoding.UTF8.GetBytes(string.Join(Path.PathSeparator, context.Roots)))
-            }, RequestJson);
-            ToolchainResult result = ToolchainExecutionScope.RequestAsync(java, ["-cp", helper, "CopJavaAnalysis"], helper, request,
-                timeout: TimeSpan.FromMinutes(2), environment: EnvironmentOverrides).GetAwaiter().GetResult();
+            }, s_requestJson);
+            ToolchainResult result = await ToolchainExecutionScope.RequestAsync(
+                new ToolchainCommand(java, ["-cp", helper, "CopJavaAnalysis"],
+                    helper, s_environmentOverrides), request,
+                new ToolchainRunOptions { Timeout = TimeSpan.FromMinutes(2) },
+                cancellationToken).ConfigureAwait(false);
             if (result.Status != ToolchainStatus.Success)
             {
                 throw new InvalidOperationException($"Java semantic analysis {result.Status}: {result.Diagnostic ?? result.StandardError}");
             }
 
-            SemanticResponse response = JsonSerializer.Deserialize<SemanticResponse>(result.StandardOutput, Json)
+            SemanticResponse response = JsonSerializer.Deserialize<SemanticResponse>(result.StandardOutput, s_json)
                 ?? throw new InvalidOperationException("Java semantic analysis returned null.");
             if (response.Facts is null || response.Errors is null)
             {
@@ -153,7 +159,7 @@ internal static class JavaNativeAnalysis
         });
         foreach (StatementInfo statement in file.Statements)
         {
-            statement.DeferSemanticAnalysis(analysis);
+            statement.DeferSemanticAnalysisAsync(analysis);
         }
     }
 
@@ -168,27 +174,29 @@ internal static class JavaNativeAnalysis
     {
         Path = Convert.ToBase64String(Encoding.UTF8.GetBytes(file.Path)),
         Source = Convert.ToBase64String(Encoding.UTF8.GetBytes(file.RawText))
-    }, RequestJson);
+    }, s_requestJson);
 
     private static string? JavaExecutable(string javac) => ToolchainProcess.FindExecutable(
         Path.Combine(Path.GetDirectoryName(javac)!, OperatingSystem.IsWindows() ? "java.exe" : "java"));
 
-    private static string? Helper(string javac)
+    private static ValueTask<string?> HelperAsync(string javac, CancellationToken cancellationToken)
     {
         FileInfo executable = new FileInfo(javac);
         string key = javac + executable.Length + executable.LastWriteTimeUtc.Ticks;
-        return Helpers.GetOrAdd(key, _ => new(() => Build(javac))).Value;
+        return s_helpers.GetOrAdd(key, _ => new(token => BuildAsync(javac, token)))
+            .GetValueAsync(cancellationToken);
     }
 
-    private static string? Build(string javac)
+    private static async ValueTask<string?> BuildAsync(
+        string javac, CancellationToken cancellationToken)
     {
         using Stream resource = typeof(JavaSourceParser).Assembly.GetManifestResourceStream("Cop.Java.Native")
             ?? throw new InvalidOperationException("Bundled Java helper resource is missing.");
         using StreamReader reader = new StreamReader(resource);
-        string source = reader.ReadToEnd();
+        string source = await reader.ReadToEndAsync(cancellationToken).ConfigureAwait(false);
         FileInfo executable = new FileInfo(javac);
         string identity = source + javac + executable.Length + executable.LastWriteTimeUtc.Ticks
-            + string.Join(";", EnvironmentOverrides.Select(p => $"{p.Key}={p.Value}"));
+            + string.Join(";", s_environmentOverrides.Select(p => $"{p.Key}={p.Value}"));
         string directory = Path.Combine(Path.GetTempPath(), "cop-native-java",
             Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(identity))));
         if (File.Exists(Path.Combine(directory, "CopJavaAnalysis.class")))
@@ -202,9 +210,13 @@ internal static class JavaNativeAnalysis
         try
         {
             string input = Path.Combine(scratch, "CopJavaAnalysis.java");
-            File.WriteAllText(input, source, new UTF8Encoding(false));
-            ToolchainResult result = ToolchainProcess.RunAsync(javac, ["-proc:none", "-encoding", "UTF-8", "-d", scratch, input], scratch,
-                timeout: TimeSpan.FromSeconds(60), environment: EnvironmentOverrides).GetAwaiter().GetResult();
+            await File.WriteAllTextAsync(input, source, new UTF8Encoding(false), cancellationToken)
+                .ConfigureAwait(false);
+            ToolchainResult result = await ToolchainProcess.RunAsync(
+                new ToolchainCommand(javac, ["-proc:none", "-encoding", "UTF-8", "-d", scratch, input],
+                    scratch, s_environmentOverrides),
+                new ToolchainRunOptions { Timeout = TimeSpan.FromSeconds(60) },
+                cancellationToken).ConfigureAwait(false);
             if (result.Status != ToolchainStatus.Success)
             {
                 ProviderWarnings.ReportOnce("java", "preflight", $"JDK native helper unavailable: {result.Diagnostic}\n{result.StandardError}");
@@ -229,12 +241,15 @@ internal static class JavaNativeAnalysis
         MethodDeclaration Method(NativeMethod m)
         {
             MethodDeclaration? old = oldMethods.FirstOrDefault(o => o.Name == m.Name && o.Line == m.Line);
-            JavaMethodDeclaration method = new JavaMethodDeclaration(m.Name, Modifiers(m.Modifiers), m.Decorators, m.ReturnTypeFact ?? Type(m.ReturnType),
+            JavaMethodDeclaration method = new JavaMethodDeclaration(new MethodDeclaration(m.Name, Modifiers(m.Modifiers), m.Decorators, m.ReturnTypeFact ?? Type(m.ReturnType),
                 m.Parameters.Select(p => new ParameterDeclaration(p.Name, p.TypeFact ?? Type(p.Type)!, p.Variadic, false, false, p.Line)
-                { Column = p.Column, EndLine = p.EndLine, EndColumn = p.EndColumn }).ToList(), m.Line,
-                m.Modifiers.Contains("synchronized"), m.Modifiers.Contains("native"), m.Modifiers.Contains("default"),
-                m.Modifiers.Contains("strictfp"), m.TypeParameters.Count > 0)
+                { Column = p.Column, EndLine = p.EndLine, EndColumn = p.EndColumn }).ToList(), m.Line))
             {
+                IsSynchronized = m.Modifiers.Contains("synchronized"),
+                IsNative = m.Modifiers.Contains("native"),
+                IsDefault = m.Modifiers.Contains("default"),
+                IsStrictfp = m.Modifiers.Contains("strictfp"),
+                IsGeneric = m.TypeParameters.Count > 0,
                 Column = m.Column,
                 EndLine = m.EndLine,
                 EndColumn = m.EndColumn,
@@ -253,7 +268,7 @@ internal static class JavaNativeAnalysis
         {
             List<MethodDeclaration> methods = t.Methods.Select(Method).ToList();
             TypeDeclaration? old = file.Types.FirstOrDefault(o => o.Name == t.Name && o.Line == t.Line);
-            return new TypeDeclaration(t.Name,
+            return new JavaTypeDeclaration(new TypeDeclaration(t.Name,
                 t.Kind is "interface" or "annotation_type" ? TypeKind.Interface :
                 t.Kind == "enum" ? TypeKind.Enum : t.Kind == "record" ? TypeKind.Struct : TypeKind.Class,
                 Modifiers(t.Modifiers), t.BaseTypes, t.Decorators,
@@ -267,8 +282,13 @@ internal static class JavaNativeAnalysis
                 TypeParameters = t.TypeParameters,
                 HasDocComment = old?.HasDocComment ?? false,
                 Fields = t.Fields.Select(f => new FieldDeclaration(f.Name, f.TypeFact ?? Type(f.Type)!, Modifiers(f.Modifiers), f.Line)).ToList()
-            }.AsJava(t.Kind == "record", t.Kind == "enum", t.Modifiers.Contains("sealed"),
-                t.Modifiers.Contains("non-sealed"), t.Modifiers.Contains("final"), t.TypeParameters.Count > 0);
+            })
+            {
+                IsRecord = t.Kind == "record", IsEnum = t.Kind == "enum",
+                HasSealedModifier = t.Modifiers.Contains("sealed"),
+                IsNonSealed = t.Modifiers.Contains("non-sealed"),
+                IsFinal = t.Modifiers.Contains("final"), IsGeneric = t.TypeParameters.Count > 0
+            };
         }
         return file with
         {
@@ -333,7 +353,7 @@ internal static class JavaNativeAnalysis
         foreach (NativeStatement fact in response.Statements)
         {
             Add(fact.ID, fact.ParentID, fact.MethodLine, fact.MethodColumn,
-                new JavaStatementInfo(fact.Kind, [], string.IsNullOrEmpty(fact.TypeName) ? null : fact.TypeName, null, [], fact.Line, fact.MethodLine > 0)
+                new JavaStatementInfo(new StatementInfo(fact.Kind, [], string.IsNullOrEmpty(fact.TypeName) ? null : fact.TypeName, null, [], fact.Line, fact.MethodLine > 0))
                 {
                     Column = fact.Column,
                     EndLine = fact.EndLine,
@@ -355,8 +375,8 @@ internal static class JavaNativeAnalysis
                 throw new InvalidOperationException("Java native analysis returned an invalid call.");
             }
 
-            JavaStatementInfo call = new JavaStatementInfo("call", [], string.IsNullOrEmpty(fact.TypeName) ? null : fact.TypeName,
-                fact.MemberName, fact.Arguments, fact.Line, fact.MethodLine > 0)
+            JavaStatementInfo call = new JavaStatementInfo(new StatementInfo("call", [], string.IsNullOrEmpty(fact.TypeName) ? null : fact.TypeName,
+                fact.MemberName, fact.Arguments, fact.Line, fact.MethodLine > 0))
             {
                 Column = fact.Column,
                 EndLine = fact.EndLine,
@@ -379,7 +399,7 @@ internal static class JavaNativeAnalysis
             }
 
             node.Parent = owner;
-            owner._children.Add(node);
+            owner.MutableChildren.Add(node);
         }
         file.Statements.Sort((a, b) => a.Line != b.Line ? a.Line.CompareTo(b.Line) : Nullable.Compare(a.Column, b.Column));
     }

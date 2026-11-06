@@ -1,6 +1,7 @@
 // Extracts OpenAPI paths and operations from JSON or YAML specifications.
 
 using System.Text;
+using System.Text.Json;
 
 namespace Cop.Providers.OpenApi;
 
@@ -15,7 +16,7 @@ public static class OpenApiParser
     /// </summary>
     public record OpenApiParseResult(List<OpenApiOperationInfo> Operations, List<OpenApiPathInfo> Paths);
 
-    private static readonly HashSet<string> HttpMethods = new(StringComparer.OrdinalIgnoreCase)
+    private static readonly HashSet<string> s_httpMethods = new(StringComparer.OrdinalIgnoreCase)
     {
         "get", "post", "put", "delete", "patch", "head", "options"
     };
@@ -35,7 +36,7 @@ public static class OpenApiParser
         bool inPaths = false;
         int pathsIndent = -1;
         int? pathIndent = null;
-        string currentPath = "";
+        string currentPath = string.Empty;
         int currentPathIndent = -1;
 
         for (int i = 0; i < lines.Length; i++)
@@ -59,7 +60,7 @@ public static class OpenApiParser
                 inPaths = true;
                 pathsIndent = indent;
                 pathIndent = null;
-                currentPath = "";
+                currentPath = string.Empty;
                 currentPathIndent = -1;
                 continue;
             }
@@ -73,7 +74,7 @@ public static class OpenApiParser
             {
                 inPaths = false;
                 pathIndent = null;
-                currentPath = "";
+                currentPath = string.Empty;
                 currentPathIndent = -1;
                 continue;
             }
@@ -109,15 +110,10 @@ public static class OpenApiParser
     /// <summary>Extracts OpenAPI paths and operations from JSON source.</summary>
     public static OpenApiParseResult ParseJson(string text)
     {
-        try
-        {
-            JsonScanner parser = new JsonScanner(text);
-            return parser.Parse();
-        }
-        catch
-        {
-            return Empty();
-        }
+        using JsonDocument document = JsonDocument.Parse(text,
+            new JsonDocumentOptions { MaxDepth = 512 });
+        JsonScanner parser = new JsonScanner(text);
+        return parser.Parse();
     }
 
     private static OpenApiParseResult Empty() => new([], []);
@@ -149,7 +145,7 @@ public static class OpenApiParser
 
     private static (string OperationId, bool HasSummary, bool HasResponses) ScanYamlOperation(string[] lines, int operationIndex, int operationIndent)
     {
-        string operationId = "";
+        string operationId = string.Empty;
         bool hasSummary = false;
         bool hasResponses = false;
         int? childIndent = null;
@@ -198,12 +194,12 @@ public static class OpenApiParser
         return (operationId, hasSummary, hasResponses);
     }
 
-    private static bool IsHttpMethod(string key) => HttpMethods.Contains(key);
+    private static bool IsHttpMethod(string key) => s_httpMethods.Contains(key);
 
     private static bool TrySplitKeyValue(string s, out string key, out string value)
     {
-        key = "";
-        value = "";
+        key = string.Empty;
+        value = string.Empty;
         int colon = FindMappingColon(s);
         if (colon < 0)
         {
@@ -387,7 +383,7 @@ public static class OpenApiParser
 
         private (string OperationId, bool HasSummary, bool HasResponses) ParseOperationObject()
         {
-            string operationId = "";
+            string operationId = string.Empty;
             bool hasSummary = false;
             bool hasResponses = false;
 
@@ -427,7 +423,7 @@ public static class OpenApiParser
 
         private bool ReadProperty(out string name, out int line)
         {
-            name = "";
+            name = string.Empty;
             line = 0;
             SkipWhitespace();
             if (Peek() == '}')
@@ -504,7 +500,7 @@ public static class OpenApiParser
         {
             if (!TryConsume('"'))
             {
-                return "";
+                return string.Empty;
             }
 
             StringBuilder sb = new System.Text.StringBuilder();

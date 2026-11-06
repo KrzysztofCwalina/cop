@@ -13,11 +13,11 @@ namespace Cop.Providers.OpenApi;
 public sealed class OpenApiProvider : DataProvider
 {
     /// <inheritdoc />
-    public override ReadOnlyMemory<byte> GetSchema() => _schema.ToJson();
+    public override ReadOnlyMemory<byte> GetSchema() => s_schema.ToJson();
 
-    private static readonly ProviderSchema _schema = BuildSchema();
+    private static readonly ProviderSchema s_schema = BuildSchema();
 
-    private static readonly HashSet<string> OpenApiExtensions = new(StringComparer.OrdinalIgnoreCase)
+    private static readonly HashSet<string> s_openApiExtensions = new(StringComparer.OrdinalIgnoreCase)
         { ".yaml", ".yml", ".json" };
 
     private static ProviderSchema BuildSchema()
@@ -47,7 +47,7 @@ public sealed class OpenApiProvider : DataProvider
     private static ProviderPropertySchema Prop(string name, string type = "string")
         => new() { Name = name, Type = type };
     private static ProviderPropertySchema Opt(string name, string type = "string")
-        => new() { Name = name, Type = type, Optional = true };
+        => new() { Name = name, Type = type, IsOptional = true };
 
     /// <inheritdoc />
     public override RuntimeBindings GetRuntimeBindings()
@@ -69,8 +69,10 @@ public sealed class OpenApiProvider : DataProvider
     }
 
     /// <inheritdoc />
-    public override object? Query(ProviderQuery query)
+    public override async ValueTask<object?> QueryAsync(
+        ProviderQuery query, CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         if (query.RootPath is null)
         {
             return new Dictionary<string, List<object>>();
@@ -83,13 +85,16 @@ public sealed class OpenApiProvider : DataProvider
         CollectOpenApiCandidateFiles(rootPath, excluded, filePaths);
 
         ConcurrentBag<(SourceFile File, OpenApiParser.OpenApiParseResult Spec)> parsed = new ConcurrentBag<(SourceFile File, OpenApiParser.OpenApiParseResult Spec)>();
-        Parallel.ForEach(filePaths,
-            new ParallelOptions { MaxDegreeOfParallelism = Environment.ProcessorCount },
-            filePath =>
+        await Parallel.ForEachAsync(filePaths,
+            new ParallelOptions
+            {
+                MaxDegreeOfParallelism = Environment.ProcessorCount,
+                CancellationToken = cancellationToken
+            }, async (filePath, token) =>
             {
                 try
                 {
-                    string text = File.ReadAllText(filePath);
+                    string text = await File.ReadAllTextAsync(filePath, token).ConfigureAwait(false);
                     string extension = Path.GetExtension(filePath);
                     OpenApiParser.OpenApiParseResult spec = extension.Equals(".json", StringComparison.OrdinalIgnoreCase)
                         ? OpenApiParser.ParseJson(text)
@@ -105,8 +110,17 @@ public sealed class OpenApiProvider : DataProvider
                     SourceFile sourceFile = new SourceFile(relativePath, "openapi", [], [], text);
                     parsed.Add((sourceFile, spec));
                 }
-                catch { }
-            });
+                catch (System.Text.Json.JsonException ex)
+                {
+                    throw new InvalidDataException(
+                        $"Cannot parse OpenAPI candidate '{filePath}': {ex.Message}", ex);
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                    throw new IOException(
+                        $"Cannot read OpenAPI candidate '{filePath}': {ex.Message}", ex);
+                }
+            }).ConfigureAwait(false);
 
         List<(SourceFile File, OpenApiParser.OpenApiParseResult Spec)> sorted = parsed.OrderBy(p => p.File.Path, StringComparer.Ordinal).ToList();
 
@@ -139,7 +153,7 @@ public sealed class OpenApiProvider : DataProvider
         {
             foreach (string file in Directory.GetFiles(dir))
             {
-                if (OpenApiExtensions.Contains(Path.GetExtension(file)))
+                if (s_openApiExtensions.Contains(Path.GetExtension(file)))
                 {
                     result.Add(file);
                 }
@@ -155,8 +169,11 @@ public sealed class OpenApiProvider : DataProvider
                 CollectOpenApiCandidateFiles(subDir, excluded, result);
             }
         }
-        catch (UnauthorizedAccessException) { }
-        catch (IOException) { }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            throw new IOException(
+                $"Cannot enumerate OpenAPI candidates in '{dir}': {ex.Message}", ex);
+        }
     }
 
     private static Dictionary<string, Dictionary<string, Func<object, object?>>> BuildAccessors()

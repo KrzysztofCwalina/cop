@@ -59,6 +59,7 @@ public static class PythonBindings
         };
         bindings.Accessors["PythonStatement"] = pythonStatementAccessors;
 
+        CodeBindings.AddDerivedAsyncAccessors(bindings);
         return bindings;
     }
 }

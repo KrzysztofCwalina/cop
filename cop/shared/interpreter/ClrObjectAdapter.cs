@@ -16,30 +16,59 @@ public sealed class ClrObjectAdapter : IDynamicObjectAdapter
     private readonly Dictionary<string, Dictionary<string, Func<object, object?>>>? _allAccessors;
     private readonly Dictionary<Type, string>? _clrTypeMappings;
     private readonly string? _typeName;
+    private readonly Dictionary<string, Dictionary<string,
+        Func<object, CancellationToken, ValueTask<object?>>>>? _allAsyncAccessors;
 
+    /// <inheritdoc/>
     public override string? TypeName => _typeName;
-    public override IEnumerable<string> GetFieldNames(object obj) => _accessors.Keys;
+    /// <inheritdoc/>
+    public override IEnumerable<string> GetFieldNames(object obj) => _accessors.Keys.Concat(
+        (IEnumerable<string>?)_allAsyncAccessors?.GetValueOrDefault(_typeName ?? "")?.Keys ?? [])
+        .Distinct(StringComparer.Ordinal);
 
     public ClrObjectAdapter(
         Dictionary<string, Func<object, object?>> accessors,
         string? typeName = null,
         Dictionary<string, Dictionary<string, Func<object, object?>>>? allAccessors = null,
-        Dictionary<Type, string>? clrTypeMappings = null)
+        Dictionary<Type, string>? clrTypeMappings = null,
+        Dictionary<string, Dictionary<string,
+            Func<object, CancellationToken, ValueTask<object?>>>>? allAsyncAccessors = null)
     {
         _accessors = accessors;
         _typeName = typeName;
         _allAccessors = allAccessors;
         _clrTypeMappings = clrTypeMappings;
+        _allAsyncAccessors = allAsyncAccessors;
     }
 
+    /// <inheritdoc/>
     public override CopValue GetField(object obj, string name)
     {
+        if (_allAsyncAccessors?.GetValueOrDefault(_typeName ?? "")?.ContainsKey(name) == true)
+        {
+            throw new InvalidOperationException($"Member '{name}' requires GetFieldAsync.");
+        }
         if (_accessors.TryGetValue(name, out Func<object, object?>? accessor))
         {
             object? raw = accessor(obj);
             return MarshalWithSubCollections(raw);
         }
         return CopNull.Instance;
+    }
+
+    /// <inheritdoc/>
+    public override async ValueTask<CopValue> GetFieldAsync(object obj, string name,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (_allAsyncAccessors?.GetValueOrDefault(_typeName ?? "")?
+            .TryGetValue(name, out Func<object, CancellationToken, ValueTask<object?>>? accessor)
+            == true)
+        {
+            return MarshalWithSubCollections(
+                await accessor(obj, cancellationToken).ConfigureAwait(false));
+        }
+        return GetField(obj, name);
     }
 
     private CopValue MarshalWithSubCollections(object? raw)
@@ -56,7 +85,8 @@ public sealed class ClrObjectAdapter : IDynamicObjectAdapter
             if (firstItem is not null && _clrTypeMappings.TryGetValue(firstItem.GetType(), out string? childTypeName) &&
                 _allAccessors.TryGetValue(childTypeName, out Dictionary<string, Func<object, object?>>? childAccessors))
             {
-                ClrObjectAdapter childAdapter = new ClrObjectAdapter(childAccessors, childTypeName, _allAccessors, _clrTypeMappings);
+                ClrObjectAdapter childAdapter = new ClrObjectAdapter(childAccessors,
+                    childTypeName, _allAccessors, _clrTypeMappings, _allAsyncAccessors);
                 List<CopValue> items = new List<CopValue>(list.Count);
                 foreach (object? item in list)
                 {
@@ -74,13 +104,15 @@ public sealed class ClrObjectAdapter : IDynamicObjectAdapter
             _clrTypeMappings.TryGetValue(raw.GetType(), out string? singleTypeName) &&
             _allAccessors.TryGetValue(singleTypeName, out Dictionary<string, Func<object, object?>>? singleAccessors))
         {
-            ClrObjectAdapter singleAdapter = new ClrObjectAdapter(singleAccessors, singleTypeName, _allAccessors, _clrTypeMappings);
+            ClrObjectAdapter singleAdapter = new ClrObjectAdapter(singleAccessors,
+                singleTypeName, _allAccessors, _clrTypeMappings, _allAsyncAccessors);
             return new CopDynamicObject(raw, singleAdapter);
         }
 
         return DataObjectAdapter.Marshal(raw);
     }
 
+    /// <inheritdoc/>
     public override string Display(object obj)
     {
         if (_accessors.TryGetValue("Name", out Func<object, object?>? nameAccessor))

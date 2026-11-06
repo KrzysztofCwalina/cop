@@ -64,7 +64,7 @@ public class RustLayeringTests
         return root;
     }
 
-    private static EngineResult RunLayering(string workspaceRoot)
+    private static async Task<EngineResult> RunLayering(string workspaceRoot)
     {
         var feedPaths = new List<string> { Path.Combine(RepoRoot, "packages") };
         var scriptPath = Path.Combine(Path.GetTempPath(), "cop-rustlayer-check-" + Guid.NewGuid().ToString("N")[..8] + ".cop");
@@ -74,7 +74,8 @@ public class RustLayeringTests
             // packageNames: ["rust"] loads the Rust provider; the layering script is supplied
             // as an additional script file. rules: ["LAYERING"] runs that script's command
             // (the rust package itself defines no command). Mirrors a user running a layering .cop.
-            return Engine.RunProject(feedPaths, ["rust"], workspaceRoot, ["LAYERING"], additionalScriptFiles: [scriptPath]);
+            return (await Engine.RunProjectAsync(feedPaths, ["rust"], workspaceRoot, ["LAYERING"],
+                new EngineRunOptions { ScriptFiles = [scriptPath] }));
         }
         finally
         {
@@ -83,12 +84,12 @@ public class RustLayeringTests
     }
 
     [Test]
-    public void Layering_DetectsForbiddenCrateDependency()
+    public async Task Layering_DetectsForbiddenCrateDependency()
     {
         var workspace = MakeWorkspace(foundationDependsOnService: true);
         try
         {
-            var result = RunLayering(workspace);
+            var result = (await RunLayering(workspace));
 
             Assert.That(result.HasFatalErrors, Is.False,
                 "Layering check should run cleanly. Errors: " + string.Join("; ", result.Errors));
@@ -104,12 +105,12 @@ public class RustLayeringTests
     }
 
     [Test]
-    public void Layering_CleanArchitecture_NoViolations()
+    public async Task Layering_CleanArchitecture_NoViolations()
     {
         var workspace = MakeWorkspace(foundationDependsOnService: false);
         try
         {
-            var result = RunLayering(workspace);
+            var result = (await RunLayering(workspace));
 
             Assert.That(result.HasFatalErrors, Is.False,
                 "Layering check should run cleanly. Errors: " + string.Join("; ", result.Errors));

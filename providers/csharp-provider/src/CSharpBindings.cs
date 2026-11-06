@@ -17,6 +17,9 @@ namespace Cop.Providers;
 /// </summary>
 public static class CSharpBindings
 {
+    /// <summary>
+    /// Builds shared and C#-specific source-model runtime accessors.
+    /// </summary>
     public static RuntimeBindings Build()
     {
         RuntimeBindings bindings = CodeBindings.Build();
@@ -67,10 +70,33 @@ public static class CSharpBindings
             ["IsGoto"] = o => (object)((CSharpStatementInfo)o).IsGoto,
             ["IsAwaitForeach"] = o => (object)((CSharpStatementInfo)o).IsAwaitForeach,
             ["HasCatchFilter"] = o => (object)((CSharpStatementInfo)o).HasCatchFilter,
+            ["IsOriginalExceptionAlwaysRethrown"] =
+                o => (object)((CSharpStatementInfo)o).IsOriginalExceptionAlwaysRethrown,
+            ["HasTypeRestrictedCatchFilter"] =
+                o => (object)((CSharpStatementInfo)o).HasTypeRestrictedCatchFilter,
+            ["IsCancellationHandler"] =
+                o => (object)((CSharpStatementInfo)o).IsCancellationHandler,
+            ["IsCallerCancellationPreserved"] =
+                o => (object)((CSharpStatementInfo)o).IsCallerCancellationPreserved,
+            ["IsOwnershipTransferred"] =
+                o => (object)((CSharpStatementInfo)o).IsOwnershipTransferred,
             ["IsUsingResource"] = o => (object)((CSharpStatementInfo)o).IsUsingResource,
         };
         bindings.Accessors["CSharpStatement"] = csharpStatementAccessors;
 
+        CodeBindings.AddDerivedAsyncAccessors(bindings);
+        foreach (string field in new[]
+                 {
+                     "HasTypeRestrictedCatchFilter", "IsOwnershipTransferred",
+                     "IsCancellationHandler", "IsCallerCancellationPreserved"
+                 })
+        {
+            bindings.AsyncAccessors["CSharpStatement"][field] = async (item, token) =>
+            {
+                await ((StatementInfo)item).EnsureSemanticAnalysisAsync(token).ConfigureAwait(false);
+                return bindings.Accessors["CSharpStatement"][field](item);
+            };
+        }
         return bindings;
     }
 }

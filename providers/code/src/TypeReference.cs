@@ -15,6 +15,10 @@ public record TypeReference(
     /// <summary>Whether the compiler identifies this as an anonymous type.</summary>
     public bool IsAnonymous { get; init; }
 
+    /// <summary>
+    /// True when this type reference has generic arguments.
+    /// </summary>
     public bool IsGeneric => GenericArguments.Count > 0;
+    /// <inheritdoc />
     public override string ToString() => OriginalText;
 }

@@ -8,19 +8,24 @@ namespace Cop.Providers;
 
 internal static class ChangeFunctions
 {
+    /// <summary>Registers change-detection functions for the analysis context.</summary>
     public static void Register(LanguageBridge bridge, AnalysisContext context)
     {
-        bridge.RegisterFunction("changeReportsAll", (_, _) =>
-            CopBool.Of(context.Options.ReportScope == "all"), 0);
-        bridge.RegisterFunction("changeMatches", (args, _) =>
-            CopBool.Of(context.Changes.IsChanged(PathArgument(args), LineArgument(args))), 2);
-        bridge.RegisterFunction("changeReportIncludes", (args, _) =>
+        bridge.RegisterFunction("changeReportsAll", (_, _, _) =>
+            ValueTask.FromResult<CopValue>(
+                CopBool.Of(context.Options.ReportScope == "all")), 0);
+        bridge.RegisterFunction("changeMatches", async (args, _, cancellationToken) =>
+            CopBool.Of((await context.GetChangesAsync(cancellationToken))
+                .IsChanged(PathArgument(args), LineArgument(args))), 2);
+        bridge.RegisterFunction("changeReportIncludes", async (args, _, cancellationToken) =>
             CopBool.Of(context.Options.ReportScope == "all" ||
                 string.IsNullOrEmpty(PathArgument(args)) ||
-                context.Changes.IsChanged(PathArgument(args), LineArgument(args))), 2);
-        bridge.RegisterFunction("changeFiles", (_, _) =>
+                (await context.GetChangesAsync(cancellationToken))
+                    .IsChanged(PathArgument(args), LineArgument(args))), 2);
+        bridge.RegisterFunction("changeFiles", async (_, _, cancellationToken) =>
         {
-            IEnumerable<CopValue> files = context.Changes.Files.Select(file =>
+            ChangeSnapshot snapshot = await context.GetChangesAsync(cancellationToken);
+            IEnumerable<CopValue> files = snapshot.Files.Select(file =>
             {
                 DataObject data = new DataObject("ChangedFile");
                 data.Set("Path", file.Path);

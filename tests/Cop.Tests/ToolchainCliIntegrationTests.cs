@@ -33,7 +33,7 @@ public partial class ToolchainCliIntegrationTests
             title = "Toolchain fixture", description = "Deferred process lifetime fixture", authors = "cop-tests",
             providerEntry = "Cop.Tests.ToolchainFixtureProvider", providerAssembly = "Toolchain.Worker.dll"
         }));
-        Assert.That(PackageMetadata.TryLoadFromDirectory(package)?.IsProvider, Is.True);
+        Assert.That(PackageMetadata.LoadFromDirectoryOrDefault(package)?.IsProvider, Is.True);
         File.WriteAllText(Path.Combine(package, "src", "fixture.cop"), """
             type FixtureItem = { Name : string }
             type FixtureData = { Items : [FixtureItem] }
@@ -108,8 +108,9 @@ public partial class ToolchainCliIntegrationTests
     {
         File.WriteAllText(Path.Combine(_root, "mode.txt"), mode);
         WriteScript("command MAIN = print(Items.Count)");
-        var result = await ToolchainProcess.RunAsync(Dotnet,
-            [_helper, "engine-probe", Path.GetDirectoryName(_script)!, _root], _root);
+        var result = await ToolchainProcess.RunAsync(
+            new ToolchainCommand(Dotnet,
+                [_helper, "engine-probe", Path.GetDirectoryName(_script)!, _root], _root));
         Assert.That(result.Status, Is.EqualTo(ToolchainStatus.Success), result.StandardError);
         using var document = JsonDocument.Parse(result.StandardOutput);
         var probe = document.RootElement;
@@ -128,7 +129,8 @@ public partial class ToolchainCliIntegrationTests
     }
 
     private Task<ToolchainResult> Run(params string[] args) =>
-        ToolchainProcess.RunAsync(Dotnet, [_cli, .. args], _root, timeout: TimeSpan.FromSeconds(30));
+        ToolchainProcess.RunAsync(new ToolchainCommand(Dotnet, [_cli, .. args], _root),
+            new ToolchainRunOptions { Timeout = TimeSpan.FromSeconds(30) });
 
     private static void AssertStopped(int pid)
     {

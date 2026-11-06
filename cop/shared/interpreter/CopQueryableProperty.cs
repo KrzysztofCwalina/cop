@@ -12,7 +12,13 @@ namespace Cop.Lang.Interpreter;
 /// </summary>
 public sealed class CopQueryableProperty : CopValue
 {
+    /// <summary>
+    /// The deferred collection from which this property is projected.
+    /// </summary>
     public CopQueryable Source { get; }
+    /// <summary>
+    /// The element member selected by the deferred projection.
+    /// </summary>
     public string PropertyName { get; }
 
     public CopQueryableProperty(CopQueryable source, string propertyName)
@@ -21,6 +27,8 @@ public sealed class CopQueryableProperty : CopValue
         PropertyName = propertyName;
     }
 
+    /// <inheritdoc/>
     public override string Display() => $"<queryable-property {Source.ProviderName}.{PropertyName}>";
+    /// <inheritdoc/>
     public override string ToString() => Display();
 }

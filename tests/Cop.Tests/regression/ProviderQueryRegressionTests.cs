@@ -23,24 +23,24 @@ public class ProviderQueryRegressionTests
     public void TearDown() => Directory.Delete(_root, true);
 
     [Test]
-    public void Issue078_CSharpFileBasedAppDirectivesAreAccepted()
+    public async Task Issue078_CSharpFileBasedAppDirectivesAreAccepted()
     {
         File.WriteAllText(Path.Combine(_root, "app.cs"), """
             #:sdk Microsoft.NET.Sdk
             #:property PublishAot=false
             System.Console.WriteLine("hello");
             """);
-        var result = Run("""
+        var result = (await Run("""
             import csharp
             let cb = csharp.parse()
             command MAIN = print(cb.Files.Count)
-            """);
+            """));
         Assert.That(result.Outputs.Select(o => o.Message), Is.EqualTo(new[] { "1" }));
         Assert.That(ProviderErrors.Drain(), Is.Empty);
     }
 
     [Test]
-    public void Issue080_PythonQuotedReturnAnnotationsAreAccepted()
+    public async Task Issue080_PythonQuotedReturnAnnotationsAreAccepted()
     {
         File.WriteAllText(Path.Combine(_root, "client.py"), """
             class GoodClient:
@@ -48,36 +48,36 @@ public class ProviderQueryRegressionTests
                 def from_connection_string(cls, conn_str: str, **kwargs) -> "GoodClient":
                     return cls(conn_str, None, **kwargs)
             """);
-        var result = Run("""
+        var result = (await Run("""
             import python
             let cb = python.parse()
             command MAIN = print(cb.Types.Count)
-            """);
+            """));
         Assert.That(result.Outputs.Select(o => o.Message), Is.EqualTo(new[] { "1" }));
     }
 
     [Test]
-    public void Issue070_CompoundJsonPropertyFilterPreservesRecords()
+    public async Task Issue070_CompoundJsonPropertyFilterPreservesRecords()
     {
-        var result = Run("""
+        var result = (await Run("""
             let chosen = json.Parse('input.json'):Name:startsWith('A')
             command MAIN = foreach chosen => '{item.Name}'
-            """);
+            """));
         Assert.That(result.Outputs.Select(o => o.Message), Is.EqualTo(new[] { "Alpha" }));
     }
 
     [TestCase("count(items)")]
     [TestCase("items.count()")]
     [TestCase("items.Count")]
-    public void Issue073_JsonQueryableCountIsExact(string terminal)
+    public async Task Issue073_JsonQueryableCountIsExact(string terminal)
     {
-        var result = Run($"let items = json.Parse('input.json')\ncommand MAIN = print({terminal})");
+        var result = (await Run($"let items = json.Parse('input.json')\ncommand MAIN = print({terminal})"));
         Assert.That(result.Outputs.Select(o => o.Message), Is.EqualTo(new[] { "2" }));
     }
 
     [TestCase("cb.Types:hasAlphaPrefix:isClient")]
     [TestCase("cb.Types:selected")]
-    public void Issue075_CrossFilePredicatesUseLocalProviderAndPushBothFilters(string expression)
+    public async Task Issue075_CrossFilePredicatesUseLocalProviderAndPushBothFilters(string expression)
     {
         File.WriteAllText(Path.Combine(_root, "input.cs"),
             "class AlphaClient {} class BetaClient {} class AlphaService {}");
@@ -93,11 +93,11 @@ public class ProviderQueryRegressionTests
             command MAIN = foreach {{expression}} => '{item.Name}'
             """);
         var diagnostics = new List<string>();
-        var result = Engine.Run(_root, _root, new EngineRunOptions
+        var result = (await Engine.RunAsync(_root, _root, new EngineRunOptions
         {
             AdditionalFeedPaths = [Path.Combine(RepoRoot, "packages")],
             DiagnosticLog = diagnostics.Add,
-        });
+        }));
         Assert.That(result.Errors.Concat(result.ParseErrors), Is.Empty);
         Assert.That(result.Outputs.Select(o => o.Message), Is.EqualTo(new[] { "AlphaClient" }));
         Assert.That(diagnostics, Has.Some.Contains(Path.Combine(RepoRoot, "packages", "languages", "csharp")));
@@ -107,20 +107,20 @@ public class ProviderQueryRegressionTests
     }
 
     [Test]
-    public void Issue076_OrderedLazyCollectionLastReturnsLastRecord()
+    public async Task Issue076_OrderedLazyCollectionLastReturnsLastRecord()
     {
-        var result = Run("""
+        var result = (await Run("""
             let items = json.Parse('input.json')
             command MAIN =
                 print(items.OrderBy(item.Name).Last.Name) &
                 print(items.OrderByDescending(item.Name).last.Name) &
                 print(items.Where(item.Name == 'Alpha').Last.Name)
-            """);
+            """));
         Assert.That(result.Outputs.Select(o => o.Message), Is.EqualTo(new[] { "Beta", "Alpha", "Alpha" }));
     }
 
     [Test]
-    public void Issue071_ProcessProviderReceivesFilterAndIssue072IgnoredFilterRemainsCorrect()
+    public async Task Issue071_ProcessProviderReceivesFilterAndIssue072IgnoredFilterRemainsCorrect()
     {
         var sdk = JsonSerializer.Serialize(Path.Combine(RepoRoot, "sdk", "python"));
         File.WriteAllText(Path.Combine(_root, "provider.py"), $$"""
@@ -136,12 +136,17 @@ public class ProviderQueryRegressionTests
                 return {"Widgets":[{"Name":"Alpha","Active":True},{"Name":"Beta","Active":False}]}
             define_provider(schema=schema, query=query)
             """);
-        using var provider = new ProcessObjectProvider("python", "provider.py", _root) { Timeout = TimeSpan.FromSeconds(15) };
-        var service = new ProviderQueryService(_root);
+        await using var provider = new ProcessObjectProvider("python", "provider.py", _root) { Timeout = TimeSpan.FromSeconds(15) };
+        await provider.InitializeAsync();
+        await using var service = new ProviderQueryService(_root);
         service.RegisterProvider("widgets", provider, ProviderSchema.FromJson(provider.GetSchema()));
         var source = (CopQueryable)service.CreateValue("widgets", new ProviderQuery { RootPath = _root });
-        var result = source.WithFilter(new PropertyFilter("Active", true)).Enumerate()
-            .Cast<CopDynamicObject>().Select(o => o.GetField("Name").Display()).ToArray();
+        var result = new List<string>();
+        await foreach (var value in source.WithFilter(new PropertyFilter("Active", true)).EnumerateAsync())
+        {
+            var item = (CopDynamicObject)value;
+            result.Add((await item.GetFieldAsync("Name")).Display());
+        }
         Assert.That(result, Is.EqualTo(new[] { "Alpha" }));
         using var request = JsonDocument.Parse(File.ReadAllText(Path.Combine(_root, "request.json")));
         Assert.That(request.RootElement.GetProperty("collection").GetString(), Is.EqualTo("Widgets"));
@@ -149,14 +154,14 @@ public class ProviderQueryRegressionTests
         Assert.That(request.RootElement.GetProperty("collectionFilters").GetProperty("Widgets").GetProperty("value").GetBoolean(), Is.True);
     }
 
-    private EngineResult Run(string program)
+    private async Task<EngineResult> Run(string program)
     {
         File.WriteAllText(Path.Combine(_root, "input.json"), """[{"Name":"Alpha"},{"Name":"Beta"}]""");
         File.WriteAllText(Path.Combine(_root, "main.cop"), "import json\n" + program);
-        var result = Engine.Run(_root, _root, new EngineRunOptions
+        var result = (await Engine.RunAsync(_root, _root, new EngineRunOptions
         {
             AdditionalFeedPaths = [Path.Combine(RepoRoot, "packages")],
-        });
+        }));
         Assert.That(result.Errors.Concat(result.ParseErrors), Is.Empty);
         return result;
     }

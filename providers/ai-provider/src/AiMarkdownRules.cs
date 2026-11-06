@@ -108,7 +108,7 @@ public partial class AiProvider
 
         static object Context(object node) => new
         {
-            title = Member(node, "Text") as string ?? "",
+            title = Member(node, "Text") as string ?? string.Empty,
             content = Items(node, "Children")
                 .Where(child => Member(child, "Kind") as string != "heading")
                 .Select(child => Member(child, "Content") as string

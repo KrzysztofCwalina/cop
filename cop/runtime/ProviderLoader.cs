@@ -36,9 +36,42 @@ public static class ProviderLoader
     /// Validates trust, loads the DLL, instantiates the provider, and calls GetSchema().
     /// Discovers DataProvider, StreamProvider, and SinkProvider subclasses.
     /// </summary>
-    public static LoadedProvider? Load(string packageDir, PackageMetadata metadata, List<string> errors)
+    public static async ValueTask<(LoadedProvider? Data,
+        List<LoadedStreamProvider> Sources, List<LoadedSinkProvider> Sinks)> LoadAsync(
+        string packageDir, PackageMetadata metadata, List<string> errors,
+        CancellationToken cancellationToken = default)
     {
-        return Load(packageDir, metadata, errors, out _, out _);
+        cancellationToken.ThrowIfCancellationRequested();
+        if (metadata.IsNodeProvider || metadata.IsPythonProvider)
+        {
+            LoadedProvider? process = await LoadProcessProviderAsync(
+                packageDir, metadata, errors, cancellationToken);
+            return (process, [], []);
+        }
+
+        List<object> instances = [];
+        bool transferred = false;
+        int originalErrors = errors.Count;
+        try
+        {
+            LoadedProvider? data = LoadClrProvider(packageDir, metadata, errors,
+                instances, out List<LoadedStreamProvider> sources,
+                out List<LoadedSinkProvider> sinks);
+            if (errors.Count != originalErrors)
+            {
+                return (null, [], []);
+            }
+            transferred = true;
+            return (data, sources, sinks);
+        }
+        finally
+        {
+            if (!transferred)
+            {
+                await Task.WhenAll(instances.Select(
+                    instance => DisposeProviderAsync(instance).AsTask()));
+            }
+        }
     }
 
     /// <summary>
@@ -46,17 +79,13 @@ public static class ProviderLoader
     /// Handles CLR providers (in-process DLL) and process providers (Node.js, Python via stdin/stdout).
     /// Also outputs any StreamProvider and SinkProvider instances found (CLR only).
     /// </summary>
-    public static LoadedProvider? Load(string packageDir, PackageMetadata metadata, List<string> errors,
+    private static LoadedProvider? LoadClrProvider(
+        string packageDir, PackageMetadata metadata, List<string> errors,
+        List<object> instances,
         out List<LoadedStreamProvider> sourceProviders, out List<LoadedSinkProvider> sinkProviders)
     {
         sourceProviders = [];
         sinkProviders = [];
-
-        // Handle out-of-process providers (Node.js, Python)
-        if (metadata.IsNodeProvider || metadata.IsPythonProvider)
-        {
-            return LoadProcessProvider(packageDir, metadata, errors);
-        }
 
         if (!metadata.IsClrProvider)
         {
@@ -100,6 +129,7 @@ public static class ProviderLoader
                 if (typeof(StreamProvider).IsAssignableFrom(type))
                 {
                     StreamProvider instance = (StreamProvider)Activator.CreateInstance(type)!;
+                    instances.Add(instance);
                     ProviderSchema schema = ProviderSchema.FromJson(instance.GetSchema());
                     sourceProviders.Add(new LoadedStreamProvider(instance, schema, metadata.Name));
                 }
@@ -109,6 +139,7 @@ public static class ProviderLoader
                          !typeof(ListAppendSink).IsAssignableFrom(type))
                 {
                     SinkProvider instance = (SinkProvider)Activator.CreateInstance(type)!;
+                    instances.Add(instance);
                     sinkProviders.Add(new LoadedSinkProvider(instance, metadata.Name));
                 }
             }
@@ -138,10 +169,16 @@ public static class ProviderLoader
             }
 
             DataProvider dataInstance = (DataProvider)Activator.CreateInstance(providerType)!;
+            instances.Add(dataInstance);
             ProviderSchema dataSchema = ProviderSchema.FromJson(dataInstance.GetSchema());
             return new LoadedProvider(dataInstance, dataSchema, metadata.Name);
         }
-        catch (Exception ex) when (ex is not OutOfMemoryException)
+        catch (Exception ex) when (ex is IOException or BadImageFormatException or
+            ReflectionTypeLoadException or TypeLoadException or MemberAccessException or
+            InvalidOperationException or ArgumentException or System.Text.Json.JsonException or
+            System.Security.SecurityException ||
+            ex is TargetInvocationException { InnerException: not OperationCanceledException
+                and not OutOfMemoryException })
         {
             string detail = ex.Message;
             if (string.IsNullOrWhiteSpace(detail))
@@ -181,6 +218,12 @@ public static class ProviderLoader
                 registry.RegisterAccessors(typeName, accessors);
             }
 
+            foreach ((string typeName, Dictionary<string, Func<object, CancellationToken,
+                ValueTask<object?>>> accessors) in bindings.AsyncAccessors)
+            {
+                registry.RegisterAsyncAccessors(typeName, accessors);
+            }
+
             if (bindings.CollectionExtractors != null)
             {
                 foreach ((string? collName, Func<object, List<object>>? extractor) in bindings.CollectionExtractors)
@@ -211,34 +254,58 @@ public static class ProviderLoader
         return schema;
     }
 
-    internal static Dictionary<string, List<object>> QueryCollections(DataProvider instance, ProviderSchema schema, ProviderQuery query, TypeRegistry? registry = null, Action<DataStore>? onStore = null)
+    internal static async ValueTask<Dictionary<string, List<object>>> QueryCollectionsAsync(
+        DataProvider instance, ProviderSchema schema, ProviderQuery query,
+        TypeRegistry? registry = null, CancellationToken cancellationToken = default)
     {
-        object? result = instance.Query(query);
-        return MaterializeCollections(result, instance, schema, registry, onStore);
+        object? result = await instance.QueryAsync(query, cancellationToken);
+        return await MaterializeCollectionsAsync(result, schema, registry, null, cancellationToken);
     }
 
-    internal static IReadOnlyDictionary<string, IEnumerable<object>> QueryDeferredCollections(
-        DataProvider instance, ProviderSchema schema, ProviderQuery query, Action<DataStore>? onStore = null)
+    internal static async ValueTask<IReadOnlyDictionary<string, IAsyncEnumerable<object>>>
+        QueryDeferredCollectionsAsync(DataProvider instance, ProviderSchema schema,
+            ProviderQuery query, Action<DataStore>? onStore = null,
+            CancellationToken cancellationToken = default)
     {
-        object? result = instance.QueryDeferred(query);
-        return result is DeferredProviderResult deferred
-            ? deferred.Collections
-            : MaterializeCollections(result, instance, schema, null, onStore)
-                .ToDictionary(c => c.Key, c => (IEnumerable<object>)c.Value, StringComparer.Ordinal);
+        object? result = await instance.QueryDeferredAsync(query, cancellationToken);
+        if (result is DeferredProviderResult deferred)
+        {
+            return deferred.Collections;
+        }
+        Dictionary<string, List<object>> buffered = await MaterializeCollectionsAsync(
+            result, schema, null, onStore, cancellationToken);
+        return buffered.ToDictionary(collection => collection.Key,
+            collection => collection.Value.ToAsyncEnumerable(), StringComparer.Ordinal);
     }
 
-    private static Dictionary<string, List<object>> MaterializeCollections(object? result,
-        DataProvider instance, ProviderSchema schema, TypeRegistry? registry, Action<DataStore>? onStore)
+    private static async ValueTask<Dictionary<string, List<object>>> MaterializeCollectionsAsync(
+        object? result, ProviderSchema schema, TypeRegistry? registry,
+        Action<DataStore>? onStore, CancellationToken cancellationToken)
     {
+        if (result is DeferredProviderResult deferred)
+        {
+            Dictionary<string, List<object>> collections = new(StringComparer.Ordinal);
+            foreach ((string name, IAsyncEnumerable<object> values) in deferred.Collections)
+            {
+                List<object> items = [];
+                await foreach (object item in values.WithCancellation(cancellationToken))
+                {
+                    items.Add(item);
+                }
+                collections.Add(name, items);
+            }
+            return collections;
+        }
+        cancellationToken.ThrowIfCancellationRequested();
         return result switch
         {
             null => new Dictionary<string, List<object>>(StringComparer.Ordinal),
-            DeferredProviderResult deferred => deferred.Collections.ToDictionary(c => c.Key, c => c.Value.ToList()),
             Dictionary<string, List<object>> collections => collections,
             DataStore store => ConvertDataStoreToCollections(schema, store, registry, onStore),
             byte[] json => ConvertJsonToCollections(schema, json, registry),
             ReadOnlyMemory<byte> json => ConvertJsonToCollections(schema, json.ToArray(), registry),
-            _ => throw new InvalidOperationException($"Provider '{instance}' returned unsupported query result type '{result.GetType().FullName}'.")
+            _ => throw new InvalidOperationException(
+                $"Provider query returned unsupported result type '{result.GetType().FullName}'.")
         };
     }
 
@@ -295,8 +362,11 @@ public static class ProviderLoader
     /// Prefers the Objects format (in-process CLR objects) when available for better performance.
     /// Falls back to JSON format with deserialization.
     /// </summary>
-    public static void QueryAndRegister(LoadedProvider provider, TypeRegistry registry, string? rootPath, List<string> errors, IReadOnlySet<string>? excludedDirectories = null)
-        => QueryAndRegister(provider.Instance, provider.Schema, provider.PackageName, registry, new ProviderQuery { RootPath = rootPath, ExcludedDirectories = excludedDirectories }, errors);
+    public static ValueTask QueryAndRegisterAsync(LoadedProvider provider,
+        TypeRegistry registry, string? rootPath, List<string> errors,
+        IReadOnlySet<string>? excludedDirectories = null)
+        => QueryAndRegisterAsync(provider, registry,
+            new ProviderQuery { RootPath = rootPath, ExcludedDirectories = excludedDirectories }, errors);
 
     /// <summary>
     /// Registers a StreamProvider as a streaming source in the registry.
@@ -324,18 +394,26 @@ public static class ProviderLoader
     /// When CollectionFilters are specified, items are filtered before registration
     /// using compiled filter predicates for efficient pushdown.
     /// </summary>
-    public static void QueryAndRegister(DataProvider instance, ProviderSchema schema, string ns, TypeRegistry registry, ProviderQuery query, List<string>? errors = null)
+    public static async ValueTask QueryAndRegisterAsync(LoadedProvider provider,
+        TypeRegistry registry, ProviderQuery query, List<string>? errors = null,
+        CancellationToken cancellationToken = default)
     {
+        (DataProvider instance, ProviderSchema schema, string ns) = provider;
         try
         {
-            Dictionary<string, List<object>> collections = QueryCollections(instance, schema, query, registry);
+            Dictionary<string, List<object>> collections = await QueryCollectionsAsync(
+                instance, schema, query, registry, cancellationToken);
             foreach ((string? collName, List<object>? items) in collections)
             {
                 List<object> filtered = ApplyCollectionFilter(registry, schema, collName, items, query.CollectionFilters);
                 registry.AppendNamespacedCollection(ns, collName, filtered);
             }
         }
-        catch (Exception ex) when (ex is not OutOfMemoryException)
+        catch (Exception ex) when (ex is Cop.Lang.Interpreter.CopEvaluationException or
+            IOException or UnauthorizedAccessException or
+            System.Security.SecurityException or HttpRequestException or TimeoutException or
+            ArgumentException or InvalidOperationException or NotSupportedException or
+            FormatException or System.Text.Json.JsonException)
         {
             if (errors != null)
             {
@@ -389,7 +467,9 @@ public static class ProviderLoader
     /// Loads a process-based provider (Node.js or Python).
     /// Creates a process-backed DataProvider that communicates via stdin/stdout.
     /// </summary>
-    private static LoadedProvider? LoadProcessProvider(string packageDir, PackageMetadata metadata, List<string> errors)
+    private static async ValueTask<LoadedProvider?> LoadProcessProviderAsync(
+        string packageDir, PackageMetadata metadata, List<string> errors,
+        CancellationToken cancellationToken)
     {
         if (string.IsNullOrEmpty(metadata.ProviderEntry))
         {
@@ -408,17 +488,41 @@ public static class ProviderLoader
             return null;
         }
 
+        ProcessObjectProvider instance = new ProcessObjectProvider(
+            runtime, entryScript, packageDir);
+        bool isTransferred = false;
         try
         {
-            ProcessObjectProvider instance = new ProcessObjectProvider(runtime, entryScript, packageDir);
+            await instance.InitializeAsync(cancellationToken);
             ReadOnlyMemory<byte> schemaBytes = instance.GetSchema();
             ProviderSchema schema = ProviderSchema.FromJson(schemaBytes);
+            isTransferred = true;
             return new LoadedProvider(instance, schema, metadata.Name);
         }
-        catch (Exception ex) when (ex is not OutOfMemoryException)
+        catch (Exception ex) when (ex is IOException or InvalidOperationException or
+            TimeoutException or System.Text.Json.JsonException or ArgumentException)
         {
             errors.Add($"Failed to load {runtime} provider '{metadata.Name}': {ex.Message}");
             return null;
+        }
+        finally
+        {
+            if (!isTransferred)
+            {
+                await instance.DisposeAsync();
+            }
+        }
+    }
+
+    internal static async ValueTask DisposeProviderAsync(object instance)
+    {
+        if (instance is IAsyncDisposable asynchronous)
+        {
+            await asynchronous.DisposeAsync();
+        }
+        else if (instance is IDisposable synchronous)
+        {
+            synchronous.Dispose();
         }
     }
 

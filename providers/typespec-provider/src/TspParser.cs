@@ -2,7 +2,7 @@
 
 using System.Text;
 
-namespace TypeSpecProvider;
+namespace Cop.Providers.TypeSpec;
 
 /// <summary>
 /// Recursive descent parser for TypeSpec source files.
@@ -32,7 +32,8 @@ public class TspParser
     /// <summary>
     /// Combines declarations from matching TypeSpec files in a directory tree.
     /// </summary>
-    public static TspSpec ParseFiles(string directory, string pattern = "*.tsp")
+    public static async ValueTask<TspSpec> ParseFilesAsync(
+        string directory, string pattern = "*.tsp", CancellationToken cancellationToken = default)
     {
         TspSpec spec = new TspSpec();
         if (!Directory.Exists(directory))
@@ -43,7 +44,7 @@ public class TspParser
         string[] files = Directory.GetFiles(directory, pattern, SearchOption.AllDirectories);
         foreach (string file in files)
         {
-            string source = File.ReadAllText(file);
+            string source = await File.ReadAllTextAsync(file, cancellationToken).ConfigureAwait(false);
             TspSpec fileSpec = Parse(source);
             Cop.Core.ExecutionStatistics.RecordInputFile(file);
             spec.Namespaces.AddRange(fileSpec.Namespaces);
@@ -250,7 +251,7 @@ public class TspParser
         {
             Name = name,
             Type = type,
-            Optional = optional,
+            IsOptional = optional,
             Default = defaultValue,
             Decorators = decorators,
         };
@@ -298,7 +299,7 @@ public class TspParser
             {
                 Name = paramName,
                 Type = paramType,
-                Optional = paramOptional,
+                IsOptional = paramOptional,
                 Decorators = paramDecorators,
             });
             ConsumeOptional(TspTokenKind.Comma);
@@ -412,7 +413,7 @@ public class TspParser
             {
                 Name = paramName,
                 Type = paramType,
-                Optional = paramOptional,
+                IsOptional = paramOptional,
                 Decorators = paramDecorators,
             });
             ConsumeOptional(TspTokenKind.Comma);
@@ -636,7 +637,7 @@ public class TspParser
         {
             string key = ExpectIdentifier();
             Expect(TspTokenKind.Colon);
-            string value = ParseDecoratorArgument() ?? "";
+            string value = ParseDecoratorArgument() ?? string.Empty;
             parts.Add($"{key}: {value}");
             ConsumeOptional(TspTokenKind.Comma);
         }
@@ -920,12 +921,12 @@ public class TspParser
 
     private string? CurrentNamespace => _currentNamespace.Count > 0 ? string.Join(".", _currentNamespace) : null;
 
-    private TspToken Current => _pos < _tokens.Count ? _tokens[_pos] : new TspToken(TspTokenKind.EndOfFile, "", 0, 0);
+    private TspToken Current => _pos < _tokens.Count ? _tokens[_pos] : new TspToken(TspTokenKind.EndOfFile, string.Empty, 0, 0);
 
     private TspToken Peek(int offset)
     {
         int idx = _pos + offset;
-        return idx < _tokens.Count ? _tokens[idx] : new TspToken(TspTokenKind.EndOfFile, "", 0, 0);
+        return idx < _tokens.Count ? _tokens[idx] : new TspToken(TspTokenKind.EndOfFile, string.Empty, 0, 0);
     }
 
     private void Advance() => _pos++;

@@ -9,18 +9,20 @@ namespace Cop.Tests.Lang.SourceParsers;
 [TestFixture]
 public class PythonAstParityTests
 {
-    private static SourceFile ParseNative(string source, string path = "parity.py")
+    private static async Task<SourceFile> ParseNativeAsync(string source, string path = "parity.py")
     {
-        using var scope = new ToolchainExecutionScope();
+        await using var scope = new ToolchainExecutionScope();
         var parser = new PythonSourceParser();
+        SourceFile file = (await parser.ParseAsync(path, source,
+            cancellationToken: CancellationToken.None))!;
         if (parser.GetCacheIdentity(path).EndsWith(":simpler", StringComparison.Ordinal))
             Assert.Ignore("This test exercises installed CPython; fallback coverage runs without Python.");
-        return parser.Parse(path, source)!;
+        return file;
     }
 
     [TestCase(true)]
     [TestCase(false)]
-    public void AbstractClasses_CommonAndPythonFactsAgreeBeforeAndAfterCache(bool useToolchain)
+    public async Task AbstractClasses_CommonAndPythonFactsAgreeBeforeAndAfterCache(bool useToolchain)
     {
         const string text = """
             from abc import ABC
@@ -33,8 +35,8 @@ public class PythonAstParityTests
                 pass
             """;
         var source = useToolchain
-            ? ParseNative(text)
-            : new PythonSourceParser(useToolchain: false).Parse("abstract.py", text)!;
+            ? await ParseNativeAsync(text)
+            : (await new PythonSourceParser(backend: PythonAnalysisBackend.SyntaxOnly).ParseAsync("abstract.py", text, cancellationToken: CancellationToken.None))!;
         var existingAbstract = (source.Types.Last() with { Modifiers = Modifier.Abstract | Modifier.Public }).AsPython();
         Assert.That(existingAbstract.IsAbstract, Is.True);
         Assert.That(existingAbstract.Modifiers, Is.EqualTo(Modifier.Abstract | Modifier.Public));
@@ -43,7 +45,7 @@ public class PythonAstParityTests
         try
         {
             SourceCacheSerializer.Save(path, [4, 5, 6], [source]);
-            var warm = SourceCacheSerializer.TryLoad(path, [4, 5, 6], typeof(PythonSourceParser).Assembly)!.Single();
+            var warm = SourceCacheSerializer.LoadOrDefault(path, [4, 5, 6], typeof(PythonSourceParser).Assembly)!.Single();
             foreach (var file in new[] { source, warm })
             {
                 Assert.That(file.Types.Select(t => t.Name), Is.EqualTo(new[] { "AbstractBase", "QualifiedAbstractBase", "Plain" }));
@@ -61,9 +63,9 @@ public class PythonAstParityTests
     }
 
     [Test]
-    public void Calls_IncludeAllExpressionContextsWithOwnershipAndNesting()
+    public async Task Calls_IncludeAllExpressionContextsWithOwnershipAndNesting()
     {
-        var file = ParseNative("""
+        var file = await ParseNativeAsync("""
             def f():
                 direct(nested())
                 x = assigned()
@@ -89,9 +91,9 @@ public class PythonAstParityTests
     }
 
     [Test]
-    public void Arguments_AreDecodedAndStructuredWithoutInventingDynamicTargets()
+    public async Task Arguments_AreDecodedAndStructuredWithoutInventingDynamicTargets()
     {
-        var file = ParseNative("""
+        var file = await ParseNativeAsync("""
             client.send("hello\nworld", nested('x'), label='value', **options)
             factory().run(b'bytes', f'{value}')
             1e999
@@ -116,9 +118,9 @@ public class PythonAstParityTests
     }
 
     [Test]
-    public void Parameters_PreserveAnnotationsDefaultsVariadicsAndLocations()
+    public async Task Parameters_PreserveAnnotationsDefaultsVariadicsAndLocations()
     {
-        var file = ParseNative("""
+        var file = await ParseNativeAsync("""
             def transform(
                 values: list[str],
                 maybe: int | None = None,
@@ -146,9 +148,9 @@ public class PythonAstParityTests
     }
 
     [Test]
-    public void Classes_ExposeMembersPropertiesNestingAndPythonFlags()
+    public async Task Classes_ExposeMembersPropertiesNestingAndPythonFlags()
     {
-        var file = ParseNative("""
+        var file = await ParseNativeAsync("""
             @dataclasses.dataclass
             class Container(typing.Protocol):
                 '''Class documentation.'''
@@ -183,16 +185,16 @@ public class PythonAstParityTests
         Assert.That(type.Properties.Single().Name, Is.EqualTo("value"));
         Assert.That(type.Properties.Single().HasGetter, Is.True);
         Assert.That(type.Properties.Single().HasSetter, Is.True);
-        Assert.That(type.Methods.Select(m => m.Name), Is.EqualTo(new[] { "value", "value", "run" }));
-        Assert.That(type.Methods[2].IsAsync, Is.True);
-        Assert.That(type.Methods[2].IsStatic, Is.True);
+        Assert.That((await AsyncSourceFacts.MembersAsync(type, CancellationToken.None)).Methods.Select(m => m.Name), Is.EqualTo(new[] { "value", "value", "run" }));
+        Assert.That((await AsyncSourceFacts.MembersAsync(type, CancellationToken.None)).Methods[2].IsAsync, Is.True);
+        Assert.That((await AsyncSourceFacts.MembersAsync(type, CancellationToken.None)).Methods[2].IsStatic, Is.True);
         Assert.That(file.Types[1].IsPublic, Is.False);
     }
 
     [Test]
-    public void NestedFunctions_DoNotContaminateOuterGeneratorOrStatements()
+    public async Task NestedFunctions_DoNotContaminateOuterGeneratorOrStatements()
     {
-        var file = ParseNative("""
+        var file = await ParseNativeAsync("""
             def outer():
                 def inner():
                     yield make()
@@ -207,9 +209,9 @@ public class PythonAstParityTests
     }
 
     [Test]
-    public void ReceiverAssignments_ExposeInstanceFieldsButNotOtherObjectsOrNestedFunctions()
+    public async Task ReceiverAssignments_ExposeInstanceFieldsButNotOtherObjectsOrNestedFunctions()
     {
-        var file = ParseNative("""
+        var file = await ParseNativeAsync("""
             class C:
                 def __init__(self):
                     self.value: int = 7
@@ -231,9 +233,9 @@ public class PythonAstParityTests
     }
 
     [Test]
-    public void ConditionalClassMembers_StayInTheirDeclaringClass()
+    public async Task ConditionalClassMembers_StayInTheirDeclaringClass()
     {
-        var file = ParseNative("""
+        var file = await ParseNativeAsync("""
             class Container:
                 if enabled():
                     value: int = 1
@@ -244,17 +246,17 @@ public class PythonAstParityTests
             """);
         var type = file.Types.Single();
         Assert.That(file.Methods, Is.Empty, "A conditional class member is not a module function.");
-        Assert.That(type.Methods.Select(m => m.Name), Is.EqualTo(new[] { "method" }));
+        Assert.That((await AsyncSourceFacts.MembersAsync(type, CancellationToken.None)).Methods.Select(m => m.Name), Is.EqualTo(new[] { "method" }));
         Assert.That(type.NestedTypes.Select(t => t.Name), Is.EqualTo(new[] { "Nested" }));
         Assert.That(type.Fields.Select(f => f.Name), Is.EqualTo(new[] { "value" }));
-        Assert.That(file.Statements.Single(s => s.MemberName == "invoked").Method, Is.SameAs(type.Methods.Single()));
+        Assert.That(file.Statements.Single(s => s.MemberName == "invoked").Method, Is.SameAs((await AsyncSourceFacts.MembersAsync(type, CancellationToken.None)).Methods.Single()));
         Assert.That(file.Statements.Single(s => s.MemberName == "enabled").Parent!.Kind, Is.EqualTo("if"));
     }
 
     [Test]
-    public void Imports_PreserveAliasRelativeLevelAndMemberNames()
+    public async Task Imports_PreserveAliasRelativeLevelAndMemberNames()
     {
-        var file = ParseNative("""
+        var file = await ParseNativeAsync("""
             import numpy as np
             from ..tools import Reader as R, Writer
             from . import *
@@ -268,9 +270,9 @@ public class PythonAstParityTests
     }
 
     [Test]
-    public void Calls_InDecoratorsDefaultsAndLambdasAreNotDiscarded()
+    public async Task Calls_InDecoratorsDefaultsAndLambdasAreNotDiscarded()
     {
-        var file = ParseNative("""
+        var file = await ParseNativeAsync("""
             @decorate(config())
             def f(value=default()):
                 result = lambda: compute()
@@ -294,18 +296,18 @@ public class PythonAstParityTests
     [TestCase("def f():\nreturn 1\n")]
     [TestCase("return 1\n")]
     [TestCase("yield 1\n")]
-    public void MalformedSource_ReportsCompilerDiagnostics(string source)
+    public async Task MalformedSource_ReportsCompilerDiagnostics(string source)
     {
-        var file = ParseNative(source);
+        var file = await ParseNativeAsync(source);
         Assert.That(file.ParseErrors, Has.Count.EqualTo(1));
         Assert.That(file.ParseErrors[0], Does.StartWith("parity.py(").And.Contain("): error:"));
         Assert.That(file.Types, Is.Empty);
     }
 
     [Test]
-    public void StubsAndUnicodeColumns_AreSupportedWithoutExecutingTarget()
+    public async Task StubsAndUnicodeColumns_AreSupportedWithoutExecutingTarget()
     {
-        var file = ParseNative("""
+        var file = await ParseNativeAsync("""
             import definitely_not_an_installed_module
             def identity(value: str = 'x') -> str: ...
             x = '😀'; client.send('ok')
@@ -320,13 +322,13 @@ public class PythonAstParityTests
     }
 
     [Test]
-    public void UnavailableInterpreter_WarnsOnceAndUsesDistinctCacheIdentity()
+    public async Task UnavailableInterpreter_WarnsOnceAndUsesDistinctCacheIdentity()
     {
         ProviderWarnings.Clear();
         var parser = new PythonSourceParser(searchPath: "");
+        var first = (await parser.ParseAsync("fallback.py", "def useful(value: int = 7) -> 'Result':\n    return called()\n", cancellationToken: CancellationToken.None))!;
         var identity = parser.GetCacheIdentity("fallback.py");
-        var first = parser.Parse("fallback.py", "def useful(value: int = 7) -> 'Result':\n    return called()\n")!;
-        parser.Parse("another.py", "class Other:\n    pass\n");
+        await parser.ParseAsync("another.py", "class Other:\n    pass\n", cancellationToken: CancellationToken.None);
         Assert.That(identity, Does.EndWith(":simpler"));
         Assert.That(first.Methods.Single().Name, Is.EqualTo("useful"));
         Assert.That(first.Methods.Single().ReturnType!.Name, Is.EqualTo("Result"));
@@ -339,10 +341,25 @@ public class PythonAstParityTests
     }
 
     [Test]
-    public void Fallback_DetectsCallsAcrossContextsAndDoesNotLeakNestedYield()
+    public void PendingInterpreterDiscoveryDistinguishesInheritedAndExplicitEmptySearchPaths()
     {
-        var parser = new PythonSourceParser(useToolchain: false);
-        var file = parser.Parse("fallback.py", """
+        var inherited = new PythonSourceParser();
+        var unavailable = new PythonSourceParser(searchPath: "");
+        var syntaxOnly = new PythonSourceParser(backend: PythonAnalysisBackend.SyntaxOnly);
+        Assert.That(inherited.GetCacheIdentity("probe.py"),
+            Does.EndWith(":python:pending:inherited"));
+        Assert.That(unavailable.GetCacheIdentity("probe.py"),
+            Does.EndWith(":python:pending:path:"));
+        Assert.That(syntaxOnly.GetCacheIdentity("probe.py"), Does.EndWith(":simpler"));
+        Assert.That(unavailable.GetCacheIdentity("probe.py"),
+            Is.Not.EqualTo(inherited.GetCacheIdentity("probe.py")));
+    }
+
+    [Test]
+    public async Task Fallback_DetectsCallsAcrossContextsAndDoesNotLeakNestedYield()
+    {
+        var parser = new PythonSourceParser(backend: PythonAnalysisBackend.SyntaxOnly);
+        var file = (await parser.ParseAsync("fallback.py", """
             def outer():
                 def generator():
                     yield nested()
@@ -352,7 +369,7 @@ public class PythonAstParityTests
                 assert checked()
                 with opened():
                     body()
-            """)!;
+            """, cancellationToken: CancellationToken.None))!;
         Assert.That(file.Statements.Where(s => s.Kind == "call").Select(s => s.MemberName),
             Is.EqualTo(new[] { "nested", "direct", "inner", "assigned", "returned", "checked", "opened", "body" }));
         Assert.That(((PythonMethodDeclaration)file.Methods.Single(m => m.Name == "outer")).IsGenerator, Is.False);
@@ -360,52 +377,53 @@ public class PythonAstParityTests
 
     [TestCase("x = [")]
     [TestCase("if :\n    pass\n")]
-    public void Fallback_ReportsBasicMalformedSource(string source)
+    public async Task Fallback_ReportsBasicMalformedSource(string source)
     {
-        var file = new PythonSourceParser(useToolchain: false).Parse("fallback.py", source)!;
+        var file = (await new PythonSourceParser(backend: PythonAnalysisBackend.SyntaxOnly).ParseAsync("fallback.py", source, cancellationToken: CancellationToken.None))!;
         Assert.That(file.ParseErrors, Has.Count.EqualTo(1));
         Assert.That(file.ParseErrors[0], Does.Contain("fallback.py(1,"));
     }
 
     [Test]
-    public void Fallback_PreservesImportsNestingAndVisibilityConventions()
+    public async Task Fallback_PreservesImportsNestingAndVisibilityConventions()
     {
-        var file = new PythonSourceParser(useToolchain: false).Parse("fallback.py", """
+        var file = (await new PythonSourceParser(backend: PythonAnalysisBackend.SyntaxOnly).ParseAsync("fallback.py", """
             import numpy as np
             from ..tools import Reader as R
             class _Private:
                 class Nested:
                     def __str__(self):
                         return 'value'
-            """)!;
+            """, cancellationToken: CancellationToken.None))!;
         Assert.That(file.Usings, Is.EqualTo(new[] { "numpy", "..tools" }));
         Assert.That(file.Imports.Select(i => i.Alias), Is.EqualTo(new[] { "np", "R" }));
         Assert.That(file.Imports[1].RelativeLevel, Is.EqualTo(2));
         Assert.That(file.Types.Single().IsPublic, Is.False);
         Assert.That(file.Types.Single().NestedTypes.Single().Name, Is.EqualTo("Nested"));
-        Assert.That(file.Types.Single().NestedTypes.Single().Methods.Single().IsPublic, Is.True);
+        Assert.That((await AsyncSourceFacts.MembersAsync(file.Types.Single().NestedTypes.Single(), CancellationToken.None)).Methods.Single().IsPublic, Is.True);
     }
 
     [Test]
-    public void Fallback_Issue083_ClassCompoundStatementTerminatesAndKeepsFollowingMethods()
+    [CancelAfter(3000)]
+    public async Task Fallback_Issue083_ClassCompoundStatementTerminatesAndKeepsFollowingMethods()
     {
-        var parse = Task.Run(() => new PythonSourceParser(useToolchain: false).Parse("fallback.py", """
+        var file = (await new PythonSourceParser(backend: PythonAnalysisBackend.SyntaxOnly).ParseAsync("fallback.py", """
             class C:
                 if True:
                     value = 1
                 def method(self):
                     useful()
-            """)!);
-        Assert.That(parse.Wait(TimeSpan.FromSeconds(3)), Is.True, "The simpler parser must advance past class-level compound statements.");
-        Assert.That(parse.Result.Types.Select(t => t.Name), Is.EqualTo(new[] { "C" }));
-        Assert.That(parse.Result.Types.Single().Methods.Select(m => m.Name), Is.EqualTo(new[] { "method" }));
-        Assert.That(parse.Result.Statements.Select(s => s.MemberName), Is.EqualTo(new[] { "useful" }));
+            """, cancellationToken: TestContext.CurrentContext.CancellationToken))!;
+        TestContext.CurrentContext.CancellationToken.ThrowIfCancellationRequested();
+        Assert.That(file.Types.Select(t => t.Name), Is.EqualTo(new[] { "C" }));
+        Assert.That((await AsyncSourceFacts.MembersAsync(file.Types.Single(), CancellationToken.None)).Methods.Select(m => m.Name), Is.EqualTo(new[] { "method" }));
+        Assert.That(file.Statements.Select(s => s.MemberName), Is.EqualTo(new[] { "useful" }));
     }
 
     [Test]
-    public void CacheRoundTrip_PreservesPythonFactsStructuredExpressionsAndCanonicalOwnership()
+    public async Task CacheRoundTrip_PreservesPythonFactsStructuredExpressionsAndCanonicalOwnership()
     {
-        var source = ParseNative("""
+        var source = await ParseNativeAsync("""
             from ..tools import Reader as R
             def f(value: list[str] = ['default']):
                 if value:
@@ -423,7 +441,7 @@ public class PythonAstParityTests
         try
         {
             SourceCacheSerializer.Save(path, [1, 2, 3], [source]);
-            var warm = SourceCacheSerializer.TryLoad(path, [1, 2, 3], typeof(PythonSourceParser).Assembly)!.Single();
+            var warm = SourceCacheSerializer.LoadOrDefault(path, [1, 2, 3], typeof(PythonSourceParser).Assembly)!.Single();
             foreach (var file in new[] { source, warm })
             {
                 CodeCollectionBuilder.LinkReferences(file);
@@ -447,8 +465,8 @@ public class PythonAstParityTests
                 Assert.That(file.Imports.Single().Column, Is.EqualTo(1));
                 var nested = file.Types.Single().NestedTypes.Single();
                 Assert.That(nested.File, Is.SameAs(file));
-                Assert.That(((PythonMethodDeclaration)nested.Methods.Single()).IsStaticmethod, Is.True);
-                Assert.That(calls[4].Method, Is.SameAs(nested.Methods.Single()));
+                Assert.That(((PythonMethodDeclaration)(await AsyncSourceFacts.MembersAsync(nested, CancellationToken.None)).Methods.Single()).IsStaticmethod, Is.True);
+                Assert.That(calls[4].Method, Is.SameAs((await AsyncSourceFacts.MembersAsync(nested, CancellationToken.None)).Methods.Single()));
                 Assert.That(calls.All(c => ReferenceEquals(c.File, file)), Is.True);
             }
         }

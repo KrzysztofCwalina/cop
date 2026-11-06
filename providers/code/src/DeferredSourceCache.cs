@@ -13,30 +13,41 @@ internal sealed class DeferredSourceCache(string scope)
     private const int Version = 2;
     private readonly string _path = CodeCollectionBuilder.GetCachePath(scope + "\ndeferred-bundle");
     private Dictionary<string, Entry>? _entries;
+    private readonly object _gate = new();
     private bool _changed;
     private sealed record Entry(string Parser, byte[] Fingerprint, byte[] Model);
 
-    public SourceFile? Read(string path, ISourceParser parser)
+    /// <summary>
+    /// Restores a cached source model or parses the exact current source text.
+    /// </summary>
+    public async ValueTask<SourceFile?> ReadAsync(
+        string path, ISourceParser parser, CancellationToken cancellationToken = default)
     {
         string parserId = parser.GetCacheIdentity(path);
         bool canCache = parser.CanCache(path);
         using FileStream stream = new FileStream(
             path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
         using StreamReader reader = new StreamReader(stream);
-        string source = reader.ReadToEnd();
+        string source = await reader.ReadToEndAsync(cancellationToken).ConfigureAwait(false);
         byte[] fingerprint = canCache
             ? SHA256.HashData(Encoding.UTF8.GetBytes(source))
             : [];
-        Dictionary<string, Entry>? entries = canCache ? _entries ??= Load() : null;
-        if (entries is not null && entries.TryGetValue(path, out Entry? entry) && entry.Parser == parserId
+        Dictionary<string, Entry>? entries;
+        Entry? entry;
+        lock (_gate)
+        {
+            entries = canCache ? _entries ??= Load() : null;
+            entry = entries?.GetValueOrDefault(path);
+        }
+        if (entry is not null && entry.Parser == parserId
             && entry.Fingerprint.AsSpan().SequenceEqual(fingerprint))
         {
             using MemoryStream buffer = new MemoryStream(entry.Model, writable: false);
-            List<SourceFile>? cached = SourceCacheSerializer.TryLoad(
+            List<SourceFile>? cached = SourceCacheSerializer.LoadOrDefault(
                 buffer, fingerprint, parser.GetType().Assembly);
             if (cached is { Count: 1 })
             {
-                if (CopDiagnostics.Timing)
+                if (CopDiagnostics.IsTimingEnabled)
                 {
                     Console.Error.WriteLine($"[provider-cache] {cached[0].Language} {path}");
                 }
@@ -46,22 +57,26 @@ internal sealed class DeferredSourceCache(string scope)
             Console.Error.WriteLine($"Warning: Could not reconstruct cached source model for '{path}'.");
         }
 
-        SourceFile? parsed = parser.Parse(path, source);
-        if (CopDiagnostics.Timing)
+        SourceFile? parsed = await parser.ParseAsync(path, source, cancellationToken)
+            .ConfigureAwait(false);
+        if (CopDiagnostics.IsTimingEnabled)
         {
             Console.Error.WriteLine($"[provider-parse] {parser.Language} {path}");
         }
 
-        if (entries is not null)
+        lock (_gate)
         {
-            entries.Remove(path);
-            _changed = true;
-        }
-        if (entries is not null && parsed is not null && parsed.ParseErrors.Count == 0)
-        {
-            using MemoryStream buffer = new MemoryStream();
-            SourceCacheSerializer.Save(buffer, fingerprint, [parsed]);
-            entries[path] = new(parserId, fingerprint, buffer.ToArray());
+            if (entries is not null)
+            {
+                entries.Remove(path);
+                _changed = true;
+                if (parsed is not null && parsed.ParseErrors.Count == 0)
+                {
+                    using MemoryStream buffer = new MemoryStream();
+                    SourceCacheSerializer.Save(buffer, fingerprint, [parsed]);
+                    entries[path] = new(parserId, fingerprint, buffer.ToArray());
+                }
+            }
         }
         return parsed;
     }
@@ -126,7 +141,18 @@ internal sealed class DeferredSourceCache(string scope)
         return bytes;
     }
 
+    /// <summary>
+    /// Persists changed source-cache entries for later executions.
+    /// </summary>
     public void Save(IReadOnlyList<string> paths)
+    {
+        lock (_gate)
+        {
+            SaveEntries(paths);
+        }
+    }
+
+    private void SaveEntries(IReadOnlyList<string> paths)
     {
         if (!_changed || _entries is null)
         {

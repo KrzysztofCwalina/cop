@@ -37,7 +37,7 @@ public sealed partial class TypeChecker
     // declared function (e.g. `:empty` is collection-emptiness, not the files package's
     // `empty(Folder)`). Filter applications using these names are not type-checked. Derived from
     // the single IntrinsicRegistry so it can never drift from the language's actual built-ins.
-    private static readonly HashSet<string> BuiltinFilterNames =
+    private static readonly HashSet<string> s_builtinFilterNames =
         IntrinsicRegistry.NameSet(o => o.IsBuiltinFilter);
 
     private readonly List<CopDiagnostic> _diagnostics = [];
@@ -314,7 +314,7 @@ public sealed partial class TypeChecker
                 // collection:predicate  → predicate(element). Skip builtin pseudo-predicates
                 // (e.g. `:empty`) whose runtime semantics differ from any same-named declared
                 // function.
-                if (!BuiltinFilterNames.Contains(pid.Name) && _funcs.TryGetValue(pid.Name, out List<Sig>? preds))
+                if (!s_builtinFilterNames.Contains(pid.Name) && _funcs.TryGetValue(pid.Name, out List<Sig>? preds))
                 {
                     CheckAgainstOverloads(pid.Name, preds, [elem], filter.Line);
                 }
@@ -327,7 +327,7 @@ public sealed partial class TypeChecker
                     WalkExpr(a);
                 }
 
-                if (!BuiltinFilterNames.Contains(mid.Name) && _funcs.TryGetValue(mid.Name, out List<Sig>? methods))
+                if (!s_builtinFilterNames.Contains(mid.Name) && _funcs.TryGetValue(mid.Name, out List<Sig>? methods))
                 {
                     List<IT?> args = new List<IT?> { elem };
                     args.AddRange(pcall.Args.Select(InferExpr));

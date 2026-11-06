@@ -2,71 +2,7 @@
 
 using System.Text;
 
-namespace TypeSpecProvider;
-
-/// <summary>
-/// Identifies the lexical categories recognized by the TypeSpec parser.
-/// </summary>
-public enum TspTokenKind
-{
-    // Literals
-    Identifier,
-    StringLiteral,
-    NumericLiteral,
-    TripleQuoteString,
-
-    // Keywords
-    Model,
-    Op,
-    Interface,
-    Enum,
-    Union,
-    Scalar,
-    Namespace,
-    Import,
-    Using,
-    Extends,
-    Is,
-    If,
-    Else,
-    Alias,
-    Extern,
-    Dec,
-    Fn,
-    Const,
-    True,
-    False,
-    Void,
-    Never,
-    Unknown,
-
-    // Punctuation
-    OpenBrace,
-    CloseBrace,
-    OpenParen,
-    CloseParen,
-    OpenBracket,
-    CloseBracket,
-    Semicolon,
-    Comma,
-    Colon,
-    Dot,
-    DotDotDot,
-    At,
-    Hash,
-    QuestionMark,
-    Equals,
-    Pipe,
-    Ampersand,
-    Arrow,        // =>
-
-    // Special
-    EndOfFile,
-    Unknown_Token,
-}
-
-/// <summary>Stores a TypeSpec token's category, text, and source position.</summary>
-public record TspToken(TspTokenKind Kind, string Value, int Line, int Column);
+namespace Cop.Providers.TypeSpec;
 
 /// <summary>
 /// Tokenizer for TypeSpec source files.
@@ -102,7 +38,7 @@ public class TspLexer
                 tokens.Add(token);
             }
         }
-        tokens.Add(new TspToken(TspTokenKind.EndOfFile, "", _line, _col));
+        tokens.Add(new TspToken(TspTokenKind.EndOfFile, string.Empty, _line, _col));
         return tokens;
     }
 

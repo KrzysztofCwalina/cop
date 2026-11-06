@@ -97,8 +97,8 @@ internal static class GoStructuralFacts
             string member = tokens[targetEnd - 1].Value;
             string? receiver = targetEnd > first + 1
                 ? Text(tokens, first, targetEnd - 2) : null;
-            GoStatementInfo call = new GoStatementInfo("call", [], receiver, member,
-                args.Select(a => Text(tokens, a.Start, a.End)).ToList(), token.Line, inMethod)
+            GoStatementInfo call = new GoStatementInfo(new StatementInfo("call", [], receiver, member,
+                args.Select(a => Text(tokens, a.Start, a.End)).ToList(), token.Line, inMethod))
             {
                 CallTarget = target,
                 ArgumentExpressions = args.Select(a => Expression(tokens, a.Start, a.End)).ToList()
@@ -114,9 +114,9 @@ internal static class GoStructuralFacts
     private static void Attach(StatementInfo statement, StatementInfo? parent)
     {
         statement.Parent = parent;
-        if (parent is not null && !parent._children.Contains(statement))
+        if (parent is not null && !parent.MutableChildren.Contains(statement))
         {
-            parent._children.Add(statement);
+            parent.MutableChildren.Add(statement);
         }
     }
 
@@ -199,7 +199,7 @@ internal static class GoStructuralFacts
 
             if (token.Kind == GoTokenKind.StringLiteral && token.Value.StartsWith('`'))
             {
-                return new("stringLiteral") { StringValue = token.Value[1..^1].Replace("\r", "") };
+                return new("stringLiteral") { StringValue = token.Value[1..^1].Replace("\r", string.Empty) };
             }
 
             if (token.Kind == GoTokenKind.Identifier)

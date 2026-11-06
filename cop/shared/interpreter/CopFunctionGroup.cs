@@ -11,8 +11,14 @@ namespace Cop.Lang.Interpreter;
 /// </summary>
 public sealed class CopFunctionGroup : CopValue, ICopCallable
 {
+    /// <summary>
+    /// The shared callable name used to resolve these overloads.
+    /// </summary>
     public string Name { get; }
     private readonly List<CopFunction> _overloads = [];
+    /// <summary>
+    /// The overloads registered under the shared callable name.
+    /// </summary>
     public IReadOnlyList<CopFunction> Functions => _overloads;
 
     public CopFunctionGroup(string name)
@@ -20,11 +26,18 @@ public sealed class CopFunctionGroup : CopValue, ICopCallable
         Name = name;
     }
 
+    /// <summary>
+    /// Adds an overload while preserving its declaration and captured environment.
+    /// </summary>
     public void Add(CopFunction func) => _overloads.Add(func);
 
+    /// <summary>
+    /// The number of arguments still required to invoke this callable.
+    /// </summary>
     public int Arity => _overloads.Count > 0 ? _overloads[0].Arity : 0;
 
-    public CopValue Invoke(IReadOnlyList<CopValue> args, Evaluator evaluator, Environment env)
+    /// <inheritdoc cref="ICopCallable.InvokeAsync"/>
+    public async ValueTask<CopValue> InvokeAsync(IReadOnlyList<CopValue> args, Evaluator evaluator, Environment env, CancellationToken cancellationToken = default)
     {
         // Try to find matching overload by first parameter type (for predicates)
         if (args.Count > 0)
@@ -45,9 +58,9 @@ public sealed class CopFunctionGroup : CopValue, ICopCallable
                         ? overload.Declaration.Params[0].Type?.Constraint : null;
                     if (constraint is null) { hasUnconstrained = true; continue; }
                     if (env.TryLookup(constraint, out CopValue? guardVal) && guardVal is ICopCallable guard
-                        && guard.Invoke([subject], evaluator, env).IsTruthy)
+                        && (await (await guard.InvokeAsync([subject], evaluator, env, cancellationToken: cancellationToken)).IsTruthyAsync(cancellationToken)))
                     {
-                        return evaluator.CallUserFunction(overload, args);
+                        return (await evaluator.CallUserFunctionAsync(overload, args, cancellationToken: cancellationToken));
                     }
                 }
                 // No constrained overload matched. When every overload is constrained (no default),
@@ -61,7 +74,7 @@ public sealed class CopFunctionGroup : CopValue, ICopCallable
                 }
             }
 
-            string? subjectTypeName = GetTypeName(subject);
+            string? subjectTypeName = (await GetTypeNameAsync(subject, cancellationToken: cancellationToken));
 
             // Arity-aware type dispatch: among overloads whose FIRST parameter type matches the
             // subject (preferring exact name, then subtype, then trait conformance — the same
@@ -107,7 +120,7 @@ public sealed class CopFunctionGroup : CopValue, ICopCallable
                 }
                 if (best is not null)
                 {
-                    return evaluator.CallUserFunction(best, args);
+                    return (await evaluator.CallUserFunctionAsync(best, args, cancellationToken: cancellationToken));
                 }
             }
 
@@ -122,7 +135,7 @@ public sealed class CopFunctionGroup : CopValue, ICopCallable
                         if (paramType is not null &&
                             string.Equals(paramType, subjectTypeName, StringComparison.OrdinalIgnoreCase))
                         {
-                            return evaluator.CallUserFunction(overload, args);
+                            return (await evaluator.CallUserFunctionAsync(overload, args, cancellationToken: cancellationToken));
                         }
                     }
                 }
@@ -141,7 +154,7 @@ public sealed class CopFunctionGroup : CopValue, ICopCallable
                             string? paramType = firstParam.Type?.Name;
                             if (paramType is not null && registry.IsSubtypeOf(subjectTypeName, paramType))
                             {
-                                return evaluator.CallUserFunction(overload, args);
+                                return (await evaluator.CallUserFunctionAsync(overload, args, cancellationToken: cancellationToken));
                             }
                         }
                     }
@@ -154,7 +167,7 @@ public sealed class CopFunctionGroup : CopValue, ICopCallable
                             string? paramType = firstParam.Type?.Name;
                             if (paramType is not null && registry.ConformsTo(subjectTypeName, paramType))
                             {
-                                return evaluator.CallUserFunction(overload, args);
+                                return (await evaluator.CallUserFunctionAsync(overload, args, cancellationToken: cancellationToken));
                             }
                         }
                     }
@@ -167,7 +180,7 @@ public sealed class CopFunctionGroup : CopValue, ICopCallable
         {
             if (_overloads[i].Arity == args.Count)
             {
-                return evaluator.CallUserFunction(_overloads[i], args);
+                return (await evaluator.CallUserFunctionAsync(_overloads[i], args, cancellationToken: cancellationToken));
             }
         }
 
@@ -179,18 +192,19 @@ public sealed class CopFunctionGroup : CopValue, ICopCallable
                 if (args.Count > overload.Arity && overload.Arity > 0 &&
                     overload.Declaration.Params[^1].Type is { IsCollection: true })
                 {
-                    return evaluator.CallUserFunction(overload, args);
+                    return (await evaluator.CallUserFunctionAsync(overload, args, cancellationToken: cancellationToken));
                 }
             }
         }
 
         // Fall back to last registered overload
-        return evaluator.CallUserFunction(_overloads[^1], args);
+        return (await evaluator.CallUserFunctionAsync(_overloads[^1], args, cancellationToken: cancellationToken));
     }
 
-    private static string? GetTypeName(CopValue value) => value switch
+    private static async ValueTask<string?> GetTypeNameAsync(CopValue value, CancellationToken cancellationToken = default) => value switch
     {
-        CopThunk thunk => GetTypeName(thunk.Force()),
+        CopThunk thunk => await GetTypeNameAsync(
+            await thunk.ForceAsync(cancellationToken), cancellationToken),
         CopDynamicObject dyn => dyn.TypeName,
         CopObject obj => obj.TypeName,
         CopString => "string",
@@ -202,6 +216,8 @@ public sealed class CopFunctionGroup : CopValue, ICopCallable
         _ => null
     };
 
+    /// <inheritdoc/>
     public override string Display() => $"<function-group {Name} ({_overloads.Count} overloads)>";
+    /// <inheritdoc/>
     public override string ToString() => Display();
 }

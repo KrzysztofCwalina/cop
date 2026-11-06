@@ -11,8 +11,11 @@ internal sealed class ChangeCommand : ChangeCommandRunner
     internal static readonly TimeSpan Timeout = TimeSpan.FromSeconds(30);
     internal const int MaxOutputCharacters = 16 * 1024 * 1024;
 
-    public override ChangeCommandResult Run(string directory, string executable, params string[] arguments)
+    /// <inheritdoc/>
+    public override async ValueTask<ChangeCommandResult> RunAsync(string directory, string executable,
+        IReadOnlyList<string> arguments, CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         using Process process = new Process
         {
             StartInfo = new ProcessStartInfo(executable)
@@ -35,33 +38,34 @@ internal sealed class ChangeCommand : ChangeCommandRunner
         process.StartInfo.Environment["GH_PROMPT_DISABLED"] = "1";
         process.StartInfo.Environment["GIT_OPTIONAL_LOCKS"] = "0";
         process.StartInfo.Environment["GIT_PAGER"] = "cat";
-        using CancellationTokenSource cancellation = new CancellationTokenSource(Timeout);
+        using CancellationTokenSource timeout = new(Timeout);
+        using CancellationTokenSource cancellation =
+            CancellationTokenSource.CreateLinkedTokenSource(timeout.Token, cancellationToken);
+        Task<string[]>? readers = null;
         try
         {
             process.Start();
-            Task<string> output = ReadBounded(process.StandardOutput, cancellation.Token);
-            Task<string> error = ReadBounded(process.StandardError, cancellation.Token);
-            // Kill immediately on a reader failure, rather than waiting for a blocked writer.
-            Task<string[]> readers = Task.WhenAll(output, error);
-            _ = readers.ContinueWith(_ => cancellation.Cancel(), CancellationToken.None,
-                TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
-                TaskScheduler.Default);
-            process.WaitForExitAsync(cancellation.Token).GetAwaiter().GetResult();
-            readers.WaitAsync(cancellation.Token).GetAwaiter().GetResult();
-            return new(process.ExitCode, output.Result, error.Result);
+            Task<string> output = ReadBoundedAsync(process.StandardOutput, cancellation);
+            Task<string> error = ReadBoundedAsync(process.StandardError, cancellation);
+            readers = Task.WhenAll(output, error);
+            await process.WaitForExitAsync(cancellation.Token).ConfigureAwait(false);
+            string[] streams = await readers.WaitAsync(cancellation.Token).ConfigureAwait(false);
+            return new(process.ExitCode, streams[0], streams[1]);
         }
-        catch (Exception exception)
+        catch (Exception exception) when (exception is IOException or InvalidOperationException
+            or System.ComponentModel.Win32Exception or OperationCanceledException
+            or DecoderFallbackException)
         {
-            try
+            cancellation.Cancel();
+            await StopAsync(process).ConfigureAwait(false);
+            if (readers is not null)
             {
-                if (!process.HasExited)
-                {
-                    process.Kill(entireProcessTree: true);
-                    process.WaitForExit(2000);
-                }
+                try { await readers.ConfigureAwait(false); }
+                catch (Exception readerException) when (readerException is IOException
+                    or InvalidOperationException or OperationCanceledException
+                    or DecoderFallbackException) { }
             }
-            catch (InvalidOperationException) { }
-            catch (System.ComponentModel.Win32Exception) { }
+            cancellationToken.ThrowIfCancellationRequested();
             string reason = exception is OperationCanceledException
                 ? "timed out or exceeded its output limit"
                 : "could not complete";
@@ -71,20 +75,45 @@ internal sealed class ChangeCommand : ChangeCommandRunner
         }
     }
 
-    private static async Task<string> ReadBounded(StreamReader reader, CancellationToken cancellation)
+    private static async Task<string> ReadBoundedAsync(StreamReader reader,
+        CancellationTokenSource cancellation)
     {
         StringBuilder text = new StringBuilder();
         char[] buffer = new char[8192];
         int count;
-        while ((count = await reader.ReadAsync(buffer.AsMemory(), cancellation)) != 0)
+        try
         {
-            if (text.Length + count > MaxOutputCharacters)
+            while ((count = await reader.ReadAsync(buffer.AsMemory(), cancellation.Token)
+                .ConfigureAwait(false)) != 0)
             {
-                throw new InvalidOperationException("Command output exceeded the review limit.");
+                if (text.Length + count > MaxOutputCharacters)
+                {
+                    throw new InvalidOperationException("Command output exceeded the review limit.");
+                }
+                text.Append(buffer, 0, count);
             }
-
-            text.Append(buffer, 0, count);
+        }
+        catch (Exception)
+        {
+            cancellation.Cancel();
+            throw;
         }
         return text.ToString();
+    }
+
+    private static async ValueTask StopAsync(Process process)
+    {
+        try
+        {
+            if (!process.HasExited)
+            {
+                process.Kill(entireProcessTree: true);
+                using CancellationTokenSource timeout = new(TimeSpan.FromSeconds(2));
+                try { await process.WaitForExitAsync(timeout.Token).ConfigureAwait(false); }
+                catch (OperationCanceledException) { }
+            }
+        }
+        catch (InvalidOperationException) { }
+        catch (System.ComponentModel.Win32Exception) { }
     }
 }

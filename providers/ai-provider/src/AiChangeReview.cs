@@ -20,7 +20,8 @@ public partial class AiProvider
     private const int MaxResponseBytes = 256 * 1024;
     private const int ReviewSeconds = 90;
 
-    private static async Task<object?> JudgeChangesAsync(List<object?> args, AnalysisContext context)
+    private static async ValueTask<object?> JudgeChangesAsync(
+        List<object?> args, AnalysisContext context, CancellationToken cancellationToken)
     {
         ChangeSnapshot? activeSnapshot = null;
         AiConfig? activeConfig = null;
@@ -31,11 +32,13 @@ public partial class AiProvider
                 return One("ai.judge requires a non-empty requirement and a Codebase argument");
             }
             // Preserve the Codebase-only contract, including validation of parsed source.
-            SerializeCodebase(args[1], allowEmpty: true);
+            await SerializeCodebaseAsync(args[1], cancellationToken, CodebasePopulation.MayBeEmpty)
+                .ConfigureAwait(false);
             DataObject codebase = (DataObject)args[1]!;
-            ChangeSnapshot snapshot = context.Changes;
+            ChangeSnapshot snapshot = await context.GetChangesAsync(cancellationToken)
+                .ConfigureAwait(false);
             activeSnapshot = snapshot;
-            snapshot.AssertUnchanged();
+            await snapshot.AssertUnchangedAsync(cancellationToken).ConfigureAwait(false);
             List<object> files = Items(codebase, "Files").ToList();
             HashSet<string> selectedPaths = files.Select(file =>
             {
@@ -89,7 +92,7 @@ public partial class AiProvider
                 $"{snapshot.Files.Count - subjects.Count} changed files outside supplied Codebase skipped.");
             if (subjects.Count == 0)
             {
-                snapshot.AssertUnchanged();
+                await snapshot.AssertUnchangedAsync(cancellationToken).ConfigureAwait(false);
                 snapshot.Log("ai.judge: no applicable changes in the supplied Codebase; skipped (0 model requests, not a completed review).");
                 return new List<object?>();
             }
@@ -149,17 +152,19 @@ public partial class AiProvider
             activeConfig = config;
             snapshot.Log($"ai.judge: diff-first review of {subjects.Count} files; limits: {MaxReviewTurns} turns, " +
                 $"{MaxToolCalls} tool calls, {MaxInitialBytes} initial bytes, {MaxExchangeBytes} exchanged bytes, {ReviewSeconds}s.");
-            LogInteraction(config, system, "", "STARTED",
+            LogInteraction(config, system, string.Empty, "STARTED",
                 $"Limits: {MaxReviewTurns} requests, {MaxToolCalls} tools, {MaxInitialBytes} initial bytes, " +
                 $"{MaxExchangeBytes} exchanged bytes, {ReviewSeconds}s.");
             using CancellationTokenSource timeout = new CancellationTokenSource(TimeSpan.FromSeconds(ReviewSeconds));
+            using CancellationTokenSource linked = CancellationTokenSource.CreateLinkedTokenSource(
+                cancellationToken, timeout.Token);
             int calls = 0;
             int bytes = 0;
             bool acknowledged = false;
             for (int turn = 0; turn < MaxReviewTurns; turn++)
             {
-                snapshot.AssertUnchanged();
-                timeout.Token.ThrowIfCancellationRequested();
+                await snapshot.AssertUnchangedAsync(linked.Token).ConfigureAwait(false);
+                linked.Token.ThrowIfCancellationRequested();
                 string request = JsonSerializer.Serialize(new
                 {
                     model = config.Model, temperature = 0.0, messages,
@@ -180,8 +185,10 @@ public partial class AiProvider
                 }
 
                 req.Content = new StringContent(request, Encoding.UTF8, "application/json");
-                using HttpResponseMessage response = await _http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, timeout.Token);
-                string body = await ReadBoundedResponse(response.Content, timeout.Token);
+                using HttpResponseMessage response = await s_http.SendAsync(
+                    req, HttpCompletionOption.ResponseHeadersRead, linked.Token).ConfigureAwait(false);
+                string body = await ReadBoundedResponse(response.Content, linked.Token)
+                    .ConfigureAwait(false);
                 bytes += Encoding.UTF8.GetByteCount(body);
                 LogInteraction(config, system, request, $"{(int)response.StatusCode} turn {turn + 1}", body);
                 if (!response.IsSuccessStatusCode)
@@ -225,12 +232,13 @@ public partial class AiProvider
                         JsonElement function = call.GetProperty("function");
                         string? name = function.GetProperty("name").GetString();
                         using JsonDocument arguments = JsonDocument.Parse(function.GetProperty("arguments").GetString()!);
-                        string result = ExecuteSourceTool(snapshot, name, arguments.RootElement);
-                        snapshot.AssertUnchanged();
-                        timeout.Token.ThrowIfCancellationRequested();
+                        string result = await ExecuteSourceToolAsync(snapshot, name,
+                            arguments.RootElement, linked.Token).ConfigureAwait(false);
+                        await snapshot.AssertUnchangedAsync(linked.Token).ConfigureAwait(false);
+                        linked.Token.ThrowIfCancellationRequested();
                         messages.Add(new { role = "tool", tool_call_id = id, content = result });
                         snapshot.Log($"ai.judge: {name} {arguments.RootElement.GetRawText()} ({Encoding.UTF8.GetByteCount(result)} bytes).");
-                        LogInteraction(config, "", arguments.RootElement.GetRawText(), $"TOOL {name}", result);
+                        LogInteraction(config, string.Empty, arguments.RootElement.GetRawText(), $"TOOL {name}", result);
                     }
                     acknowledged = true;
                     continue;
@@ -249,21 +257,24 @@ public partial class AiProvider
                 string content = message.GetProperty("content").GetString()
                     ?? throw new InvalidOperationException("model response contained no review content");
                 List<object?> findings = ParseChangeFindings(content, subjects, snapshot);
-                snapshot.AssertUnchanged();
-                timeout.Token.ThrowIfCancellationRequested();
+                await snapshot.AssertUnchangedAsync(linked.Token).ConfigureAwait(false);
+                linked.Token.ThrowIfCancellationRequested();
                 snapshot.Log($"ai.judge: review completed; {findings.Count} findings, {turn + 1} requests, {calls} tool calls.");
-                LogInteraction(config, "", "", "COMPLETED",
+                LogInteraction(config, string.Empty, string.Empty, "COMPLETED",
                     $"{findings.Count} findings, {turn + 1} requests, {calls} tool calls.");
                 return findings;
             }
             throw new InvalidOperationException("review turn budget exhausted without a final review; narrow the Codebase");
         }
-        catch (Exception ex) when (ex is not OutOfMemoryException)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException
+            or HttpRequestException or JsonException or InvalidOperationException
+            or ArgumentException or KeyNotFoundException
+            || ex is OperationCanceledException && !cancellationToken.IsCancellationRequested)
         {
             activeSnapshot?.Log($"ai.judge: review failed (not a clean result): {ex.Message}");
             if (activeConfig is not null)
             {
-                LogInteraction(activeConfig, "", "", "FAILED (not a clean result)", ex.Message);
+                LogInteraction(activeConfig, string.Empty, string.Empty, "FAILED (not a clean result)", ex.Message);
             }
 
             return One($"ai.judge: change review failed: {ex.Message}");
@@ -318,7 +329,9 @@ public partial class AiProvider
         }
     ];
 
-    private static string ExecuteSourceTool(ChangeSnapshot snapshot, string? name, JsonElement args)
+    private static async ValueTask<string> ExecuteSourceToolAsync(
+        ChangeSnapshot snapshot, string? name, JsonElement args,
+        CancellationToken cancellationToken)
     {
         if (args.ValueKind != JsonValueKind.Object)
         {
@@ -346,7 +359,8 @@ public partial class AiProvider
                 throw new InvalidOperationException("search query/result budget exceeded");
             }
 
-            return snapshot.SearchSource(query, count);
+            return await snapshot.SearchSourceAsync(query, count, cancellationToken)
+                .ConfigureAwait(false);
         }
         string path = args.GetProperty("path").GetString()!;
         string side = args.GetProperty("side").GetString()!;
@@ -357,7 +371,8 @@ public partial class AiProvider
             throw new InvalidOperationException("invalid source side or read range (maximum 200 lines)");
         }
 
-        return snapshot.ReadSource(path, start, lines, side);
+        return await snapshot.ReadSourceAsync(path, start, lines, side, cancellationToken)
+            .ConfigureAwait(false);
     }
 
     private static List<object?> ParseChangeFindings(string content, List<ChangedFile> subjects, ChangeSnapshot snapshot)
