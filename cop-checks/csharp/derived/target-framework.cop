@@ -5,6 +5,8 @@ import code
 let target-framework-message =
     'Project {item.Name} must target net10.0'
 
-export let derived-target-framework = codebase.Projects
+export let derived-target-framework = checkRule(
+    'cop-checks/derived-target-framework',
+    codebase.Projects
     .Where(hasOtherProjectPropertyValue(item, 'TargetFramework', 'net10.0'))
-    :toError(target-framework-message)
+    :toError(target-framework-message))

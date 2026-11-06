@@ -12,8 +12,9 @@ predicate hasCancellationNotOptional(Method) => Method.Parameters:any(isCancella
 predicate hasMethodMissingCancellation(Type) => Type.Methods.Where(isPublicServiceMethod):any(isMissingCancellation)
 
 ## Public virtual service methods must accept CancellationToken or RequestContext
-export let service-method-needs-cancellation = Clients:hasMethodMissingCancellation
-    :toWarning('{item.Name} must accept CancellationToken or RequestContext')
+export let service-method-needs-cancellation = checkRule('csharp-library-azure-checks/service-method-needs-cancellation',
+    Clients:hasMethodMissingCancellation
+    :toWarning('{item.Name} must accept CancellationToken or RequestContext'))
 
 predicate hasBannedReturnType(Method) => Method:isPublic
     && Method.ReturnType != nic
@@ -23,8 +24,9 @@ predicate hasBannedReturnType(Method) => Method:isPublic
 predicate hasBannedReturn(Type) => Type.Methods:any(hasBannedReturnType)
 
 ## Client methods should return azure-specific types, not raw HTTP types
-export let no-raw-http-return-types = Clients:hasBannedReturn
-    :toWarning('{item.Name} should not return raw HTTP types')
+export let no-raw-http-return-types = checkRule('csharp-library-azure-checks/no-raw-http-return-types',
+    Clients:hasBannedReturn
+    :toWarning('{item.Name} should not return raw HTTP types'))
 
 predicate isRequestContextParam(Parameter) => Parameter.Type == 'RequestContext'
 predicate isProtocolMethodByContext(Method) => Method:isPublic && Method:isVirtual
@@ -46,8 +48,9 @@ predicate hasInvalidProtocolReturn(Method) => isProtocolMethodByContext && !hasA
 predicate hasProtocolWithInvalidReturn(Type) => Type.Methods:any(hasInvalidProtocolReturn)
 
 ## Protocol methods (with RequestContext) must return allowed types only
-export let protocol-method-return-type = Clients:hasProtocolWithInvalidReturn
-    :toWarning('{item.Name} protocol method has invalid return type')
+export let protocol-method-return-type = checkRule('csharp-library-azure-checks/protocol-method-return-type',
+    Clients:hasProtocolWithInvalidReturn
+    :toWarning('{item.Name} protocol method has invalid return type'))
 
 predicate isProtocolMethod(Method) => Method:isPublic && Method:isVirtual && Method.Parameters:any(isRequestContent)
 predicate isConvenienceMethod(Method) => Method:isPublic && Method:isVirtual && Method.Parameters:!any(isRequestContent)
@@ -56,7 +59,8 @@ predicate hasConvenienceCounterpart(Method) => Type.Methods.Where(isConvenienceM
 predicate hasAmbiguousOverload(Type) => Type.Methods.Where(isProtocolMethod):any(hasConvenienceCounterpart)
 
 ## Avoid ambiguous overloads between protocol and convenience methods
-export let no-ambiguous-overloads = Clients:hasAmbiguousOverload
-    :toWarning('{item.Name} may have ambiguous protocol/convenience overloads')
+export let no-ambiguous-overloads = checkRule('csharp-library-azure-checks/no-ambiguous-overloads',
+    Clients:hasAmbiguousOverload
+    :toWarning('{item.Name} may have ambiguous protocol/convenience overloads'))
 
 let method-design = service-method-needs-cancellation + no-raw-http-return-types + protocol-method-return-type + no-ambiguous-overloads

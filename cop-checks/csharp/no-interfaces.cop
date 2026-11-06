@@ -8,6 +8,8 @@ let allowed-interfaces = ['ICopCallable']
 let interface-message =
     'Use an abstract class instead of interface {item.Name} ({item.File.Path})'
 
-export let no-new-interfaces = code.interfacesExcept(
+export let no-new-interfaces = checkRule(
+    'cop-checks/no-new-interfaces',
+    code.interfacesExcept(
     source-types-without-examples:isCSharp, allowed-interfaces)
-    :toError(interface-message)
+    :toError(interface-message))

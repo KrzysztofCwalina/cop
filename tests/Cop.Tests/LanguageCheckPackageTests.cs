@@ -16,6 +16,30 @@ public class LanguageCheckPackageTests
 {
     private static string RepoRoot => FindRepoRoot();
 
+    [TestCase("csharp-checks", 57)]
+    [TestCase("python-checks", 22)]
+    [TestCase("javascript-checks", 7)]
+    [TestCase("go-checks", 11)]
+    [TestCase("java-checks", 3)]
+    [TestCase("rust-checks", 17)]
+    public async Task CleanLanguageSuitesCountOnlyTheirExecutedLeafChecks(string package, int checks)
+    {
+        var target = Path.Combine(Path.GetTempPath(), "cop-clean-checks-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(target);
+        try
+        {
+            var result = await Engine.RunProjectAsync([Path.Combine(RepoRoot, "packages")], [package], target, []);
+
+            Assert.That(result.HasFatalErrors, Is.False, string.Join("; ", result.Errors));
+            Assert.That(result.Outputs, Is.Empty);
+            Assert.That(result.Statistics!.Evaluations["check"], Is.EqualTo(checks));
+        }
+        finally
+        {
+            Directory.Delete(target, recursive: true);
+        }
+    }
+
     private static string FindRepoRoot()
     {
         var dir = TestContext.CurrentContext.TestDirectory;

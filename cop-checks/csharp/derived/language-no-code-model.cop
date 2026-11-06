@@ -6,8 +6,10 @@ predicate importsCodeModel(File) =>
 let language-code-model-message =
     '{item.Name}: remove Cop.Providers.SourceModel; keep the language general-purpose'
 
-export let derived-language-no-code-model = codebase.Types
+export let derived-language-no-code-model = checkRule(
+    'cop-checks/derived-language-no-code-model',
+    codebase.Types
     .Where(
         inShared(item.File) &&
         importsCodeModel(item.File))
-    :toError(language-code-model-message)
+    :toError(language-code-model-message))

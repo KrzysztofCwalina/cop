@@ -6,6 +6,8 @@ predicate referencesProcess(Statement) =>
 let process-launch-message =
     'The interpreter must not launch processes; use a provider'
 
-export let derived-interpreter-no-process-launch = codebase.Statements:referencesProcess
+export let derived-interpreter-no-process-launch = checkRule(
+    'cop-checks/derived-interpreter-no-process-launch',
+    codebase.Statements:referencesProcess
     .Where(inInterpreter(item.File))
-    :toError(process-launch-message)
+    :toError(process-launch-message))

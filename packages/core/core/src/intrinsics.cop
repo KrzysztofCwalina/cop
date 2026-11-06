@@ -27,6 +27,11 @@ export function sink(name : string, options : object) : [object] => intrinsic
 
 # I/O
 
+## Records a distinct category/name evaluation for the execution summary and returns the
+## original value unchanged. Repeated names in the same category count once per run.
+## Does not enumerate collections; qualify names with the package to avoid collisions.
+export function observe(value: T, category: string, name: string) : T => intrinsic
+
 ## Reads the content of a file at the given path (sandboxed to project root).
 ## Returns the file content as a string.
 export function read(path : string) : string => intrinsic

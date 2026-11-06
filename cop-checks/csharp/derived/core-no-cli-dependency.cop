@@ -3,8 +3,10 @@
 let core-cli-message =
     '{item.Name}: remove CLI/REPL dependencies; keep the core host-independent'
 
-export let derived-core-no-cli-dependency = codebase.Types
+export let derived-core-no-cli-dependency = checkRule(
+    'cop-checks/derived-core-no-cli-dependency',
+    codebase.Types
     .Where(
         inCore(item.File) &&
         importsCliCommandsOrRepl(item.File))
-    :toError(core-cli-message)
+    :toError(core-cli-message))

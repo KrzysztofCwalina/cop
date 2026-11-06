@@ -10,9 +10,11 @@ predicate hasExemptProviderName(Type) =>
 let provider-namespace-message =
     '{item.Name}: namespace must start with Cop.Providers, not {item.File.Namespace}'
 
-export let derived-provider-namespace = codebase.Types:extendsDataProvider
+export let derived-provider-namespace = checkRule(
+    'cop-checks/derived-provider-namespace',
+    codebase.Types:extendsDataProvider
     .Where(item.File.Path:in(files-without-samples-or-examples.Path))
     .Where(
         !hasProviderNamespacePrefix(item.File) &&
         !hasExemptProviderName(item))
-    :toError(provider-namespace-message)
+    :toError(provider-namespace-message))

@@ -5,6 +5,125 @@ namespace Cop.Tests;
 
 public partial class ToolchainCliIntegrationTests
 {
+    [TestCase(false, 0)]
+    [TestCase(true, 1)]
+    public async Task CheckSummaryCountsCleanAndFailingComposedRulesNotHelpersOrAliases(bool finding, int exitCode)
+    {
+        var repository = new DirectoryInfo(Path.GetDirectoryName(_cli)!);
+        while (!File.Exists(Path.Combine(repository.FullName, "cop.sln"))) repository = repository.Parent!;
+        var feed = Path.Combine(repository.FullName, "packages").Replace("\\", "\\\\");
+        File.WriteAllText(_script, $$"""
+            feed '{{feed}}'
+            import code
+            function rule(name: string, values: [int]) : [Violation] =>
+                checkRule(name, values.Where(item > 0).Select(Violation {
+                    Severity: 1.0, Certainty: 1.0, Message: 'finding',
+                    File: '', Line: 0, Source: '', Check: name
+                }))
+            function suite() => rule('fixture/clean', [-1]) + rule('fixture/other', [{{(finding ? "1" : "-2")}}])
+            let unused = rule('fixture/unused', [1])
+            let helper = 42
+            let result = suite()
+            let alias = result
+            command MAIN = print(helper) & CHECK(alias + rule('fixture/clean', [-3]))
+            """);
+
+        var result = await Run(_script, "-t", _root, "--no-color");
+
+        Assert.That(result.ExitCode, Is.EqualTo(exitCode), result.StandardError);
+        Assert.That(result.StandardOutput.Split('\n').Count(line => line.Contains("error: finding")),
+            Is.EqualTo(finding ? 1 : 0));
+        Assert.That(result.StandardError, Does.Contain("0 input files processed, 2 checks evaluated in ")
+            .And.Not.Contain("commands executed"));
+    }
+
+    [Test]
+    public async Task CheckSummaryPreservesPackageIdentityAndExcludesUnusedProviderWork()
+    {
+        var repository = new DirectoryInfo(Path.GetDirectoryName(_cli)!);
+        while (!File.Exists(Path.Combine(repository.FullName, "cop.sln"))) repository = repository.Parent!;
+        var feed = Path.Combine(repository.FullName, "packages").Replace("\\", "\\\\");
+        File.WriteAllText(_script, $$"""
+            feed '{{feed}}'
+            import code
+            import csharp
+            let unused = checkRule('unused/rule', csharp.parse().Statements:toError('unused'))
+            let first = checkRule('first/rule', [])
+            let alias = first
+            let second = checkRule('second/rule', [])
+            command MAIN = CHECK(first + alias + second)
+            """);
+
+        var result = await Run(_script, "-t", _root, "--no-color");
+
+        Assert.That(result.ExitCode, Is.EqualTo(0), result.StandardError);
+        Assert.That(result.StandardOutput, Is.Empty);
+        Assert.That(result.StandardError, Does.Contain("0 input files processed, 2 checks evaluated in "));
+    }
+
+    [Test]
+    public async Task ExplicitObservationDoesNotEnumerateADeferredProviderCollection()
+    {
+        WriteScript("""
+            function observe(value: T, category: string, name: string) : T => intrinsic
+            function ignore(value: object) => 'ready'
+            command MAIN = print(ignore(observe(Items, 'probe', 'fixture/items')))
+            """);
+
+        var result = await Run(_script, "-t", _root, "--no-color");
+
+        Assert.That(result.ExitCode, Is.EqualTo(0), result.StandardError);
+        Assert.That(result.StandardOutput.Trim(), Is.EqualTo("ready"));
+        Assert.That(result.StandardError, Does.Contain("0 input files processed, ")
+            .And.Not.Contain("checks evaluated"));
+        Assert.That(File.Exists(Path.Combine(_root, "pids.txt")), Is.False);
+    }
+
+    [TestCase(false, 57)]
+    [TestCase(true, 58)]
+    public async Task BuiltInCSharpSuiteCountsLeafFunctionsAndDoesNotDoubleCountCompatibilityAliases(
+        bool includeOptional, int checks)
+    {
+        var repository = new DirectoryInfo(Path.GetDirectoryName(_cli)!);
+        while (!File.Exists(Path.Combine(repository.FullName, "cop.sln"))) repository = repository.Parent!;
+        var feed = Path.Combine(repository.FullName, "packages").Replace("\\", "\\\\");
+        File.WriteAllText(_script, $$"""
+            feed '{{feed}}'
+            import code
+            import csharp
+            import csharp-checks
+            let cb = codebase(csharp.parse())
+            command MAIN = CHECK(csharpChecks(cb){{(includeOptional
+                ? " + avoidBoolParams(cb) + boolParameterNaming(cb) + emptyCatches(cb) + emptyCatches(cb)"
+                : "")}})
+            """);
+
+        var result = await Run(_script, "-t", _root, "--no-color");
+
+        Assert.That(result.ExitCode, Is.EqualTo(0), result.StandardError);
+        Assert.That(result.StandardOutput, Is.Empty);
+        Assert.That(result.StandardError, Does.Contain($"0 input files processed, {checks} checks evaluated in "));
+    }
+
+    [TestCase("MAIN", 65)]
+    [TestCase("DERIVED", 29)]
+    [TestCase("MAIN,DERIVED", 94)]
+    public async Task RepositorySuitesCountOnlySelectedChecksOnAnAllCleanRealInput(string commands, int checks)
+    {
+        var repository = new DirectoryInfo(Path.GetDirectoryName(_cli)!);
+        while (!File.Exists(Path.Combine(repository.FullName, "cop.sln"))) repository = repository.Parent!;
+        var target = Path.Combine(_root, "clean-target");
+        Directory.CreateDirectory(target);
+        File.WriteAllText(Path.Combine(target, "clean.cs"), "// Clean fixture.\n");
+
+        var result = await Run(Path.Combine(repository.FullName, "cop-checks", "main.cop"),
+            "-t", target, "-c", commands, "--no-color");
+
+        Assert.That(result.ExitCode, Is.EqualTo(0), result.StandardError);
+        Assert.That(result.StandardOutput, Is.Empty);
+        Assert.That(result.StandardError, Does.Contain($", {checks} checks evaluated in "));
+    }
+
     [Test]
     public async Task SummaryCountsIndividualNamedComputationsIncludingEmptyResultsOnce()
     {

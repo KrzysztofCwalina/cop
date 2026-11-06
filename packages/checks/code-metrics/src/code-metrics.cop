@@ -41,17 +41,21 @@ predicate isUndocumentedPublic(Type) => Type.Documented == false && Type.Modifie
 predicate hasTooManyParams(Type) => Type.Methods:any((m) => m.Parameters.Count > 5)
 predicate isEmptyCatch(Statement) => Statement.ErrorHandler == true && Statement.Generic == true
 
-export let long-methods = cb.Types:hasLongMethod
-    :toWarning('{item.Name} has a method with more than 50 statements')
+export let long-methods = checkRule('code-metrics/long-methods',
+    cb.Types:hasLongMethod
+    :toWarning('{item.Name} has a method with more than 50 statements'))
 
-export let undocumented-types = cb.Types:isUndocumentedPublic
-    :toWarning('{item.Name} is a public type without documentation')
+export let undocumented-types = checkRule('code-metrics/undocumented-types',
+    cb.Types:isUndocumentedPublic
+    :toWarning('{item.Name} is a public type without documentation'))
 
-export let too-many-params = cb.Types:hasTooManyParams
-    :toWarning('{item.Name} has a method with more than 5 parameters')
+export let too-many-params = checkRule('code-metrics/too-many-params',
+    cb.Types:hasTooManyParams
+    :toWarning('{item.Name} has a method with more than 5 parameters'))
 
-export let empty-catches = cb.Statements:isEmptyCatch
-    :toError('Empty catch block swallows all exceptions')
+export let empty-catches = checkRule('code-metrics/empty-catches',
+    cb.Statements:isEmptyCatch
+    :toError('Empty catch block swallows all exceptions'))
 
 ## Curated language-agnostic slop rules with severity weights.
 ## Users can extend with language-specific rules via multi-package execution.

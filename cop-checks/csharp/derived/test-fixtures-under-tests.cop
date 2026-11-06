@@ -3,6 +3,8 @@
 let fixture-location-message =
     'Test fixture {item.Name} must live under tests/ ({item.File.Path})'
 
-export let derived-tests-location = codebase.Types:hasTestFixture
+export let derived-tests-location = checkRule(
+    'cop-checks/derived-tests-location',
+    codebase.Types:hasTestFixture
     .Where(item.File.Path:in(non-test-files.Path))
-    :toError(fixture-location-message)
+    :toError(fixture-location-message))

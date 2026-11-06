@@ -679,9 +679,12 @@ public static class RunCommand
         if (!isJson && result.Statistics is { } statistics)
         {
             string elapsed = statistics.Elapsed.TotalSeconds.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture);
+            string work = statistics.Evaluations.TryGetValue("check", out int checks)
+                ? $"{checks} check{(checks == 1 ? "" : "s")} evaluated"
+                : $"{statistics.CommandsExecuted} computation{(statistics.CommandsExecuted == 1 ? "" : "s")} evaluated";
             Console.Error.WriteLine(
                 $"Summary: {statistics.InputFiles} input file{(statistics.InputFiles == 1 ? "" : "s")} processed, " +
-                $"{statistics.CommandsExecuted} command{(statistics.CommandsExecuted == 1 ? "" : "s")} executed in {elapsed}s.");
+                $"{work} in {elapsed}s.");
         }
 
         // Use explicit exit code from command if available (e.g., CHECK returns violation count)

@@ -26,5 +26,7 @@ predicate isUnapprovedRegistration(Statement) =>
 let ffi-message =
     'Unapproved runtime function; use a .cop package or get explicit approval'
 
-export let no-new-ffi = non-test-calls:isUnapprovedRegistration
-    :toError(ffi-message)
+export let no-new-ffi = checkRule(
+    'cop-checks/no-new-ffi',
+    non-test-calls:isUnapprovedRegistration
+    :toError(ffi-message))

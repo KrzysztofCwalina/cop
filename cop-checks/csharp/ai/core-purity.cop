@@ -8,7 +8,8 @@ import csharp
 let core-codebase = code.codebase(
     csharp.parse('cop/shared'), csharp.parse('cop/runtime'))
 
-export let core-purity-violations = ai.judge(
+export let core-purity-violations = checkRule(
+    'cop-checks/core-purity-violations', ai.judge(
     '''
     The Cop core must remain a general-purpose language and runtime.
     Reviewing user source code for quality, style, or correctness belongs
@@ -20,4 +21,4 @@ export let core-purity-violations = ai.judge(
     Compiler error severities and package-integrity violations are allowed;
     their purpose is not reviewing user source code.
     ''',
-    core-codebase)
+    core-codebase))
