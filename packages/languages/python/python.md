@@ -1,6 +1,6 @@
 ---
 name: python-lister
-version: 1.0.0
+version: 2.0.0
 title: Python API Surface Analysis
 description: API surface tracking, export, and diff for Python libraries
 authors: cop-team

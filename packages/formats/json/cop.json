@@ -1,6 +1,6 @@
 {
   "name": "json",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "Load JSON files into dynamic objects or collections",
   "title": "JSON File Loading",
   "authors": "cop-team",

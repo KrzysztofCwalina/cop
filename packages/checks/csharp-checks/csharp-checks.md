@@ -1,12 +1,12 @@
 ---
 name: csharp-checks
-version: 1.0.1
+version: 1.0.2
 title: C# Checks
 description: C# correctness, StyleCop style, and Framework Design Guidelines checks for coding agents
 authors: cop-team
 tags: csharp, dotnet, coding-standards, stylecop, fdg, naming, design
 language: C#
-dependencies: []
+dependencies: ['github.com/KrzysztofCwalina/cop/code: 1.2.0', 'github.com/KrzysztofCwalina/cop/csharp: 2.0.0']
 provider: clr
 providerEntry: Cop.Providers.CSharpProvider
 providerAssembly: csharp-provider.dll

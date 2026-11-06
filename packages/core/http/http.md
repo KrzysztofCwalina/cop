@@ -1,6 +1,6 @@
 ---
 name: http
-version: 1.0.0
+version: 2.0.0
 title: HTTP Server Provider
 description: HTTP server provider for building web APIs with cop pipelines
 authors: cop-team

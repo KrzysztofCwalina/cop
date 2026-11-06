@@ -1,11 +1,11 @@
 ---
 name: cop
-version: 1.0.0
+version: 2.0.0
 title: Cop Language Analysis
 description: Structural analysis of .cop source files — types, predicates, functions, imports
 authors: cop-team
 tags: cop, language, analysis
-dependencies: [code]
+dependencies: ['github.com/KrzysztofCwalina/cop/code: 1.2.0']
 provider: clr
 providerEntry: Cop.Providers.CopProvider
 ---

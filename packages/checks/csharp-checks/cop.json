@@ -1,6 +1,6 @@
 {
   "name": "csharp-checks",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "C# correctness, StyleCop style, and Framework Design Guidelines checks for coding agents",
   "title": "C# Checks",
   "authors": "cop-team",
@@ -14,5 +14,9 @@
     "design"
   ],
   "language": "C#",
+  "dependencies": [
+    "github.com/KrzysztofCwalina/cop/code: 1.2.0",
+    "github.com/KrzysztofCwalina/cop/csharp: 2.0.0"
+  ],
   "applyTo": "**/*.cs"
 }

@@ -1,6 +1,6 @@
 {
   "name": "openapi",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "Analyze OpenAPI/Swagger specs: paths, operations, summaries, operationIds, responses, and source line numbers",
   "title": "OpenAPI",
   "authors": "cop-team",
@@ -15,4 +15,3 @@
   "providerEntry": "Cop.Providers.OpenApi.OpenApiProvider",
   "providerAssembly": "openapi-provider.dll"
 }
-

@@ -1,6 +1,6 @@
 {
   "name": "javascript-checks",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "JavaScript and TypeScript coding conventions, correctness checks, and async/await rules for coding agents",
   "title": "JavaScript/TypeScript Checks",
   "authors": "cop-team",
@@ -12,6 +12,7 @@
   ],
   "language": "JavaScript",
   "dependencies": [
-    "javascript"
+    "github.com/KrzysztofCwalina/cop/javascript: 2.0.0",
+    "github.com/KrzysztofCwalina/cop/code: 1.2.0"
   ]
 }

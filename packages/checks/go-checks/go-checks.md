@@ -1,12 +1,12 @@
 ---
 name: go-checks
-version: 1.0.1
+version: 1.0.2
 title: Go Checks
 description: Go coding conventions and correctness checks for coding agents
 authors: cop-team
 tags: go, golang, coding-standards, correctness
 language: Go
-dependencies: go
+dependencies: ['github.com/KrzysztofCwalina/cop/go: 2.0.0', 'github.com/KrzysztofCwalina/cop/code: 1.2.0']
 ---
 
 # Go Checks

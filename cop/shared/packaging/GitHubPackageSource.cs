@@ -145,11 +145,19 @@ public class GitHubPackageSource
         return files;
     }
 
-    private static string? GetPackageRef(PackageReference packageRef) =>
-        packageRef.Version ?? (packageRef.Host.Equals("github.com", StringComparison.OrdinalIgnoreCase)
+    private static string? GetPackageRef(PackageReference packageRef)
+    {
+        if (Version.TryParse(packageRef.Version, out var version)
+            && version.Build >= 0 && version.Revision < 0)
+        {
+            return packageRef.TagName;
+        }
+
+        return packageRef.Version ?? (packageRef.Host.Equals("github.com", StringComparison.OrdinalIgnoreCase)
             && packageRef.Owner.Equals("KrzysztofCwalina", StringComparison.OrdinalIgnoreCase)
             && packageRef.Repo.Equals("cop", StringComparison.OrdinalIgnoreCase)
                 ? $"v{ProviderCompatibility.HostVersion}" : null);
+    }
 
     /// <summary>
     /// Lists all packages in the packages folder, recursing into group folders.

@@ -1,12 +1,12 @@
 ---
 name: java-checks
-version: 1.0.1
+version: 1.0.2
 title: Java Checks
 description: Java coding conventions and correctness checks for coding agents
 authors: cop-team
 tags: java, coding-standards, correctness
 language: Java
-dependencies: java
+dependencies: ['github.com/KrzysztofCwalina/cop/java: 2.0.0', 'github.com/KrzysztofCwalina/cop/code: 1.2.0']
 ---
 
 # Java Checks

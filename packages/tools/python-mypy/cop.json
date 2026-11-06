@@ -1,6 +1,6 @@
 {
   "name": "python-mypy",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Run mypy type checker and expose diagnostics",
   "title": "Python Mypy Integration",
   "authors": "cop-team",

@@ -1,6 +1,6 @@
 {
   "name": "powershell",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "Analyze PowerShell scripts: commands, logical command text, line numbers, and strict-mode usage",
   "title": "PowerShell",
   "authors": "cop-team",

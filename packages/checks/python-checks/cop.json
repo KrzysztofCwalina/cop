@@ -1,6 +1,6 @@
 {
   "name": "python-checks",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Python correctness, style, idiom, quality, and documentation checks for coding agents",
   "title": "Python Checks",
   "authors": "cop-team",
@@ -14,6 +14,7 @@
   ],
   "language": "Python",
   "dependencies": [
-    "python"
+    "github.com/KrzysztofCwalina/cop/python: 2.0.0",
+    "github.com/KrzysztofCwalina/cop/code: 1.2.0"
   ]
 }

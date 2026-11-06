@@ -454,6 +454,9 @@ Package versions follow semantic versioning (`X.Y.Z`). Versions are tracked thro
 - Tag format: `{packageName}/{version}` (e.g., `code-analysis/1.0.0`)
 - When restoring with a specific version, cop looks for the corresponding git tag
 - When no version is specified, cop fetches the latest version by listing all tags matching `{packageName}/*` and selecting the highest semver
+- Explicit semantic versions select the matching `{packageName}/{version}` tag. Custom
+  repository refs remain unchanged. Transitive dependencies are deduplicated at the
+  highest requested version; genuine dependency cycles fail with their dependency path.
 
 Auto-restore (during `cop`) does not use versions — it downloads the latest files from the default branch.
 

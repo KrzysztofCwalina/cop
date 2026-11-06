@@ -1,6 +1,6 @@
 {
   "name": "java",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "Java source code parser and analyzer",
   "title": "Java Source Language Provider",
   "authors": "cop-team",

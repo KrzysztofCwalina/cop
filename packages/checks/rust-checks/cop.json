@@ -1,6 +1,6 @@
 {
   "name": "rust-checks",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Rust coding conventions and correctness checks for coding agents",
   "title": "Rust Checks",
   "authors": "cop-team",
@@ -11,6 +11,7 @@
   ],
   "language": "Rust",
   "dependencies": [
-    "rust"
+    "github.com/KrzysztofCwalina/cop/rust: 2.0.0",
+    "github.com/KrzysztofCwalina/cop/code: 1.2.0"
   ]
 }

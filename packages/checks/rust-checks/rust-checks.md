@@ -1,12 +1,12 @@
 ---
 name: rust-checks
-version: 1.0.1
+version: 1.0.2
 title: Rust Checks
 description: Rust coding conventions and correctness checks for coding agents
 authors: cop-team
 tags: rust, coding-standards, correctness
 language: Rust
-dependencies: rust
+dependencies: ['github.com/KrzysztofCwalina/cop/rust: 2.0.0', 'github.com/KrzysztofCwalina/cop/code: 1.2.0']
 ---
 
 # Rust Checks

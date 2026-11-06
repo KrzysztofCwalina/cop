@@ -1,6 +1,6 @@
 {
   "name": "cop",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "Structural analysis of .cop source files \u2014 types, predicates, functions, imports",
   "title": "Cop Language Analysis",
   "authors": "cop-team",
@@ -12,6 +12,6 @@
   "provider": "clr",
   "providerEntry": "Cop.Providers.CopProvider",
   "dependencies": [
-    "code"
+    "github.com/KrzysztofCwalina/cop/code: 1.2.0"
   ]
 }

@@ -282,6 +282,17 @@
         "C#, Python, JavaScript, Java, Go, and Rust check packages reuse the shared queries while preserving their diagnostics and rule behavior.",
         "Repository self-checks now use clearer predicates, explicit source scopes, architectural comments, and readable 90-character lines."
       ]
+    },
+    {
+      "version": "2026.11.6.1",
+      "approved": true,
+      "features": [
+        "Analysis now runs asynchronously end to end, including deferred collections, semantic queries, external tools, and cancellation.",
+        "C# checks use compiler-backed facts for cancellation, resource ownership, nullable directives, catch filters, and rethrows instead of source-text approximations.",
+        "Shared code and C# query helpers compose correctly in production checks, including caller-defined functions.",
+        "Versioned package restores select published package tags and resolve transitive dependencies without false circular-dependency errors.",
+        "Provider authors: the async CLR provider API is a breaking change; rebuild custom providers and use the updated SDK examples and package versions."
+      ]
     }
   ]
 }

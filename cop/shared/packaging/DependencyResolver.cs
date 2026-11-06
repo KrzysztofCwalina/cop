@@ -36,31 +36,25 @@ namespace Cop.Core
             // Dictionary to track the highest version for each package (by FullPath)
             Dictionary<string, PackageReference> resolvedPackages = new Dictionary<string, PackageReference>();
 
-            // Stack for DFS traversal
-            Stack<PackageReference> toProcess = new Stack<PackageReference>(directDependencies.AsEnumerable().Reverse());
-
-            // Track the resolution path for cycle detection
-            Dictionary<string, List<string>> resolutionPath = new Dictionary<string, List<string>>();
+            Stack<(PackageReference Package, List<string> Ancestors)> toProcess = new(
+                directDependencies.AsEnumerable().Reverse()
+                    .Select(package => (package, new List<string>())));
 
             while (toProcess.Count > 0)
             {
-                PackageReference current = toProcess.Pop();
+                var (current, ancestors) = toProcess.Pop();
 
                 // Resolve version if null
                 PackageReference resolvedCurrent = await ResolveMissingVersionAsync(current, ct);
 
                 // Check for circular dependency
                 string packagePath = GetPackageIdentifier(resolvedCurrent);
-                if (resolutionPath.ContainsKey(packagePath))
+                if (ancestors.Contains(packagePath))
                 {
-                    List<string> cycle = resolutionPath[packagePath];
-                    cycle.Add(packagePath); // Complete the cycle
-                    throw new CircularDependencyException(cycle);
+                    throw new CircularDependencyException([.. ancestors, packagePath]);
                 }
 
-                // Update resolution path
-                List<string> currentPath = new List<string> { packagePath };
-                resolutionPath[packagePath] = currentPath;
+                List<string> currentPath = [.. ancestors, packagePath];
 
                 // Check if this package version is already resolved
                 if (resolvedPackages.TryGetValue(packagePath, out PackageReference? existing))
@@ -69,7 +63,6 @@ namespace Cop.Core
                     if (CompareVersions(resolvedCurrent.Version ?? "0.0.0", existing.Version ?? "0.0.0") <= 0)
                     {
                         // Existing version is higher or equal, skip this one
-                        resolutionPath.Remove(packagePath);
                         continue;
                     }
                     // New version is higher, replace it
@@ -79,38 +72,13 @@ namespace Cop.Core
                 resolvedPackages[packagePath] = resolvedCurrent;
 
                 // Fetch metadata to get transitive dependencies
-                try
+                PackageMetadata metadata = await _source.GetPackageMetadataAsync(resolvedCurrent, ct);
+                if (metadata.Dependencies.Count > 0)
                 {
-                    PackageMetadata metadata = await _source.GetPackageMetadataAsync(resolvedCurrent, ct);
-
-                    if (metadata?.Dependencies != null && metadata.Dependencies.Count > 0)
+                    foreach (string depString in metadata.Dependencies.AsEnumerable().Reverse())
                     {
-                        // Parse each dependency string
-                        List<PackageReference> transitiveDeps = new List<PackageReference>();
-                        foreach (string depString in metadata.Dependencies)
-                        {
-                            PackageReference depRef = PackageReference.Parse(depString);
-                            if (depRef != null)
-                            {
-                                transitiveDeps.Add(depRef);
-                            }
-                        }
-
-                        // Add transitive dependencies to the processing queue
-                        // Add to path tracking for cycle detection
-                        foreach (PackageReference? dep in transitiveDeps.AsEnumerable().Reverse())
-                        {
-                            List<string> newPath = new List<string>(currentPath) { GetPackageIdentifier(dep) };
-                            string depIdentifier = GetPackageIdentifier(dep);
-                            resolutionPath[depIdentifier] = newPath;
-                            toProcess.Push(dep);
-                        }
+                        toProcess.Push((PackageReference.Parse(depString), currentPath));
                     }
-                }
-                finally
-                {
-                    // Remove from path when backtracking
-                    resolutionPath.Remove(packagePath);
                 }
             }
 

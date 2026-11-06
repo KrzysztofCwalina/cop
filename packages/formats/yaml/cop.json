@@ -1,6 +1,6 @@
 {
   "name": "yaml",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "Analyze YAML files (CI workflows, Kubernetes manifests, docker-compose): flattened key paths, values, and line numbers",
   "title": "YAML",
   "authors": "cop-team",

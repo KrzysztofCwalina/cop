@@ -1,6 +1,6 @@
 ---
 name: typespec
-version: 1.0.0
+version: 2.0.0
 title: TypeSpec Analysis
 description: Types and collections for TypeSpec API specification analysis
 authors: cop-team

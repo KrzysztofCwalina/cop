@@ -1,6 +1,6 @@
 {
   "name": "bash",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "Analyze Bash/Shell scripts: simple commands, logical command text, line numbers, and strict-mode usage",
   "title": "Bash/Shell",
   "authors": "cop-team",
@@ -14,4 +14,3 @@
   "providerEntry": "Cop.Providers.Bash.BashProvider",
   "providerAssembly": "bash-provider.dll"
 }
-

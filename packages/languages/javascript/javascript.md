@@ -1,6 +1,6 @@
 ---
 name: javascript-lister
-version: 1.0.0
+version: 2.0.0
 title: JavaScript/TypeScript API Surface Analysis
 description: API surface tracking, export, and diff for JavaScript/TypeScript libraries
 authors: cop-team

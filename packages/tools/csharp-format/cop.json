@@ -1,6 +1,6 @@
 {
   "name": "csharp-format",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Run dotnet format and expose formatting violations",
   "title": "C# Format Check",
   "tags": [

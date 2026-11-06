@@ -1,6 +1,6 @@
 ---
 name: typespec-http
-version: 1.0.0
+version: 2.0.0
 title: TypeSpec HTTP Protocol Analysis
 description: HTTP protocol graph derived from TypeSpec API specifications
 authors: cop-team

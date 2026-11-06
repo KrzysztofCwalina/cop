@@ -1,6 +1,6 @@
 {
   "name": "xml",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "Analyze XML files and XML-based project/config files: elements, attributes, values, paths, and line numbers",
   "title": "XML",
   "authors": "cop-team",

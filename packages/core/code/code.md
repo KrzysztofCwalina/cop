@@ -1,6 +1,6 @@
 ---
 name: code
-version: 1.1.0
+version: 1.2.0
 title: Code Analysis Types
 description: Core type definitions for source code structural analysis
 authors: cop-team
