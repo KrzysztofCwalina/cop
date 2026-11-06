@@ -6,6 +6,6 @@ let exception-base-message =
 export let derived-exception-suffix-implies-base = checkRule(
     'cop-checks/derived-exception-suffix-implies-base',
     codebase.Types:hasExceptionSuffix
-    .Where(item.File.Path:in(source-files.Path))
+    .Where(item.File.Path:in(source-file-paths))
     .Where(!hasExceptionBase(item))
     :toError(exception-base-message))

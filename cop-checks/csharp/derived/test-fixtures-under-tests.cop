@@ -6,5 +6,5 @@ let fixture-location-message =
 export let derived-tests-location = checkRule(
     'cop-checks/derived-tests-location',
     codebase.Types:hasTestFixture
-    .Where(item.File.Path:in(non-test-files.Path))
+    .Where(item.File.Path:in(non-test-file-paths))
     :toError(fixture-location-message))

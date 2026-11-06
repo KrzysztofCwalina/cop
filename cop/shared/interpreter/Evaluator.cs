@@ -444,15 +444,7 @@ public sealed class Evaluator
                 && env.TryLookup(ImplicitItemVariable, out CopValue? item)
                 && IsTemplate(thunk))
             {
-                return new CopThunk(async (forcingCancellationToken) => (await thunk.ForceTemplateAsync(async (renderCancellationToken) =>
-                {
-                    Environment scope = closure.Extend();
-                    // Track actual reads, so nested item scopes and constant templates stay memoized.
-                    CopThunk contextualItem = new CopThunk(() => item);
-                    scope.Define(ImplicitItemVariable, contextualItem);
-                    CopValue rendered = (await ForceValueAsync((await evaluate(scope, renderCancellationToken)), cancellationToken: renderCancellationToken));
-                    return (rendered, !contextualItem.IsForced);
-                }, cancellationToken: forcingCancellationToken)));
+                return CreateContextualTemplate(thunk, closure, evaluate, item);
             }
             return value;
         }
@@ -466,6 +458,20 @@ public sealed class Evaluator
 
         throw new CopEvaluationException($"Undefined variable '{id.Name}'", id.Line, _filePath);
     }
+
+    private CopThunk CreateContextualTemplate(CopThunk thunk, Environment closure,
+        Func<Environment, CancellationToken, ValueTask<CopValue>> evaluate, CopValue item) =>
+        new(async forcingCancellationToken => await thunk.ForceTemplateAsync(
+            async renderCancellationToken =>
+            {
+                Environment scope = closure.Extend();
+                // Track actual reads, so nested item scopes and constant templates stay memoized.
+                CopThunk contextualItem = new(() => item);
+                scope.Define(ImplicitItemVariable, contextualItem);
+                CopValue rendered = await ForceValueAsync(await evaluate(scope, renderCancellationToken),
+                    cancellationToken: renderCancellationToken);
+                return (rendered, !contextualItem.IsForced);
+            }, cancellationToken: forcingCancellationToken));
 
     private static bool IsTemplate(CopThunk thunk)
     {
@@ -1159,8 +1165,7 @@ public sealed class Evaluator
         };
         if (IsCollectionValue(obj))
         {
-            result = QuerySource.TrackLocal(obj, result, source => mem with { Object = source },
-                $"{mem.Member} executes locally");
+            result = TrackMemberProjection(obj, result, mem);
         }
 
         // Computed property fallback for trait conformance
@@ -1188,11 +1193,22 @@ public sealed class Evaluator
         return result;
     }
 
+    private static CopValue TrackMemberProjection(CopValue input, CopValue result, MemberExpr member) =>
+        QuerySource.TrackLocal(input, result, source => member with { Object = source },
+            $"{member.Member} executes locally");
+
     /// <summary>
     /// If value is a predicate with 1 parameter matching a known collection,
     /// resolve it to the filtered collection (named subset pattern).
     /// </summary>
-    private async ValueTask<CopValue> TryResolveNamedSubsetAsync(CopValue value, Environment env, CancellationToken cancellationToken = default)
+    private ValueTask<CopValue> TryResolveNamedSubsetAsync(CopValue value, Environment env,
+        CancellationToken cancellationToken = default) =>
+        value is CopFunction or CopFunctionGroup
+            ? ResolveNamedSubsetAsync(value, env, cancellationToken)
+            : ValueTask.FromResult(value);
+
+    private async ValueTask<CopValue> ResolveNamedSubsetAsync(CopValue value, Environment env,
+        CancellationToken cancellationToken)
     {
         if (value is CopFunction predFunc && predFunc.Declaration.Params.Count == 1)
         {
@@ -1331,11 +1347,14 @@ public sealed class Evaluator
 
     private async ValueTask<CopValue> EvalLazyMemberAsync(CopLazyCollection lazy, string member, int line, CancellationToken cancellationToken = default) => member switch
     {
-        "Count" or "count" or "Length" or "length" => new CopInt((await lazy.EnumerateAsync(cancellationToken: cancellationToken).CountAsync(cancellationToken: cancellationToken))),
+        "Count" or "count" or "Length" or "length" => new CopInt(
+            (await lazy.GetItemsAsync(cancellationToken)).Count),
         "First" or "first" => (await lazy.EnumerateAsync(cancellationToken: cancellationToken).FirstOrDefaultAsync(cancellationToken: cancellationToken)) ?? CopNull.Instance,
-        "Last" or "last" => (await lazy.EnumerateAsync(cancellationToken: cancellationToken).LastOrDefaultAsync(cancellationToken: cancellationToken)) ?? CopNull.Instance,
+        "Last" or "last" => (await lazy.GetItemsAsync(cancellationToken)) is { Count: > 0 } items
+            ? items[^1] : CopNull.Instance,
         // Collection projection: collection.Name → map each item's Name field
-        _ => (await ProjectCollectionAsync((await lazy.EnumerateAsync(cancellationToken: cancellationToken).ToListAsync(cancellationToken: cancellationToken)), member, cancellationToken: cancellationToken))
+        _ => (await ProjectCollectionAsync(await lazy.GetItemsAsync(cancellationToken),
+            member, cancellationToken: cancellationToken))
     };
 
     private CopValue EvalStringMember(CopString str, string member, int line) => member switch

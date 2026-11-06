@@ -124,6 +124,25 @@ public sealed class CopLazyCollection : CopValue
         }
     }
 
+    /// <summary>Completes the replay cache without copying its items into another buffer.</summary>
+    internal async ValueTask<IReadOnlyList<CopValue>> GetItemsAsync(
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        lock (_gate)
+        {
+            if (_complete)
+            {
+                return _cached;
+            }
+        }
+
+        await foreach (CopValue _ in EnumerateAsync(cancellationToken).ConfigureAwait(false))
+        {
+        }
+        return _cached;
+    }
+
     private async Task AdvanceAsync(CancellationToken cancellationToken)
     {
         try

@@ -134,6 +134,25 @@ with `-d`. Failed resolution is an error; genuine source-analysis warnings and
 errors are not suppressed. Compatible local and explicitly declared feeds retain
 their normal precedence.
 
+### Runtime performance
+
+Compare runs against the same target, command selection, and package versions.
+Package restoration is separate from analysis; a first run may also populate source
+caches. Use ordinary runs for timing comparisons: detailed diagnostics and runtime
+tracing add overhead.
+
+Bind shared collection projections outside per-item filters. For example, compute
+the allowed paths once rather than rebuilding `included-files.Path` for every call:
+
+```cop skip
+let included-paths = included-files.Path
+let selected-calls = cb.Calls.Where(item.File.Path:in(included-paths))
+```
+
+`let` bindings remain demand-driven and reuse their evaluated result. Completed
+lazy collections also reuse their input buffer for counts and projections; member
+values are still read on each projection, rather than cached across object changes.
+
 ### Change-focused reviews
 
 These options apply to scripts, named local commands, URL scripts, and package

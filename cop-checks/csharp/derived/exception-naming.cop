@@ -6,6 +6,6 @@ let exception-name-message =
 export let derived-exception-naming = checkRule(
     'cop-checks/derived-exception-naming',
     codebase.Types:hasExceptionBase
-    .Where(item.File.Path:in(source-files.Path))
+    .Where(item.File.Path:in(source-file-paths))
     .Where(!hasExceptionSuffix(item))
     :toError(exception-name-message))

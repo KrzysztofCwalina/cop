@@ -13,7 +13,7 @@ let provider-namespace-message =
 export let derived-provider-namespace = checkRule(
     'cop-checks/derived-provider-namespace',
     codebase.Types:extendsDataProvider
-    .Where(item.File.Path:in(files-without-samples-or-examples.Path))
+    .Where(item.File.Path:in(file-paths-without-samples-or-examples))
     .Where(
         !hasProviderNamespacePrefix(item.File) &&
         !hasExemptProviderName(item))
