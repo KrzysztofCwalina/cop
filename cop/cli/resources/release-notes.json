@@ -293,6 +293,14 @@
         "Versioned package restores select published package tags and resolve transitive dependencies without false circular-dependency errors.",
         "Provider authors: the async CLR provider API is a breaking change; rebuild custom providers and use the updated SDK examples and package versions."
       ]
+    },
+    {
+      "version": "2026.11.6.2",
+      "approved": true,
+      "features": [
+        "Fix explicit 'cop package restore' losing declared GitHub feeds during local-directory discovery.",
+        "Includes the async execution, compiler-backed C# checks, and compatible package updates from 2026.11.6.1."
+      ]
     }
   ]
 }

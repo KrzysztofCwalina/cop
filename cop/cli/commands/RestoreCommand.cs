@@ -104,8 +104,7 @@ public static class RestoreCommand
 
             // Build PackageReference list from feed URLs + import names
             // Only GitHub feeds (github.com/owner/repo) support remote restore
-            List<string> feedPaths = Cop.Lang.Interpreter.ModuleLoader.ExtractFeedPaths(source, Path.GetDirectoryName(filePath) ?? ".").ToList();
-            List<string> githubFeeds = feedPaths
+            List<string> githubFeeds = module.FeedPaths
                 .Where(f => f.StartsWith("github.com/", StringComparison.OrdinalIgnoreCase))
                 .ToList();
 

@@ -111,6 +111,9 @@ CLI commands for managing feeds:
 - **`cop package feed add <url>`** — add a feed (e.g., `github.com/myorg/my-packages` or a local path)
 - **`cop package feed remove <url>`** — remove a feed (cannot remove the default feed)
 
+Explicit `cop package restore` reads GitHub feeds directly from the program's `feed`
+declarations; remote feeds are not filtered through local-directory discovery.
+
 ---
 
 ## Importing Packages
