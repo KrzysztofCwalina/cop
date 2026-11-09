@@ -155,6 +155,11 @@ values are still read on each projection, rather than cached across object chang
 Small function scopes and argument lists avoid dictionary and async-iterator
 overhead; arguments still evaluate sequentially and honor cancellation.
 
+Cop disables dynamic profile-guided optimization (PGO) by default to avoid
+instrumentation and recompilation costs during batch analysis. Ordinary tiered
+compilation remains enabled for long-lived sessions. To compare a workload with
+dynamic PGO enabled, set `DOTNET_TieredPGO=1` before starting Cop.
+
 ### Change-focused reviews
 
 These options apply to scripts, named local commands, URL scripts, and package

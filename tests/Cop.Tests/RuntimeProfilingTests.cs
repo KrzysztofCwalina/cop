@@ -1,4 +1,5 @@
 using System.Reflection;
+using System.Text.Json;
 using Cop.Lang.Interpreter;
 using Cop.Providers;
 using NUnit.Framework;
@@ -8,6 +9,22 @@ namespace Cop.Tests;
 [TestFixture]
 public class RuntimeProfilingTests
 {
+    [Test]
+    public void ExecutableDisablesDynamicPgoWithoutDisablingTieredCompilation()
+    {
+        string configurationPath = Path.ChangeExtension(
+            typeof(Engine).Assembly.Location, ".runtimeconfig.json");
+        using JsonDocument document = JsonDocument.Parse(File.ReadAllText(configurationPath));
+        JsonElement properties = document.RootElement
+            .GetProperty("runtimeOptions").GetProperty("configProperties");
+
+        Assert.That(properties.TryGetProperty("System.Runtime.TieredPGO", out JsonElement pgo),
+            Is.True, "The executable must explicitly avoid dynamic PGO instrumentation.");
+        Assert.That(pgo.GetBoolean(), Is.False);
+        Assert.That(!properties.TryGetProperty("System.Runtime.TieredCompilation", out JsonElement tiering)
+            || tiering.GetBoolean(), Is.True, "Long-lived modes retain ordinary tiered compilation.");
+    }
+
     [Test]
     public void CancellationRestoresTheTraceCallback()
     {
