@@ -10,7 +10,7 @@
     <TieredPGO>false</TieredPGO>
     <SelfContained>false</SelfContained>
     <AssemblyName>cop</AssemblyName>
-    <Version>2026.11.6.2</Version>
+    <Version>2026.11.9.1</Version>
     <ApplicationIcon>resources\cop.ico</ApplicationIcon>
   </PropertyGroup>
 

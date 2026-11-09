@@ -301,6 +301,15 @@
         "Fix explicit 'cop package restore' losing declared GitHub feeds during local-directory discovery.",
         "Includes the async execution, compiler-backed C# checks, and compatible package updates from 2026.11.6.1."
       ]
+    },
+    {
+      "version": "2026.11.9.1",
+      "approved": true,
+      "features": [
+        "Execution summaries count actual evaluated leaf checks instead of internal commands: 65 main checks, 29 derived checks, or 94 combined repository checks.",
+        "Faster full and C# analysis through lazy-buffer and scope reuse and streamlined sequential argument evaluation.",
+        "Dynamic PGO is disabled by default to reduce analysis CPU overhead; ordinary tiered compilation remains enabled. Set DOTNET_TieredPGO=1 to opt back in."
+      ]
     }
   ]
 }
