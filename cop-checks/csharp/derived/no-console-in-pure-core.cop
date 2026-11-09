@@ -10,9 +10,11 @@ predicate referencesConsole(Statement) =>
 let console-message =
     '{item.TypeName}.{item.MemberName}: use the core output abstraction, not Console'
 
-export let derived-no-console-in-pure-core = codebase.Statements:referencesConsole
+export let derived-no-console-in-pure-core = checkRule(
+    'cop-checks/derived-no-console-in-pure-core',
+    codebase.Statements:referencesConsole
     .Where(
         inInterpreter(item.File) ||
         inSyntax(item.File) ||
         inRuntime(item.File))
-    :toError(console-message)
+    :toError(console-message))

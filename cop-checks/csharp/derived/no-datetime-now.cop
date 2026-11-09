@@ -6,6 +6,8 @@ predicate referencesDateTimeNow(Statement) =>
 let datetime-message =
     'Use DateTimeOffset/UtcNow instead of DateTime.Now ({item.File.Path}:{item.Line})'
 
-export let derived-no-datetime-now = codebase.Statements:referencesDateTimeNow
-    .Where(item.File.Path:in(source-files.Path))
-    :toError(datetime-message)
+export let derived-no-datetime-now = checkRule(
+    'cop-checks/derived-no-datetime-now',
+    codebase.Statements:referencesDateTimeNow
+    .Where(item.File.Path:in(source-file-paths))
+    :toError(datetime-message))

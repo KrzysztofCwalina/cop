@@ -285,6 +285,13 @@ public static class Engine
         await using ToolchainExecutionScope toolchainScope = new ToolchainExecutionScope();
 
         LanguageBridge bridge = CreateBridge(outputs, fileOutputLines, asserts, diagLog);
+        bridge.RegisterFunction("observe", (args, _) =>
+        {
+            if (args.Count != 3 || args[1] is not CopString category || args[2] is not CopString name)
+                throw new ArgumentException("observe requires a value, a category string, and a name string.");
+            statistics.RecordEvaluation(category.Value, name.Value);
+            return args[0];
+        }, 3);
         ConcurrentDictionary<LetDecl, byte> evaluatedBindings = new System.Collections.Concurrent.ConcurrentDictionary<LetDecl, byte>(ReferenceEqualityComparer.Instance);
         bridge.Evaluator.LetBindingEvaluated = declaration =>
         {

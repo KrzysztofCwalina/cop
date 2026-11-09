@@ -70,6 +70,7 @@ public class DocumentedFeatureCoverageTests
             ["none"] = CoveredBy("doc-samples"),
             ["Normalized"] = CoveredBy("LanguageFeatureExecutionTests"),
             ["notEquals"] = CoveredBy("DocumentedOperationsExecutionTests"),
+            ["observe"] = CoveredBy("ToolchainCliIntegrationTests.ExplicitObservationDoesNotEnumerateADeferredProviderCollection"),
             ["OrderBy"] = CoveredBy("doc-samples"),
             ["OrderByDescending"] = CoveredBy("doc-samples"),
             ["Path"] = CoveredBy("DocumentedOperationsExecutionTests"),

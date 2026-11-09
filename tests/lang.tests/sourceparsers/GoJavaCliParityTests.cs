@@ -59,7 +59,7 @@ public class GoJavaCliParityTests
                         "Sample.java(7): error: Avoid System.exit() - throw an exception or return an error instead [system-exit]"
                     }), output);
                 Assert.That(output.Contains("using simpler"), Is.EqualTo(!native), output);
-                string stableOutput = CliSummaryAssertions.NormalizeElapsedTime(output, 1, 6, 30);
+                string stableOutput = CliSummaryAssertions.NormalizeElapsedTime(output, 1, 3, 30, checks: true);
                 if (first is not null) Assert.That(stableOutput, Is.EqualTo(first));
                 first = stableOutput;
             }

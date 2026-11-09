@@ -37,20 +37,23 @@ predicate isProdLine(Line) => !Line.File.Path:endsWith('_test.go')
 # panic() aborts the program — return an error instead in library code.
 predicate isPanicCall(Statement) =>
     Statement.Kind == throw && Statement:hasMemberName(['panic'])
-export let panic-calls = cb.Statements:isPanicCall:isProdStatement:isUnsuppressed
-    :toWarning('Avoid panic() in library code — return an error instead')
+export let panic-calls = checkRule('go-checks/panic-calls',
+    cb.Statements:isPanicCall:isProdStatement:isUnsuppressed
+    :toWarning('Avoid panic() in library code — return an error instead'))
 
 # os.Exit() skips deferred cleanup and is hard to test — reserve it for main().
 predicate isOsExit(Statement) =>
     Statement:hasTypeName(['os']) && Statement:hasMemberName(['Exit'])
-export let os-exit = cb.Calls:isOsExit:isProdStatement:isUnsuppressed
-    :toWarning('Avoid os.Exit() outside main — it skips deferred cleanup; return an error instead')
+export let os-exit = checkRule('go-checks/os-exit',
+    cb.Calls:isOsExit:isProdStatement:isUnsuppressed
+    :toWarning('Avoid os.Exit() outside main — it skips deferred cleanup; return an error instead'))
 
 # time.Sleep() in production code is usually a concurrency smell — prefer channels/contexts.
 predicate isTimeSleep(Statement) =>
     Statement:hasTypeName(['time']) && Statement:hasMemberName(['Sleep'])
-export let time-sleep = cb.Calls:isTimeSleep:isProdStatement:isUnsuppressed
-    :toInfo('time.Sleep() is often a concurrency smell — prefer channels, contexts, or timers')
+export let time-sleep = checkRule('go-checks/time-sleep',
+    cb.Calls:isTimeSleep:isProdStatement:isUnsuppressed
+    :toInfo('time.Sleep() is often a concurrency smell — prefer channels, contexts, or timers'))
 
 ## Combined correctness checks
 export let go-correctness-checks = panic-calls + os-exit + time-sleep
@@ -60,27 +63,31 @@ export let go-correctness-checks = panic-calls + os-exit + time-sleep
 # Avoid fmt console output in library code — use a logging framework (log/slog).
 predicate isConsolePrint(Statement) =>
     Statement:hasTypeName(['fmt']) && Statement:hasMemberName(['Print', 'Printf', 'Println'])
-export let console-output = cb.Calls:isConsolePrint:isProdStatement:isUnsuppressed
-    :toWarning('Avoid fmt.{item.MemberName} in library code — use a logging framework (log/slog)')
+export let console-output = checkRule('go-checks/console-output',
+    cb.Calls:isConsolePrint:isProdStatement:isUnsuppressed
+    :toWarning('Avoid fmt.{item.MemberName} in library code — use a logging framework (log/slog)'))
 
 # Go identifiers should use MixedCaps, not snake_case.
 predicate isDeclaredType(Type) => Type.Kind == Struct || Type.Kind == Interface
 predicate hasUnderscoreName(Type) => isDeclaredType && Type.Name:contains('_')
-export let underscore-naming = cb.Types:isProdType:hasUnderscoreName
-    :toWarning('{item.Name} — Go names should use MixedCaps, not snake_case')
+export let underscore-naming = checkRule('go-checks/underscore-naming',
+    cb.Types:isProdType:hasUnderscoreName
+    :toWarning('{item.Name} — Go names should use MixedCaps, not snake_case'))
 
 # Common initialisms should be all-caps (ID not Id, URL not Url, HTTP not Http, ...).
 predicate hasBadInitialism(Type) => isDeclaredType && isPublic
     && (Type.Name:matches('Id([A-Z]|$)') || Type.Name:matches('Url([A-Z]|$)')
         || Type.Name:matches('Http([A-Z]|$)') || Type.Name:matches('Api([A-Z]|$)')
         || Type.Name:matches('Json([A-Z]|$)') || Type.Name:matches('Xml([A-Z]|$)'))
-export let initialism-casing = cb.Types:isProdType:hasBadInitialism
-    :toInfo('{item.Name} — use all-caps initialisms (ID/URL/HTTP/API/JSON/XML)')
+export let initialism-casing = checkRule('go-checks/initialism-casing',
+    cb.Types:isProdType:hasBadInitialism
+    :toInfo('{item.Name} — use all-caps initialisms (ID/URL/HTTP/API/JSON/XML)'))
 
 # interface{} can be written as `any` since Go 1.18.
 predicate isEmptyInterface(Line) => Line.Text:contains('interface{}')
-export let use-any = cb.Lines:isProdLine:isEmptyInterface:isUnsuppressed
-    :toInfo('Use any instead of interface{} (Go 1.18+)')
+export let use-any = checkRule('go-checks/use-any',
+    cb.Lines:isProdLine:isEmptyInterface:isUnsuppressed
+    :toInfo('Use any instead of interface{} (Go 1.18+)'))
 
 ## Combined style checks
 export let go-style-checks = console-output + underscore-naming + initialism-casing + use-any
@@ -90,14 +97,16 @@ export let go-style-checks = console-output + underscore-naming + initialism-cas
 # Functions with more than 7 parameters are hard to call — group them into a struct.
 predicate hasTooManyArgs(Method) =>
     Method:hasParameterCountAbove(7)
-export let too-many-arguments = cb.Methods:isProdMethod:hasTooManyArgs
-    :toWarning('{item.Name} has more than 7 parameters — group them into a struct')
+export let too-many-arguments = checkRule('go-checks/too-many-arguments',
+    cb.Methods:isProdMethod:hasTooManyArgs
+    :toWarning('{item.Name} has more than 7 parameters — group them into a struct'))
 
 # Very large function bodies are hard to read — consider splitting.
 predicate isLargeFunction(Method) =>
     Method:hasStatementCountAbove(50)
-export let large-function = cb.Methods:isProdMethod:isLargeFunction
-    :toInfo('{item.Name} is large (> 50 statements) — consider splitting it')
+export let large-function = checkRule('go-checks/large-function',
+    cb.Methods:isProdMethod:isLargeFunction
+    :toInfo('{item.Name} is large (> 50 statements) — consider splitting it'))
 
 ## Combined complexity checks
 export let go-complexity-checks = too-many-arguments + large-function
@@ -106,14 +115,16 @@ export let go-complexity-checks = too-many-arguments + large-function
 
 # Exported types (struct/interface) should have a doc comment.
 predicate isUndocumentedType(Type) => isDeclaredType && isPublic && !Type.Documented
-export let undocumented-types = cb.Types:isProdType:isUndocumentedType
-    :toWarning('Exported type {item.Name} is missing a doc comment')
+export let undocumented-types = checkRule('go-checks/undocumented-types',
+    cb.Types:isProdType:isUndocumentedType
+    :toWarning('Exported type {item.Name} is missing a doc comment'))
 
 # Exported functions should have a doc comment.
 predicate isUndocumentedFn(Method) => isPublic && !Method.Documented
 predicate hasUndocumentedFn(Type) => Type.Methods:any(isUndocumentedFn)
-export let undocumented-functions = cb.Types:isProdType:hasUndocumentedFn
-    :toWarning('{item.Name} has exported functions without doc comments')
+export let undocumented-functions = checkRule('go-checks/undocumented-functions',
+    cb.Types:isProdType:hasUndocumentedFn
+    :toWarning('{item.Name} has exported functions without doc comments'))
 
 ## Combined documentation checks
 export let go-doc-checks = undocumented-types + undocumented-functions

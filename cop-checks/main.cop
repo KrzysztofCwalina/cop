@@ -13,28 +13,34 @@ let source-files-without-examples = codebase.Files.Where(!inTestsSamplesOrExampl
 let non-test-files = codebase.Files.Where(!inTests(item))
 let files-without-samples-or-examples = codebase.Files.Where(!inSamplesOrExamples(item))
 
+let source-file-paths = source-files.Path
+let source-file-paths-without-examples = source-files-without-examples.Path
+let non-test-file-paths = non-test-files.Path
+let file-paths-without-samples-or-examples = files-without-samples-or-examples.Path
+
 let source-types-without-examples = codebase.Types
-    .Where(item.File.Path:in(source-files-without-examples.Path))
+    .Where(item.File.Path:in(source-file-paths-without-examples))
 
 let csharp-source-files = source-files-without-examples
     .Where(item.Language == csharp)
+let csharp-source-file-paths = csharp-source-files.Path
 let csharp-source-codebase : Codebase = {
     SourceScopes: codebase.SourceScopes,
     Files: csharp-source-files,
-    Types: codebase.Types.Where(item.File.Path:in(csharp-source-files.Path)),
-    Methods: codebase.Methods.Where(item.File.Path:in(csharp-source-files.Path)),
-    Statements: codebase.Statements.Where(item.File.Path:in(csharp-source-files.Path)),
-    Calls: codebase.Calls.Where(item.File.Path:in(csharp-source-files.Path)),
-    Lines: codebase.Lines.Where(item.File.Path:in(csharp-source-files.Path)),
-    Regions: codebase.Regions.Where(item.File.Path:in(csharp-source-files.Path)),
+    Types: codebase.Types.Where(item.File.Path:in(csharp-source-file-paths)),
+    Methods: codebase.Methods.Where(item.File.Path:in(csharp-source-file-paths)),
+    Statements: codebase.Statements.Where(item.File.Path:in(csharp-source-file-paths)),
+    Calls: codebase.Calls.Where(item.File.Path:in(csharp-source-file-paths)),
+    Lines: codebase.Lines.Where(item.File.Path:in(csharp-source-file-paths)),
+    Regions: codebase.Regions.Where(item.File.Path:in(csharp-source-file-paths)),
     Projects: codebase.Projects
 }
 let csharp-source-violations = csharpChecks(csharp-source-codebase)
 
 let source-calls = codebase.Calls:isCSharp
-    .Where(item.File.Path:in(source-files.Path))
+    .Where(item.File.Path:in(source-file-paths))
 let non-test-calls = codebase.Calls
-    .Where(item.File.Path:in(non-test-files.Path))
+    .Where(item.File.Path:in(non-test-file-paths))
 
 predicate inTestsOrSamples(File) =>
     File.Path:startsWith('tests/') ||

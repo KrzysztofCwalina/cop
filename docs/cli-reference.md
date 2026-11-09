@@ -34,18 +34,28 @@ command list, including `cop update [--force]`, even when combined with
 Normal text runs finish with a compact execution summary on **stderr**:
 
 ```text
-Summary: 142 input files processed, 12 commands executed in 0.42s.
+Summary: 142 input files processed, 65 checks evaluated in 0.42s.
 ```
 
-The displayed command count includes individual named computations: each top-level
-`let` actually evaluated, plus callable entry commands that ran. A composed suite
-therefore counts its demanded computations, not just `MAIN`. Empty results still
-count; unused declarations do not. Repeated reads of one binding count once.
-Imported computations, input setup, and aggregate bindings count when evaluated,
-so this is not a special-purpose count of checks. Selecting a binding directly
-does not add an extra entry-wrapper count. Nested helper function calls are not
-counted per item. The language does not recognize check names, violation types,
-or check-producing functions to calculate these statistics.
+Bundled check packages and repository rules explicitly mark each leaf rule with
+`code.checkRule(name, violations)`. The count is the number of distinct marked rules
+actually evaluated, including rules with **zero findings**. Helpers, aggregate suites,
+aliases, repeated applications of the same rule, and unused or opt-in rules that did
+not run add no checks. Running the same rule over several inputs still counts one
+distinct check, not one check per file or finding.
+
+Custom checks participate by wrapping their complete violation list, not each item
+or the combined suite. Use a stable package-qualified name such as
+`checkRule('my-checks/no-var', violations)`; unrelated packages must use different
+names. This returns the original collection without enumerating it. Merely tagging
+findings with `toError(message, name)` does not register a check, because that would
+miss clean rules.
+
+When no marked check was evaluated (for example a general data-processing program
+or legacy unmarked rules), the summary instead reports **computations evaluated**:
+demanded distinct let bindings plus callable entry commands. It does not claim
+these are checks. The language remains domain-independent; the code package defines
+check registration using the general-purpose `observe(value, category, name)` hook.
 
 The file count deduplicates input paths reported by providers during actual work,
 including cached inputs and filesystem metadata inspection. Lazy queries count
@@ -123,6 +133,32 @@ changing local files. Detailed skipped-provider paths and versions are available
 with `-d`. Failed resolution is an error; genuine source-analysis warnings and
 errors are not suppressed. Compatible local and explicitly declared feeds retain
 their normal precedence.
+
+### Runtime performance
+
+Compare runs against the same target, command selection, and package versions.
+Package restoration is separate from analysis; a first run may also populate source
+caches. Use ordinary runs for timing comparisons: detailed diagnostics and runtime
+tracing add overhead.
+
+Bind shared collection projections outside per-item filters. For example, compute
+the allowed paths once rather than rebuilding `included-files.Path` for every call:
+
+```cop skip
+let included-paths = included-files.Path
+let selected-calls = cb.Calls.Where(item.File.Path:in(included-paths))
+```
+
+`let` bindings remain demand-driven and reuse their evaluated result. Completed
+lazy collections also reuse their input buffer for counts and projections; member
+values are still read on each projection, rather than cached across object changes.
+Small function scopes and argument lists avoid dictionary and async-iterator
+overhead; arguments still evaluate sequentially and honor cancellation.
+
+Cop disables dynamic profile-guided optimization (PGO) by default to avoid
+instrumentation and recompilation costs during batch analysis. Ordinary tiered
+compilation remains enabled for long-lived sessions. To compare a workload with
+dynamic PGO enabled, set `DOTNET_TieredPGO=1` before starting Cop.
 
 ### Change-focused reviews
 

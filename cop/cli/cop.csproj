@@ -7,6 +7,7 @@
     <Nullable>enable</Nullable>
     <PublishSingleFile>true</PublishSingleFile>
     <PublishReadyToRun>true</PublishReadyToRun>
+    <TieredPGO>false</TieredPGO>
     <SelfContained>false</SelfContained>
     <AssemblyName>cop</AssemblyName>
     <Version>2026.11.6.2</Version>

@@ -24,12 +24,14 @@ export predicate hasBannedParamType(Method) => Method:isPublic && Method.Paramet
 export predicate hasBannedParams(Type) => Type.Methods:any(hasBannedParamType)
 
 ## Public methods should not have a bool parameter named 'async'
-export let public-async-bool-params = cb.Types:isExposingAsyncBool
-    :toWarning('{item.Name} should not have a bool \'async\' parameter in public API')
+export let public-async-bool-params = checkRule('csharp-library-checks/public-async-bool-params',
+    cb.Types:isExposingAsyncBool
+    :toWarning('{item.Name} should not have a bool \'async\' parameter in public API'))
 
 ## Non-public async methods should accept a bool 'async' parameter
-export let async-missing-bool-param = cb.Types:hasNonPublicAsyncWithoutParam
-    :toWarning('{item.Name} non-public async method should have \'async\' parameter')
+export let async-missing-bool-param = checkRule('csharp-library-checks/async-missing-bool-param',
+    cb.Types:hasNonPublicAsyncWithoutParam
+    :toWarning('{item.Name} non-public async method should have \'async\' parameter'))
 
 # ConfigureAwait
 
@@ -37,8 +39,9 @@ predicate isAwaitUsingDefault(Statement) => Statement.Kind == 'await'
     && (Statement.MemberName != 'ConfigureAwait' || Statement.Arguments:contains('true'))
 
 ## Library code must use ConfigureAwait(false) on all await expressions
-export let awaits-using-default = cb.Statements:isAwaitUsingDefault
-    :toWarning('Library code must use ConfigureAwait(false) on await expressions')
+export let awaits-using-default = checkRule('csharp-library-checks/awaits-using-default',
+    cb.Statements:isAwaitUsingDefault
+    :toWarning('Library code must use ConfigureAwait(false) on await expressions'))
 
 # Dual-mode method patterns
 
@@ -58,16 +61,18 @@ predicate isUnconditionalAwait(Statement) => Statement.Kind == 'await'
     && isInDualModeMethod && !isGuardedByAsyncCheck
 
 ## Unconditional await in dual-mode method (AZC0110)
-export let unconditional-await-in-dual-mode = cb.Statements:isUnconditionalAwait
-    :toError('Await must be guarded by if (async) in dual-mode methods')
+export let unconditional-await-in-dual-mode = checkRule('csharp-library-checks/unconditional-await-in-dual-mode',
+    cb.Statements:isUnconditionalAwait
+    :toError('Await must be guarded by if (async) in dual-mode methods'))
 
 # Unconditional EnsureCompleted in dual-mode method (AZC0111)
 predicate isUnconditionalEnsureCompleted(Statement) => Statement.Kind == 'call'
     && Statement.MemberName == 'EnsureCompleted' && isInDualModeMethod && !isGuardedByAsyncCheck
 
 ## Unconditional EnsureCompleted in dual-mode method (AZC0111)
-export let unconditional-sync-in-dual-mode = cb.Statements:isUnconditionalEnsureCompleted
-    :toError('EnsureCompleted must be guarded by if (!async) in dual-mode methods')
+export let unconditional-sync-in-dual-mode = checkRule('csharp-library-checks/unconditional-sync-in-dual-mode',
+    cb.Statements:isUnconditionalEnsureCompleted
+    :toError('EnsureCompleted must be guarded by if (!async) in dual-mode methods'))
 
 # AZC0108: Detect wrong async argument values in guarded branches
 
@@ -85,10 +90,12 @@ export predicate hasWrongAsyncTrueInSyncGuard(Statement) => Statement.Kind == 'c
     && Statement.Arguments:any((a) => a:contains('async: true'))
 
 ## Wrong async argument value in guarded branch (AZC0108)
-export let wrong-async-arg-value = cb.Statements:hasWrongAsyncFalseInAsyncGuard
-    :toError('Passing async: false inside async guard — should be async: true')
-export let wrong-sync-arg-value = cb.Statements:hasWrongAsyncTrueInSyncGuard
-    :toError('Passing async: true inside sync guard — should be async: false')
+export let wrong-async-arg-value = checkRule('csharp-library-checks/wrong-async-arg-value',
+    cb.Statements:hasWrongAsyncFalseInAsyncGuard
+    :toError('Passing async: false inside async guard — should be async: true'))
+export let wrong-sync-arg-value = checkRule('csharp-library-checks/wrong-sync-arg-value',
+    cb.Statements:hasWrongAsyncTrueInSyncGuard
+    :toError('Passing async: true inside sync guard — should be async: false'))
 
 # AZC0109: async parameter used outside of if condition or ternary
 
@@ -97,8 +104,9 @@ export predicate isPassingAsyncParamAsArg(Statement) => Statement.Kind == 'call'
     && Statement.Arguments:contains('async')
 
 ## Misuse of async parameter (AZC0109)
-export let async-param-misuse = cb.Statements:isPassingAsyncParamAsArg
-    :toWarning('Do not pass async parameter as argument — use if/else branching instead')
+export let async-param-misuse = checkRule('csharp-library-checks/async-param-misuse',
+    cb.Statements:isPassingAsyncParamAsArg
+    :toWarning('Do not pass async parameter as argument — use if/else branching instead'))
 
 ## Combined async/sync library checks
 export let csharp-library-async-checks = public-async-bool-params + async-missing-bool-param + awaits-using-default + unconditional-await-in-dual-mode + unconditional-sync-in-dual-mode + wrong-async-arg-value + wrong-sync-arg-value + async-param-misuse
@@ -135,12 +143,14 @@ predicate isNotSealedOrAbstract(Type) => Type:!isSealed && Type:!isAbstract
 export predicate isMissingMockingConstructor(Type) => Type.Constructors:!any(isProtectedParameterless)
 
 ## Client types must have a constructor that accepts an Options parameter
-export let client-needs-options-ctor = Clients:isMissingOptionsConstructor
-    :toWarning('{item.Name} should accept an options parameter')
+export let client-needs-options-ctor = checkRule('csharp-library-checks/client-needs-options-ctor',
+    Clients:isMissingOptionsConstructor
+    :toWarning('{item.Name} should accept an options parameter'))
 
 ## Client types must be sealed or abstract to prevent unintended inheritance
-export let client-sealed-or-abstract = Clients:isNotSealedOrAbstract
-    :toWarning('{item.Name} should be sealed or abstract')
+export let client-sealed-or-abstract = checkRule('csharp-library-checks/client-sealed-or-abstract',
+    Clients:isNotSealedOrAbstract
+    :toWarning('{item.Name} should be sealed or abstract'))
 
 # Method checks
 
@@ -158,16 +168,19 @@ predicate isMissingSyncCounterpart(Method) => !Type.MethodNames:contains(Method.
 predicate hasAsyncWithoutSync(Type) => Type.Methods.Where(isAsyncServiceMethod):any(isMissingSyncCounterpart)
 
 ## Async methods on client types must accept a CancellationToken parameter
-export let async-needs-cancellation-token = Clients:hasAsyncWithoutCancellation
-    :toWarning('{item.Name} is async without CancellationToken')
+export let async-needs-cancellation-token = checkRule('csharp-library-checks/async-needs-cancellation-token',
+    Clients:hasAsyncWithoutCancellation
+    :toWarning('{item.Name} is async without CancellationToken'))
 
 ## Public instance methods on client types should be virtual for mocking
-export let client-methods-virtual = Clients:hasNonVirtualServiceMethod
-    :toWarning('{item.Name} has non-virtual service method')
+export let client-methods-virtual = checkRule('csharp-library-checks/client-methods-virtual',
+    Clients:hasNonVirtualServiceMethod
+    :toWarning('{item.Name} has non-virtual service method'))
 
 ## Every public async method on a client type must have a matching sync method
-export let async-needs-sync-counterpart = Clients:hasAsyncWithoutSync
-    :toWarning('{item.Name} has async method without sync counterpart')
+export let async-needs-sync-counterpart = checkRule('csharp-library-checks/async-needs-sync-counterpart',
+    Clients:hasAsyncWithoutSync
+    :toWarning('{item.Name} has async method without sync counterpart'))
 
 # Content parameters
 

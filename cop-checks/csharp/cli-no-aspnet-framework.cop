@@ -5,6 +5,8 @@ predicate isCopCliProject(Project) =>
 let aspnet-message =
     'Project {item.Name}: remove Microsoft.AspNetCore.App for single-file publishing'
 
-export let no-aspnet-in-cli = codebase.Projects:isCopCliProject
+export let no-aspnet-in-cli = checkRule(
+    'cop-checks/no-aspnet-in-cli',
+    codebase.Projects:isCopCliProject
     .Where(hasFramework(item, 'Microsoft.AspNetCore.App'))
-    :toError(aspnet-message)
+    :toError(aspnet-message))

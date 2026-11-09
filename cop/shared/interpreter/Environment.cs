@@ -8,7 +8,11 @@ namespace Cop.Lang.Interpreter;
 /// </summary>
 public sealed class Environment
 {
-    private readonly Dictionary<string, CopValue> _bindings = new(StringComparer.Ordinal);
+    private Dictionary<string, CopValue>? _bindings;
+    private string? _singleName;
+    private CopValue _singleValue = CopNull.Instance;
+    private string? _secondName;
+    private CopValue _secondValue = CopNull.Instance;
 
     /// <summary>
     /// Enclosing environment (null for the global environment).
@@ -25,35 +29,61 @@ public sealed class Environment
     /// </summary>
     public void Define(string name, CopValue value)
     {
-        _bindings[name] = value;
+        ArgumentNullException.ThrowIfNull(name);
+        if (_bindings is not null)
+        {
+            _bindings[name] = value;
+        }
+        else if (_singleName is null || _singleName == name)
+        {
+            _singleName = name;
+            _singleValue = value;
+        }
+        else if (_secondName is null || _secondName == name)
+        {
+            _secondName = name;
+            _secondValue = value;
+        }
+        else
+        {
+            _bindings = new(StringComparer.Ordinal)
+            {
+                [_singleName] = _singleValue,
+                [_secondName] = _secondValue,
+                [name] = value
+            };
+            _singleName = null;
+            _singleValue = CopNull.Instance;
+            _secondName = null;
+            _secondValue = CopNull.Instance;
+        }
     }
 
     /// <summary>
     /// Look up a binding by name, walking the parent chain.
     /// Returns CopNull.Instance if not found.
     /// </summary>
-    public CopValue Lookup(string name)
-    {
-        if (_bindings.TryGetValue(name, out CopValue? value))
-        {
-            return value;
-        }
-
-        if (Parent is not null)
-        {
-            return Parent.Lookup(name);
-        }
-
-        return CopNull.Instance;
-    }
+    public CopValue Lookup(string name) =>
+        TryLookup(name, out CopValue value) ? value : CopNull.Instance;
 
     /// <summary>
     /// Look up a binding, returning false if not found anywhere in the chain.
     /// </summary>
     public bool TryLookup(string name, out CopValue value)
     {
-        if (_bindings.TryGetValue(name, out value!))
+        ArgumentNullException.ThrowIfNull(name);
+        if (_bindings is not null && _bindings.TryGetValue(name, out value!))
         {
+            return true;
+        }
+        if (_singleName == name)
+        {
+            value = _singleValue;
+            return true;
+        }
+        if (_secondName == name)
+        {
+            value = _secondValue;
             return true;
         }
 
@@ -77,5 +107,22 @@ public sealed class Environment
     /// <summary>
     /// Returns all bindings in this environment (not walking parent chain).
     /// </summary>
-    public IEnumerable<KeyValuePair<string, CopValue>> AllBindings() => _bindings;
+    public IEnumerable<KeyValuePair<string, CopValue>> AllBindings()
+    {
+        if (_bindings is not null)
+        {
+            foreach (KeyValuePair<string, CopValue> binding in _bindings)
+            {
+                yield return binding;
+            }
+        }
+        else if (_singleName is not null)
+        {
+            yield return new(_singleName, _singleValue);
+            if (_secondName is not null)
+            {
+                yield return new(_secondName, _secondValue);
+            }
+        }
+    }
 }

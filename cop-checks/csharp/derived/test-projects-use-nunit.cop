@@ -7,6 +7,8 @@ predicate inTests(Project) =>
 let test-framework-message =
     'Test project {item.Name} must reference NUnit'
 
-export let derived-test-projects-use-nunit = codebase.Projects:inTests
+export let derived-test-projects-use-nunit = checkRule(
+    'cop-checks/derived-test-projects-use-nunit',
+    codebase.Projects:inTests
     .Where(!hasPackage(item, 'NUnit'))
-    :toError(test-framework-message)
+    :toError(test-framework-message))

@@ -11,7 +11,7 @@ internal static class TestTextParsing
         var line = stderr.Split('\n', StringSplitOptions.RemoveEmptyEntries)
             .Select(value => value.TrimEnd('\r')).Single(value => value.StartsWith("Summary:", StringComparison.Ordinal));
         var prefix = $"Summary: {files} input file{(files == 1 ? "" : "s")} processed, " +
-            $"{commands} command{(commands == 1 ? "" : "s")} executed in ";
+            $"{commands} computation{(commands == 1 ? "" : "s")} evaluated in ";
         Assert.That(line, Does.StartWith(prefix).And.EndWith("s."));
         Assert.That(double.TryParse(line[prefix.Length..^2], NumberStyles.AllowDecimalPoint,
             CultureInfo.InvariantCulture, out var seconds), Is.True);

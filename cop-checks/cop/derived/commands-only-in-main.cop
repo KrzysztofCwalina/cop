@@ -8,8 +8,10 @@ predicate hasMainSuffix(File) =>
 let check-command-message =
     'Only cop-checks/main.cop may declare a command ({item.File.Path}:{item.Line})'
 
-export let derived-single-command-in-checks = codebase.Statements:isCommand
+export let derived-single-command-in-checks = checkRule(
+    'cop-checks/derived-single-command-in-checks',
+    codebase.Statements:isCommand
     .Where(
         inChecks(item.File) &&
         !hasMainSuffix(item.File))
-    :toError(check-command-message)
+    :toError(check-command-message))

@@ -6,5 +6,7 @@ predicate lacksTestsSuffix(Type) =>
 let fixture-name-message =
     'Test fixture {item.Name} must be named *Tests ({item.File.Path})'
 
-export let derived-test-class-naming = codebase.Types:hasTestFixture:lacksTestsSuffix
-    :toError(fixture-name-message)
+export let derived-test-class-naming = checkRule(
+    'cop-checks/derived-test-class-naming',
+    codebase.Types:hasTestFixture:lacksTestsSuffix
+    :toError(fixture-name-message))

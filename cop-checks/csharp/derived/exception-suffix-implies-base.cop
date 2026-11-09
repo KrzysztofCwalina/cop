@@ -3,7 +3,9 @@
 let exception-base-message =
     '{item.Name} is named *Exception but does not derive from Exception'
 
-export let derived-exception-suffix-implies-base = codebase.Types:hasExceptionSuffix
-    .Where(item.File.Path:in(source-files.Path))
+export let derived-exception-suffix-implies-base = checkRule(
+    'cop-checks/derived-exception-suffix-implies-base',
+    codebase.Types:hasExceptionSuffix
+    .Where(item.File.Path:in(source-file-paths))
     .Where(!hasExceptionBase(item))
-    :toError(exception-base-message)
+    :toError(exception-base-message))

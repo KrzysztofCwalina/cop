@@ -13,20 +13,23 @@ let cb = codebase(java.parse())
 predicate isConsolePrint(Statement) =>
     Statement:hasMemberReceiver('System', ['out', 'err']) &&
     Statement:hasMemberName(['println', 'print', 'printf'])
-export let console-output = cb.Calls:isConsolePrint:isUnsuppressed
-    :toWarning('Avoid System.{item.CallTarget.Target.Name}.{item.MemberName}() — use a logging framework instead', nameof(console-output))
+export let console-output = checkRule('java-checks/console-output',
+    cb.Calls:isConsolePrint:isUnsuppressed
+    :toWarning('Avoid System.{item.CallTarget.Target.Name}.{item.MemberName}() — use a logging framework instead', nameof(console-output)))
 
 ## Do not call printStackTrace() — log exceptions through a logger
 predicate isPrintStackTrace(Statement) =>
     Statement:hasMemberName(['printStackTrace'])
-export let print-stack-trace = cb.Calls:isPrintStackTrace:isUnsuppressed
-    :toWarning('Do not call printStackTrace() — log the exception via a logger', nameof(print-stack-trace))
+export let print-stack-trace = checkRule('java-checks/print-stack-trace',
+    cb.Calls:isPrintStackTrace:isUnsuppressed
+    :toWarning('Do not call printStackTrace() — log the exception via a logger', nameof(print-stack-trace)))
 
 ## Avoid System.exit() in library and application code
 predicate isSystemExit(Statement) =>
     Statement:hasIdentifierReceiver('System') && Statement:hasMemberName(['exit'])
-export let system-exit = cb.Calls:isSystemExit:isUnsuppressed
-    :toError('Avoid System.exit() — throw an exception or return an error instead', nameof(system-exit))
+export let system-exit = checkRule('java-checks/system-exit',
+    cb.Calls:isSystemExit:isUnsuppressed
+    :toError('Avoid System.exit() — throw an exception or return an error instead', nameof(system-exit)))
 
 ## All Java checks combined
 export let java-checks = console-output + print-stack-trace + system-exit

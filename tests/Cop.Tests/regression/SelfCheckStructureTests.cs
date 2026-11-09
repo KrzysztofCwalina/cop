@@ -58,6 +58,38 @@ public class SelfCheckStructureTests
     }
 
     [Test]
+    public void SharedFileScopePathsAreProjectedOnceInsteadOfInsideEachElementFilter()
+    {
+        var scopes = new HashSet<string>(StringComparer.Ordinal)
+        {
+            "source-files", "source-files-without-examples", "non-test-files",
+            "files-without-samples-or-examples", "csharp-source-files"
+        };
+        var projections = new FileScopeProjectionCollector(scopes);
+        foreach (var file in Directory.GetFiles(
+            Path.Combine(_repo, "cop-checks"), "*.cop", SearchOption.AllDirectories))
+        {
+            projections.Visit(CopParser.Parse(File.ReadAllText(file), file));
+        }
+        Assert.That(projections.Sources, Is.EquivalentTo(scopes));
+    }
+
+    private sealed class FileScopeProjectionCollector(HashSet<string> scopes) : AstWalker
+    {
+        public List<string> Sources { get; } = [];
+
+        public override object? VisitMemberExpr(MemberExpr node)
+        {
+            if (node is { Object: IdentifierExpr source, Member: "Path" }
+                && scopes.Contains(source.Name))
+            {
+                Sources.Add(source.Name);
+            }
+            return base.VisitMemberExpr(node);
+        }
+    }
+
+    [Test]
     public void SelfChecksUsePrivateNamedDiagnosticTemplates()
     {
         var templates = new List<string>();

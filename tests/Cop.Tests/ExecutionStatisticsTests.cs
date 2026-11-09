@@ -7,6 +7,39 @@ namespace Cop.Tests;
 public class ExecutionStatisticsTests
 {
     [Test]
+    public async Task NamedEvaluationsDeduplicateWithinCategoriesAndSnapshotsStayStable()
+    {
+        using var statistics = new ExecutionStatistics();
+        await Task.WhenAll(Enumerable.Range(0, 20).Select(_ => Task.Run(() =>
+        {
+            statistics.RecordEvaluation("check", "first/rule");
+            statistics.RecordEvaluation("check", "second/rule");
+            statistics.RecordEvaluation("report", "first/rule");
+        })));
+        var snapshot = statistics.Snapshot();
+        statistics.RecordEvaluation("check", "third/rule");
+
+        Assert.That(snapshot.Evaluations, Is.EquivalentTo(new Dictionary<string, int>
+        {
+            ["check"] = 2,
+            ["report"] = 1
+        }));
+        Assert.That(statistics.Snapshot().Evaluations["check"], Is.EqualTo(3));
+        using var independent = new ExecutionStatistics();
+        Assert.That(independent.Snapshot().Evaluations, Is.Empty);
+    }
+
+    [TestCase("")]
+    [TestCase(" ")]
+    public void EmptyEvaluationIdentitiesFailExplicitly(string identity)
+    {
+        using var statistics = new ExecutionStatistics();
+        Assert.Throws<ArgumentException>(() => statistics.RecordEvaluation("check", identity));
+        Assert.Throws<ArgumentException>(() => statistics.RecordEvaluation(identity, "rule"));
+        Assert.That(statistics.Snapshot().Evaluations, Is.Empty);
+    }
+
+    [Test]
     public async Task RepeatedConcurrentInputReportsCountEachFileOnce()
     {
         using var statistics = new ExecutionStatistics();
