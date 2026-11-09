@@ -250,7 +250,7 @@ public class IssueRegressionTests
     {
         var lines = Normalize(result.Stderr).Split('\n', StringSplitOptions.RemoveEmptyEntries);
         Assert.That(lines, Has.Length.EqualTo(1), Describe(result));
-        Assert.That(lines[0], Does.StartWith("Summary: ")
+        Assert.That(lines[0], Does.StartWith("Summary   ")
             .And.Contain($"{computations} computation{(computations == 1 ? "" : "s")} evaluated in ").And.EndWith("s."),
             Describe(result));
     }

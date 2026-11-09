@@ -31,11 +31,23 @@ Help also accepts `-help`, `-?`, and `/?`. Root help always shows the complete
 command list, including `cop update [--force]`, even when combined with
 `--no-color`. Use `cop <command> --help` for command-specific options.
 
-Normal text runs finish with a compact execution summary on **stderr**:
+Normal text runs finish with a compact execution summary on **stderr**. When
+packages need restoring, setup and analysis use the same aligned phase labels:
 
 ```text
-Summary: 142 input files processed, 65 checks evaluated in 0.42s.
+  Packages  Restoring packages from 1 feed for Cop 2026.11.9.1
+  Restored  csharp (github.com/KrzysztofCwalina/cop)
+  Restored  code (github.com/KrzysztofCwalina/cop)
+  Analyze   Analyzing source
+  Summary   142 input files processed, 65 checks evaluated in 0.42s.
 ```
+
+Already available packages need no setup messages; those runs show just the final
+summary. Phase labels use restrained cyan (green for restored packages) only when
+**stderr** is a terminal and `--no-color` is not set. Redirected status is plain
+text, with no animated progress. Findings and program output stay on **stdout**;
+JSON output stays machine-readable and omits the analysis transition and summary.
+Restore failures retain the package, feed, and reason on stderr.
 
 Bundled check packages and repository rules explicitly mark each leaf rule with
 `code.checkRule(name, violations)`. The count is the number of distinct marked rules

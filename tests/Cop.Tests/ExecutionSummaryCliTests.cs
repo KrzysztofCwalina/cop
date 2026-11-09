@@ -5,6 +5,98 @@ namespace Cop.Tests;
 
 public partial class ToolchainCliIntegrationTests
 {
+    [TestCase(false)]
+    [TestCase(true)]
+    public async Task RedirectedSummaryIsPlainAndSingularWithoutSetupNoise(bool noColor)
+    {
+        File.WriteAllText(_script, "command MAIN = print('hello')");
+        var args = new List<string> { _script, "-t", _root };
+        if (noColor) args.Add("--no-color");
+
+        var result = await Run(args.ToArray());
+
+        Assert.That(result.ExitCode, Is.EqualTo(0), result.StandardError);
+        Assert.That(result.StandardOutput.Trim(), Is.EqualTo("hello"));
+        Assert.That(result.StandardError, Does.StartWith("  Summary   0 input files processed, 1 computation evaluated in ")
+            .And.Not.Contain("Packages").And.Not.Contain("Analyze"));
+        Assert.That(result.StandardError.Contains('\x1b'), Is.False);
+        AssertExecutionSummary(result.StandardError, 0, 1);
+    }
+
+    [Test]
+    public async Task MarkedSingleRuleKeepsSingularCheckSummary()
+    {
+        var repository = new DirectoryInfo(Path.GetDirectoryName(_cli)!);
+        while (!File.Exists(Path.Combine(repository.FullName, "cop.sln"))) repository = repository.Parent!;
+        var feed = Path.Combine(repository.FullName, "packages").Replace("\\", "\\\\");
+        File.WriteAllText(_script, $$"""
+            feed '{{feed}}'
+            import code
+            command MAIN = CHECK(checkRule('fixture/single', []))
+            """);
+
+        var verify = await Run("verify", _script);
+        Assert.That(verify.ExitCode, Is.EqualTo(0), verify.StandardError);
+        var result = await Run(_script, "-t", _root, "--no-color");
+
+        Assert.That(result.ExitCode, Is.EqualTo(0), result.StandardError);
+        Assert.That(result.StandardOutput, Is.Empty);
+        Assert.That(result.StandardError, Does.StartWith("  Summary   0 input files processed, 1 check evaluated in "));
+    }
+
+    [TestCase("text")]
+    [TestCase("json")]
+    public async Task PackageRunPreservesProgramOutputAndSummaryRouting(string format)
+    {
+        var package = Path.Combine(_root, "packages", "presentation-fixture");
+        Directory.CreateDirectory(Path.Combine(package, "src"));
+        File.WriteAllText(Path.Combine(package, "cop.json"),
+            """{"name":"presentation-fixture","version":"1.0.0","title":"Fixture","description":"Fixture","authors":"tests"}""");
+        File.WriteAllText(Path.Combine(package, "src", "main.cop"), "command MAIN = print('hello')");
+
+        var verify = await Run("verify", Path.Combine(package, "src"));
+        Assert.That(verify.ExitCode, Is.EqualTo(0), verify.StandardError);
+        var result = await Run("run", "presentation-fixture", "-t", _root, "-f", format);
+
+        Assert.That(result.ExitCode, Is.EqualTo(0), result.StandardError);
+        if (format == "json")
+        {
+            using var json = JsonDocument.Parse(result.StandardOutput);
+            Assert.That(json.RootElement.GetArrayLength(), Is.EqualTo(1));
+            Assert.That(json.RootElement[0].GetProperty("message").GetString(), Is.EqualTo("hello"));
+            Assert.That(result.StandardError, Is.Empty);
+        }
+        else
+        {
+            Assert.That(result.StandardOutput.Trim(), Is.EqualTo("hello"));
+            AssertExecutionSummary(result.StandardError, 0, 1);
+        }
+    }
+
+    [Test]
+    public async Task SingleRealInputFileUsesSingularSummary()
+    {
+        var repository = new DirectoryInfo(Path.GetDirectoryName(_cli)!);
+        while (!File.Exists(Path.Combine(repository.FullName, "cop.sln"))) repository = repository.Parent!;
+        var feed = Path.Combine(repository.FullName, "packages").Replace("\\", "\\\\");
+        var target = Path.Combine(_root, "target");
+        Directory.CreateDirectory(target);
+        File.WriteAllText(Path.Combine(target, "example.cs"), "// Single input fixture.\n");
+        File.WriteAllText(_script, $$"""
+            feed '{{feed}}'
+            import csharp
+            command MAIN = print(csharp.parse().Files.Count)
+            """);
+
+        var verify = await Run("verify", _script);
+        Assert.That(verify.ExitCode, Is.EqualTo(0), verify.StandardError);
+        var result = await Run(_script, "-t", target);
+
+        Assert.That(result.ExitCode, Is.EqualTo(0), result.StandardError);
+        Assert.That(result.StandardOutput.Trim(), Is.EqualTo("1"));
+        Assert.That(result.StandardError, Does.StartWith("  Summary   1 input file processed, "));
+    }
+
     [TestCase(false, 0)]
     [TestCase(true, 1)]
     public async Task CheckSummaryCountsCleanAndFailingComposedRulesNotHelpersOrAliases(bool finding, int exitCode)
@@ -234,7 +326,7 @@ public partial class ToolchainCliIntegrationTests
         var result = await Run(_script, "-t", _root, "--no-color");
 
         Assert.That(result.ExitCode, Is.EqualTo(2), result.StandardError);
-        Assert.That(result.StandardError, Does.Not.Contain("Summary:").And.Contain("missingFunction"));
+        Assert.That(result.StandardError, Does.Not.Contain("  Summary   ").And.Contain("missingFunction"));
     }
 
     private static void AssertExecutionSummary(string stderr, int files, int commands)

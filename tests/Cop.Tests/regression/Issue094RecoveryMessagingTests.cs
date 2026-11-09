@@ -37,7 +37,7 @@ public partial class ToolchainCliIntegrationTests
 
     [TestCase(false)]
     [TestCase(true)]
-    public async Task Issue094_ResolvedCompatibilityIsInformational_NotARepairWarning(bool diagnostics)
+    public async Task Issue094_ResolvedCompatibilityIsQuiet_NotARepairWarning(bool diagnostics)
     {
         var feed = WriteRecoveredFixtureFeed();
         File.WriteAllText(_script, $"feed '{feed}'\nimport fixture\ncommand MAIN = print(selected)");
@@ -48,11 +48,17 @@ public partial class ToolchainCliIntegrationTests
 
         Assert.That(result.ExitCode, Is.EqualTo(0), result.StandardError);
         Assert.That(result.StandardOutput.Trim(), Is.EqualTo("RECOVERED"));
-        Assert.That(result.StandardError, Does.Contain($"Info: Packages are ready for Cop {ProviderCompatibility.HostVersion}.")
+        Assert.That(result.StandardError, Does.Not.Contain("Packages are ready")
+            .And.Not.Contain("local files will not be changed").And.Not.Contain("Package setup complete")
             .And.Not.Contain("Different-version local providers").And.Not.Contain("No action is required.")
             .And.Not.Contain("Warning:").And.Not.Contain("Error:").And.Not.Contain("must be restored or rebuilt"));
         if (diagnostics)
             Assert.That(result.StandardError, Does.Contain("[diag]").And.Contain("2000.1.1.1"));
+        else
+        {
+            Assert.That(result.StandardError.Trim().Split('\n'), Has.Length.EqualTo(1));
+            AssertExecutionSummary(result.StandardError, 0, 2);
+        }
         Assert.That(File.Exists(Path.Combine(_root, "packages", "fixture", "lib", "fixture.dll")), Is.True);
     }
 
@@ -71,7 +77,7 @@ public partial class ToolchainCliIntegrationTests
 
         Assert.That(result.ExitCode, Is.EqualTo(1), result.StandardError);
         Assert.That(result.StandardOutput.Trim(), Is.EqualTo("0"));
-        Assert.That(result.StandardError, Does.Contain($"Info: Packages are ready for Cop {ProviderCompatibility.HostVersion}.")
+        Assert.That(result.StandardError, Does.Not.Contain("Packages are ready")
             .And.Not.Contain("Different-version local providers").And.Not.Contain("No action is required.")
             .And.Contain("Error: 1 source analysis error(s)").And.Contain("broken.cop")
             .And.Not.Contain("Warning: Provider").And.Not.Contain("Analysis completed successfully"));

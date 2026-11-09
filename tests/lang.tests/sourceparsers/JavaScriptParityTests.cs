@@ -76,7 +76,7 @@ public class JavaScriptParityTests
             Assert.That(process.ExitCode, Is.EqualTo(0), errors);
             Assert.That(output.Replace("\r\n", "\n").Trim(), Is.EqualTo("1\n2\n5\ndecoded\nnumber\n(): number"));
             Assert.That(errors, Does.Not.Contain("simpler syntax analysis"));
-            Assert.That(errors, Does.Not.Contain("Auto-restoring"));
+            Assert.That(errors, Does.Not.Contain("  Packages  Restoring"));
             Assert.That(File.Exists(marker), Is.False, "Inherited Node options must not execute a runtime preload.");
         }
         finally { Directory.Delete(root, true); }

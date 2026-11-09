@@ -268,7 +268,7 @@ public static class RunCommand
         Action<string>? diagLog = diag ? msg => Console.Error.WriteLine(ColorDiagLine(msg)) : null;
 
         // Auto-restore missing imports before execution
-        await AutoRestoreImportsAsync(scriptsDir, diagLog);
+        bool restoredPackages = await AutoRestoreImportsAsync(scriptsDir, diagLog);
 
         // Surface imported packages' instructions to coding agents by placing their
         // instructions/*.md into the analysis target's .github/instructions/ (idempotent — a no-op
@@ -318,7 +318,7 @@ public static class RunCommand
                 string[] projectFiles = Directory.GetFiles(scriptsDir, "*.cop", SearchOption.AllDirectories);
                 allScriptFiles = [.. projectFiles, .. userCheckFiles];
             }
-            await AutoRestoreImportsAsync(UserChecksDirectory, diagLog);
+            restoredPackages |= await AutoRestoreImportsAsync(UserChecksDirectory, diagLog);
         }
         else if (scopeToFile != null)
         {
@@ -373,6 +373,11 @@ public static class RunCommand
                 }
                 providerPackages.Add((pkgDir, metadata));
             }
+        }
+
+        if (restoredPackages && !string.Equals(format, "json", StringComparison.OrdinalIgnoreCase))
+        {
+            AnalysisConsole.Write("Analyze", "Analyzing source");
         }
 
         try
@@ -472,6 +477,11 @@ public static class RunCommand
 
         // Include user-global check files
         string[] userCheckFiles = await GetUserCheckFilesAsync(diagLog);
+
+        if (missing.Count > 0 && !string.Equals(format, "json", StringComparison.OrdinalIgnoreCase))
+        {
+            AnalysisConsole.Write("Analyze", "Analyzing source");
+        }
 
         try
         {
@@ -682,8 +692,8 @@ public static class RunCommand
             string work = statistics.Evaluations.TryGetValue("check", out int checks)
                 ? $"{checks} check{(checks == 1 ? "" : "s")} evaluated"
                 : $"{statistics.CommandsExecuted} computation{(statistics.CommandsExecuted == 1 ? "" : "s")} evaluated";
-            Console.Error.WriteLine(
-                $"Summary: {statistics.InputFiles} input file{(statistics.InputFiles == 1 ? "" : "s")} processed, " +
+            AnalysisConsole.Write("Summary",
+                $"{statistics.InputFiles} input file{(statistics.InputFiles == 1 ? "" : "s")} processed, " +
                 $"{work} in {elapsed}s.");
         }
 
@@ -1038,7 +1048,7 @@ public static class RunCommand
     /// Parses .cop files in the scripts directory, discovers imports, and auto-restores
     /// any missing packages into the current host version's cache.
     /// </summary>
-    private static async Task AutoRestoreImportsAsync(
+    private static async Task<bool> AutoRestoreImportsAsync(
         string scriptsDir, Action<string>? diagLog)
     {
         string cachePath = PackageResolver.GlobalCachePath;
@@ -1052,6 +1062,13 @@ public static class RunCommand
             }
         }
 
+        return await AutoRestoreImportsAsync(scriptsDir, diagLog, cachePath, feedPaths);
+    }
+
+    internal static async Task<bool> AutoRestoreImportsAsync(
+        string scriptsDir, Action<string>? diagLog, string cachePath, List<string> feedPaths,
+        List<string>? restoreFeeds = null, GitHubPackageSource? packageSource = null)
+    {
         // Parse all .cop files to collect imports
         HashSet<string> imports = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         string[] scriptFilePaths = Directory.GetFiles(scriptsDir, "*.cop", SearchOption.AllDirectories);
@@ -1076,7 +1093,7 @@ public static class RunCommand
 
         if (imports.Count == 0)
         {
-            return;
+            return false;
         }
 
         HashSet<string> incompatibleProviders = new HashSet<string>(StringComparer.Ordinal);
@@ -1088,14 +1105,6 @@ public static class RunCommand
                     diagLog?.Invoke($"[diag] Skipping local provider: {error}");
                 }
             });
-
-        void ReportCompatibilityResolved()
-        {
-            if (incompatibleProviders.Count > 0)
-            {
-                Console.Error.WriteLine($"Info: Packages are ready for Cop {ProviderCompatibility.HostVersion}.");
-            }
-        }
 
         Queue<string> pendingImports = new Queue<string>(imports);
         while (pendingImports.TryDequeue(out string? name))
@@ -1126,26 +1135,23 @@ public static class RunCommand
 
         if (missing.Count == 0)
         {
-            ReportCompatibilityResolved();
-            return;
+            return false;
         }
 
         // Try to restore from GitHub feeds
-        FeedManager feedManager = new FeedManager();
-        List<string> feeds = feedManager.GetFeeds();
-        List<string> githubFeeds = feeds
+        List<string> githubFeeds = (restoreFeeds ?? new FeedManager().GetFeeds())
             .Where(f => f.StartsWith("github.com/", StringComparison.OrdinalIgnoreCase))
             .ToList();
 
         if (githubFeeds.Count == 0)
         {
             diagLog?.Invoke($"[diag] Missing imports ({string.Join(", ", missing)}) but no GitHub feeds configured");
-            return;
+            return false;
         }
 
-        string? githubToken = await GitHubAuthentication.ResolveTokenAsync();
         using HttpClient httpClient = new HttpClient();
-        GitHubPackageSource source2 = new GitHubPackageSource(httpClient, githubToken);
+        GitHubPackageSource source2 = packageSource ??
+            new GitHubPackageSource(httpClient, await GitHubAuthentication.ResolveTokenAsync());
 
         Directory.CreateDirectory(cachePath);
         if (!feedPaths.Contains(cachePath, StringComparer.OrdinalIgnoreCase))
@@ -1161,13 +1167,7 @@ public static class RunCommand
         if (missing.Count > 0)
         {
             int feedCount = githubFeeds.Distinct().Count();
-            if (incompatibleProviders.Count > 0)
-            {
-                Console.Error.WriteLine("Info: Local packages target a different Cop version. " +
-                    "Preparing matching packages automatically; local files will not be changed.");
-            }
-
-            Console.Error.WriteLine($"Auto-restoring {missing.Count} package(s) from {feedCount} feed(s)...");
+            AnalysisConsole.Restoring(feedCount);
         }
 
         while (queue.Count > 0)
@@ -1199,11 +1199,14 @@ public static class RunCommand
                 try
                 {
                     PackageReference pkgRef = PackageReference.Parse($"{feed}/{pkgName}");
-                    Console.Error.Write($"  Restoring '{pkgName}' from {feed}...");
                     Dictionary<string, byte[]> files =
                         await source2.DownloadPackageFilesAsync(pkgRef);
 
-                    if (files.Count == 0) { Console.Error.WriteLine(" no files"); continue; }
+                    if (files.Count == 0)
+                    {
+                        AnalysisConsole.RestoreFailed(pkgName, feed, "no files");
+                        continue;
+                    }
 
                     // Write to temp directory first, then atomically move into place.
                     // This prevents concurrent cop processes from reading partially-written packages.
@@ -1234,7 +1237,7 @@ public static class RunCommand
                         DeleteTemporaryDirectory(tempDir);
                     }
 
-                    Console.Error.WriteLine(" ok");
+                    AnalysisConsole.PackageRestored(pkgName, feed);
                     downloaded.Add(pkgName);
                     restored = true;
                     restoredCount++;
@@ -1267,14 +1270,14 @@ public static class RunCommand
                 }
                 catch (PackageNotFoundException)
                 {
-                    Console.Error.WriteLine(" not found");
+                    AnalysisConsole.RestoreFailed(pkgName, feed, "not found");
                     continue;
                 }
                 catch (Exception ex) when (ex is HttpRequestException or IOException or
                     UnauthorizedAccessException or FormatException or InvalidOperationException or
                     System.Text.Json.JsonException)
                 {
-                    Console.Error.WriteLine($" failed: {ex.Message}");
+                    AnalysisConsole.RestoreFailed(pkgName, feed, ex.Message);
                 }
             }
 
@@ -1284,15 +1287,7 @@ public static class RunCommand
             }
         }
 
-        if (restoredCount > 0)
-        {
-            Console.Error.WriteLine($"{restoredCount} package(s) restored successfully");
-            if (imports.All(name => FindCompatiblePackage(name) is not null))
-            {
-                ReportCompatibilityResolved();
-                Console.Error.WriteLine("Package setup complete. Continuing source analysis.");
-            }
-        }
+        return restoredCount > 0;
     }
 
     private static void AddDeclaredFeedPaths(List<string> feedPaths, Cop.Lang.Ast.ModuleNode module, string filePath)
@@ -1476,17 +1471,22 @@ public static class RunCommand
         using HttpClient httpClient = new HttpClient();
         GitHubPackageSource source = new GitHubPackageSource(httpClient, githubToken);
 
+        return await AutoRestorePackagesAsync(packageNames, cachePath, githubFeeds, source);
+    }
+
+    internal static async Task<bool> AutoRestorePackagesAsync(
+        List<string> packageNames, string cachePath, List<string> githubFeeds, GitHubPackageSource source)
+    {
         Directory.CreateDirectory(cachePath);
 
         // BFS: download requested packages, then their imports
         Queue<string> queue = new Queue<string>(packageNames);
         HashSet<string> downloaded = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        int restoredCount = 0;
 
         if (packageNames.Count > 0)
         {
             int feedCount = githubFeeds.Distinct().Count();
-            Console.Error.WriteLine($"Auto-restoring {packageNames.Count} package(s) from {feedCount} feed(s)...");
+            AnalysisConsole.Restoring(feedCount);
         }
 
         while (queue.Count > 0)
@@ -1509,10 +1509,13 @@ public static class RunCommand
                 try
                 {
                     PackageReference pkgRef = PackageReference.Parse($"{feed}/{pkgName}");
-                    Console.Error.Write($"  Restoring '{pkgName}' from {feed}...");
                     Dictionary<string, byte[]> files = await source.DownloadPackageFilesAsync(pkgRef);
 
-                    if (files.Count == 0) { Console.Error.WriteLine(" no files"); continue; }
+                    if (files.Count == 0)
+                    {
+                        AnalysisConsole.RestoreFailed(pkgName, feed, "no files");
+                        continue;
+                    }
 
                     // Write to temp directory first, then atomically move into place.
                     // This prevents concurrent cop processes from reading partially-written packages.
@@ -1543,10 +1546,9 @@ public static class RunCommand
                         DeleteTemporaryDirectory(tempDir);
                     }
 
-                    Console.Error.WriteLine(" ok");
+                    AnalysisConsole.PackageRestored(pkgName, feed);
                     downloaded.Add(pkgName);
                     restored = true;
-                    restoredCount++;
 
                     // Parse src/ .cop files to discover transitive imports (skip samples/)
                     foreach ((string? relPath, byte[] _) in files.Where(f =>
@@ -1575,14 +1577,14 @@ public static class RunCommand
                 }
                 catch (PackageNotFoundException)
                 {
-                    Console.Error.WriteLine(" not found");
+                    AnalysisConsole.RestoreFailed(pkgName, feed, "not found");
                     continue;
                 }
                 catch (Exception ex) when (ex is HttpRequestException or IOException or
                     UnauthorizedAccessException or FormatException or InvalidOperationException or
                     System.Text.Json.JsonException)
                 {
-                    Console.Error.WriteLine($" failed: {ex.Message}");
+                    AnalysisConsole.RestoreFailed(pkgName, feed, ex.Message);
                 }
             }
 
@@ -1591,11 +1593,6 @@ public static class RunCommand
                 Console.Error.WriteLine($"Error: Package '{pkgName}' not found in any configured feed.");
                 return false;
             }
-        }
-
-        if (restoredCount > 0)
-        {
-            Console.Error.WriteLine($"{restoredCount} package(s) restored successfully");
         }
 
         return true;
