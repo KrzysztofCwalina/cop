@@ -290,6 +290,82 @@ public sealed class AsyncExecutionTests
         Assert.That(allocated, Is.LessThan(1_280L * count));
     }
 
+    [Test]
+    public async Task SmallListsAvoidAsyncIteratorAllocation()
+    {
+        const int count = 1_000;
+        LanguageBridge bridge = new();
+        CopInt expected = new(7);
+        bridge.RegisterValue("value", expected);
+        await bridge.LoadSourceAsync("command MAIN = [value, value, value]");
+        await bridge.Evaluator.RunCommandAsync("MAIN");
+        CopValue[] results = new CopValue[count];
+
+        long before = GC.GetAllocatedBytesForCurrentThread();
+        for (int index = 0; index < count; index++)
+        {
+            results[index] = await bridge.Evaluator.RunCommandAsync("MAIN");
+        }
+        long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+
+        Assert.That(results.Cast<CopList>().SelectMany(list => list.Items),
+            Is.EqualTo(Enumerable.Repeat(expected, count * 3)));
+        Assert.That(allocated, Is.LessThan(3_000L * count));
+    }
+
+    [TestCase("function pack(first, second) => [first, second]\ncommand MAIN = pack(step(1), step(2))")]
+    [TestCase("command MAIN = keep(step(1), step(2))")]
+    [TestCase("command MAIN = [step(1), step(2)]")]
+    [TestCase("command MAIN = 0:keep(step(1), step(2))")]
+    public async Task ArgumentEvaluationAwaitsEachExpressionInOrder(string source)
+    {
+        TaskCompletionSource release = NewGate();
+        List<int> calls = [];
+        LanguageBridge bridge = new();
+        bridge.RegisterFunction("step", async (arguments, _, cancellationToken) =>
+        {
+            int value = ((CopInt)arguments[0]).Value;
+            calls.Add(value);
+            if (value == 1)
+            {
+                await release.Task.WaitAsync(cancellationToken);
+            }
+            return new CopInt(value);
+        });
+        bridge.RegisterFunction("keep", (arguments, _) =>
+            new CopList(arguments.ToList()));
+        await bridge.LoadSourceAsync(source);
+
+        Task<CopValue> pending = bridge.Evaluator.RunCommandAsync("MAIN").AsTask();
+        Assert.That(calls, Is.EqualTo(new[] { 1 }));
+        Assert.That(pending.IsCompleted, Is.False);
+        release.SetResult();
+        await pending;
+        Assert.That(calls, Is.EqualTo(new[] { 1, 2 }));
+    }
+
+    [TestCase("command MAIN = [step(1), step(2)]")]
+    [TestCase("function keep(first, second) => [first, second]\ncommand MAIN = keep(step(1), step(2))")]
+    public async Task ArgumentCancellationDoesNotEvaluateLaterExpressions(string source)
+    {
+        using CancellationTokenSource cancellation = new();
+        List<int> calls = [];
+        LanguageBridge bridge = new();
+        bridge.RegisterFunction("step", (arguments, _) =>
+        {
+            int value = ((CopInt)arguments[0]).Value;
+            calls.Add(value);
+            cancellation.Cancel();
+            return new CopInt(value);
+        });
+        await bridge.LoadSourceAsync(source);
+
+        OperationCanceledException? error = Assert.CatchAsync<OperationCanceledException>(
+            async () => await bridge.Evaluator.RunCommandAsync("MAIN", cancellation.Token));
+        Assert.That(error!.CancellationToken, Is.EqualTo(cancellation.Token));
+        Assert.That(calls, Is.EqualTo(new[] { 1 }));
+    }
+
     private static TaskCompletionSource NewGate() =>
         new(TaskCreationOptions.RunContinuationsAsynchronously);
 

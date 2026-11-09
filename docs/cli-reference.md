@@ -152,6 +152,8 @@ let selected-calls = cb.Calls.Where(item.File.Path:in(included-paths))
 `let` bindings remain demand-driven and reuse their evaluated result. Completed
 lazy collections also reuse their input buffer for counts and projections; member
 values are still read on each projection, rather than cached across object changes.
+Small function scopes and argument lists avoid dictionary and async-iterator
+overhead; arguments still evaluate sequentially and honor cancellation.
 
 ### Change-focused reviews
 

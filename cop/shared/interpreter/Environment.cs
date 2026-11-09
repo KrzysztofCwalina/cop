@@ -11,6 +11,8 @@ public sealed class Environment
     private Dictionary<string, CopValue>? _bindings;
     private string? _singleName;
     private CopValue _singleValue = CopNull.Instance;
+    private string? _secondName;
+    private CopValue _secondValue = CopNull.Instance;
 
     /// <summary>
     /// Enclosing environment (null for the global environment).
@@ -37,15 +39,23 @@ public sealed class Environment
             _singleName = name;
             _singleValue = value;
         }
+        else if (_secondName is null || _secondName == name)
+        {
+            _secondName = name;
+            _secondValue = value;
+        }
         else
         {
             _bindings = new(StringComparer.Ordinal)
             {
                 [_singleName] = _singleValue,
+                [_secondName] = _secondValue,
                 [name] = value
             };
             _singleName = null;
             _singleValue = CopNull.Instance;
+            _secondName = null;
+            _secondValue = CopNull.Instance;
         }
     }
 
@@ -69,6 +79,11 @@ public sealed class Environment
         if (_singleName == name)
         {
             value = _singleValue;
+            return true;
+        }
+        if (_secondName == name)
+        {
+            value = _secondValue;
             return true;
         }
 
@@ -104,6 +119,10 @@ public sealed class Environment
         else if (_singleName is not null)
         {
             yield return new(_singleName, _singleValue);
+            if (_secondName is not null)
+            {
+                yield return new(_secondName, _secondValue);
+            }
         }
     }
 }

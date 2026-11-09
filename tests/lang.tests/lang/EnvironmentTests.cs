@@ -8,6 +8,27 @@ namespace Cop.Tests.Lang;
 public sealed class EnvironmentTests
 {
     [Test]
+    public void TwoBindingScopesAvoidDictionaryAllocation()
+    {
+        const int count = 1_000;
+        CopEnvironment[] scopes = new CopEnvironment[count];
+        long before = GC.GetAllocatedBytesForCurrentThread();
+        for (int index = 0; index < count; index++)
+        {
+            scopes[index] = new CopEnvironment();
+            scopes[index].Define("value", CopBool.True);
+            scopes[index].Define("item", CopNull.Instance);
+        }
+        long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+
+        Assert.That(scopes.Select(scope => scope.Lookup("value")),
+            Is.EqualTo(Enumerable.Repeat(CopBool.True, count)));
+        Assert.That(scopes.Select(scope => scope.Lookup("item")),
+            Is.EqualTo(Enumerable.Repeat(CopNull.Instance, count)));
+        Assert.That(allocated, Is.LessThan(128L * count));
+    }
+
+    [Test]
     public void SingleBindingScopesAvoidDictionaryAllocation()
     {
         const int count = 1_000;
@@ -36,13 +57,17 @@ public sealed class EnvironmentTests
         Assert.That(missing, Is.SameAs(CopNull.Instance));
 
         scope.Define("Item", new CopInt(3));
+        scope.Define("Item", new CopInt(6));
+        Assert.That(scope.AllBindings().Select(pair => pair.Key),
+            Is.EqualTo(new[] { "item", "Item" }));
+        Assert.That(((CopInt)scope.Lookup("Item")).Value, Is.EqualTo(6));
         scope.Define("other", new CopInt(4));
         scope.Define("item", new CopInt(5));
 
         Assert.That(scope.AllBindings().Select(pair => pair.Key),
             Is.EqualTo(new[] { "item", "Item", "other" }));
         Assert.That(scope.AllBindings().Select(pair => ((CopInt)pair.Value).Value),
-            Is.EqualTo(new[] { 5, 3, 4 }));
+            Is.EqualTo(new[] { 5, 6, 4 }));
     }
 
     [Test]

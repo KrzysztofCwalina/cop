@@ -609,7 +609,7 @@ public sealed class Evaluator
                 return strResult;
             }
 
-            List<CopValue> args = (await call.Args.ToAsyncEnumerable().Select(async (a, itemCancellationToken) => (await EvalAsync(a, env, cancellationToken: itemCancellationToken))).ToListAsync(cancellationToken: cancellationToken));
+            List<CopValue> args = await EvalArgumentsAsync(call.Args, env, cancellationToken);
 
             // First, try resolving as a member that is callable
             CopValue? memberVal = (await TryGetMemberAsync(obj, mem.Member, cancellationToken: cancellationToken));
@@ -644,7 +644,7 @@ public sealed class Evaluator
         }
 
         CopValue callee = (await ForceValueAsync((await EvalAsync(call.Callee, env, cancellationToken: cancellationToken)), cancellationToken: cancellationToken));
-        List<CopValue> callArgs = (await call.Args.ToAsyncEnumerable().Select(async (a, itemCancellationToken) => (await EvalAsync(a, env, cancellationToken: itemCancellationToken))).ToListAsync(cancellationToken: cancellationToken));
+        List<CopValue> callArgs = await EvalArgumentsAsync(call.Args, env, cancellationToken);
 
         // Currying / partial application: a DIRECT call that extends a closure, or under-applies an
         // item-parameter function (its leading parameter is a type the filter fills per element),
@@ -1504,10 +1504,19 @@ public sealed class Evaluator
     }
 
     private async ValueTask<CopValue> EvalListAsync(ListExpr list, Environment env,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default) =>
+        new CopList(await EvalArgumentsAsync(list.Elements, env, cancellationToken));
+
+    private async ValueTask<List<CopValue>> EvalArgumentsAsync(IReadOnlyList<Expression> expressions,
+        Environment env, CancellationToken cancellationToken)
     {
-        List<CopValue> items = (await list.Elements.ToAsyncEnumerable().Select(async (e, itemCancellationToken) => (await EvalAsync(e, env, cancellationToken: itemCancellationToken))).ToListAsync(cancellationToken: cancellationToken));
-        return new CopList(items);
+        cancellationToken.ThrowIfCancellationRequested();
+        List<CopValue> values = new(expressions.Count);
+        foreach (Expression expression in expressions)
+        {
+            values.Add(await EvalAsync(expression, env, cancellationToken));
+        }
+        return values;
     }
 
     private async ValueTask<CopValue> EvalObjectAsync(ObjectExpr obj, Environment env, CancellationToken cancellationToken = default)
@@ -1874,7 +1883,7 @@ public sealed class Evaluator
         if (HasCallableArg(call.Args, env)
             || (await FirstParamIsCollectionFunctionAsync(methodName, call.Args.Count, collection, env, cancellationToken: cancellationToken)))
         {
-            List<CopValue> evaluatedArgs = (await call.Args.ToAsyncEnumerable().Select(async (a, itemCancellationToken) => (await EvalAsync(a, env, cancellationToken: itemCancellationToken))).ToListAsync(cancellationToken: cancellationToken));
+            List<CopValue> evaluatedArgs = await EvalArgumentsAsync(call.Args, env, cancellationToken);
             List<CopValue> allArgs = new List<CopValue> { collection };
             allArgs.AddRange(evaluatedArgs);
 
@@ -2029,7 +2038,7 @@ public sealed class Evaluator
                     // Evaluate args with item bound to subject (for template interpolation)
                     Environment argEnv = env.Extend();
                     argEnv.Define(ImplicitItemVariable, subject);
-                    List<CopValue> args = (await call.Args.ToAsyncEnumerable().Select(async (a, itemCancellationToken) => (await EvalAsync(a, argEnv, cancellationToken: itemCancellationToken))).ToListAsync(cancellationToken: cancellationToken));
+                    List<CopValue> args = await EvalArgumentsAsync(call.Args, argEnv, cancellationToken);
                     List<CopValue> allArgs = new List<CopValue> { subject };
                     allArgs.AddRange(args);
 
@@ -2124,7 +2133,7 @@ public sealed class Evaluator
 
                     Environment argEnv = env.Extend();
                     argEnv.Define(ImplicitItemVariable, subject);
-                    List<CopValue> args = (await call.Args.ToAsyncEnumerable().Select(async (a, itemCancellationToken) => (await EvalAsync(a, argEnv, cancellationToken: itemCancellationToken))).ToListAsync(cancellationToken: cancellationToken));
+                    List<CopValue> args = await EvalArgumentsAsync(call.Args, argEnv, cancellationToken);
                     List<CopValue> allArgs = new List<CopValue> { subject };
                     allArgs.AddRange(args);
 
