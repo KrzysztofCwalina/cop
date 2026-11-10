@@ -84,7 +84,7 @@ public class PublishedCSharpMetadataRegressionTests
                     Assert.Fail("Isolated C# semantic query timed out.");
                 }
                 var output = stdout.GetAwaiter().GetResult().Replace("\r\n", "\n").Trim();
-                var errors = stderr.GetAwaiter().GetResult().Trim();
+                var errors = stderr.GetAwaiter().GetResult().TrimEnd();
                 TestContext.WriteLine($"isolated={isolatedCopy}, run={run}, exit={process.ExitCode}\n{output}\n{errors}");
                 Assert.That(process.ExitCode, Is.Zero, errors);
                 Assert.That(output.Split('\n'), Is.EqualTo(new[]

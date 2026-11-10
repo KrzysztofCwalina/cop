@@ -111,7 +111,7 @@ public class CSharpModernRegressionTests
                     Assert.Fail("Standalone C# regression timed out.");
                 }
                 var output = stdout.GetAwaiter().GetResult().Trim();
-                var errors = stderr.GetAwaiter().GetResult().Trim();
+                var errors = stderr.GetAwaiter().GetResult().TrimEnd();
                 TestContext.WriteLine($"pass={pass}, exit={process.ExitCode}\n{output}\n{errors}");
                 Assert.That(process.ExitCode, Is.Zero, errors);
                 if (pass > 0)
