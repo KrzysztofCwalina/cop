@@ -40,6 +40,10 @@ public sealed class Evaluator
     /// </summary>
     public Action<LetDecl>? LetBindingEvaluated { get; set; }
     /// <summary>
+    /// An optional notification invoked when a user-defined (non-predicate) function is called.
+    /// </summary>
+    public Action<FunctionDecl>? UserFunctionCalled { get; set; }
+    /// <summary>
     /// An optional notification invoked when an entry command finishes.
     /// </summary>
     public Action? EntryCommandCompleted { get; set; }
@@ -2437,6 +2441,10 @@ public sealed class Evaluator
     {
         // Validate arguments before dispatch (arity + parameter types)
         await TypeValidator.ValidateArgumentsAsync(func.Declaration, args, TypeRegistry, cancellationToken: cancellationToken);
+        if (UserFunctionCalled is { } called && !func.Declaration.IsPredicate)
+        {
+            called(func.Declaration);
+        }
 
         // First-parameter guard (e.g. `predicate isMissingNamespace(Type:isCSharp)`): a guarded
         // predicate only applies to arguments its guard accepts; for others it is simply false and

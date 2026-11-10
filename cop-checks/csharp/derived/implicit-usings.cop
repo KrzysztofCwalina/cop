@@ -5,8 +5,6 @@ import code
 let implicit-usings-message =
     'Project {item.Name} must set <ImplicitUsings>enable</ImplicitUsings>'
 
-export let derived-implicit-usings = checkRule(
-    'cop-checks/derived-implicit-usings',
-    codebase.Projects
+export let derived-implicit-usings = codebase.Projects
     .Where(hasOtherProjectPropertyValue(item, 'ImplicitUsings', 'enable'))
-    :toError(implicit-usings-message))
+    :toError(implicit-usings-message)

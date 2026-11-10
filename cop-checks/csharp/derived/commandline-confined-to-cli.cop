@@ -8,10 +8,8 @@ predicate importsCommandLine(File) =>
 let commandline-message =
     '{item.Name} uses System.CommandLine outside cop/cli ({item.File.Path})'
 
-export let derived-commandline-confined-to-cli = checkRule(
-    'cop-checks/derived-commandline-confined-to-cli',
-    codebase.Types
+export let derived-commandline-confined-to-cli = codebase.Types
     .Where(
         !inCli(item.File) &&
         importsCommandLine(item.File))
-    :toError(commandline-message))
+    :toError(commandline-message)

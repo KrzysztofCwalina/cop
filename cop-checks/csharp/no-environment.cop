@@ -17,10 +17,8 @@ let allowed-calls =
 let environment-message =
     'Use CLI flags or config instead of environment variables for Cop settings'
 
-export let no-environment = checkRule(
-    'cop-checks/no-environment',
-    (env-calls - allowed-calls)
-    :toError(environment-message))
+export let no-environment = (env-calls - allowed-calls)
+    :toError(environment-message)
 
 # Calls to inspect.
 let env-calls = source-calls:isEnvironmentVariableAccess

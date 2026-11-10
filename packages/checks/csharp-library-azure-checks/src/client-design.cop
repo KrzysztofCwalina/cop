@@ -8,14 +8,12 @@ predicate hasTokenCredentialParam(Constructor) => Constructor.Parameters:any(isT
 predicate isMissingTokenCredential(Type) => Type.Constructors:!any(hasTokenCredentialParam)
 
 ## Azure clients must accept TokenCredential for authentication
-export let client-needs-token-credential = checkRule('csharp-library-azure-checks/client-needs-token-credential',
-    Clients:isMissingTokenCredential
-    :toWarning('{item.Name} must accept TokenCredential'))
+export let client-needs-token-credential = Clients:isMissingTokenCredential
+    :toWarning('{item.Name} must accept TokenCredential')
 
 ## Client types must provide a protected parameterless constructor for mocking
-export let client-needs-mocking-ctor = checkRule('csharp-library-azure-checks/client-needs-mocking-ctor',
-    Clients:isMissingMockingConstructor
-    :toWarning('{item.Name} must provide a protected parameterless constructor'))
+export let client-needs-mocking-ctor = Clients:isMissingMockingConstructor
+    :toWarning('{item.Name} must provide a protected parameterless constructor')
 
 predicate isOptionsParameter(Parameter) => Parameter.Type:endsWith('Options')
 predicate hasCtorWithOptions(Type) => Type.Constructors:any(isCtorWithOptions)
@@ -27,14 +25,12 @@ predicate isMissingCtrWithOptions(Type) => !hasCtorWithOptions
 predicate isMissingCtorWithoutOptions(Type) => hasCtorWithOptions && !hasCtorWithoutOptions
 
 ## Client types should have a constructor that accepts ClientOptions
-export let client-needs-options-ctor = checkRule('csharp-library-azure-checks/client-needs-options-ctor',
-    Clients:isMissingCtrWithOptions
-    :toWarning('{item.Name} should have a constructor that accepts options'))
+export let client-needs-options-ctor = Clients:isMissingCtrWithOptions
+    :toWarning('{item.Name} should have a constructor that accepts options')
 
 ## Client types should have a constructor without ClientOptions for simple scenarios
-export let client-needs-simple-ctor = checkRule('csharp-library-azure-checks/client-needs-simple-ctor',
-    Clients:isMissingCtorWithoutOptions
-    :toWarning('{item.Name} should have a constructor without options for simple usage'))
+export let client-needs-simple-ctor = Clients:isMissingCtorWithoutOptions
+    :toWarning('{item.Name} should have a constructor without options for simple usage')
 
 predicate isRequestContent(Parameter) => Parameter.Type == 'RequestContent' || Parameter.Type == 'RequestBody'
 predicate hasRequestContent(Method) => Method.Parameters:any(isRequestContent)
@@ -42,9 +38,8 @@ predicate isConvenience(Method) => Method:isPublic && Method:isVirtual
 predicate hasConvenienceWithRequestContent(Type) => Type.Methods.Where(isConvenience):any(hasRequestContent)
 
 ## Convenience methods should not take RequestContent or RequestBody parameters
-export let no-request-content-in-convenience = checkRule('csharp-library-azure-checks/no-request-content-in-convenience',
-    Clients:hasConvenienceWithRequestContent
-    :toWarning('{item.Name} convenience method should not have RequestContent parameter'))
+export let no-request-content-in-convenience = Clients:hasConvenienceWithRequestContent
+    :toWarning('{item.Name} convenience method should not have RequestContent parameter')
 
 # AZC0021: ClientSettings constructor should not combine settings param with other params
 predicate isClientSettingsParam(Parameter) => Parameter.Type:endsWith('Settings')
@@ -54,8 +49,7 @@ predicate hasSettingsAndOtherParams(Constructor) => Constructor:isPublic
 predicate hasSettingsCtorOverloaded(Type) => Type.Constructors:any(hasSettingsAndOtherParams)
 
 ## ClientSettings constructor should not combine settings param with other params (AZC0021)
-export let settings-ctor-isolation = checkRule('csharp-library-azure-checks/settings-ctor-isolation',
-    Clients:hasSettingsCtorOverloaded
-    :toWarning('{item.Name} constructor should not combine ClientSettings with other parameters'))
+export let settings-ctor-isolation = Clients:hasSettingsCtorOverloaded
+    :toWarning('{item.Name} constructor should not combine ClientSettings with other parameters')
 
 let client-design = client-needs-token-credential + client-needs-mocking-ctor + client-needs-options-ctor + client-needs-simple-ctor + no-request-content-in-convenience + settings-ctor-isolation

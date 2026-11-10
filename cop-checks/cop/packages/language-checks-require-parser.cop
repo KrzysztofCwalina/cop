@@ -31,9 +31,7 @@ predicate hasProgramProvidersArg(Statement) =>
 let language-parser-message =
     'Use codebase(<lang>.parse()), not codebase(Program.Providers)'
 
-export let lang-provider-hardcoded-violations = checkRule(
-    'cop-checks/lang-provider-hardcoded-violations',
-    codebase.Calls
+export let lang-provider-hardcoded-violations = codebase.Calls
     :callsUnqualifiedCodebase:hasProgramProvidersArg
     .Where(inLanguagePackage(item.File))
-    :toError(language-parser-message))
+    :toError(language-parser-message)

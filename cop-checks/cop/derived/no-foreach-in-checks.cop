@@ -6,8 +6,6 @@ predicate isForeach(Statement) =>
 let check-foreach-message =
     'Do not use foreach in cop-checks — use CHECK ({item.File.Path}:{item.Line})'
 
-export let derived-no-foreach-in-checks = checkRule(
-    'cop-checks/derived-no-foreach-in-checks',
-    codebase.Statements:isForeach
+export let derived-no-foreach-in-checks = codebase.Statements:isForeach
     .Where(inChecks(item.File))
-    :toError(check-foreach-message))
+    :toError(check-foreach-message)

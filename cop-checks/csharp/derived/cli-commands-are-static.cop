@@ -10,8 +10,6 @@ predicate isNotStatic(Type) =>
 let static-command-message =
     'CLI command {item.Name} must be a static class ({item.File.Path})'
 
-export let derived-cli-commands-are-static = checkRule(
-    'cop-checks/derived-cli-commands-are-static',
-    codebase.Types:hasCommandSuffix:isNotStatic
+export let derived-cli-commands-are-static = codebase.Types:hasCommandSuffix:isNotStatic
     .Where(inCliCommands(item.File))
-    :toError(static-command-message))
+    :toError(static-command-message)

@@ -3,10 +3,8 @@
 let provider-cli-message =
     'Provider type {item.Name} depends on the CLI (Cop.Cli/Cop.Repl) ({item.File.Path})'
 
-export let derived-providers-no-cli-dependency = checkRule(
-    'cop-checks/derived-providers-no-cli-dependency',
-    codebase.Types
+export let derived-providers-no-cli-dependency = codebase.Types
     .Where(
         inProviders(item.File) &&
         importsCliCommandsOrRepl(item.File))
-    :toError(provider-cli-message))
+    :toError(provider-cli-message)

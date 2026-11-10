@@ -24,8 +24,6 @@ predicate isListedProvider(Project) =>
 let provider-dependency-message =
     'Provider project {item.Name} must not reference another provider project'
 
-export let derived-provider-isolation = checkRule(
-    'cop-checks/derived-provider-isolation',
-    codebase.Projects:isListedProvider
+export let derived-provider-isolation = codebase.Projects:isListedProvider
     .Where(referencesAny(item, provider-names))
-    :toError(provider-dependency-message))
+    :toError(provider-dependency-message)

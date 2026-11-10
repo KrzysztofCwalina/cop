@@ -10,29 +10,25 @@ let cb = codebase(javascript.parse())
 
 ## Do not use default exports — use named exports only
 predicate isDefaultExport(Line) => Line.Text:matches('^export\\s+default\\s')
-export let no-default-exports = checkRule('javascript-library-checks/no-default-exports',
-    cb.Lines:isDefaultExport
-    :toError('Do not use default exports — use named exports'))
+export let no-default-exports = cb.Lines:isDefaultExport
+    :toError('Do not use default exports — use named exports')
 
 ## Do not import Promise from external libraries (use native Promise)
 predicate isImportingBluebird(Line) => Line.Text:matches('from\\s+[\'"]bluebird[\'"]')
     || Line.Text:matches('require\\([\'"]bluebird[\'"]\\)')
-export let no-external-promises = checkRule('javascript-library-checks/no-external-promises',
-    cb.Lines:isImportingBluebird
-    :toError('Use native Promise — do not import from bluebird or other polyfill libraries'))
+export let no-external-promises = cb.Lines:isImportingBluebird
+    :toError('Use native Promise — do not import from bluebird or other polyfill libraries')
 
 ## Do not use const enums (problematic for consumers)
 predicate isConstEnumDeclaration(Line) => Line.Text:matches('^\\s*(export\\s+)?const\\s+enum\\s')
-export let no-const-enums = checkRule('javascript-library-checks/no-const-enums',
-    cb.Lines:isConstEnumDeclaration
-    :toWarning('Do not use const enum — use regular enum instead'))
+export let no-const-enums = cb.Lines:isConstEnumDeclaration
+    :toWarning('Do not use const enum — use regular enum instead')
 
 ## Do not reference window global — use self for cross-platform compatibility
 predicate hasWindowReference(Line) => Line.Text:matches('\\bwindow\\.')
     && !Line.Text:matches('//') && !Line.Text:matches('\\*')
-export let no-window-reference = checkRule('javascript-library-checks/no-window-reference',
-    cb.Lines:hasWindowReference
-    :toError('Do not use window — use self for cross-platform compatibility'))
+export let no-window-reference = cb.Lines:hasWindowReference
+    :toError('Do not use window — use self for cross-platform compatibility')
 
 ## Combined library design checks
 export let javascript-library-design-checks = no-default-exports + no-external-promises + no-const-enums + no-window-reference
@@ -57,9 +53,8 @@ predicate hasBannedVerb(Method) => isPublicMethod
         || Method.Name:startsWith('push')
         || Method.Name:startsWith('updateOrInsert'))
 predicate hasBannedVerb(Type) => Type.Methods:any(hasBannedVerb)
-export let standardized-verbs = checkRule('javascript-library-checks/standardized-verbs',
-    Clients:hasBannedVerb
-    :toError('{item.Name} uses a banned method verb prefix — use get, list, create, upsert, update, replace, delete, add, set, or remove'))
+export let standardized-verbs = Clients:hasBannedVerb
+    :toError('{item.Name} uses a banned method verb prefix — use get, list, create, upsert, update, replace, delete, add, set, or remove')
 
 ## Methods returning a subclient must be named get*Client
 predicate isReturningClient(Method) => isPublicMethod && Method.ReturnType != nic
@@ -67,9 +62,8 @@ predicate isReturningClient(Method) => isPublicMethod && Method.ReturnType != ni
 predicate hasSubclientBadName(Method) => isReturningClient
     && !Method.Name:startsWith('get')
 predicate hasSubclientBadName(Type) => Type.Methods:any(hasSubclientBadName)
-export let subclient-naming = checkRule('javascript-library-checks/subclient-naming',
-    Clients:hasSubclientBadName
-    :toError('{item.Name} returns a subclient but is not named get*Client'))
+export let subclient-naming = Clients:hasSubclientBadName
+    :toError('{item.Name} returns a subclient but is not named get*Client')
 
 ## Async client methods must support cancellation (AbortSignal or options)
 predicate isOptionsParam(Parameter) => Parameter.Name == 'options'
@@ -82,9 +76,8 @@ predicate isAsyncMissingCancellation(Method) => isAsyncPublicMethod
     && Method.Parameters:!any(hasAbortSignal)
     && Method.Parameters:!any(isOptionsParam)
 predicate hasMissingCancellation(Type) => Type.Methods:any(isAsyncMissingCancellation)
-export let support-cancellation = checkRule('javascript-library-checks/support-cancellation',
-    Clients:hasMissingCancellation
-    :toError('{item.Name} has an async method without cancellation support — accept AbortSignalLike or an options parameter'))
+export let support-cancellation = Clients:hasMissingCancellation
+    :toError('{item.Name} has an async method without cancellation support — accept AbortSignalLike or an options parameter')
 
 ## list methods should return PagedAsyncIterableIterator
 predicate isListMethod(Method) => isPublicMethod && Method.Name:startsWith('list')
@@ -92,9 +85,8 @@ predicate hasPagingBadReturn(Method) => isListMethod && Method.ReturnType != nic
     && !Method.ReturnType.Name:contains('Paged')
     && !Method.ReturnType.Name:contains('PagedAsyncIterableIterator')
 predicate hasPagingBadReturn(Type) => Type.Methods:any(hasPagingBadReturn)
-export let pagination-list-return = checkRule('javascript-library-checks/pagination-list-return',
-    Clients:hasPagingBadReturn
-    :toWarning('{item.Name} list method should return PagedAsyncIterableIterator'))
+export let pagination-list-return = Clients:hasPagingBadReturn
+    :toWarning('{item.Name} list method should return PagedAsyncIterableIterator')
 
 ## LRO methods should be prefixed with begin
 predicate hasPollerReturn(Method) => isPublicMethod && Method.ReturnType != nic
@@ -102,9 +94,8 @@ predicate hasPollerReturn(Method) => isPublicMethod && Method.ReturnType != nic
         || Method.ReturnType.Name:contains('PollerLike'))
 predicate hasLroBadName(Method) => hasPollerReturn && !Method.Name:startsWith('begin')
 predicate hasLroBadName(Type) => Type.Methods:any(hasLroBadName)
-export let lro-begin-prefix = checkRule('javascript-library-checks/lro-begin-prefix',
-    Clients:hasLroBadName
-    :toError('{item.Name} returns a Poller but is not prefixed with begin'))
+export let lro-begin-prefix = Clients:hasLroBadName
+    :toError('{item.Name} returns a Poller but is not prefixed with begin')
 
 ## Combined client checks
 export let javascript-client-checks = standardized-verbs + support-cancellation + subclient-naming + lro-begin-prefix + pagination-list-return

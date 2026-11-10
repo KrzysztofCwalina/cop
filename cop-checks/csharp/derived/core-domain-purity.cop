@@ -9,8 +9,6 @@ predicate hasAnalysisName(Type) =>
 let core-domain-message =
     'Core type {item.Name}: move analysis-specific logic to a .cop package'
 
-export let derived-core-domain-purity = checkRule(
-    'cop-checks/derived-core-domain-purity',
-    codebase.Types:hasAnalysisName
+export let derived-core-domain-purity = codebase.Types:hasAnalysisName
     .Where(inCore(item.File))
-    :toError(core-domain-message))
+    :toError(core-domain-message)

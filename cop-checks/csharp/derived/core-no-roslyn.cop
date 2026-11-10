@@ -5,10 +5,8 @@ let roslyn-namespaces = ['Microsoft.CodeAnalysis', 'Microsoft.CodeAnalysis.CShar
 let core-roslyn-message =
     '{item.Name}: C# analysis belongs in csharp-provider, not the core'
 
-export let derived-core-no-roslyn = checkRule(
-    'cop-checks/derived-core-no-roslyn',
-    codebase.Types
+export let derived-core-no-roslyn = codebase.Types
     .Where(
         inCore(item.File) &&
         importsAny(item.File, roslyn-namespaces))
-    :toError(core-roslyn-message))
+    :toError(core-roslyn-message)

@@ -2414,12 +2414,6 @@ const packages = {
     ],
     "functions": [
       {
-        "name": "checkRule",
-        "params": "name: string, violations: [Violation]",
-        "returns": "[Violation]",
-        "desc": "Marks one evaluated leaf check, including a check with no findings, and returns its\nviolations unchanged without enumerating them. Use a stable package-qualified name\n(for example 'csharp-checks/var-declarations'). Mark the complete violation list,\nnot each finding or an aggregate suite. Aliases reuse the same name.\nOnly demanded applications count; repeated applications of one name count once per run."
-      },
-      {
         "name": "severityLabel",
         "params": "Violation: Violation",
         "returns": "string",

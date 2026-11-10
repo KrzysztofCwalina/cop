@@ -15,10 +15,8 @@ predicate typesAllowedToUseRegex(Type) =>
 let regex-message =
     '{item.Name}: use parsers instead of System.Text.RegularExpressions'
 
-export let no-regex = checkRule(
-    'cop-checks/no-regex',
-    codebase.Types:isCSharp
+export let no-regex = codebase.Types:isCSharp
     .Where(
         importsRegex(item.File) &&
         !typesAllowedToUseRegex(item))
-    :toError(regex-message))
+    :toError(regex-message)

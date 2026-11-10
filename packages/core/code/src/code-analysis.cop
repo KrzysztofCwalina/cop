@@ -16,14 +16,6 @@ export type Violation = {
     FullPath : string?
 }
 
-## Marks one evaluated leaf check, including a check with no findings, and returns its
-## violations unchanged without enumerating them. Use a stable package-qualified name
-## (for example 'csharp-checks/var-declarations'). Mark the complete violation list,
-## not each finding or an aggregate suite. Aliases reuse the same name.
-## Only demanded applications count; repeated applications of one name count once per run.
-export function checkRule(name: string, violations: [Violation]) : [Violation] =>
-    observe(violations, 'check', name)
-
 ## Maps numeric severity to a display label (error / warning / info), aligned with the
 ## values toError (1.0), toWarning (0.5), and toInfo (0.2) set.
 export function severityLabel(Violation) : string =>

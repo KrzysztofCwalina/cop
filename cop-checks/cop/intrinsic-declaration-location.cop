@@ -8,8 +8,6 @@ predicate hasIntrinsicsSuffix(File) =>
 let intrinsics-message =
     'Intrinsic declaration must be in intrinsics.cop, not {item.File.Path}'
 
-export let intrinsics-in-wrong-file = checkRule(
-    'cop-checks/intrinsics-in-wrong-file',
-    codebase.Methods:asCop:isIntrinsic
+export let intrinsics-in-wrong-file = codebase.Methods:asCop:isIntrinsic
     .Where(!hasIntrinsicsSuffix(item.File))
-    :toError(intrinsics-message))
+    :toError(intrinsics-message)

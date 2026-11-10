@@ -6,10 +6,8 @@ predicate outsideSrc(File) =>
 let provider-location-message =
     '{item.Name} is a provider source outside a src/ folder ({item.File.Path})'
 
-export let derived-provider-sources-under-src = checkRule(
-    'cop-checks/derived-provider-sources-under-src',
-    codebase.Types
+export let derived-provider-sources-under-src = codebase.Types
     .Where(
         inProviders(item.File) &&
         outsideSrc(item.File))
-    :toError(provider-location-message))
+    :toError(provider-location-message)

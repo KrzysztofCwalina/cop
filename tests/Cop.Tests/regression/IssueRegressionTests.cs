@@ -66,7 +66,7 @@ public class IssueRegressionTests
 
         Assert.That(result.ExitCode, Is.EqualTo(1), Describe(result));
         Assert.That(Normalize(result.Stdout), Is.EqualTo("Issue8Target.cs(1): error: ISSUE8 TYPE Issue8Target"), Describe(result));
-        AssertOnlyExecutionSummary(result, 3);
+        AssertOnlyExecutionSummary(result, 1, "check");
     }
 
     // Issue #10
@@ -89,7 +89,7 @@ public class IssueRegressionTests
 
         Assert.That(result.ExitCode, Is.EqualTo(1), Describe(result));
         Assert.That(Normalize(result.Stdout), Is.EqualTo("empty(0): error: ISSUE10 VIOLATION empty"), Describe(result));
-        AssertOnlyExecutionSummary(result, 2);
+        AssertOnlyExecutionSummary(result, 1, "check");
     }
 
     // Issue #37
@@ -179,7 +179,7 @@ public class IssueRegressionTests
         Assert.That(Normalize(result.Stdout), Is.EqualTo("issue52(0): error: ISSUE52 issue52"), Describe(result));
         // Anti-regression: the raw Violation object dump (e.g. "Severity = ...") must NOT appear.
         Assert.That(Normalize(result.Stdout), Does.Not.Contain("Severity ="), Describe(result));
-        AssertOnlyExecutionSummary(result);
+        AssertOnlyExecutionSummary(result, 1, "check");
     }
 
     [Test]
@@ -246,12 +246,12 @@ public class IssueRegressionTests
         return (process.ExitCode, stdout.GetAwaiter().GetResult(), stderr.GetAwaiter().GetResult());
     }
 
-    private static void AssertOnlyExecutionSummary((int ExitCode, string Stdout, string Stderr) result, int computations = 1)
+    private static void AssertOnlyExecutionSummary((int ExitCode, string Stdout, string Stderr) result, int computations = 1, string work = "computation")
     {
         var lines = Normalize(result.Stderr).Split('\n', StringSplitOptions.RemoveEmptyEntries);
         Assert.That(lines, Has.Length.EqualTo(1), Describe(result));
         Assert.That(lines[0], Does.StartWith("Summary   ")
-            .And.Contain($"{computations} computation{(computations == 1 ? "" : "s")} evaluated in ").And.EndWith("s."),
+            .And.Contain($"{computations} {work}{(computations == 1 ? "" : "s")} evaluated in ").And.EndWith("s."),
             Describe(result));
     }
 

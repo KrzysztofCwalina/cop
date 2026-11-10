@@ -3,9 +3,7 @@
 let namespace-message =
     '{item.Name} in {item.File.Path} must be in a namespace'
 
-export let types-without-namespace = checkRule(
-    'cop-checks/types-without-namespace',
-    codebase.Types:isCSharp
+export let types-without-namespace = codebase.Types:isCSharp
     .Where(item.File.Path:in(source-file-paths))
     .Where(!hasNamespace(item))
-    :toError(namespace-message))
+    :toError(namespace-message)

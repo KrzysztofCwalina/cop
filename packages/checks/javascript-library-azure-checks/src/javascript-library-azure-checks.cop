@@ -13,9 +13,8 @@ predicate isCtorWithCredential(Method) => isConstructorMethod
 predicate isMissingCredential(Type) => isClient
     && Type.Constructors.Count > 0
     && Type.Constructors:!any(isCtorWithCredential)
-export let client-needs-credential = checkRule('javascript-library-azure-checks/client-needs-credential',
-    Clients:isMissingCredential
-    :toError('{item.Name} constructor must accept a TokenCredential parameter'))
+export let client-needs-credential = Clients:isMissingCredential
+    :toError('{item.Name} constructor must accept a TokenCredential parameter')
 
 # Client names should follow Azure pattern: <ServiceName>Client
 predicate hasTooShortName(Type) => isClient && Type.Name.Length < 8
@@ -32,9 +31,8 @@ predicate hasCopyrightHeader(Line) => Line.Number == 1
     && Line.Text:contains('Copyright')
 predicate isMissingCopyright(File) => File.Lines.Count > 0
     && File.Lines:!any(hasCopyrightHeader)
-export let copyright-header = checkRule('javascript-library-azure-checks/copyright-header',
-    javascript.lines():isMissingCopyright
-    :toWarning('Source file is missing a copyright header comment'))
+export let copyright-header = javascript.lines():isMissingCopyright
+    :toWarning('Source file is missing a copyright header comment')
 
 # Azure Core imports: clients should use @azure/core-client
 predicate isImportingAzureCore(File) => File.Imports:any(isAzureCoreImport)
@@ -46,16 +44,14 @@ predicate isThrowingCustomError(Statement) =>
     Statement.TypeName != nic &&
     !Statement:hasTypeName(['Error', 'TypeError', 'RangeError', 'RestError']) &&
     !Statement.TypeName:endsWith('Error')
-export let error-handling = checkRule('javascript-library-azure-checks/error-handling',
-    javascript.statements():isThrowingCustomError
-    :toError('Only throw Error, TypeError, RangeError, or RestError — do not throw custom non-Error types'))
+export let error-handling = javascript.statements():isThrowingCustomError
+    :toError('Only throw Error, TypeError, RangeError, or RestError — do not throw custom non-Error types')
 
 ## Azure clients should not use console for logging — use @azure/logger
 predicate isUsingConsoleLog(Statement) =>
     isCall && Statement:hasIdentifierReceiver('console')
-export let no-console-logging = checkRule('javascript-library-azure-checks/no-console-logging',
-    Clients.Methods.Statements:isUsingConsoleLog
-    :toError('Do not use console for logging — use @azure/logger instead'))
+export let no-console-logging = Clients.Methods.Statements:isUsingConsoleLog
+    :toError('Do not use console for logging — use @azure/logger instead')
 
 ## All Azure-specific JavaScript client library checks combined
 export let javascript-library-azure-checks = client-needs-credential + copyright-header + error-handling + no-console-logging

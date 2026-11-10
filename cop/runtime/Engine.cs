@@ -293,11 +293,24 @@ public static class Engine
             return args[0];
         }, 3);
         ConcurrentDictionary<LetDecl, byte> evaluatedBindings = new System.Collections.Concurrent.ConcurrentDictionary<LetDecl, byte>(ReferenceEqualityComparer.Instance);
+        LeafCheckCatalog? leafChecks = null;
         bridge.Evaluator.LetBindingEvaluated = declaration =>
         {
             if (evaluatedBindings.TryAdd(declaration, 0))
             {
                 statistics.CommandCompleted();
+            }
+
+            if (leafChecks?.NameOf(declaration) is { } check)
+            {
+                statistics.RecordEvaluation("check", check);
+            }
+        };
+        bridge.Evaluator.UserFunctionCalled = declaration =>
+        {
+            if (leafChecks?.NameOf(declaration) is { } check)
+            {
+                statistics.RecordEvaluation("check", check);
             }
         };
         bridge.Evaluator.EntryCommandCompleted = statistics.CommandCompleted;
@@ -549,6 +562,10 @@ public static class Engine
         }
 
         // Phase 2: Evaluate let bindings (now that provider data is available)
+        leafChecks = LeafCheckCatalog.Build(
+            modules.Select(m => (m.Module, m.FilePath))
+                .Concat(moduleLoader.LoadedFiles.Select(f => (f.Module, f.FilePath)))
+                .ToList());
         // First: deferred let bindings from imported packages
         moduleLoader.EvalDeferredLetBindings(bridge.Evaluator, errors);
 

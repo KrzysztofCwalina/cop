@@ -49,25 +49,18 @@ text, with no animated progress. Findings and program output stay on **stdout**;
 JSON output stays machine-readable and omits the analysis transition and summary.
 Restore failures retain the package, feed, and reason on stderr.
 
-Bundled check packages and repository rules explicitly mark each leaf rule with
-`code.checkRule(name, violations)`. The count is the number of distinct marked rules
-actually evaluated, including rules with **zero findings**. Helpers, aggregate suites,
-aliases, repeated applications of the same rule, and unused or opt-in rules that did
-not run add no checks. Running the same rule over several inputs still counts one
-distinct check, not one check per file or finding.
+Checks are counted automatically; rule authors write nothing extra. A **check** is a
+top-level `let` whose type is `[Violation]`, or an exported function declared to return
+`[Violation]`. The count is the number of distinct checks actually evaluated, including
+checks with **zero findings**. A `let` or function whose value only combines other
+checks with `+` (a suite such as `let all = a + b`) or just refers to one (an alias such
+as `let x = varDeclarations(cb)`) is not counted itself. Helpers, repeated applications
+of the same check, and unused or opt-in checks that did not run add no checks. Running
+the same check over several inputs still counts one check, not one per file or finding.
 
-Custom checks participate by wrapping their complete violation list, not each item
-or the combined suite. Use a stable package-qualified name such as
-`checkRule('my-checks/no-var', violations)`; unrelated packages must use different
-names. This returns the original collection without enumerating it. Merely tagging
-findings with `toError(message, name)` does not register a check, because that would
-miss clean rules.
-
-When no marked check was evaluated (for example a general data-processing program
-or legacy unmarked rules), the summary instead reports **computations evaluated**:
-demanded distinct let bindings plus callable entry commands. It does not claim
-these are checks. The language remains domain-independent; the code package defines
-check registration using the general-purpose `observe(value, category, name)` hook.
+When no check was evaluated (for example a general data-processing program), the
+summary instead reports **computations evaluated**: demanded distinct let bindings
+plus callable entry commands. It does not claim these are checks.
 
 The file count deduplicates input paths reported by providers during actual work,
 including cached inputs and filesystem metadata inspection. Lazy queries count

@@ -20,8 +20,6 @@ predicate isRuntime(Project) =>
 let runtime-dependency-message =
     '{item.Name} must not reference providers other than filesystem-provider'
 
-export let layering-violations = checkRule(
-    'cop-checks/layering-violations',
-    codebase.Projects:isRuntime
+export let layering-violations = codebase.Projects:isRuntime
     .Where(referencesAny(item, forbidden-providers))
-    :toError(runtime-dependency-message))
+    :toError(runtime-dependency-message)

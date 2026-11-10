@@ -6,8 +6,6 @@ predicate lacksProviderSuffix(Type) =>
 let provider-name-message =
     '{item.Name} extends DataProvider but is not named *Provider ({item.File.Path})'
 
-export let derived-provider-naming = checkRule(
-    'cop-checks/derived-provider-naming',
-    codebase.Types
+export let derived-provider-naming = codebase.Types
     :extendsDataProvider:lacksProviderSuffix
-    :toError(provider-name-message))
+    :toError(provider-name-message)

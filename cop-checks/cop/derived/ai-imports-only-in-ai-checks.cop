@@ -9,10 +9,8 @@ predicate hasCorePuritySuffix(File) =>
 let ai-import-message =
     'Only core-purity.cop may import ai; keep default checks deterministic'
 
-export let derived-ai-imports-only-in-ai-checks = checkRule(
-    'cop-checks/derived-ai-imports-only-in-ai-checks',
-    codebase.Statements:importsAi
+export let derived-ai-imports-only-in-ai-checks = codebase.Statements:importsAi
     .Where(
         inChecks(item.File) &&
         !hasCorePuritySuffix(item.File))
-    :toError(ai-import-message))
+    :toError(ai-import-message)

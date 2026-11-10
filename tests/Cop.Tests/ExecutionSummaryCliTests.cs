@@ -24,7 +24,7 @@ public partial class ToolchainCliIntegrationTests
     }
 
     [Test]
-    public async Task MarkedSingleRuleKeepsSingularCheckSummary()
+    public async Task SingleCheckKeepsSingularCheckSummary()
     {
         var repository = new DirectoryInfo(Path.GetDirectoryName(_cli)!);
         while (!File.Exists(Path.Combine(repository.FullName, "cop.sln"))) repository = repository.Parent!;
@@ -32,7 +32,8 @@ public partial class ToolchainCliIntegrationTests
         File.WriteAllText(_script, $$"""
             feed '{{feed}}'
             import code
-            command MAIN = CHECK(checkRule('fixture/single', []))
+            let single : [Violation] = []
+            command MAIN = CHECK(single)
             """);
 
         var verify = await Run("verify", _script);
@@ -107,17 +108,19 @@ public partial class ToolchainCliIntegrationTests
         File.WriteAllText(_script, $$"""
             feed '{{feed}}'
             import code
-            function rule(name: string, values: [int]) : [Violation] =>
-                checkRule(name, values.Where(item > 0).Select(Violation {
+            function positives(values: [int]) : [Violation] =>
+                values.Where(item > 0).Select(Violation {
                     Severity: 1.0, Certainty: 1.0, Message: 'finding',
-                    File: '', Line: 0, Source: '', Check: name
-                }))
-            function suite() => rule('fixture/clean', [-1]) + rule('fixture/other', [{{(finding ? "1" : "-2")}}])
-            let unused = rule('fixture/unused', [1])
+                    File: '', Line: 0, Source: '', Check: 'fixture'
+                })
+            let clean = positives([-1])
+            let other = positives([{{(finding ? "1" : "-2")}}])
+            export function suite() : [Violation] => clean + other
+            let unused = positives([1])
             let helper = 42
             let result = suite()
             let alias = result
-            command MAIN = print(helper) & CHECK(alias + rule('fixture/clean', [-3]))
+            command MAIN = print(helper) & CHECK(alias + clean)
             """);
 
         var result = await Run(_script, "-t", _root, "--no-color");
@@ -130,7 +133,7 @@ public partial class ToolchainCliIntegrationTests
     }
 
     [Test]
-    public async Task CheckSummaryPreservesPackageIdentityAndExcludesUnusedProviderWork()
+    public async Task CheckSummaryCountsDistinctChecksAndExcludesUnusedProviderWork()
     {
         var repository = new DirectoryInfo(Path.GetDirectoryName(_cli)!);
         while (!File.Exists(Path.Combine(repository.FullName, "cop.sln"))) repository = repository.Parent!;
@@ -139,10 +142,10 @@ public partial class ToolchainCliIntegrationTests
             feed '{{feed}}'
             import code
             import csharp
-            let unused = checkRule('unused/rule', csharp.parse().Statements:toError('unused'))
-            let first = checkRule('first/rule', [])
+            let unused = csharp.parse().Statements:toError('unused')
+            let first : [Violation] = []
             let alias = first
-            let second = checkRule('second/rule', [])
+            let second : [Violation] = []
             command MAIN = CHECK(first + alias + second)
             """);
 
