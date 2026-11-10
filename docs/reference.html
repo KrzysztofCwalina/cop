@@ -3666,7 +3666,7 @@ const packages = {
     "types": {
       "CSharpType": {
         "desc": "A C#-specific view of a Type, exposing C#-only facts that have no place in the\nlanguage-agnostic common model. Obtain one by narrowing with `asCSharp`.",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/languages/csharp/src/csharp.cop#L42",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/languages/csharp/src/csharp.cop#L45",
         "baseType": "Type",
         "props": [
           {
@@ -3718,7 +3718,7 @@ const packages = {
       },
       "CSharpMethod": {
         "desc": "A C#-specific view of a Method, exposing C#-only facts (extension, partial, unsafe,\nextern, expression-bodied, generic) absent from the common model. Reached via a\nnarrowed type's `.Methods` (e.g. `codebase.Types:asCSharp.Methods`) or `asCSharp`.",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/languages/csharp/src/csharp.cop#L57",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/languages/csharp/src/csharp.cop#L60",
         "baseType": "Method",
         "props": [
           {
@@ -3755,7 +3755,7 @@ const packages = {
       },
       "CSharpStatement": {
         "desc": "A C#-specific view of a Statement, exposing C# control-flow and error-handling facts\n(lock / unsafe / fixed / checked blocks, yield, goto, await foreach, catch filters) that\nhave no place in the common model. Reached by narrowing with `asCSharp`.",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/languages/csharp/src/csharp.cop#L119",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/languages/csharp/src/csharp.cop#L122",
         "baseType": "Statement",
         "props": [
           {
@@ -3838,223 +3838,229 @@ const packages = {
     },
     "predicates": [
       {
+        "name": "isInterface",
+        "appliesTo": "Type",
+        "desc": "True for C# interface declarations.",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/languages/csharp/src/csharp.cop#L17"
+      },
+      {
         "name": "isAsyncVoid",
         "appliesTo": "Method",
         "desc": "Identifies async methods returning void; does not decide whether they are permitted.",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/languages/csharp/src/csharp.cop#L17"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/languages/csharp/src/csharp.cop#L20"
       },
       {
         "name": "disablesNullable",
         "appliesTo": "Statement",
         "desc": "Identifies an active parsed #nullable disable directive.",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/languages/csharp/src/csharp.cop#L22"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/languages/csharp/src/csharp.cop#L25"
       },
       {
         "name": "isEnvironmentVariableAccess",
         "appliesTo": "Statement",
         "desc": "Matches syntactic System.Environment variable reads or writes.\nUnqualified names are recognized; aliases and resolved symbols are not inferred.",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/languages/csharp/src/csharp.cop#L30"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/languages/csharp/src/csharp.cop#L33"
       },
       {
         "name": "isEnvironmentVariableRead",
         "appliesTo": "Statement",
         "desc": "Identifies GetEnvironmentVariable access, including overloads with a target argument.",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/languages/csharp/src/csharp.cop#L36"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/languages/csharp/src/csharp.cop#L39"
       },
       {
         "name": "asCSharp",
         "appliesTo": "Type",
         "narrows": "CSharpType",
         "desc": "Narrows a Type to a CSharpType (C# types only), exposing C#-specific fields.\nExample: codebase.Types:asCSharp:isRecord",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/languages/csharp/src/csharp.cop#L68"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/languages/csharp/src/csharp.cop#L71"
       },
       {
         "name": "asCSharp",
         "appliesTo": "Method",
         "narrows": "CSharpMethod",
         "desc": "Narrows a Method to a CSharpMethod (C# methods only), exposing C#-specific fields.\nExample: codebase.Methods:asCSharp:isExtensionMethod",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/languages/csharp/src/csharp.cop#L72"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/languages/csharp/src/csharp.cop#L75"
       },
       {
         "name": "isRecord",
         "appliesTo": "CSharpType",
         "desc": "True for C# `record` / `record struct` declarations.",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/languages/csharp/src/csharp.cop#L75"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/languages/csharp/src/csharp.cop#L78"
       },
       {
         "name": "isRecordStruct",
         "appliesTo": "CSharpType",
         "desc": "True for C# `record struct` declarations specifically.",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/languages/csharp/src/csharp.cop#L78"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/languages/csharp/src/csharp.cop#L81"
       },
       {
         "name": "isReadonlyStruct",
         "appliesTo": "CSharpType",
         "desc": "True for C# `readonly struct` declarations.",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/languages/csharp/src/csharp.cop#L81"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/languages/csharp/src/csharp.cop#L84"
       },
       {
         "name": "isRef",
         "appliesTo": "CSharpType",
         "desc": "True for C# `ref struct` declarations.",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/languages/csharp/src/csharp.cop#L84"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/languages/csharp/src/csharp.cop#L87"
       },
       {
         "name": "isFileLocal",
         "appliesTo": "CSharpType",
         "desc": "True for C# `file`-scoped (file-local) type declarations.",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/languages/csharp/src/csharp.cop#L87"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/languages/csharp/src/csharp.cop#L90"
       },
       {
         "name": "isPartial",
         "appliesTo": "CSharpType",
         "desc": "True for C# `partial` type declarations.",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/languages/csharp/src/csharp.cop#L90"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/languages/csharp/src/csharp.cop#L93"
       },
       {
         "name": "hasPrimaryConstructor",
         "appliesTo": "CSharpType",
         "desc": "True when the type declares a primary constructor.",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/languages/csharp/src/csharp.cop#L93"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/languages/csharp/src/csharp.cop#L96"
       },
       {
         "name": "isGenericType",
         "appliesTo": "CSharpType",
         "desc": "True when the type declares generic type parameters.",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/languages/csharp/src/csharp.cop#L96"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/languages/csharp/src/csharp.cop#L99"
       },
       {
         "name": "isExtensionMethod",
         "appliesTo": "CSharpMethod",
         "desc": "True for C# extension methods (first parameter has the `this` modifier).",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/languages/csharp/src/csharp.cop#L99"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/languages/csharp/src/csharp.cop#L102"
       },
       {
         "name": "isPartialMethod",
         "appliesTo": "CSharpMethod",
         "desc": "True for `partial` method declarations.",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/languages/csharp/src/csharp.cop#L102"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/languages/csharp/src/csharp.cop#L105"
       },
       {
         "name": "isUnsafeMethod",
         "appliesTo": "CSharpMethod",
         "desc": "True for `unsafe` method declarations.",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/languages/csharp/src/csharp.cop#L105"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/languages/csharp/src/csharp.cop#L108"
       },
       {
         "name": "isExternMethod",
         "appliesTo": "CSharpMethod",
         "desc": "True for `extern` method declarations (e.g. P/Invoke).",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/languages/csharp/src/csharp.cop#L108"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/languages/csharp/src/csharp.cop#L111"
       },
       {
         "name": "isExpressionBodied",
         "appliesTo": "CSharpMethod",
         "desc": "True for expression-bodied methods (`=> expr;`).",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/languages/csharp/src/csharp.cop#L111"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/languages/csharp/src/csharp.cop#L114"
       },
       {
         "name": "isGenericMethod",
         "appliesTo": "CSharpMethod",
         "desc": "True when the method declares generic type parameters.",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/languages/csharp/src/csharp.cop#L114"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/languages/csharp/src/csharp.cop#L117"
       },
       {
         "name": "asCSharp",
         "appliesTo": "Statement",
         "narrows": "CSharpStatement",
         "desc": "Narrows a Statement to a CSharpStatement (C# statements only), exposing C#-specific fields.\nExample: codebase.Statements:asCSharp:isLock",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/languages/csharp/src/csharp.cop#L139"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/languages/csharp/src/csharp.cop#L142"
       },
       {
         "name": "isLock",
         "appliesTo": "CSharpStatement",
         "desc": "True for a C# `lock` statement.",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/languages/csharp/src/csharp.cop#L142"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/languages/csharp/src/csharp.cop#L145"
       },
       {
         "name": "isUnsafeBlock",
         "appliesTo": "CSharpStatement",
         "desc": "True for a C# `unsafe` block statement.",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/languages/csharp/src/csharp.cop#L145"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/languages/csharp/src/csharp.cop#L148"
       },
       {
         "name": "isFixed",
         "appliesTo": "CSharpStatement",
         "desc": "True for a C# `fixed` statement.",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/languages/csharp/src/csharp.cop#L148"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/languages/csharp/src/csharp.cop#L151"
       },
       {
         "name": "isChecked",
         "appliesTo": "CSharpStatement",
         "desc": "True for a C# `checked` block statement.",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/languages/csharp/src/csharp.cop#L151"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/languages/csharp/src/csharp.cop#L154"
       },
       {
         "name": "isUnchecked",
         "appliesTo": "CSharpStatement",
         "desc": "True for a C# `unchecked` block statement.",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/languages/csharp/src/csharp.cop#L154"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/languages/csharp/src/csharp.cop#L157"
       },
       {
         "name": "isYield",
         "appliesTo": "CSharpStatement",
         "desc": "True for a C# `yield return` / `yield break` statement.",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/languages/csharp/src/csharp.cop#L157"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/languages/csharp/src/csharp.cop#L160"
       },
       {
         "name": "isGoto",
         "appliesTo": "CSharpStatement",
         "desc": "True for a C# `goto` statement.",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/languages/csharp/src/csharp.cop#L160"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/languages/csharp/src/csharp.cop#L163"
       },
       {
         "name": "isAwaitForeach",
         "appliesTo": "CSharpStatement",
         "desc": "True for a C# `await foreach` (async stream) statement.",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/languages/csharp/src/csharp.cop#L163"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/languages/csharp/src/csharp.cop#L166"
       },
       {
         "name": "hasCatchFilter",
         "appliesTo": "CSharpStatement",
         "desc": "True for a `catch` clause with an exception filter (`when (...)`).",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/languages/csharp/src/csharp.cop#L166"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/languages/csharp/src/csharp.cop#L169"
       },
       {
         "name": "isCancellationHandler",
         "appliesTo": "CSharpStatement",
         "desc": "True for a bound OperationCanceledException or derived typed catch, including aliases.",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/languages/csharp/src/csharp.cop#L169"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/languages/csharp/src/csharp.cop#L172"
       },
       {
         "name": "isCallerCancellationPreserved",
         "appliesTo": "CSharpStatement",
         "desc": "Proves supported explicit caller-cancellation paths, not implicit exception effects.\nRecognizes original rethrows, operation-linked caller-token guards and exclusions,\nconsumed fresh canceled completion sources, and exclusively internal-token awaits.\nNested cleanup must preserve cancellation on every explicit handler path.\nKnown caller lineage survives linking to independent lifetime/deadline tokens.\nUnknown token provenance, unsupported flow, and unconsumed completions are false.",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/languages/csharp/src/csharp.cop#L178"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/languages/csharp/src/csharp.cop#L181"
       },
       {
         "name": "isUsingResource",
         "appliesTo": "CSharpStatement",
         "desc": "True for a call directly initializing a `using` or `await using` resource.\nCalls nested in its arguments or body are not themselves using resources.",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/languages/csharp/src/csharp.cop#L183"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/languages/csharp/src/csharp.cop#L186"
       },
       {
         "name": "hasTypeRestrictedCatchFilter",
         "appliesTo": "CSharpStatement",
         "desc": "True when a catch filter restricts the caught exception to specific exception types.\nArbitrary conditions, broad base types, and negative type tests do not qualify.",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/languages/csharp/src/csharp.cop#L187"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/languages/csharp/src/csharp.cop#L190"
       },
       {
         "name": "alwaysRethrowsOriginalException",
         "appliesTo": "CSharpStatement",
         "desc": "True when every path through a catch body rethrows the original exception.\nA conditional rethrow, replacement exception, or nested function does not qualify.",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/languages/csharp/src/csharp.cop#L192"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/languages/csharp/src/csharp.cop#L195"
       },
       {
         "name": "transfersResourceOwnership",
         "appliesTo": "CSharpStatement",
         "desc": "True when a created resource is returned or stored in an owning member.\nLocal assignments and ordinary method arguments are not ownership transfers.",
-        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/languages/csharp/src/csharp.cop#L197"
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/languages/csharp/src/csharp.cop#L200"
       }
     ],
     "functions": [

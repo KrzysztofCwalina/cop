@@ -97,6 +97,10 @@ Comments, string literals, and inactive preprocessor branches do not produce dir
 
 ## Reusable C# fact predicates
 
+`csharp.isInterface(Type)` identifies C# interface declarations and excludes interfaces
+from other languages. Filter with `codebase.Types:isInterface`; the caller supplies
+folder exclusions, allowed names, and diagnostics.
+
 `csharp.isAsyncVoid(Method)` identifies async methods returning `void`.
 `csharp.disablesNullable(Statement)` identifies active C# nullable-disable directives.
 Neither predicate chooses whether that construct is allowed or creates diagnostics.

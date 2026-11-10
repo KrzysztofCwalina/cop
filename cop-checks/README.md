@@ -31,7 +31,7 @@ a named scope, narrow it in named steps, then report the result with `:toError('
 
 let allowed-interfaces = ['ICopCallable']
 
-let interfaces : [Type] = source-code.Types:isCSharp.Where(item.Kind == Interface)
+let interfaces : [Type] = source-code.Types:isInterface
 let non-example-interfaces : [Type] = interfaces.Where(!inFolders(item.File, ['examples/']))
 let new-interfaces : [Type] = non-example-interfaces.Where(!item.Name:in(allowed-interfaces))
 

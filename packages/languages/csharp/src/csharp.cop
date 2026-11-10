@@ -13,6 +13,9 @@ export function parse(path : string) : Codebase => provider('csharp', path)
 ## Example: csharp.load('lib/MyLib.dll')
 export function load(path : string) : Codebase => provider('csharp', path)
 
+## True for C# interface declarations.
+export predicate isInterface(Type:isCSharp) => Type.Kind == Interface
+
 ## Identifies async methods returning void; does not decide whether they are permitted.
 export predicate isAsyncVoid(Method) =>
     Method.Modifiers:isSet(Async) &&

@@ -186,6 +186,56 @@ public class CodeQueryTests
     }
 
     [Test]
+    public async Task CSharpInterfacePredicateExcludesClassesAndOtherLanguages()
+    {
+        Write("target/Input.cs", """
+            namespace Fixture;
+            interface ICSharpContract { }
+            class Ordinary { }
+            """);
+        Write("target/Input.ts", "export interface ITypeScriptContract { run(): void; }");
+        await AssertProgram("""
+            import code
+            import csharp
+            import javascript
+            let cb = codebase(csharp.parse(), javascript.parse())
+            command MAIN = {
+                foreach cb.Types.Where(item.Name == 'ITypeScriptContract') => 'foreign:{item.Name}'
+                foreach cb.Types:isInterface => 'selected:{item.Name}'
+                0
+            }
+            """, ["foreign:ITypeScriptContract", "selected:ICSharpContract"]);
+    }
+
+    [TestCase("import csharp\nimport go")]
+    [TestCase("import go\nimport csharp")]
+    public async Task InterfacePredicatesKeepLanguageScopeInEitherImportOrder(string imports)
+    {
+        Write("target/Input.cs", """
+            namespace Fixture;
+            interface ICSharpContract { }
+            class Ordinary { }
+            """);
+        Write("target/input.go", """
+            package fixture
+            type GoContract interface { Run() }
+            type Ordinary struct {}
+            """);
+        await AssertProgram($$"""
+            import code
+            {{imports}}
+            let csharp-code = csharp.parse()
+            let cb = codebase(csharp-code, go.parse())
+            command MAIN = {
+                foreach cb.Types.Where(csharp.isInterface(item)) => 'qualified:{item.Name}'
+                foreach csharp-code.Types:isInterface => 'csharp:{item.Name}'
+                foreach cb.Types:asGo:isInterface => 'go:{item.Name}'
+                0
+            }
+            """, ["qualified:ICSharpContract", "csharp:ICSharpContract", "go:GoContract"]);
+    }
+
+    [Test]
     public async Task CSharpFactQueriesKeepEnvironmentOverloadsAndNullableDirectivesDistinct()
     {
         Write("target/Input.cs", """

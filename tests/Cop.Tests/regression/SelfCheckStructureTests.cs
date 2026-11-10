@@ -188,6 +188,33 @@ public class SelfCheckStructureTests
     }
 
     [Test]
+    [Explicit("Issue #112: csharp.parse() fails a Codebase parameter at runtime — remove when fixed")]
+    [Category("PendingFix")]
+    public async Task Issue112_CSharpParseCanBePassedToCodebaseParameters()
+    {
+        var target = Path.Combine(_root, "target");
+        Directory.CreateDirectory(target);
+        File.WriteAllText(Path.Combine(target, "Input.cs"), "namespace Fixture; class Ordinary { }");
+        var main = Path.Combine(_root, "main.cop");
+        File.WriteAllText(main, """
+            import code
+            import csharp
+            let production = withoutFolders(csharp.parse(), ['tests/', 'samples/'])
+            command MAIN = print('{production.Types.Name}')
+            """);
+        var diagnostics = VerifyCommand.CollectDiagnostics([main], _root, File.ReadAllText);
+        Assert.That(diagnostics, Is.Empty, string.Join("\n", diagnostics.Select(d => d.Message)));
+        var result = await Engine.RunAsync(_root, target, new EngineRunOptions
+        {
+            AdditionalFeedPaths = [Path.Combine(_repo, "packages")],
+        });
+
+        Assert.That(result.HasFatalErrors, Is.False, string.Join("\n", result.Errors));
+        Assert.That(result.Outputs.Select(o => o.Message), Is.EqualTo(new[] { "[Ordinary]" }));
+        Assert.That(result.ExitCode, Is.EqualTo(0));
+    }
+
+    [Test]
     public async Task RepositoryHasNoUnapprovedRegexImports()
     {
         File.Copy(Path.Combine(_repo, "cop-checks", "csharp", "no-regex.cop"), Path.Combine(_root, "rule.cop"));
@@ -441,6 +468,20 @@ public class SelfCheckStructureTests
         await AssertCheck(Path.Combine("csharp", "no-interfaces.cop"), "no-new-interfaces", file,
             "namespace Example; interface IUnexpected { }", "csharp", hasViolation ? [1] : [],
             $"Use an abstract class instead of interface IUnexpected ({file})");
+    }
+
+    [Test]
+    public async Task InterfaceCheckPreservesCaseInsensitiveCallableAllowance()
+    {
+        await AssertCheck(Path.Combine("csharp", "no-interfaces.cop"), "no-new-interfaces",
+            "Input.cs", """
+            namespace Fixture;
+            interface ICopCallable { }
+            interface icopcallable { }
+            class Ordinary { }
+            interface IUnexpected { }
+            """, "csharp", [5],
+            "Use an abstract class instead of interface IUnexpected (Input.cs)");
     }
 
     [TestCase("[]", new[] { 2, 3, 6 })]
