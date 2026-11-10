@@ -1,3 +1,5 @@
+// Formats analysis phase status and package-restoration messages on stderr.
+
 namespace Cop.Cli.Commands;
 
 internal static class AnalysisConsole
