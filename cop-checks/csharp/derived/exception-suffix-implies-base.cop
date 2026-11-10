@@ -1,8 +1,7 @@
 # Reserve the Exception suffix for types derived from Exception.
 
-export let derived-exception-suffix-implies-base = codebase.Types
-    .Where(
-        !inFolders(item.File, ['tests/', 'samples/']) &&
-        item.Name:endsWith('Exception') &&
-        !derivesFromAny(item, ['Exception']))
+let types-named-exception : [Type] = source-code.Types.Where(item.Name:endsWith('Exception'))
+
+export let derived-exception-suffix-implies-base = types-named-exception
+    .Where(!derivesFromAny(item, ['Exception']))
     :toError('{item.Name} is named *Exception but does not derive from Exception')

@@ -1,7 +1,7 @@
 # Keep the language independent of code-analysis types; use generic provider data instead.
 
-export let derived-language-no-code-model = codebase.Types
-    .Where(
-        item.File.Path:contains('cop/shared/') &&
-        importsAny(item.File, ['Cop.Providers.SourceModel']))
+let language-types : [Type] = codebase.Types.Where(item.File.Path:contains('cop/shared/'))
+
+export let derived-language-no-code-model = language-types
+    .Where(importsAny(item.File, ['Cop.Providers.SourceModel']))
     :toError('{item.Name}: remove Cop.Providers.SourceModel; keep the language general-purpose')

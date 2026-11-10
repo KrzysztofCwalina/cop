@@ -7,6 +7,8 @@ predicate inPureCore(File) =>
     File.Path:contains('cop/shared/tokenizer/') ||
     File.Path:contains('cop/runtime/')
 
-export let derived-no-console-in-pure-core = codebase.Statements
-    .Where(inPureCore(item.File) && item.TypeName:equals('Console'))
+let pure-core-statements : [Statement] = codebase.Statements.Where(inPureCore(item.File))
+
+export let derived-no-console-in-pure-core = pure-core-statements
+    .Where(item.TypeName:equals('Console'))
     :toError('{item.TypeName}.{item.MemberName}: use the core output abstraction, not Console')

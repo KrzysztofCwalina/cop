@@ -1,5 +1,7 @@
 # Keep provider sources in src/ directories, as expected by the build and packaging.
 
-export let derived-provider-sources-under-src = codebase.Types
-    .Where(item.File.Path:startsWith('providers/') && !item.File.Path:contains('/src/'))
+let provider-folder-types : [Type] = codebase.Types.Where(item.File.Path:startsWith('providers/'))
+
+export let derived-provider-sources-under-src = provider-folder-types
+    .Where(!item.File.Path:contains('/src/'))
     :toError('{item.Name} is a provider source outside a src/ folder ({item.File.Path})')

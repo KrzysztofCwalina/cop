@@ -1,7 +1,7 @@
 # Keep argument parsing in the CLI; other layers must not import System.CommandLine.
 
-export let derived-commandline-confined-to-cli = codebase.Types
-    .Where(
-        !item.File.Path:contains('cop/cli/') &&
-        importsAny(item.File, ['System.CommandLine']))
+let non-cli-types : [Type] = codebase.Types.Where(!item.File.Path:contains('cop/cli/'))
+
+export let derived-commandline-confined-to-cli = non-cli-types
+    .Where(importsAny(item.File, ['System.CommandLine']))
     :toError('{item.Name} uses System.CommandLine outside cop/cli ({item.File.Path})')

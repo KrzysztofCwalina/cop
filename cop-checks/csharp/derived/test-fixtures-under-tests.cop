@@ -1,5 +1,7 @@
 # Keep NUnit test fixtures with the test projects under tests/.
 
-export let derived-tests-location = codebase.Types
-    .Where(hasDecorator(item, 'TestFixture') && !inFolders(item.File, ['tests/']))
+let test-fixtures : [Type] = codebase.Types.Where(hasDecorator(item, 'TestFixture'))
+
+export let derived-tests-location = test-fixtures
+    .Where(!inFolders(item.File, ['tests/']))
     :toError('Test fixture {item.Name} must live under tests/ ({item.File.Path})')

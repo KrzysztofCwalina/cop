@@ -1,8 +1,8 @@
 # CLI commands are entry points, not objects; their classes must be static.
 
-export let derived-cli-commands-are-static = codebase.Types
-    .Where(
-        item.File.Path:contains('cop/cli/commands/') &&
-        item.Name:endsWith('Command') &&
-        !item.Modifiers:isSet(Static))
+let cli-command-types : [Type] = codebase.Types
+    .Where(item.File.Path:contains('cop/cli/commands/') && item.Name:endsWith('Command'))
+
+export let derived-cli-commands-are-static = cli-command-types
+    .Where(!item.Modifiers:isSet(Static))
     :toError('CLI command {item.Name} must be a static class ({item.File.Path})')

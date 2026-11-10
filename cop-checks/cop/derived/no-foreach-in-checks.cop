@@ -1,5 +1,7 @@
 # Report violations with CHECK, not foreach, so failures set the exit code.
 
-export let derived-no-foreach-in-checks = codebase.Statements
-    .Where(item.Kind == foreach && item.File.Path:contains('cop-checks/'))
+let foreach-statements : [Statement] = codebase.Statements.Where(item.Kind == foreach)
+
+export let derived-no-foreach-in-checks = foreach-statements
+    .Where(item.File.Path:contains('cop-checks/'))
     :toError('Do not use foreach in cop-checks — use CHECK ({item.File.Path}:{item.Line})')

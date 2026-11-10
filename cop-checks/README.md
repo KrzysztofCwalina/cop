@@ -11,32 +11,43 @@ Run it with `cop cop-checks/main.cop -t .`; opt into AI checks with `-c AI`.
 Group folders are not standalone programs. The separate package-source suite is
 `cop cop-checks/cop/packages/main.cop -t packages`.
 
-The default suite also includes `csharp-checks`, restricted to production sources:
-`main.cop` passes `withoutFolders(csharp-code, ['tests/', 'samples/', 'examples/'])` to
-`csharpChecks(...)`, so analysis is scoped before the checks run. Tests, samples, and
-examples remain available as intentional negative-test fixtures.
+`main.cop` defines the named scopes that rules start from:
+
+- `codebase` — everything: C# and Cop sources, including tests, samples, and examples.
+- `source-code` — production code: `codebase` without `tests/` and `samples/`.
+- `core-types` — the language core: types under `cop/shared/` and `cop/runtime/`.
+
+The default suite also runs `csharpChecks(csharp-source-code)`: C# sources without tests,
+samples, and examples.
+Tests, samples, and examples remain available as intentional negative-test fixtures.
 
 ## Reading and maintaining a rule
 
-Keep every rule readable at a glance. A rule file is a short comment, then one exported
-violation list: a collection, one `.Where(...)` with its conditions, and `:toError('...')`.
+Keep every rule readable at a glance. Build it step by step, one idea per line: start from
+a named scope, narrow it in named steps, then report the result with `:toError('...')`.
 
 ```cop skip
-# Require namespaces for C# types outside tests/ and samples/.
+# Use abstract classes for production abstractions instead of new interfaces.
 
-export let types-without-namespace = codebase.Types:isCSharp
-    .Where(!inFolders(item.File, ['tests/', 'samples/']) && !hasNamespace(item))
-    :toError('{item.Name} in {item.File.Path} must be in a namespace')
+let allowed-interfaces = ['ICopCallable']
+
+let interfaces : [Type] = source-code.Types:isCSharp.Where(item.Kind == Interface)
+let non-example-interfaces : [Type] = interfaces.Where(!inFolders(item.File, ['examples/']))
+let new-interfaces : [Type] = non-example-interfaces.Where(!item.Name:in(allowed-interfaces))
+
+export let no-new-interfaces = new-interfaces
+    :toError('Use an abstract class instead of interface {item.Name} ({item.File.Path})')
 ```
 
 - Start with one or two lines explaining the rule's purpose and rationale.
+- Start from a named scope (`source-code`, `core-types`, `codebase`) instead of repeating
+  folder exclusions inside conditions.
+- Give each intermediate step a descriptive name and its element type (`[Type]`,
+  `[Statement]`, `[Project]`). Avoid long expressions that combine many conditions.
 - Write the message inline in `:toError(...)`. It renders once per matching item.
-- Write the scope inline too, e.g. `!inFolders(item.File, ['tests/'])`, so each rule shows
-  exactly which folders it exempts. Rules deliberately exempt different folders.
-- Inline one-line conditions. Add a local predicate only when it names a real concept
-  (e.g. `mayUseRegex`, `isFfiRegistration`). Sibling files share one namespace, so a rule
-  must not depend on another rule's predicates or lets; reusable queries go in packages.
-- Use named lists only for real policy data such as allowlists.
+- Add a local predicate only when it names a real concept (e.g. `mayUseRegex`,
+  `isFfiRegistration`). Sibling files share one namespace, so step names must be unique
+  and a rule must not depend on another rule's steps; reusable queries go in packages.
 - Keep Cop source lines within 100 characters.
 
 The environment rule is the one rule with more structure: it reports

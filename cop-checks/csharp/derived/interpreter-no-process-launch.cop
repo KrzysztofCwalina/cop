@@ -1,7 +1,8 @@
 # Keep process execution in providers; the interpreter must not reference Process.
 
-export let derived-interpreter-no-process-launch = codebase.Statements
-    .Where(
-        item.File.Path:contains('cop/shared/interpreter/') &&
-        item.TypeName:equals('Process'))
+let interpreter-statements : [Statement] = codebase.Statements
+    .Where(item.File.Path:contains('cop/shared/interpreter/'))
+
+export let derived-interpreter-no-process-launch = interpreter-statements
+    .Where(item.TypeName:equals('Process'))
     :toError('The interpreter must not launch processes; use a provider')

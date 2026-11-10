@@ -1,7 +1,5 @@
 # Keep the listed provider dependencies out of runtime; filesystem-provider is allowed.
 
-import code
-
 let forbidden-providers = [
     'code'
     'markdown-provider'
@@ -14,6 +12,8 @@ let forbidden-providers = [
     'cop-provider'
 ]
 
-export let layering-violations = codebase.Projects
-    .Where(item.Name:in(['runtime']) && referencesAny(item, forbidden-providers))
+let runtime-projects : [Project] = codebase.Projects.Where(item.Name == 'runtime')
+
+export let layering-violations = runtime-projects
+    .Where(referencesAny(item, forbidden-providers))
     :toError('{item.Name} must not reference providers other than filesystem-provider')

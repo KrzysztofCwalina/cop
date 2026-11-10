@@ -18,8 +18,7 @@ export let no-environment = (env-calls - allowed-calls)
     :toError('Use CLI flags or config instead of environment variables for Cop settings')
 
 # Calls to inspect.
-let env-calls = codebase.Calls:isCSharp:isEnvironmentVariableAccess
-    .Where(!inFolders(item.File, ['tests/', 'samples/']))
+let env-calls : [Statement] = source-code.Calls:isCSharp:isEnvironmentVariableAccess
 let env-reads = env-calls:isEnvRead
 
 # Allowed groups.

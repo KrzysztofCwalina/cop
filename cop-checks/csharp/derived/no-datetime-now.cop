@@ -1,8 +1,5 @@
 # Use UTC or DateTimeOffset instead of DateTime.Now to avoid local-time ambiguity.
 
-export let derived-no-datetime-now = codebase.Statements
-    .Where(
-        !inFolders(item.File, ['tests/', 'samples/']) &&
-        item.TypeName:equals('DateTime') &&
-        item.MemberName:equals('Now'))
+export let derived-no-datetime-now = source-code.Statements
+    .Where(item.TypeName:equals('DateTime') && item.MemberName:equals('Now'))
     :toError('Use DateTimeOffset/UtcNow instead of DateTime.Now ({item.File.Path}:{item.Line})')

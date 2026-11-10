@@ -1,9 +1,9 @@
 # Keep default checks deterministic; only *core-purity.cop files may import ai.
 
-export let derived-ai-imports-only-in-ai-checks = codebase.Statements
-    .Where(
-        item.Kind == import &&
-        item.MemberName:equals('ai') &&
-        item.File.Path:contains('cop-checks/') &&
-        !item.File.Path:endsWith('core-purity.cop'))
+let imports : [Statement] = codebase.Statements.Where(item.Kind == import)
+let ai-imports : [Statement] = imports.Where(item.MemberName:equals('ai'))
+let ai-imports-in-checks : [Statement] = ai-imports.Where(item.File.Path:contains('cop-checks/'))
+
+export let derived-ai-imports-only-in-ai-checks = ai-imports-in-checks
+    .Where(!item.File.Path:endsWith('core-purity.cop'))
     :toError('Only core-purity.cop may import ai; keep default checks deterministic')

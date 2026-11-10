@@ -1,9 +1,13 @@
 # Keep networking imports out of the interpreter and runtime.
 # Providers handle network I/O.
 
-export let derived-core-network-isolation = codebase.Types
+let network-namespaces = ['System.Net', 'System.Net.Http', 'System.Net.Sockets']
+
+let interpreter-and-runtime-types : [Type] = codebase.Types
     .Where(
-        (item.File.Path:contains('cop/shared/interpreter/') ||
-            item.File.Path:contains('cop/runtime/')) &&
-        importsAny(item.File, ['System.Net', 'System.Net.Http', 'System.Net.Sockets']))
+        item.File.Path:contains('cop/shared/interpreter/') ||
+        item.File.Path:contains('cop/runtime/'))
+
+export let derived-core-network-isolation = interpreter-and-runtime-types
+    .Where(importsAny(item.File, network-namespaces))
     :toError('{item.Name}: networking belongs in providers, not the language core')

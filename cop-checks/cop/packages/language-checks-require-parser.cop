@@ -9,10 +9,11 @@ let language-package-paths = [
 predicate isProgramProviders(CodeExpression) =>
     isMemberOfIgnoringCase(CodeExpression, 'Program', 'Providers')
 
-export let lang-provider-hardcoded-violations = codebase.Calls
-    .Where(
-        inFolders(item.File, language-package-paths) &&
-        item.MemberName:equals('codebase') &&
-        item.CallTarget.Kind == identifier &&
-        item.ArgumentExpressions:any(isProgramProviders))
+let language-package-calls : [Statement] = codebase.Calls
+    .Where(inFolders(item.File, language-package-paths))
+let codebase-calls : [Statement] = language-package-calls
+    .Where(item.MemberName:equals('codebase') && item.CallTarget.Kind == identifier)
+
+export let lang-provider-hardcoded-violations = codebase-calls
+    .Where(item.ArgumentExpressions:any(isProgramProviders))
     :toError('Use codebase(<lang>.parse()), not codebase(Program.Providers)')

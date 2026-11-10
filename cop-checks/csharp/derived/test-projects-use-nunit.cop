@@ -1,7 +1,7 @@
 # Use NUnit consistently across projects under tests/.
 
-import code
+let test-projects : [Project] = codebase.Projects.Where(item.Path:startsWith('tests/'))
 
-export let derived-test-projects-use-nunit = codebase.Projects
-    .Where(item.Path:startsWith('tests/') && !hasPackage(item, 'NUnit'))
+export let derived-test-projects-use-nunit = test-projects
+    .Where(!hasPackage(item, 'NUnit'))
     :toError('Test project {item.Name} must reference NUnit')

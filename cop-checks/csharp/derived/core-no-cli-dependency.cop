@@ -1,7 +1,5 @@
 # Keep the language and runtime host-independent: no CLI command or REPL imports.
 
-export let derived-core-no-cli-dependency = codebase.Types
-    .Where(
-        (item.File.Path:contains('cop/shared/') || item.File.Path:contains('cop/runtime/')) &&
-        importsAny(item.File, ['Cop.Cli.Commands', 'Cop.Repl']))
+export let derived-core-no-cli-dependency = core-types
+    .Where(importsAny(item.File, ['Cop.Cli.Commands', 'Cop.Repl']))
     :toError('{item.Name}: remove CLI/REPL dependencies; keep the core host-independent')

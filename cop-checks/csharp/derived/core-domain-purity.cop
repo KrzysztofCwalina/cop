@@ -6,8 +6,5 @@ predicate hasAnalysisName(Type) =>
     Type.Name:contains('CodeSmell') ||
     Type.Name:contains('CodeReview')
 
-export let derived-core-domain-purity = codebase.Types
-    .Where(
-        (item.File.Path:contains('cop/shared/') || item.File.Path:contains('cop/runtime/')) &&
-        hasAnalysisName(item))
+export let derived-core-domain-purity = core-types.Where(hasAnalysisName(item))
     :toError('Core type {item.Name}: move analysis-specific logic to a .cop package')

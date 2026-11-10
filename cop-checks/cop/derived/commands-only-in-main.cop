@@ -1,8 +1,8 @@
 # Keep commands in *main.cop files; individual checks only export violations.
 
-export let derived-single-command-in-checks = codebase.Statements
-    .Where(
-        item.Kind == command &&
-        item.File.Path:contains('cop-checks/') &&
-        !item.File.Path:endsWith('main.cop'))
+let commands : [Statement] = codebase.Statements.Where(item.Kind == command)
+let commands-in-checks : [Statement] = commands.Where(item.File.Path:contains('cop-checks/'))
+
+export let derived-single-command-in-checks = commands-in-checks
+    .Where(!item.File.Path:endsWith('main.cop'))
     :toError('Only cop-checks/main.cop may declare a command ({item.File.Path}:{item.Line})')

@@ -1,11 +1,11 @@
 # Use abstract classes for production abstractions instead of new interfaces.
 
-import code
-
 # ICopCallable lets callable values retain their CopValue base class.
 let allowed-interfaces = ['ICopCallable']
 
-export let no-new-interfaces = code.interfacesExcept(
-    codebase.Types:isCSharp.Where(!inFolders(item.File, ['tests/', 'samples/', 'examples/'])),
-    allowed-interfaces)
+let interfaces : [Type] = source-code.Types:isCSharp.Where(item.Kind == Interface)
+let non-example-interfaces : [Type] = interfaces.Where(!inFolders(item.File, ['examples/']))
+let new-interfaces : [Type] = non-example-interfaces.Where(!item.Name:in(allowed-interfaces))
+
+export let no-new-interfaces = new-interfaces
     :toError('Use an abstract class instead of interface {item.Name} ({item.File.Path})')

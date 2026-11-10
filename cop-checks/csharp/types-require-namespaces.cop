@@ -1,5 +1,6 @@
-# Require namespaces for C# types outside tests/ and samples/.
+# Require namespaces for C# types in production code.
 
-export let types-without-namespace = codebase.Types:isCSharp
-    .Where(!inFolders(item.File, ['tests/', 'samples/']) && !hasNamespace(item))
+let source-types : [Type] = source-code.Types:isCSharp
+
+export let types-without-namespace = source-types.Where(!hasNamespace(item))
     :toError('{item.Name} in {item.File.Path} must be in a namespace')
