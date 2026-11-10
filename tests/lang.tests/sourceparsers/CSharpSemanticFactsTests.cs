@@ -296,6 +296,30 @@ public class CSharpSemanticFactsTests
     }
 
     [Test]
+    public async Task BindingOneStatementReportsUnrelatedErrorsInTheSameFileExactlyOnce()
+    {
+        var source = Path.Combine(_root, "a.cs");
+        File.WriteAllText(source, """
+            class Example {
+                string Value() => "ok";
+                string Run() => Value();
+                void Broken() { Missing(); }
+            }
+            """);
+        var call = await (await CallsAsync()).SingleAsync(async (CopDynamicObject item, CancellationToken token) =>
+            await TextAsync(item, "MemberName", token) == "Value");
+        Assert.That(ProviderErrors.Drain(), Is.Empty);
+        Assert.That(await TextAsync(await ObjectAsync(call, "ValueType"), "Name"), Is.EqualTo("String"));
+        Assert.That(ProviderErrors.Drain(), Is.EqualTo(new[]
+        {
+            $"{source}(4,21): C# semantic context: The name 'Missing' does not exist in the current context (CS0103)"
+        }));
+        Assert.That(await TextAsync(await ObjectAsync(call, "ReferencedCallable"), "Signature"),
+            Is.EqualTo("Example.Value()"));
+        Assert.That(ProviderErrors.Drain(), Is.Empty);
+    }
+
+    [Test]
     public async Task MissingContext_IsReportedOnlyOnSemanticDemand_AndNeverFabricatesSelectedTarget()
     {
         File.WriteAllText(Path.Combine(_root, "a.cs"), "class Caller { void Run() { Missing.Factory().Execute(1); } }");

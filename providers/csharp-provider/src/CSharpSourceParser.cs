@@ -188,6 +188,11 @@ public class CSharpSourceParser : ISourceParser
     public static void EnrichWithSemantics(SyntaxTree tree, SemanticModel model, List<TypeDeclaration> types, List<StatementInfo> allStatements)
         => EnrichWithSemantics(tree, model, types, allStatements, typeNamesOnly: false);
 
+    internal static void EnrichInterfaces(SyntaxTree tree, SemanticModel model,
+        List<TypeDeclaration> types, List<StatementInfo> statements)
+        => EnrichWithSemantics(tree, model, types, statements, typeNamesOnly: false,
+            resolveInvocations: false, resolveInferences: false);
+
     /// <summary>
     /// Resolves statement type names using the supplied semantic compilation models.
     /// </summary>
@@ -208,7 +213,9 @@ public class CSharpSourceParser : ISourceParser
     public static void DeferTypeNames(SyntaxTree tree, List<StatementInfo> statements,
         Func<SemanticModel> invocationModel, Func<SemanticModel> inferenceModel)
     {
-        DeferBoundFacts(tree, statements, inferenceModel);
+        // Roslyn models own their bound-node caches; separate models repeat binding and nullable flow.
+        Lazy<SemanticModel> nullableModel = new(inferenceModel);
+        DeferBoundFacts(tree, statements, () => nullableModel.Value);
         Lazy<bool> invocations = new Lazy<bool>(() =>
         {
             EnrichWithSemantics(tree, invocationModel(), [], statements, typeNamesOnly: true,
@@ -217,7 +224,7 @@ public class CSharpSourceParser : ISourceParser
         });
         Lazy<bool> inferences = new Lazy<bool>(() =>
         {
-            EnrichWithSemantics(tree, inferenceModel(), [], statements, typeNamesOnly: true,
+            EnrichWithSemantics(tree, nullableModel.Value, [], statements, typeNamesOnly: true,
                 resolveInvocations: false);
             return true;
         });
@@ -235,14 +242,35 @@ public class CSharpSourceParser : ISourceParser
         DeferCatchFilterFacts(tree, statements, getModel);
         DeferCancellationFacts(tree, statements, getModel);
         DeferOwnershipFacts(tree, statements, getModel);
-        Lazy<bool> binding = new Lazy<bool>(() =>
+        Lazy<SemanticModel> model = new(getModel);
+        Lazy<bool> diagnostics = new(() =>
         {
-            EnrichBoundFacts(tree, getModel(), statements);
+            ReportSemanticErrors(tree, model.Value);
             return true;
         });
-        foreach (StatementInfo statement in statements)
+        foreach (IGrouping<(int, int?, int?), CSharpStatementInfo> group in statements.OfType<CSharpStatementInfo>()
+                     .GroupBy(statement => (statement.SyntaxStart, statement.EndLine, statement.EndColumn)))
         {
-            statement.DeferSemanticAnalysis(binding);
+            CSharpStatementInfo[] matches = group.ToArray();
+            Lazy<bool> binding = new(() =>
+            {
+                _ = diagnostics.Value;
+                if (group.Key is (int start, int endLine, int endColumn) && start >= 0)
+                {
+                    int end = tree.GetText().Lines.GetPosition(new(endLine - 1, endColumn - 1));
+                    TextSpan span = TextSpan.FromBounds(start, end);
+                    SyntaxNode node = tree.GetRoot().FindNode(span, getInnermostNodeForTie: true);
+                    if (node.Span == span)
+                    {
+                        EnrichBoundFacts(node, model.Value, matches);
+                    }
+                }
+                return true;
+            });
+            foreach (CSharpStatementInfo statement in matches)
+            {
+                statement.DeferSemanticAnalysis(binding);
+            }
         }
     }
 
@@ -310,7 +338,7 @@ public class CSharpSourceParser : ISourceParser
         }
     }
 
-    private static void EnrichBoundFacts(SyntaxTree tree, SemanticModel model, List<StatementInfo> statements)
+    private static void ReportSemanticErrors(SyntaxTree tree, SemanticModel model)
     {
         foreach (Diagnostic? diagnostic in model.GetDiagnostics().Where(d => d.Severity == DiagnosticSeverity.Error))
         {
@@ -319,60 +347,47 @@ public class CSharpSourceParser : ISourceParser
                 $"{tree.FilePath}({position.Line + 1},{position.Character + 1}): " +
                 $"C# semantic context: {diagnostic.GetMessage()} ({diagnostic.Id})");
         }
+    }
 
-        Dictionary<int, CSharpStatementInfo[]> byStart = statements.OfType<CSharpStatementInfo>().GroupBy(s => s.SyntaxStart)
-            .ToDictionary(g => g.Key, g => g.ToArray());
-        foreach (SyntaxNode node in tree.GetRoot().DescendantNodes())
+    private static void EnrichBoundFacts(SyntaxNode node, SemanticModel model, CSharpStatementInfo[] matches)
+    {
+        ExpressionSyntax? expression = node switch
         {
-            if (!byStart.TryGetValue(node.SpanStart, out CSharpStatementInfo[]? matches))
-            {
-                continue;
-            }
+            VariableDeclaratorSyntax variable => variable.Initializer?.Value,
+            ReturnStatementSyntax returned => returned.Expression,
+            ExpressionSyntax value => value,
+            _ => null
+        };
+        if (expression is null)
+        {
+            return;
+        }
 
-            ExpressionSyntax? expression = node switch
+        TypeReference? resultType = BoundType(model.GetTypeInfo(expression).Type);
+        IMethodSymbol? callable = expression is InvocationExpressionSyntax or BaseObjectCreationExpressionSyntax
+            ? model.GetSymbolInfo(expression).Symbol as IMethodSymbol : null;
+        ITypeSymbol? receiver = expression switch
+        {
+            InvocationExpressionSyntax { Expression: MemberAccessExpressionSyntax member }
+                when model.GetSymbolInfo(member.Expression).Symbol is not INamedTypeSymbol
+                => model.GetTypeInfo(member.Expression).Type,
+            InvocationExpressionSyntax { Expression: MemberBindingExpressionSyntax }
+                => model.GetTypeInfo(expression.Ancestors().OfType<ConditionalAccessExpressionSyntax>().First().Expression).Type,
+            InvocationExpressionSyntax invocation when callable?.MethodKind == MethodKind.DelegateInvoke
+                => model.GetTypeInfo(invocation.Expression).Type,
+            InvocationExpressionSyntax when callable is { IsStatic: false, MethodKind: MethodKind.Ordinary }
+                => model.GetEnclosingSymbol(expression.SpanStart)?.ContainingType,
+            _ => null
+        };
+        CallableReference? selected = callable is null || callable.ContainingType?.TypeKind == Microsoft.CodeAnalysis.TypeKind.Error
+            ? null : BoundCallable(callable);
+        foreach (CSharpStatementInfo statement in matches)
+        {
+            statement.ValueType = resultType;
+            if (node is InvocationExpressionSyntax or BaseObjectCreationExpressionSyntax)
             {
-                VariableDeclaratorSyntax variable => variable.Initializer?.Value,
-                ReturnStatementSyntax returned => returned.Expression,
-                ExpressionSyntax value => value,
-                _ => null
-            };
-            if (expression is null)
-            {
-                continue;
-            }
-
-            TypeReference? resultType = BoundType(model.GetTypeInfo(expression).Type);
-            IMethodSymbol? callable = expression is InvocationExpressionSyntax or BaseObjectCreationExpressionSyntax
-                ? model.GetSymbolInfo(expression).Symbol as IMethodSymbol : null;
-            ITypeSymbol? receiver = expression switch
-            {
-                InvocationExpressionSyntax { Expression: MemberAccessExpressionSyntax member }
-                    when model.GetSymbolInfo(member.Expression).Symbol is not INamedTypeSymbol
-                    => model.GetTypeInfo(member.Expression).Type,
-                InvocationExpressionSyntax { Expression: MemberBindingExpressionSyntax }
-                    => model.GetTypeInfo(expression.Ancestors().OfType<ConditionalAccessExpressionSyntax>().First().Expression).Type,
-                InvocationExpressionSyntax invocation when callable?.MethodKind == MethodKind.DelegateInvoke
-                    => model.GetTypeInfo(invocation.Expression).Type,
-                InvocationExpressionSyntax when callable is { IsStatic: false, MethodKind: MethodKind.Ordinary }
-                    => model.GetEnclosingSymbol(expression.SpanStart)?.ContainingType,
-                _ => null
-            };
-            CallableReference? selected = callable is null || callable.ContainingType?.TypeKind == Microsoft.CodeAnalysis.TypeKind.Error
-                ? null : BoundCallable(callable);
-            LinePosition end = node.GetLocation().GetLineSpan().EndLinePosition;
-            foreach (CSharpStatementInfo? statement in matches)
-            {
-                if (statement.EndLine != end.Line + 1 || statement.EndColumn != end.Character + 1)
-                {
-                    continue;
-                }
-
-                statement.ValueType = resultType;
-                if (node is InvocationExpressionSyntax or BaseObjectCreationExpressionSyntax)
-                {
-                    statement.ReceiverType = BoundType(receiver);
-                    statement.ReferencedCallable = selected;
-                }
+                statement.ReceiverType = BoundType(receiver);
+                statement.ReferencedCallable = selected;
             }
         }
     }

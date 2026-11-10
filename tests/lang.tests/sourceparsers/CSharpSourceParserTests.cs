@@ -131,6 +131,55 @@ public class CSharpSourceParserTests
         Assert.That((invocations, inferences), Is.EqualTo((1, 1)));
         Assert.That((await AsyncSourceFacts.TypeNameAsync(next[1], CancellationToken.None)).TypeName, Is.EqualTo("Client"));
         Assert.That((invocations, inferences), Is.EqualTo((1, 1)));
+        Assert.That(next[0].ValueType?.Name, Is.EqualTo("Client"));
+        Assert.That((invocations, inferences), Is.EqualTo((1, 1)),
+            "Binding facts and var inference must share the nullable semantic model.");
+    }
+
+    [TestCase(true)]
+    [TestCase(false)]
+    public void DeferredSemanticFacts_ShareOneNullableModelAcrossDemandPaths(bool bindingFirst)
+    {
+        const string source = """
+            #nullable enable
+            using System;
+            using System.IO;
+            using System.Threading;
+            class Example {
+                void Run(string? text, CancellationToken token) {
+                    var inferred = text;
+                    using var stream = new MemoryStream();
+                    try { token.ThrowIfCancellationRequested(); }
+                    catch (Exception ex) when (ex is OperationCanceledException) { throw; }
+                }
+            }
+            """;
+        var tree = CSharpSyntaxTree.ParseText(source);
+        var compilation = CSharpCompilation.Create("SharedDemand", [tree],
+            [MetadataReference.CreateFromFile(typeof(object).Assembly.Location)],
+            new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
+        var file = _parser.ParseWithSemantics("Input.cs", source, tree, null)!;
+        int invocations = 0, models = 0;
+        CSharpSourceParser.DeferTypeNames(tree, file.Statements,
+            () => { invocations++; return compilation.GetSemanticModel(tree); },
+            () => { models++; return compilation.GetSemanticModel(tree); });
+        Assert.That((invocations, models), Is.EqualTo((0, 0)));
+        var inferred = file.Statements.Single(s => s.MemberName == "inferred");
+        var call = file.Statements.Single(s => s.MemberName == "ThrowIfCancellationRequested");
+        var handler = (Cop.Providers.SourceModel.CSharpStatementInfo)file.Statements.Single(s => s.Kind == "catch");
+        var creation = file.Statements.OfType<Cop.Providers.SourceModel.CSharpStatementInfo>()
+            .Single(s => s.Kind == "call" && s.Line == 8);
+        for (int repeat = 0; repeat < 2; repeat++)
+        {
+            if (bindingFirst)
+                Assert.That(call.ValueType?.Name, Is.EqualTo("Void"));
+            Assert.That(inferred.TypeName, Is.EqualTo("string"));
+            Assert.That(call.ValueType?.Name, Is.EqualTo("Void"));
+            Assert.That(handler.HasTypeRestrictedCatchFilter, Is.True);
+            Assert.That(handler.IsCancellationHandler, Is.False);
+            Assert.That(creation.IsOwnershipTransferred, Is.False);
+        }
+        Assert.That((invocations, models), Is.EqualTo((0, 1)));
     }
 
     [Test]

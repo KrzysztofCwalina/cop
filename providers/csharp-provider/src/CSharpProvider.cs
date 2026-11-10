@@ -110,14 +110,16 @@ public class CSharpProvider : DataProvider
                     await compilations.GetValueAsync(prepareToken).ConfigureAwait(false);
                     return true;
                 });
-                file?.DeferSemanticAnalysis(() => CSharpSourceParser.EnrichWithSemantics(tree,
-                    readyCompilations![tree].GetSemanticModel(tree), file.Types, file.Statements));
+                Lazy<SemanticModel> semanticModel = new(() =>
+                    readyCompilations![tree].GetSemanticModel(tree));
+                file?.DeferSemanticAnalysis(() => CSharpSourceParser.EnrichInterfaces(tree,
+                    semanticModel.Value, file.Types, file.Statements));
 #pragma warning disable RSEXPERIMENTAL001 // Nullable-analysis control is experimental in the pinned Roslyn version.
                 if (file is not null)
                 {
                     CSharpSourceParser.DeferTypeNames(tree, file.Statements,
                         () => readyCompilations![tree].GetSemanticModel(tree, SemanticModelOptions.DisableNullableAnalysis),
-                        () => readyCompilations![tree].GetSemanticModel(tree));
+                        () => semanticModel.Value);
                     foreach (StatementInfo statement in file.Statements)
                     {
                         statement.DeferSemanticAnalysisAsync(preparation);
