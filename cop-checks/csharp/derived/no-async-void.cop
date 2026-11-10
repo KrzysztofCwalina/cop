@@ -1,10 +1,5 @@
 # Use async Task instead of async void so callers can await and observe failures.
 
-predicate hasAsyncVoid(Type) =>
-    Type.Methods:any(isAsyncVoid)
-
-let async-void-message =
-    '{item.Name} declares an async void method — use async Task ({item.File.Path})'
-
-export let derived-no-async-void = codebase.Types:hasAsyncVoid
-    :toError(async-void-message)
+export let derived-no-async-void = codebase.Types
+    .Where(item.Methods:any(isAsyncVoid))
+    :toError('{item.Name} declares an async void method — use async Task ({item.File.Path})')

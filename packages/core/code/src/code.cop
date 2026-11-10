@@ -375,6 +375,25 @@ export function codebase(providers : [Codebase]) : Codebase => {
     Projects: reduce(providers, (acc, p) => acc + p.Projects, [])
 }
 
+## Tests whether a file's path starts with any of the given folders, e.g. ['tests/', 'samples/'].
+export predicate inFolders(File, folders : [string]) =>
+    folders:any((folder) => File.Path:startsWith(folder))
+
+## Removes the source elements whose files are in any of the given folders.
+## Projects and SourceScopes are kept so project-level context stays complete.
+## Example: let production = withoutFolders(csharp.parse(), ['tests/', 'samples/'])
+export function withoutFolders(cb : Codebase, folders : [string]) : Codebase => {
+    SourceScopes: cb.SourceScopes,
+    Files: cb.Files.Where(!inFolders(item, folders)),
+    Types: cb.Types.Where(!inFolders(item.File, folders)),
+    Methods: cb.Methods.Where(!inFolders(item.File, folders)),
+    Statements: cb.Statements.Where(!inFolders(item.File, folders)),
+    Calls: cb.Calls.Where(!inFolders(item.File, folders)),
+    Lines: cb.Lines.Where(!inFolders(item.File, folders)),
+    Regions: cb.Regions.Where(!inFolders(item.File, folders)),
+    Projects: cb.Projects
+}
+
 # Language filter predicates
 export predicate isCSharp(Type) => Type.File.Language == csharp
 export predicate isCSharp(Statement) => Statement.File.Language == csharp

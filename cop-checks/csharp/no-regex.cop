@@ -3,20 +3,14 @@
 import code
 import csharp
 
-predicate importsRegex(File) =>
-    importsAny(File, ['System.Text.RegularExpressions'])
-
-predicate typesAllowedToUseRegex(Type) =>
+predicate mayUseRegex(Type) =>
     Type.Name:contains('RegexCache') ||
     Type.Name:contains('FilterCompiler') ||
     Type.Name:contains('FilterEvaluator') ||
     Type.Name:contains('StandardLibrary')
 
-let regex-message =
-    '{item.Name}: use parsers instead of System.Text.RegularExpressions'
-
 export let no-regex = codebase.Types:isCSharp
     .Where(
-        importsRegex(item.File) &&
-        !typesAllowedToUseRegex(item))
-    :toError(regex-message)
+        importsAny(item.File, ['System.Text.RegularExpressions']) &&
+        !mayUseRegex(item))
+    :toError('{item.Name}: use parsers instead of System.Text.RegularExpressions')

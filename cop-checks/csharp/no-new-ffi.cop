@@ -16,15 +16,9 @@ predicate isFfiRegistration(Statement) =>
     Statement.MemberName:equals('Register') &&
     hasIdentifierReceiverIgnoringCase(Statement, 'ffi')
 
-predicate hasApprovedFfiName(Statement) =>
-    hasStringArgumentIn(Statement, 0, approved-ffi-names)
-
-predicate isUnapprovedRegistration(Statement) =>
-    isFfiRegistration &&
-    !hasApprovedFfiName
-
-let ffi-message =
-    'Unapproved runtime function; use a .cop package or get explicit approval'
-
-export let no-new-ffi = non-test-calls:isUnapprovedRegistration
-    :toError(ffi-message)
+export let no-new-ffi = codebase.Calls
+    .Where(
+        !inFolders(item.File, ['tests/']) &&
+        isFfiRegistration(item) &&
+        !hasStringArgumentIn(item, 0, approved-ffi-names))
+    :toError('Unapproved runtime function; use a .cop package or get explicit approval')

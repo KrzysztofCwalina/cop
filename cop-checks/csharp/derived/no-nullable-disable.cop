@@ -1,8 +1,5 @@
 # Preserve nullable safety checks by rejecting #nullable disable directives.
 
-let nullable-directive-message =
-    'Do not disable nullable reference types ({item.File.Path}:{item.Line})'
-
 export let derived-no-nullable-disable = codebase.Statements:disablesNullable
     .Where(item.File.Language == csharp)
-    :toError(nullable-directive-message)
+    :toError('Do not disable nullable reference types ({item.File.Path}:{item.Line})')

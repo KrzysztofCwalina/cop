@@ -2,9 +2,6 @@
 
 import code
 
-let multi-targeting-message =
-    'Project {item.Name}: use TargetFramework, not TargetFrameworks'
-
 export let derived-single-target-framework = codebase.Projects
     .Where(hasProjectProperty(item, 'TargetFrameworks'))
-    :toError(multi-targeting-message)
+    :toError('Project {item.Name}: use TargetFramework, not TargetFrameworks')

@@ -1,15 +1,7 @@
 # Keep argument parsing in the CLI; other layers must not import System.CommandLine.
 
-predicate inCli(File) =>
-    File.Path:contains('cop/cli/')
-predicate importsCommandLine(File) =>
-    importsAny(File, ['System.CommandLine'])
-
-let commandline-message =
-    '{item.Name} uses System.CommandLine outside cop/cli ({item.File.Path})'
-
 export let derived-commandline-confined-to-cli = codebase.Types
     .Where(
-        !inCli(item.File) &&
-        importsCommandLine(item.File))
-    :toError(commandline-message)
+        !item.File.Path:contains('cop/cli/') &&
+        importsAny(item.File, ['System.CommandLine']))
+    :toError('{item.Name} uses System.CommandLine outside cop/cli ({item.File.Path})')

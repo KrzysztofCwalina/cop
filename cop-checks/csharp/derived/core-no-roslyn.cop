@@ -1,12 +1,7 @@
 # Keep Roslyn in csharp-provider so the language and runtime stay language-independent.
 
-let roslyn-namespaces = ['Microsoft.CodeAnalysis', 'Microsoft.CodeAnalysis.CSharp']
-
-let core-roslyn-message =
-    '{item.Name}: C# analysis belongs in csharp-provider, not the core'
-
 export let derived-core-no-roslyn = codebase.Types
     .Where(
-        inCore(item.File) &&
-        importsAny(item.File, roslyn-namespaces))
-    :toError(core-roslyn-message)
+        (item.File.Path:contains('cop/shared/') || item.File.Path:contains('cop/runtime/')) &&
+        importsAny(item.File, ['Microsoft.CodeAnalysis', 'Microsoft.CodeAnalysis.CSharp']))
+    :toError('{item.Name}: C# analysis belongs in csharp-provider, not the core')

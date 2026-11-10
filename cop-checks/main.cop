@@ -6,77 +6,12 @@ import csharp
 import csharp-checks
 import cop
 
-let codebase = codebase(csharp.parse(), cop.parse())
+let csharp-code = codebase(csharp.parse())
+let codebase = codebase(csharp-code, cop.parse())
 
-let source-files = codebase.Files.Where(!inTestsOrSamples(item))
-let source-files-without-examples = codebase.Files.Where(!inTestsSamplesOrExamples(item))
-let non-test-files = codebase.Files.Where(!inTests(item))
-let files-without-samples-or-examples = codebase.Files.Where(!inSamplesOrExamples(item))
-
-let source-file-paths = source-files.Path
-let source-file-paths-without-examples = source-files-without-examples.Path
-let non-test-file-paths = non-test-files.Path
-let file-paths-without-samples-or-examples = files-without-samples-or-examples.Path
-
-let source-types-without-examples = codebase.Types
-    .Where(item.File.Path:in(source-file-paths-without-examples))
-
-let csharp-source-files = source-files-without-examples
-    .Where(item.Language == csharp)
-let csharp-source-file-paths = csharp-source-files.Path
-let csharp-source-codebase : Codebase = {
-    SourceScopes: codebase.SourceScopes,
-    Files: csharp-source-files,
-    Types: codebase.Types.Where(item.File.Path:in(csharp-source-file-paths)),
-    Methods: codebase.Methods.Where(item.File.Path:in(csharp-source-file-paths)),
-    Statements: codebase.Statements.Where(item.File.Path:in(csharp-source-file-paths)),
-    Calls: codebase.Calls.Where(item.File.Path:in(csharp-source-file-paths)),
-    Lines: codebase.Lines.Where(item.File.Path:in(csharp-source-file-paths)),
-    Regions: codebase.Regions.Where(item.File.Path:in(csharp-source-file-paths)),
-    Projects: codebase.Projects
-}
-let csharp-source-violations = csharpChecks(csharp-source-codebase)
-
-let source-calls = codebase.Calls:isCSharp
-    .Where(item.File.Path:in(source-file-paths))
-let non-test-calls = codebase.Calls
-    .Where(item.File.Path:in(non-test-file-paths))
-
-predicate inTestsOrSamples(File) =>
-    File.Path:startsWith('tests/') ||
-    File.Path:startsWith('samples/')
-predicate inSamplesOrExamples(File) =>
-    File.Path:startsWith('samples/') ||
-    File.Path:startsWith('examples/')
-predicate inTestsSamplesOrExamples(File) =>
-    inTestsOrSamples ||
-    File.Path:startsWith('examples/')
-predicate inTests(File) =>
-    File.Path:startsWith('tests/')
-predicate inShared(File) =>
-    File.Path:contains('cop/shared/')
-predicate inRuntime(File) =>
-    File.Path:contains('cop/runtime/')
-predicate inCore(File) =>
-    inShared ||
-    inRuntime
-predicate inInterpreter(File) =>
-    File.Path:contains('cop/shared/interpreter/')
-predicate inProviders(File) =>
-    File.Path:startsWith('providers/')
-predicate importsCliCommandsOrRepl(File) =>
-    importsAny(File, ['Cop.Cli.Commands', 'Cop.Repl'])
-predicate inChecks(File) =>
-    File.Path:contains('cop-checks/')
-
-predicate extendsDataProvider(Type) =>
-    derivesFromAny(Type, ['DataProvider'])
-predicate hasTestFixture(Type) =>
-    hasDecorator(Type, 'TestFixture')
-predicate hasExceptionBase(Type) =>
-    derivesFromAny(Type, ['Exception'])
-predicate hasExceptionSuffix(Type) =>
-    Type.Name:endsWith('Exception')
+# The generic C# package checks apply to production code only.
+let csharp-source-violations =
+    csharpChecks(withoutFolders(csharp-code, ['tests/', 'samples/', 'examples/']))
 
 export let default-violations =
     csharp-source-violations +

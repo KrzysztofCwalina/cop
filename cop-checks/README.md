@@ -11,93 +11,51 @@ Run it with `cop cop-checks/main.cop -t .`; opt into AI checks with `-c AI`.
 Group folders are not standalone programs. The separate package-source suite is
 `cop cop-checks/cop/packages/main.cop -t packages`.
 
-The default suite also includes `csharp-checks`, restricted to production sources.
-Tests, samples, and examples remain available as intentional negative-test fixtures.
-`main.cop` builds `csharp-source-codebase` from the shared production-file scope and
-passes it to `csharpChecks(...)`. This scopes analysis before compiler-bound checks run,
-rather than filtering their findings afterward. The package's existing exported lists
-remain useful for standalone runs but use its own unscoped parsed model.
+The default suite also includes `csharp-checks`, restricted to production sources:
+`main.cop` passes `withoutFolders(csharp-code, ['tests/', 'samples/', 'examples/'])` to
+`csharpChecks(...)`, so analysis is scoped before the checks run. Tests, samples, and
+examples remain available as intentional negative-test fixtures.
 
 ## Reading and maintaining a rule
 
-Start each rule with one or two short lines explaining its purpose and useful rationale.
-Avoid implementation narration, review history, and restating every condition. Keep
-detailed limitations in this reference; use inline comments only for non-obvious reasons.
+Keep every rule readable at a glance. A rule file is a short comment, then one exported
+violation list: a collection, one `.Where(...)` with its conditions, and `:toError('...')`.
 
-Name predicates for the facts they establish, not for the rules that use them. A path under `tests/`
-does not establish that its contents are test fixtures; `inTestsOrSamples(File)` names
-the actual location test. Only a parsed `TestFixture` attribute justifies `hasTestFixture`.
+```cop skip
+# Require namespaces for C# types outside tests/ and samples/.
 
-Use the shortest name that preserves meaningful distinctions. `referencesAspNet` needs
-no `Framework` suffix, but `callsUnqualifiedCodebase` keeps `Unqualified` because member
-calls are excluded. Imports and paths are predicates on `File`, not claims about a type's
-behavior. Approval predicates explicitly describe policy exceptions.
+export let types-without-namespace = codebase.Types:isCSharp
+    .Where(!inFolders(item.File, ['tests/', 'samples/']) && !hasNamespace(item))
+    :toError('{item.Name} in {item.File.Path} must be in a namespace')
+```
 
-Put predicate bodies on the line after `=>`. Format compound Boolean expressions
-with one condition per line and trailing `&&` or `||`, preserving parentheses.
-Keep Cop source lines within 90 characters, including comments and message templates.
-Put message literals on the line after `=` and keep diagnostics concise and actionable.
+- Start with one or two lines explaining the rule's purpose and rationale.
+- Write the message inline in `:toError(...)`. It renders once per matching item.
+- Write the scope inline too, e.g. `!inFolders(item.File, ['tests/'])`, so each rule shows
+  exactly which folders it exempts. Rules deliberately exempt different folders.
+- Inline one-line conditions. Add a local predicate only when it names a real concept
+  (e.g. `mayUseRegex`, `isFfiRegistration`). Sibling files share one namespace, so a rule
+  must not depend on another rule's predicates or lets; reusable queries go in packages.
+- Use named lists only for real policy data such as allowlists.
+- Keep Cop source lines within 100 characters.
 
-Use named collections to make a rule's policy readable from top to bottom. The
-environment rule defines each allowed group of calls separately, combines them
-into `allowed-calls`, and reports `env-calls - allowed-calls`. Put that policy
-first, followed by its supporting collections and parsed-argument helpers.
-Explain the architectural reason for each allowance, not what the implementation does.
-The environment supplies execution context; it must not become a second configuration API.
-Runtime credentials stay separate from shareable configuration, dependency locations belong
-to the host, installation owns host setup, and unsupported context must be reported rather
-than silently accepted. These principles should make sense without knowing Cop's implementation.
-Define file exclusions in a `source-files` collection instead of rule predicates.
-Avoid nesting argument inspection inside exception-table joins.
-
-Sibling files share one namespace. Reused facts live in `main.cop`, and individual rules
-combine them with filters and `Where` expressions. File scopes also live in `main.cop`:
-
-| Collection | Excludes |
-|------------|----------|
-| `source-files` | `tests/`, `samples/` |
-| `source-files-without-examples` | `tests/`, `samples/`, `examples/` |
-| `non-test-files` | `tests/` |
-| `files-without-samples-or-examples` | `samples/`, `examples/` |
-
-These scopes are intentionally different; use the one matching the rule's policy.
-`main.cop` also defines `source-calls`: C# calls from `source-files`. Call rules use
-this pre-filtered collection directly, e.g. `source-calls:isEnvironmentVariableAccess`,
-without repeating language filters or file membership checks.
-`non-test-calls` contains calls from `non-test-files`, in any parsed language.
-Use it when only tests are exempt; samples and examples remain checked.
-`source-types-without-examples` selects parsed types from `source-files-without-examples`.
-The interface policy delegates selection to `code.interfacesExcept(types, allowedNames)`.
-Its allowlist, C# scope, and recommendation to use abstract classes stay in the local rule.
+The environment rule is the one rule with more structure: it reports
+`env-calls - allowed-calls` and defines each allowed group separately, with the
+architectural reason for each allowance. The environment supplies execution context;
+it must not become a second configuration API.
 
 Reusable queries belong in packages; repository policy does not. `code` supplies parsed
 import/reference/property queries, declaration and call matching, argument inspection,
-suppression facts, and count comparisons. C#-specific fact predicates live in `csharp`.
-Do not put repository paths, framework choices, approved names, severity, or architectural
-messages into these APIs. Language check packages use the same common queries while
-retaining their own naming conventions, thresholds, suppressions, and diagnostics.
+folder scoping (`inFolders`, `withoutFolders`), and count comparisons. C#-specific fact
+predicates live in `csharp`. Do not put repository paths, approved names, or messages
+into these APIs.
 
 Individual rule IDs remain stable; the aggregate lists are `default-violations`, `derived-violations`,
 `ai-violations`, and `package-violations`.
 
-Give each diagnostic template a private, rule-specific `let` immediately before the
-violation list, and pass its name to `toError`. For example:
-
-```cop skip
-let namespace-message = '{item.Name} in {item.File.Path} must be in a namespace'
-
-export let types-without-namespace = codebase.Types:isCSharp
-    .Where(item.File.Path:in(source-files.Path))
-    .Where(!hasNamespace(item))
-    :toError(namespace-message)
-```
-
-The template renders for each matching item. Names must be unique across sibling files.
-
 The checks inspect parsed facts, but some are deliberately limited: import rules report
 types in importing files, name rules are heuristics, and project-setting rules reject
-nonblank invalid values without detecting empty or missing settings. Path matching and existing
-allowlists are unchanged.
+nonblank invalid values without detecting empty or missing settings.
 
 ## Default and package-source rules
 

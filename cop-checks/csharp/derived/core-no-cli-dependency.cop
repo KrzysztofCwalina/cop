@@ -1,10 +1,7 @@
 # Keep the language and runtime host-independent: no CLI command or REPL imports.
 
-let core-cli-message =
-    '{item.Name}: remove CLI/REPL dependencies; keep the core host-independent'
-
 export let derived-core-no-cli-dependency = codebase.Types
     .Where(
-        inCore(item.File) &&
-        importsCliCommandsOrRepl(item.File))
-    :toError(core-cli-message)
+        (item.File.Path:contains('cop/shared/') || item.File.Path:contains('cop/runtime/')) &&
+        importsAny(item.File, ['Cop.Cli.Commands', 'Cop.Repl']))
+    :toError('{item.Name}: remove CLI/REPL dependencies; keep the core host-independent')

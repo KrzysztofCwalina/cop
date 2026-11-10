@@ -5,9 +5,7 @@ import code
 # ICopCallable lets callable values retain their CopValue base class.
 let allowed-interfaces = ['ICopCallable']
 
-let interface-message =
-    'Use an abstract class instead of interface {item.Name} ({item.File.Path})'
-
 export let no-new-interfaces = code.interfacesExcept(
-    source-types-without-examples:isCSharp, allowed-interfaces)
-    :toError(interface-message)
+    codebase.Types:isCSharp.Where(!inFolders(item.File, ['tests/', 'samples/', 'examples/'])),
+    allowed-interfaces)
+    :toError('Use an abstract class instead of interface {item.Name} ({item.File.Path})')

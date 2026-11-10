@@ -2,9 +2,6 @@
 
 import code
 
-let nullable-setting-message =
-    'Project {item.Name} must set <Nullable>enable</Nullable>'
-
 export let derived-nullable-enabled = codebase.Projects
     .Where(hasOtherProjectPropertyValue(item, 'Nullable', 'enable'))
-    :toError(nullable-setting-message)
+    :toError('Project {item.Name} must set <Nullable>enable</Nullable>')

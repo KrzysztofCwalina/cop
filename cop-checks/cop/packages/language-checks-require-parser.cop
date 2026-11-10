@@ -1,37 +1,18 @@
 # Language-specific checks must use an explicit parser, not Program.Providers.
 
-predicate inLegacyLanguagePackage(File) =>
-    File.Path:startsWith('dotnet/') ||
-    File.Path:startsWith('js/') ||
-    File.Path:startsWith('python/') ||
-    File.Path:startsWith('java/') ||
-    File.Path:startsWith('go/') ||
-    File.Path:startsWith('rust/')
-
-predicate inLanguageChecks(File) =>
-    File.Path:startsWith('checks/csharp-') ||
-    File.Path:startsWith('checks/javascript-') ||
-    File.Path:startsWith('checks/python-') ||
-    File.Path:startsWith('checks/java-') ||
-    File.Path:startsWith('checks/go-') ||
-    File.Path:startsWith('checks/rust-')
-
-predicate inLanguagePackage(File) =>
-    inLegacyLanguagePackage ||
-    inLanguageChecks
+let language-package-paths = [
+    'dotnet/', 'js/', 'python/', 'java/', 'go/', 'rust/',
+    'checks/csharp-', 'checks/javascript-', 'checks/python-',
+    'checks/java-', 'checks/go-', 'checks/rust-'
+]
 
 predicate isProgramProviders(CodeExpression) =>
     isMemberOfIgnoringCase(CodeExpression, 'Program', 'Providers')
-predicate callsUnqualifiedCodebase(Statement) =>
-    Statement.MemberName:equals('codebase') &&
-    Statement.CallTarget.Kind == identifier
-predicate hasProgramProvidersArg(Statement) =>
-    Statement.ArgumentExpressions:any(isProgramProviders)
-
-let language-parser-message =
-    'Use codebase(<lang>.parse()), not codebase(Program.Providers)'
 
 export let lang-provider-hardcoded-violations = codebase.Calls
-    :callsUnqualifiedCodebase:hasProgramProvidersArg
-    .Where(inLanguagePackage(item.File))
-    :toError(language-parser-message)
+    .Where(
+        inFolders(item.File, language-package-paths) &&
+        item.MemberName:equals('codebase') &&
+        item.CallTarget.Kind == identifier &&
+        item.ArgumentExpressions:any(isProgramProviders))
+    :toError('Use codebase(<lang>.parse()), not codebase(Program.Providers)')

@@ -2,12 +2,6 @@
 
 import cop
 
-predicate hasIntrinsicsSuffix(File) =>
-    File.Path:endsWith('intrinsics.cop')
-
-let intrinsics-message =
-    'Intrinsic declaration must be in intrinsics.cop, not {item.File.Path}'
-
 export let intrinsics-in-wrong-file = codebase.Methods:asCop:isIntrinsic
-    .Where(!hasIntrinsicsSuffix(item.File))
-    :toError(intrinsics-message)
+    .Where(!item.File.Path:endsWith('intrinsics.cop'))
+    :toError('Intrinsic declaration must be in intrinsics.cop, not {item.File.Path}')

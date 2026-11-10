@@ -2,7 +2,6 @@
 
 import code
 
-let runtime-projects = ['runtime']
 let forbidden-providers = [
     'code'
     'markdown-provider'
@@ -15,11 +14,6 @@ let forbidden-providers = [
     'cop-provider'
 ]
 
-predicate isRuntime(Project) =>
-    Project.Name:in(runtime-projects)
-let runtime-dependency-message =
-    '{item.Name} must not reference providers other than filesystem-provider'
-
-export let layering-violations = codebase.Projects:isRuntime
-    .Where(referencesAny(item, forbidden-providers))
-    :toError(runtime-dependency-message)
+export let layering-violations = codebase.Projects
+    .Where(item.Name:in(['runtime']) && referencesAny(item, forbidden-providers))
+    :toError('{item.Name} must not reference providers other than filesystem-provider')

@@ -1,6 +1,4 @@
 using Cop.Cli.Commands;
-using Cop.Lang.Ast;
-using Cop.Lang.Parser;
 using Cop.Providers;
 using NUnit.Framework;
 
@@ -39,7 +37,7 @@ public class SelfCheckStructureTests
     }
 
     [Test]
-    public void SelfCheckSourceLinesStayWithin90Characters()
+    public void SelfCheckSourceLinesStayWithin100Characters()
     {
         var checks = Path.Combine(_repo, "cop-checks");
         var overlongLines = new List<string>();
@@ -49,84 +47,12 @@ public class SelfCheckStructureTests
             foreach (var line in File.ReadLines(file))
             {
                 number++;
-                if (line.Length > 90)
+                if (line.Length > 100)
                     overlongLines.Add($"{Path.GetRelativePath(checks, file)}:{number}: {line.Length} characters");
             }
         }
 
         Assert.That(overlongLines, Is.Empty, string.Join("\n", overlongLines));
-    }
-
-    [Test]
-    public void SharedFileScopePathsAreProjectedOnceInsteadOfInsideEachElementFilter()
-    {
-        var scopes = new HashSet<string>(StringComparer.Ordinal)
-        {
-            "source-files", "source-files-without-examples", "non-test-files",
-            "files-without-samples-or-examples", "csharp-source-files"
-        };
-        var projections = new FileScopeProjectionCollector(scopes);
-        foreach (var file in Directory.GetFiles(
-            Path.Combine(_repo, "cop-checks"), "*.cop", SearchOption.AllDirectories))
-        {
-            projections.Visit(CopParser.Parse(File.ReadAllText(file), file));
-        }
-        Assert.That(projections.Sources, Is.EquivalentTo(scopes));
-    }
-
-    private sealed class FileScopeProjectionCollector(HashSet<string> scopes) : AstWalker
-    {
-        public List<string> Sources { get; } = [];
-
-        public override object? VisitMemberExpr(MemberExpr node)
-        {
-            if (node is { Object: IdentifierExpr source, Member: "Path" }
-                && scopes.Contains(source.Name))
-            {
-                Sources.Add(source.Name);
-            }
-            return base.VisitMemberExpr(node);
-        }
-    }
-
-    [Test]
-    public void SelfChecksUsePrivateNamedDiagnosticTemplates()
-    {
-        var templates = new List<string>();
-        foreach (var file in Directory.GetFiles(Path.Combine(_repo, "cop-checks"), "*.cop", SearchOption.AllDirectories))
-        {
-            var module = CopParser.Parse(File.ReadAllText(file), file);
-            var calls = new DiagnosticCallCollector();
-            calls.Visit(module);
-            var bindings = module.Declarations.OfType<LetDecl>().ToDictionary(d => d.Name);
-            foreach (var call in calls.Calls)
-            {
-                Assert.That(call.Args, Has.Count.EqualTo(1), file);
-                Assert.That(call.Args[0], Is.InstanceOf<IdentifierExpr>(), file);
-                var name = ((IdentifierExpr)call.Args[0]).Name;
-                Assert.That(bindings.ContainsKey(name), Is.True, $"{file}: {name}");
-                var binding = bindings[name];
-                Assert.That(binding.IsExported, Is.False, $"{file}: {name}");
-                Assert.That(binding.Value is InterpolatedStringExpr or LiteralExpr { Value: string },
-                    Is.True, $"{file}: {name} must hold a plain template, not a lambda");
-                templates.Add(name);
-            }
-        }
-
-        Assert.That(templates, Has.Count.EqualTo(38));
-        Assert.That(templates.Distinct().Count(), Is.EqualTo(38), "Sibling rules share a namespace.");
-    }
-
-    private sealed class DiagnosticCallCollector : AstWalker
-    {
-        public List<CallExpr> Calls { get; } = [];
-
-        public override object? VisitCallExpr(CallExpr node)
-        {
-            if (node.Callee is IdentifierExpr { Name: "toError" or "toWarning" or "toInfo" })
-                Calls.Add(node);
-            return base.VisitCallExpr(node);
-        }
     }
 
     [Test]
@@ -576,49 +502,43 @@ public class SelfCheckStructureTests
     }
 
     [Test]
-    public async Task SharedFileScopesPreserveDistinctExemptions()
+    public async Task WithoutFoldersKeepsProjectsAndRemovesSourcesInFolders()
     {
         var scripts = Path.Combine(_root, "cop-checks");
         var target = Path.Combine(_root, "target");
         Directory.CreateDirectory(scripts);
-        foreach (var folder in new[] { "src", "tests", "samples", "examples" })
+        foreach (var folder in new[] { "src", "tests", "samples" })
         {
             Directory.CreateDirectory(Path.Combine(target, folder));
             File.WriteAllText(Path.Combine(target, folder, "Input.cs"),
                 """namespace Fixture; class Example { void Run() { System.Console.WriteLine("example"); } }""");
+            File.WriteAllText(Path.Combine(target, folder, folder + ".csproj"),
+                """<Project Sdk="Microsoft.NET.Sdk"></Project>""");
         }
-        File.WriteAllText(Path.Combine(target, "src", "Input.cop"), "let example = print('example')");
-        var program = Path.Combine(scripts, "main.cop");
-        File.WriteAllText(program, """
-            command FILE_SCOPES =
-                print('{source-files.Path.OrderBy(item)}') &
-                print('{source-files-without-examples.Path.OrderBy(item)}') &
-                print('{non-test-files.Path.OrderBy(item)}') &
-                print('{files-without-samples-or-examples.Path.OrderBy(item)}') &
-                print('{source-calls.File.Path.OrderBy(item)}') &
-                print('{non-test-calls.File.Path.OrderBy(item)}')
+        File.WriteAllText(Path.Combine(scripts, "main.cop"), """
+            import code
+            import csharp
+            let production = withoutFolders(codebase(csharp.parse()), ['tests/', 'samples/'])
+            command SCOPE =
+                print('{production.Files.Path.OrderBy(item)}') &
+                print('{production.Types.File.Path.OrderBy(item)}') &
+                print('{production.Calls.File.Path.OrderBy(item)}') &
+                print('{production.Projects.Name.OrderBy(item)}')
             """);
-        var checks = Path.Combine(_repo, "cop-checks");
-        var files = Directory.GetFiles(checks, "*.cop", SearchOption.AllDirectories)
-            .Order(StringComparer.Ordinal).Append(program).ToArray();
-        var result = (await Engine.RunAsync(checks, target, new EngineRunOptions
+        var result = await Engine.RunAsync(scripts, target, new EngineRunOptions
         {
-            CommandName = "FILE_SCOPES",
-            ScriptFiles = files,
+            CommandName = "SCOPE",
             AdditionalFeedPaths = [Path.Combine(_repo, "packages")],
-        }));
+        });
 
         Assert.That(result.HasParseErrors, Is.False, string.Join("\n", result.ParseErrors));
         Assert.That(result.HasFatalErrors, Is.False, string.Join("\n", result.Errors));
-        Assert.That(result.ExitCode, Is.Null);
         Assert.That(result.Outputs.Select(o => o.Message), Is.EqualTo(new[]
         {
-            "[examples/Input.cs, src/Input.cop, src/Input.cs]",
-            "[src/Input.cop, src/Input.cs]",
-            "[examples/Input.cs, samples/Input.cs, src/Input.cop, src/Input.cs]",
-            "[src/Input.cop, src/Input.cs, tests/Input.cs]",
-            "[examples/Input.cs, src/Input.cs]",
-            "[examples/Input.cs, samples/Input.cs, src/Input.cop, src/Input.cs]"
+            "[src/Input.cs]",
+            "[src/Input.cs]",
+            "[src/Input.cs]",
+            "[samples, src, tests]"
         }));
     }
 

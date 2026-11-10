@@ -14,14 +14,12 @@ let allowed-calls =
     # Unsupported host context must not lead to misleading analysis.
     rust-build-setting-reads
 
-let environment-message =
-    'Use CLI flags or config instead of environment variables for Cop settings'
-
 export let no-environment = (env-calls - allowed-calls)
-    :toError(environment-message)
+    :toError('Use CLI flags or config instead of environment variables for Cop settings')
 
 # Calls to inspect.
-let env-calls = source-calls:isEnvironmentVariableAccess
+let env-calls = codebase.Calls:isCSharp:isEnvironmentVariableAccess
+    .Where(!inFolders(item.File, ['tests/', 'samples/']))
 let env-reads = env-calls:isEnvRead
 
 # Allowed groups.

@@ -1,11 +1,8 @@
 # Use UTC or DateTimeOffset instead of DateTime.Now to avoid local-time ambiguity.
 
-predicate referencesDateTimeNow(Statement) =>
-    Statement.TypeName:equals('DateTime') &&
-    Statement.MemberName:equals('Now')
-let datetime-message =
-    'Use DateTimeOffset/UtcNow instead of DateTime.Now ({item.File.Path}:{item.Line})'
-
-export let derived-no-datetime-now = codebase.Statements:referencesDateTimeNow
-    .Where(item.File.Path:in(source-file-paths))
-    :toError(datetime-message)
+export let derived-no-datetime-now = codebase.Statements
+    .Where(
+        !inFolders(item.File, ['tests/', 'samples/']) &&
+        item.TypeName:equals('DateTime') &&
+        item.MemberName:equals('Now'))
+    :toError('Use DateTimeOffset/UtcNow instead of DateTime.Now ({item.File.Path}:{item.Line})')

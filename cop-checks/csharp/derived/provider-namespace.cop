@@ -1,18 +1,9 @@
 # Give DataProvider subclasses namespaces starting with Cop.Providers.
 
-let exempt-provider-names = ['TypeSpecHttpProvider' 'TypeSpecRawProvider']
-
-predicate hasProviderNamespacePrefix(File) =>
-    File.Namespace:startsWith('Cop.Providers')
-predicate hasExemptProviderName(Type) =>
-    Type.Name:in(exempt-provider-names)
-
-let provider-namespace-message =
-    '{item.Name}: namespace must start with Cop.Providers, not {item.File.Namespace}'
-
-export let derived-provider-namespace = codebase.Types:extendsDataProvider
-    .Where(item.File.Path:in(file-paths-without-samples-or-examples))
+export let derived-provider-namespace = codebase.Types
     .Where(
-        !hasProviderNamespacePrefix(item.File) &&
-        !hasExemptProviderName(item))
-    :toError(provider-namespace-message)
+        !inFolders(item.File, ['samples/', 'examples/']) &&
+        derivesFromAny(item, ['DataProvider']) &&
+        !item.File.Namespace:startsWith('Cop.Providers') &&
+        !item.Name:in(['TypeSpecHttpProvider', 'TypeSpecRawProvider']))
+    :toError('{item.Name}: namespace must start with Cop.Providers, not {item.File.Namespace}')
