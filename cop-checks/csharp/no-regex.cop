@@ -1,10 +1,9 @@
 # Reserve regex for :matches() and glob matching; use parsers elsewhere.
 
+let allowed-regex-types = ['RegexCache', 'FilterCompiler', 'FilterEvaluator', 'StandardLibrary']
+
 predicate mayUseRegex(Type) =>
-    Type.Name:contains('RegexCache') ||
-    Type.Name:contains('FilterCompiler') ||
-    Type.Name:contains('FilterEvaluator') ||
-    Type.Name:contains('StandardLibrary')
+    allowed-regex-types:any((name) => Type.Name:contains(name))
 
 let regex-users : [Type] = codebase.Types:isCSharp
     .Where(importsAny(item.File, ['System.Text.RegularExpressions']))

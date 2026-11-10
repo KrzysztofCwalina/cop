@@ -634,6 +634,38 @@ public class SelfCheckStructureTests
     }
 
     [Test]
+    [Explicit("Issue #113: documented string containsAny fails at runtime — remove when fixed")]
+    [Category("PendingFix")]
+    public async Task Issue113_StringContainsAnyMatchesDocumentedSubstrings()
+    {
+        var target = Path.Combine(_root, "target");
+        Directory.CreateDirectory(target);
+        File.WriteAllText(Path.Combine(target, "Input.cs"), """
+            namespace Fixture;
+            class CustomRegexCacheWrapper { }
+            class Unexpected { }
+            """);
+        File.WriteAllText(Path.Combine(_root, "main.cop"), """
+            import code
+            import csharp
+            let cb = codebase(csharp.parse())
+            command MAIN = {
+                foreach cb.Types.Where(item.Name:containsAny(['RegexCache'])) => '{item.Name}'
+                0
+            }
+            """);
+        var result = await Engine.RunAsync(_root, target, new EngineRunOptions
+        {
+            AdditionalFeedPaths = [Path.Combine(_repo, "packages")],
+        });
+
+        Assert.That(result.HasFatalErrors, Is.False, string.Join("\n", result.Errors));
+        Assert.That(result.Outputs.Select(o => o.Message),
+            Is.EqualTo(new[] { "CustomRegexCacheWrapper" }));
+        Assert.That(result.ExitCode, Is.EqualTo(0));
+    }
+
+    [Test]
     public async Task RegexCheckPreservesInfrastructureNameExemptions()
     {
         await AssertCheck(Path.Combine("csharp", "no-regex.cop"), "no-regex", "Input.cs", """
