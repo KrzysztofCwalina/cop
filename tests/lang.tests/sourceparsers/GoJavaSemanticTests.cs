@@ -443,7 +443,7 @@ public class GoJavaSemanticTests
                 Assert.That(output, Does.Contain($"bound=1;string={(version == 0 ? 1 : 0)}"));
                 Assert.That(output.Contains("Compiler selected string result"), Is.EqualTo(version == 0));
                 Assert.That(output, Does.Not.Contain("using simpler"));
-                string stableOutput = CliSummaryAssertions.NormalizeElapsedTime(output, 2, 4, 120);
+                string stableOutput = CliSummaryAssertions.NormalizeElapsedTime(output, 2, 1, 120, checks: true);
                 if (first is not null) Assert.That(stableOutput, Is.EqualTo(first));
                 first = stableOutput;
             }
