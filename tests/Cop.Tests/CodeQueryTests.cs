@@ -188,6 +188,44 @@ public class CodeQueryTests
             """, names);
     }
 
+    [TestCase("WhereIn", new[] { "IAllowed" })]
+    [TestCase("WhereNotIn", new[] { "IOther" })]
+    public async Task MembershipTransformsFilterParsedInterfaces(string method, string[] expected)
+    {
+        Write("target/Input.cs", """
+            namespace Fixture;
+            interface IAllowed { }
+            interface IOther { }
+            class Ordinary { }
+            """);
+        await AssertProgram($$"""
+            import code
+            import csharp
+            let allowed-interfaces = ['iallowed']
+            let interfaces = csharp.parse().Types:isInterface
+            let selected = interfaces.{{method}}(item.Name, allowed-interfaces)
+            command MAIN = {
+                foreach selected => '{item.Name}'
+                0
+            }
+            """, expected);
+    }
+
+    [TestCase("whereIn", new[] { "A", "A" })]
+    [TestCase("whereNotIn", new[] { "B" })]
+    public async Task CoreMembershipFunctionsAcceptExplicitSelectors(string function, string[] expected)
+    {
+        await AssertProgram($$"""
+            import core
+            let entries = [{ Name = 'A' }, { Name = 'B' }, { Name = 'A' }]
+            let selected = {{function}}(entries, (entry) => entry.Name, ['a'])
+            command MAIN = {
+                foreach selected => '{item.Name}'
+                0
+            }
+            """, expected);
+    }
+
     [Test]
     public async Task CSharpInterfacePredicateExcludesClassesAndOtherLanguages()
     {

@@ -1314,6 +1314,63 @@ command main = x + 1", "test.cop");
         Assert.That(((CopString)items[1]).Value, Is.EqualTo("Bus"));
     }
 
+    [TestCase("WhereIn", new[] { 1, 3 })]
+    [TestCase("whereIn", new[] { 1, 3 })]
+    [TestCase("WhereNotIn", new[] { 2, 4 })]
+    [TestCase("whereNotIn", new[] { 2, 4 })]
+    public async Task MembershipTransformsPreserveObjectsOrderAndDuplicates(string method, int[] expected)
+    {
+        var result = await EvalAsync($$"""
+            let entries = [
+                { Name = 'Allowed', Id = 1 },
+                { Name = 'Other', Id = 2 },
+                { Name = 'allowed', Id = 3 },
+                { Name = 'AllowedSuffix', Id = 4 }
+            ]
+            let allowed = ['ALLOWED']
+            command main = entries.{{method}}(item.Name, allowed).Select(item.Id)
+            """);
+
+        Assert.That(((CopList)result).Items.Select(value => ((CopInt)value).Value), Is.EqualTo(expected));
+    }
+
+    [TestCase("item.Name")]
+    [TestCase("(allowed) => allowed.Name")]
+    [TestCase("getName")]
+    public async Task MembershipSelectorsUseTheCallerScopeForValues(string selector)
+    {
+        var result = await EvalAsync($$"""
+            function getName(entry: object) : string => entry.Name
+            let allowed = ['A']
+            let entries = [{ Name = 'A' }, { Name = 'B' }]
+            command main = entries.WhereIn({{selector}}, allowed).Select(item.Name)
+            """);
+
+        Assert.That(((CopList)result).Items.Select(value => ((CopString)value).Value), Is.EqualTo(new[] { "A" }));
+    }
+
+    [TestCase("[1, 2].WhereIn(item, [])", new int[] { })]
+    [TestCase("[1, 2].WhereNotIn(item, [])", new[] { 1, 2 })]
+    [TestCase("[].WhereIn(item.Name, ['A'])", new int[] { })]
+    [TestCase("[].WhereNotIn(item.Name, ['A'])", new int[] { })]
+    [TestCase("[10, 20, 10].WhereIn(item, [10])", new[] { 10, 10 })]
+    [TestCase("[10, 20, 10].WhereNotIn(item, [10])", new[] { 20 })]
+    public async Task MembershipTransformsHandleEmptyCollectionsAndNumericKeys(string expression, int[] expected)
+    {
+        var result = await EvalExprAsync(expression);
+        Assert.That(((CopList)result).Items.Select(value => ((CopInt)value).Value), Is.EqualTo(expected));
+    }
+
+    [TestCase("[1].WhereIn(item)", "expects a selector and a collection")]
+    [TestCase("[1].WhereNotIn(item, [1], [2])", "expects a selector and a collection")]
+    [TestCase("[1].WhereIn(item, 1)", "expects a collection as its second argument")]
+    [TestCase("[].WhereNotIn(item, nic)", "expects a collection as its second argument")]
+    public void MembershipTransformsRejectInvalidArguments(string expression, string message)
+    {
+        var error = Assert.ThrowsAsync<CopEvaluationException>(() => EvalExprAsync(expression));
+        Assert.That(error!.Message, Does.Contain(message));
+    }
+
     [Test]
     public async Task OrderBySortsByKeyAscending()
     {

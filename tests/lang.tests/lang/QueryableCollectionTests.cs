@@ -187,6 +187,30 @@ public class QueryableCollectionTests
         Assert.That(svc.QueryCount, Is.EqualTo(1));
     }
 
+    [TestCase("WhereIn")]
+    [TestCase("WhereNotIn")]
+    public async Task MembershipTransformsRemainLazyAndPreserveProviderObjects(string method)
+    {
+        var first = new CopObject(new Dictionary<string, CopValue> { ["Name"] = new CopString("Allowed") });
+        var second = new CopObject(new Dictionary<string, CopValue> { ["Name"] = new CopString("Other") });
+        var third = new CopObject(new Dictionary<string, CopValue> { ["Name"] = new CopString("allowed") });
+        var service = new FakeQueryService(new CopList([first, second, third]));
+        var evaluator = new Evaluator();
+        evaluator.GlobalEnvironment.Define("items",
+            new CopQueryable("fixture", new ProviderQuery { RootPath = "." }, service.QueryProvider));
+        evaluator.GlobalEnvironment.Define("allowed",
+            new CopLazyCollection(() => new CopValue[] { new CopString("ALLOWED") }));
+        await evaluator.EvalModuleAsync(CopParser.Parse(
+            $"command MAIN = items.{method}(item.Name, allowed)", "membership.cop"));
+
+        var result = (CopLazyCollection)await evaluator.RunCommandAsync("MAIN");
+        Assert.That(service.QueryCount, Is.EqualTo(0));
+        CopValue[] expected = method == "WhereIn" ? [first, third] : [second];
+        Assert.That(await result.EnumerateAsync().ToArrayAsync(), Is.EqualTo(expected));
+        Assert.That(await result.EnumerateAsync().ToArrayAsync(), Is.EqualTo(expected));
+        Assert.That(service.QueryCount, Is.EqualTo(1));
+    }
+
     private class FakeQueryService
     {
         private readonly CopValue _result;

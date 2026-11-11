@@ -789,6 +789,39 @@ public sealed class Evaluator
                 })));
                 return result;
             }
+            case "WhereIn" or "whereIn" or "WhereNotIn" or "whereNotIn":
+            {
+                if (argExprs.Count != 2)
+                {
+                    throw new CopEvaluationException($"{member} expects a selector and a collection",
+                        argExprs.FirstOrDefault()?.Line ?? 0, _filePath);
+                }
+
+                CopValue values = await ForceValueAsync(
+                    await EvalAsync(argExprs[1], env, cancellationToken), cancellationToken);
+                if (!IsCollectionValue(values))
+                {
+                    throw new CopEvaluationException($"{member} expects a collection as its second argument",
+                        argExprs[1].Line, _filePath);
+                }
+
+                CopList allowed = values as CopList ?? new CopList(
+                    await CoerceToEnumerableAsync(values, cancellationToken).ToListAsync(cancellationToken));
+                bool negated = member is "WhereNotIn" or "whereNotIn";
+                return await TransformAsync(new CopLazyCollection(deferredCancellationToken =>
+                    CoerceToEnumerableAsync(collection, deferredCancellationToken).Where(async (item, itemCancellationToken) =>
+                    {
+                        CopValue key = await ForceValueAsync(
+                            await EvalElementExprAsync(argExprs[0], item, env, itemCancellationToken), itemCancellationToken);
+                        if (key is ICopCallable selector)
+                        {
+                            key = await ForceValueAsync(
+                                await selector.InvokeAsync([item], this, env, itemCancellationToken), itemCancellationToken);
+                        }
+
+                        return EvalInMembership(key, allowed) != negated;
+                    })));
+            }
             case "OrderBy" or "orderBy" or "OrderByDescending" or "orderByDescending":
             {
                 if (argExprs.Count != 1)

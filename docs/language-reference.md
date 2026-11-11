@@ -883,6 +883,8 @@ Transforms operate on the collection as a whole and return a new list or value. 
 
 ```ruby
 Items.Where(predicate)       # subset of matching items — e.g. Items.Where(isPublic)
+Items.WhereIn(selector, values)    # keep items whose selected value is in values
+Items.WhereNotIn(selector, values) # keep items whose selected value is not in values
 Items.First(predicate)       # first matching item
 Items.Last(predicate)        # last matching item
 Items.Single(predicate)      # single matching item
@@ -899,6 +901,26 @@ Items.Max(projection)        # maximum numeric value
 Items.Average(projection)    # average numeric value
 Items.Reduce(accumulator, initial) # fold with (acc, item) => result
 ```
+
+`WhereIn` and `WhereNotIn` combine a projection and a membership test:
+
+```cop
+let interfaces = [{ Name = 'IAllowed' }, { Name = 'IOther' }]
+let allowed-interfaces = ['IAllowed']
+let allowed = interfaces.WhereIn(item.Name, allowed-interfaces)
+let unexpected = interfaces.WhereNotIn(item.Name, allowed-interfaces)
+command MAIN = print('{allowed.Count} allowed, {unexpected.Count} unexpected')
+# => 1 allowed, 1 unexpected
+```
+
+These are equivalent to `.Where(item.Name:in(allowed-interfaces))` and
+`.Where(!item.Name:in(allowed-interfaces))`. Membership uses exact values, ignoring
+string case, just like `:in`. Both helpers preserve the original objects, order,
+and duplicates. An empty value list keeps no items with `WhereIn` and all items
+with `WhereNotIn`. Explicit selectors such as `(entry) => entry.Name` also work.
+With `import core`, the function forms are
+`whereIn(items, selector, values)` and `whereNotIn(items, selector, values)`,
+using an explicit lambda or named function for the selector.
 
 #### Collection Concatenation (`+`)
 
