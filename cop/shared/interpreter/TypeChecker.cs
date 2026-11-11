@@ -751,7 +751,8 @@ public sealed partial class TypeChecker
 
     private IT? InferCall(CallExpr call)
     {
-        if (call.Callee is MemberExpr { Member: "Where" or "where" } where
+        if (call.Callee is MemberExpr
+            { Member: "Where" or "where" or "WhereIn" or "whereIn" or "WhereNotIn" or "whereNotIn" } where
             && InferExpr(where.Object) is { IsCollection: true } collection)
         {
             return collection;

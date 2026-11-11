@@ -88,6 +88,25 @@ public class StructuralCheckPolicyTests
         }
     }
 
+    [TestCase("WhereIn", "Name", false)]
+    [TestCase("WhereIn", "Source", true)]
+    [TestCase("WhereNotIn", "Name", false)]
+    [TestCase("WhereNotIn", "Source", true)]
+    public void MembershipTransformsPreserveSemanticElementType(string method, string member, bool isRaw)
+    {
+        var diagnostics = Check(Model + $$"""
+            let samples : [Sample] = []
+            let selected = samples.{{method}}(item.Name, ['a'])
+                .Where(item.{{member}}:endsWith('b'))
+            """);
+
+        Assert.That(diagnostics, Has.Count.EqualTo(isRaw ? 1 : 0));
+        if (isRaw)
+        {
+            Assert.That(diagnostics[0].Message, Does.Contain("'Source'"));
+        }
+    }
+
     [TestCase("Comment.Content:startsWith(' ')")]
     public void AllowsFormattingChecksOnParsedCommentContent(string expression)
     {

@@ -15,6 +15,18 @@ export type Group : object = {
 export function where(items: [T], condition: (T) => bool) : [T] 
   => reduce(items, (acc, item) => condition(item) ? acc.concat([item]) : acc, [])
 
+## Keeps items whose selected value is in values, using case-insensitive membership.
+## Preserves the original items, their order, and duplicates.
+## Example: interfaces.WhereIn(item.Name, allowedNames)
+export function whereIn(items: [T], selector: (T) => K, values: [K]) : [T]
+  => items.Where((candidate) => selector(candidate):in(values))
+
+## Keeps items whose selected value is not in values, using case-insensitive membership.
+## Preserves the original items, their order, and duplicates.
+## Example: interfaces.WhereNotIn(item.Name, allowedNames)
+export function whereNotIn(items: [T], selector: (T) => K, values: [K]) : [T]
+  => items.Where((candidate) => !selector(candidate):in(values))
+
 ## Projects each item through a transformation. Returns a new collection.
 ## Example: Types:select((item) => item.Name)
 export function select(items: [T], transform: (T) => R) : [R]
