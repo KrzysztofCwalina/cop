@@ -17,6 +17,9 @@ public record ProjectInfo(
 {
     /// <summary>Absolute source membership, or null when only the project directory is known.</summary>
     public List<string>? SourceFiles { get; init; }
+
+    /// <summary>Shared frameworks referenced by the project (e.g., C# FrameworkReference), distinct from target frameworks.</summary>
+    public List<string> FrameworkReferences { get; init; } = [];
     /// <summary>Backward-compatible constructor for providers compiled against older cop versions.</summary>
     public ProjectInfo(string name, string path, string? language, List<string> references)
         : this(name, path, language, references, [], []) { }

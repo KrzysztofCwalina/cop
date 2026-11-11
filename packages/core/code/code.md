@@ -23,7 +23,7 @@ Keep thresholds, allowlists, exclusions, severity, and diagnostic wording in the
 | Area | Helpers |
 |------|---------|
 | Imports | `importsAny(File, names)` |
-| Projects | `referencesAny`, `hasPackage`, `hasFramework` |
+| Projects | `referencesAny`, `hasPackage`, `targetsFramework`, `referencesFramework` |
 | Properties | `hasProjectProperty`, `hasProjectPropertyValue`, `hasOtherProjectPropertyValue` |
 | Declarations | `derivesFromAny`, `hasDecorator`, `hasNamespace`, `interfacesExcept` |
 | Named statements | `hasMemberName`, `hasTypeName` |

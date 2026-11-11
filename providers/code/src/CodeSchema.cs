@@ -156,7 +156,7 @@ public static class CodeSchema
 
                 TypeDef("Project", null,
                     Prop("Name"), Prop("Path"), Opt("Language"),
-                    Coll("References"), Coll("Packages"), Coll("Frameworks"),
+                    Coll("References"), Coll("Packages"), Coll("Frameworks"), Coll("FrameworkReferences"),
                     new ProviderPropertySchema { Name = "SourceFiles", Type = "string", IsCollection = true, IsOptional = true },
                     Coll("Properties", "ProjectProperty")),
 
