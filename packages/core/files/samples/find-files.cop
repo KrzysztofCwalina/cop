@@ -1,7 +1,7 @@
 import files
 
 # Find empty folders and large files
-let large-files = files.files():where(File.Size > 1000000)
+let large-files = files.files().Where(item.Size > 1000000)
 
 command MAIN =
     foreach files.folders():empty => 'Empty: {item.Path}' |

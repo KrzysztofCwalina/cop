@@ -1,4 +1,8 @@
 using System.Diagnostics;
+using Cop.Lang.Interpreter;
+using Cop.Lang;
+using Cop.Providers;
+using Cop.Repl;
 using NUnit.Framework;
 
 namespace Cop.Tests;
@@ -22,6 +26,93 @@ public class IssueRegressionTests
         {
             try { Directory.Delete(_workDir, recursive: true); } catch { }
         }
+    }
+
+    [Test]
+    public async Task Issue107_ReplEvaluatesExpressionsBindingsAndCommands()
+    {
+        File.WriteAllText(Path.Combine(_workDir, "main.cop"),
+            "let numbers = [2, 3]\n" +
+            "command SHOW = foreach numbers => '{item}'\n" +
+            "let once = print('once')\n" +
+            "command SAVEFILE = save('result.txt', 'saved')\n" +
+            "command ESCAPE = save('../escape.txt', 'bad')\n" +
+            "function __eval__() => 99\n");
+        File.WriteAllText(Path.Combine(_workDir, "sample.txt"), "sample");
+        List<string> errors = [];
+        await using ReplContext context = Engine.PrepareRepl(_workDir, _workDir, errors)!;
+        Assert.That(errors, Is.Empty);
+        Assert.That(context, Is.Not.Null);
+        ReplEvaluator repl = new ReplEvaluator(context);
+
+        Assert.That(await repl.EvaluateAsync("1 + 2"), Is.EqualTo(new[] { "3" }));
+        Assert.That(await repl.EvaluateAsync("__eval__()"), Is.EqualTo(new[] { "99" }));
+        Assert.That(await repl.EvaluateAsync("numbers"), Is.EqualTo(new[] { "2", "3" }));
+        Assert.That(await repl.EvaluateAsync("numbers.Count"), Is.EqualTo(new[] { "2" }));
+        Assert.That(await repl.EvaluateAsync("filesystem.Files.Count"), Is.EqualTo(new[] { "2" }));
+        Assert.That(await repl.EvaluateAsync("SHOW"), Is.EqualTo(new[] { "2", "3" }));
+        Assert.That(await repl.EvaluateAsync("once"), Is.EqualTo(new[] { "once" }));
+        Assert.That(await repl.EvaluateAsync("once"), Is.Empty);
+        Assert.That(await repl.EvaluateAsync("SAVEFILE"), Is.EqualTo(new[] { "SAVE: result.txt" }));
+        Assert.That(File.ReadAllText(Path.Combine(_workDir, "result.txt")), Is.EqualTo("saved"));
+        Assert.That(Assert.ThrowsAsync<InvalidOperationException>(
+            async () => await repl.EvaluateAsync("ESCAPE"))!.Message, Does.Contain("outside the project root"));
+        Assert.That(Assert.ThrowsAsync<CopEvaluationException>(
+            async () => await repl.EvaluateAsync("missing"))!.Message, Does.Contain("Undefined"));
+        Assert.ThrowsAsync<ParseException>(async () => await repl.EvaluateAsync("1 2"));
+        Assert.That(await repl.EvaluateAsync("1 + 4"), Is.EqualTo(new[] { "5" }));
+    }
+
+    [Test]
+    public async Task Issue107_ReplLoadsDeclaredFeedsAndExternalProviders()
+    {
+        string feed = Path.Combine(RepoRoot, "packages").Replace("\\", "\\\\").Replace("'", "\\'");
+        File.WriteAllText(Path.Combine(_workDir, "main.cop"), $$"""
+            feed '{{feed}}'
+            import code
+            import csharp
+            let model = csharp.parse()
+            command TYPES = foreach model.Types => '{item.Name}'
+            """);
+        File.WriteAllText(Path.Combine(_workDir, "Input.cs"), "namespace Fixture; class Found { }");
+        List<string> errors = [];
+        await using ReplContext context = Engine.PrepareRepl(_workDir, _workDir, errors)!;
+        Assert.That(errors, Is.Empty, string.Join("\n", errors));
+        ReplEvaluator repl = new ReplEvaluator(context);
+
+        Assert.That(await repl.EvaluateAsync("model.Types.Count"), Is.EqualTo(new[] { "1" }));
+        Assert.That(await repl.EvaluateAsync("TYPES"), Is.EqualTo(new[] { "Found" }));
+    }
+
+    [Test]
+    public void Issue117_PublishedSelfChecksAnalyzeFixtureWithoutMissingMethod()
+    {
+        const string sample = """
+            // Fixture for the repository's interface policy.
+            namespace Fixture.Example;
+            /// <summary>A contract rejected by the repository's interface policy.</summary>
+            public interface IUnexpected
+            {
+                /// <summary>Executes the fixture operation.</summary>
+                void Run();
+            }
+            """;
+        File.WriteAllText(Path.Combine(_workDir, "Wrong.cop"),
+            "export function misplaced(value : string) : string => intrinsic");
+        File.WriteAllText(Path.Combine(_workDir, "Sample.cs"), sample);
+        foreach (string folder in new[] { "tests", "samples", "examples" })
+        {
+            Directory.CreateDirectory(Path.Combine(_workDir, folder));
+            File.WriteAllText(Path.Combine(_workDir, folder, "Sample.cs"), sample);
+        }
+
+        var result = RunCop($"\"{Path.Combine(RepoRoot, "cop-checks", "main.cop")}\" -t \"{_workDir}\" --no-user-checks --no-color", _workDir);
+
+        Assert.That(result.ExitCode, Is.EqualTo(1), Describe(result));
+        Assert.That(Normalize(result.Stdout), Is.EqualTo(
+            "Wrong.cop(1): error: Intrinsic declaration must be in intrinsics.cop, not Wrong.cop\n" +
+            "Sample.cs(4): error: Use an abstract class instead of interface IUnexpected (Sample.cs)"), Describe(result));
+        Assert.That(result.Stderr, Does.Not.Contain("MissingMethodException"), Describe(result));
     }
 
     // Issue #5

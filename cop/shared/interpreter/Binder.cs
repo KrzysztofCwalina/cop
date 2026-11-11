@@ -43,6 +43,7 @@ public sealed class Binder
     /// triggers duplicate-declaration diagnostics.
     /// </summary>
     private readonly IReadOnlySet<string> _programNames;
+    private readonly IReadOnlySet<string> _programTypeNames;
 
     /// <summary>
     /// When true, a bare identifier used in a value position that resolves to nothing is
@@ -54,11 +55,19 @@ public sealed class Binder
 
     public Binder(string? filePath = null, IReadOnlyList<Symbol>? externalSymbols = null,
         IReadOnlySet<string>? programNames = null, bool reportUndefinedIdentifiers = false)
+        : this(filePath, externalSymbols, programNames, reportUndefinedIdentifiers, null)
+    {
+    }
+
+    public Binder(string? filePath, IReadOnlyList<Symbol>? externalSymbols,
+        IReadOnlySet<string>? programNames, bool reportUndefinedIdentifiers,
+        IReadOnlySet<string>? programTypeNames)
     {
         _filePath = filePath;
         _externalSymbols = externalSymbols ?? [];
         _programNames = programNames ?? new HashSet<string>(StringComparer.Ordinal);
         _reportUndefinedIdentifiers = reportUndefinedIdentifiers;
+        _programTypeNames = programTypeNames ?? new HashSet<string>(StringComparer.Ordinal);
     }
 
     /// <summary>
@@ -1098,6 +1107,11 @@ public sealed class Binder
 
         Symbol? symbol = _currentScope.Resolve(name);
         if (symbol is TypeSymbol or EnumSymbol)
+        {
+            return;
+        }
+
+        if (symbol is null && _programTypeNames.Contains(name))
         {
             return;
         }

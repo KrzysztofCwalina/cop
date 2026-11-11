@@ -70,9 +70,9 @@ public class IssueRegressionCoverageIndexTests
         new(52, CoverageKind.ImplementedHere, "IssueRegressionTests.Issue052_NamedViolationRuleIsRoutedThroughCheck"),
         new(53, CoverageKind.CoveredBy, "StructuralCheckPolicyTests"),
         new(54, CoverageKind.ImplementedHere, "SelfCheckStructureTests"),
-        new(55, CoverageKind.ImplementedHere, "SelfCheckStructureTests.Issue055_CodePackageSourceVerifiesWithoutSelfImportDuplicates (PendingFix)"),
+        new(55, CoverageKind.ImplementedHere, "SelfCheckStructureTests.Issue055_CodePackageSourceVerifiesWithoutSelfImportDuplicates"),
         new(60, CoverageKind.ImplementedHere, "PythonCodebaseRegressionTests.Issue060_PythonParseReturnsCodebase"),
-        new(61, CoverageKind.ImplementedHere, "IntrinsicArgumentRegressionTests.Issue061_VerifyRejectsIncompatibleIntrinsicArguments (PendingFix)"),
+        new(61, CoverageKind.ImplementedHere, "IntrinsicArgumentRegressionTests.Issue061_VerifyRejectsIncompatibleIntrinsicArguments"),
         new(62, CoverageKind.ImplementedHere, "PackageNamespaceRegressionTests.Issue062_QualifiedPurePackageFunctionExecutes"),
         new(63, CoverageKind.ImplementedHere, "LazySourceLocationRegressionTests.Issue063_ToErrorResolvesLazySourceLocationWithoutPriorFieldReads"),
         new(65, CoverageKind.ImplementedHere, "IntrinsicLiteralRegressionTests.Issue065_FunctionCanReturnIntrinsicStringLiteral"),
@@ -86,11 +86,11 @@ public class IssueRegressionCoverageIndexTests
         new(78, CoverageKind.ImplementedHere, "ProviderQueryRegressionTests.Issue078_CSharpFileBasedAppDirectivesAreAccepted"),
         new(80, CoverageKind.ImplementedHere, "ProviderQueryRegressionTests.Issue080_PythonQuotedReturnAnnotationsAreAccepted"),
         new(83, CoverageKind.ImplementedHere, "PythonCodebaseRegressionTests.Issue083_ClassCompoundStatementTerminatesWithExpectedClassMember"),
-        new(84, CoverageKind.ImplementedHere, "ForeachPipelineRegressionTests.Issue084_PipeSeparatedForeachCommandsProduceBothOutputs (PendingFix)"),
+        new(84, CoverageKind.ImplementedHere, "ForeachPipelineRegressionTests.Issue084_PipeSeparatedForeachCommandsProduceBothOutputs"),
         new(85, CoverageKind.ImplementedHere, "ToolchainCliIntegrationTests.ExplicitLocalFeed_DoesNotAttemptRemoteRestore"),
-        new(86, CoverageKind.CoveredBy, "ForeachPipelineRegressionTests.Issue084_PipeSeparatedForeachCommandsProduceBothOutputs (PendingFix; foreach composition family)"),
-        new(87, CoverageKind.ImplementedHere, "SiblingTypeVerifyRegressionTests.Issue087_VerifyResolvesSiblingParameterTypes (PendingFix)"),
-        new(88, CoverageKind.ImplementedHere, "ForeachPipelineRegressionTests.Issue088_MultilineCommandDoesNotSilentlyDropLiteralAndForeachOutput (PendingFix)"),
+        new(86, CoverageKind.CoveredBy, "ForeachPipelineRegressionTests.Issue086_ThreePipeSeparatedForeachCommandsExecuteInOrder"),
+        new(87, CoverageKind.ImplementedHere, "SiblingTypeVerifyRegressionTests.Issue087_VerifyResolvesSiblingParameterTypes"),
+        new(88, CoverageKind.ImplementedHere, "ForeachPipelineRegressionTests.Issue088_MultilineCommandDoesNotSilentlyDropLiteralAndForeachOutput"),
         new(89, CoverageKind.ImplementedHere, "PublishedCSharpMetadataRegressionTests.Issue089_SelfContainedHostBindsFrameworkAndLocalCalls_WithoutInstalledDotnet"),
         new(90, CoverageKind.CoveredBy, "ToolchainCliIntegrationTests.ExplicitLocalFeed_DoesNotAttemptRemoteRestore (duplicate of #85)"),
         new(91, CoverageKind.CoveredBy, "RustFrontendBundleTests.Issue091_StructuralDiscoveryMaterializesOnlyHelperAndNotices; RustFrontendTests.Issue091_ArchiveSourcesRemainDeferredUntilRealSemanticDemand; RustFrontendTests.Issue091_LocalMethodWithFullStandardLibraryKeepsExactSelectedDeclaration; native project_ownership_does_not_consider_unrelated_sysroot_crates"),
@@ -99,13 +99,15 @@ public class IssueRegressionCoverageIndexTests
         new(95, CoverageKind.ImplementedHere, "CSharpModernRegressionTests.Issue095_CSharp14DeclarationsRunWithoutInstalledDotnet"),
         new(96, CoverageKind.ImplementedHere, "CSharpModernRegressionTests.Issue096_AssignmentOnlyCatchesAreNotEmpty_AndRealEmptyCatchesRemainVisible"),
         new(97, CoverageKind.ImplementedHere, "ToolchainCliIntegrationTests.Issue097_EmptyProject_WarnsOnceWithoutDroppingSourcesOrProjectEdges; ToolchainCliIntegrationTests.Issue097_NonEmptyMalformedProject_RemainsAnAnalysisError"),
-        new(101, CoverageKind.ImplementedHere, "SelfCheckStructureTests.Issue101_EmptyTargetFrameworksPropertyRemainsVisibleToStructuralChecks (PendingFix)"),
+        new(101, CoverageKind.ImplementedHere, "SelfCheckStructureTests.Issue101_EmptyTargetFrameworksPropertyRemainsVisibleToStructuralChecks"),
         new(103, CoverageKind.ImplementedHere, "SelfCheckStructureTests.Issue103_NamedDiagnosticTemplateRendersEveryType; NamedTemplateTests"),
+        new(107, CoverageKind.ImplementedHere, "IssueRegressionTests.Issue107_ReplEvaluatesExpressionsBindingsAndCommands"),
         new(108, CoverageKind.ImplementedHere, "PackageDependencyRegressionTests"),
-        new(112, CoverageKind.ImplementedHere, "SelfCheckStructureTests.Issue112_CSharpParseCanBePassedToCodebaseParameters (PendingFix)"),
-        new(113, CoverageKind.ImplementedHere, "SelfCheckStructureTests.Issue113_StringContainsAnyMatchesDocumentedSubstrings (PendingFix)"),
-        new(116, CoverageKind.ImplementedHere, "SelfCheckStructureTests.Issue116_ChainedSourceScopeFiltersPassStrictVerification (PendingFix)"),
-        new(117, CoverageKind.ImplementedHere, "SelfCheckStructureTests.Issue117_PublishedCliPassesRepositorySelfChecks (PendingFix)"),
+        new(111, CoverageKind.CoveredBy, "SelfCheckStructureTests.Issue111_CSharpChecksAcceptsCSharpParseResult"),
+        new(112, CoverageKind.ImplementedHere, "SelfCheckStructureTests.Issue112_CSharpParseCanBePassedToCodebaseParameters"),
+        new(113, CoverageKind.ImplementedHere, "SelfCheckStructureTests.Issue113_StringContainsAnyMatchesDocumentedSubstrings"),
+        new(116, CoverageKind.ImplementedHere, "SelfCheckStructureTests.Issue116_ChainedSourceScopeFiltersPassStrictVerification; StructuralCheckPolicyTests.Issue116_ChainedWherePreservesSemanticElementType"),
+        new(117, CoverageKind.ImplementedHere, "SelfCheckStructureTests.Issue117_PublishedCliPassesRepositorySelfChecks; IssueRegressionTests.Issue117_PublishedSelfChecksAnalyzeFixtureWithoutMissingMethod"),
     ];
 
     [Test]
@@ -115,8 +117,8 @@ public class IssueRegressionCoverageIndexTests
         Assert.That(duplicates, Is.Empty, "Each issue must appear exactly once in the regression coverage index.");
 
         var coveredIssues = Coverage.Select(c => c.Issue).OrderBy(i => i).ToArray();
-        Assert.That(coveredIssues, Is.EqualTo(Enumerable.Range(1, 55).Concat([60, 61, 62, 63, 65, 66, 70, 71, 72, 73, 75, 76, 78, 80, 83, 84, 85, 86, 87, 88, 89, 90, 91, 93, 94, 95, 96, 97, 101, 103, 108, 112, 113, 116, 117]).ToArray()),
-            "Regression coverage index must cover issues #1 through #55, #60-#63, #65-#66, #70-#73, #75-#76, #78, #80, #83-#91, #93-#97, #101, #103, #108, #112-#113, and #116-#117.");
+        Assert.That(coveredIssues, Is.EqualTo(Enumerable.Range(1, 55).Concat([60, 61, 62, 63, 65, 66, 70, 71, 72, 73, 75, 76, 78, 80, 83, 84, 85, 86, 87, 88, 89, 90, 91, 93, 94, 95, 96, 97, 101, 103, 107, 108, 111, 112, 113, 116, 117]).ToArray()),
+            "Regression coverage index must cover issues #1 through #55, #60-#63, #65-#66, #70-#73, #75-#76, #78, #80, #83-#91, #93-#97, #101, #103, #107-#108, #111-#113, and #116-#117.");
 
         var untracked = Coverage.Where(c => string.IsNullOrWhiteSpace(c.Detail)).Select(c => c.Issue).ToArray();
         Assert.That(untracked, Is.Empty, "Every issue must be ImplementedHere, CoveredBy(suiteName), or OutOfScope(reason).");

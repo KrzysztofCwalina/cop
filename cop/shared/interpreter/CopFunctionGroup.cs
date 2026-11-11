@@ -43,6 +43,16 @@ public sealed class CopFunctionGroup : CopValue, ICopCallable
         if (args.Count > 0)
         {
             CopValue subject = args[0];
+            while (subject is CopThunk thunk)
+            {
+                subject = await thunk.ForceAsync(cancellationToken);
+            }
+            bool subjectIsCollection = subject is CopList or CopLazyCollection or CopQueryable;
+            bool ambiguousCollectionTypes = subjectIsCollection && _overloads
+                .Where(o => o.Arity == args.Count && o.Declaration.Params.Count > 0
+                    && o.Declaration.Params[0].Type is { IsCollection: true })
+                .Select(o => o.Declaration.Params[0].Type!.Name)
+                .Distinct(StringComparer.OrdinalIgnoreCase).Take(2).Count() > 1;
 
             // Constraint/guard dispatch: when overloads carry a first-parameter constraint predicate
             // (e.g. `writesOutput(Statement:isCSharp)` vs `(Statement:isPython)`), pick the overload
@@ -97,13 +107,15 @@ public sealed class CopFunctionGroup : CopValue, ICopCallable
                         continue;
                     }
 
-                    string? paramType = overload.Declaration.Params[0].Type?.Name;
-                    if (paramType is null)
+                    TypeRef? parameterType = overload.Declaration.Params[0].Type;
+                    if (parameterType is null)
                     {
                         continue;
                     }
 
-                    int tier =
+                    string paramType = parameterType.Name;
+                    int tier = parameterType.IsCollection ? (subjectIsCollection && !ambiguousCollectionTypes ? 0 : -1) :
+                        subjectIsCollection && paramType is not ("collection" or "object") ? -1 :
                         string.Equals(paramType, subjectTypeName, StringComparison.OrdinalIgnoreCase) ? 0 :
                         (arityRegistry is not null && arityRegistry.IsSubtypeOf(subjectTypeName, paramType)) ? 1 :
                         (arityRegistry is not null && arityRegistry.ConformsTo(subjectTypeName, paramType)) ? 2 :
@@ -132,7 +144,7 @@ public sealed class CopFunctionGroup : CopValue, ICopCallable
                     {
                         Parameter firstParam = overload.Declaration.Params[0];
                         string? paramType = firstParam.Type?.Name;
-                        if (paramType is not null &&
+                        if (paramType is not null && firstParam.Type!.IsCollection == subjectIsCollection &&
                             string.Equals(paramType, subjectTypeName, StringComparison.OrdinalIgnoreCase))
                         {
                             return (await evaluator.CallUserFunctionAsync(overload, args, cancellationToken: cancellationToken));
@@ -213,6 +225,7 @@ public sealed class CopFunctionGroup : CopValue, ICopCallable
         CopBool => "bool",
         CopList => "collection",
         CopLazyCollection => "collection",
+        CopQueryable => "collection",
         _ => null
     };
 

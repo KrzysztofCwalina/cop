@@ -1879,6 +1879,16 @@ public sealed class Evaluator
             }
         }
 
+        if (methodName is "containsAny" or "ca"
+            && _ffi.Resolve(methodName) is { } builtin
+            && (!env.TryLookup(methodName, out CopValue? binding) || binding is CopExternalFunction))
+        {
+            List<CopValue> args = new List<CopValue> { collection };
+            args.AddRange(await EvalArgumentsAsync(call.Args, env, cancellationToken));
+            CopValue result = await builtin.InvokeAsync(args, this, env, cancellationToken);
+            return negated && result is CopBool b ? CopBool.Of(!b.IsTrue) : result;
+        }
+
         // Generic dispatch: collection-level when any arg is a lambda/callable (e.g.
         // Types:all(isPublic)) OR the resolved function's first parameter is a collection
         // (e.g. References:containsAny(['cop']) → containsAny(items:[string], values:[string])).
@@ -2330,6 +2340,14 @@ public sealed class Evaluator
             return false;
         }
 
+        if ((name is "contains" or "containsAny") && overloads.Any(o =>
+            o.Declaration.Body is IntrinsicBody
+            && o.Declaration.Params.Count == argCount + 1
+            && o.Declaration.Params[0].Type is { Name: "string", IsCollection: false }))
+        {
+            return true;
+        }
+
         string? itemType = (await FirstItemTypeNameAsync(collection, cancellationToken: cancellationToken));
         if (itemType is null)
         {
@@ -2534,7 +2552,7 @@ public sealed class Evaluator
         {
             ExpressionBody eb => (await EvalAsync(eb.Expr, funcEnv, cancellationToken: cancellationToken)),
             MappingBody mb => (await EvalMappingBodyAsync(mb, funcEnv, cancellationToken: cancellationToken)),
-            BlockBody bb => (await EvalBlockBodyAsync(bb, funcEnv, cancellationToken: cancellationToken)),
+            BlockBody bb => (await EvalBlockBodyAsync(bb, funcEnv, func.Declaration.IsCommand, cancellationToken)),
             IntrinsicBody => (await CallIntrinsicViaFFIAsync(func.Declaration.Name, args, funcEnv, cancellationToken: cancellationToken)),
             _ => CopNull.Instance
         };
@@ -2587,7 +2605,8 @@ public sealed class Evaluator
         return new CopObject(fields);
     }
 
-    private async ValueTask<CopValue> EvalBlockBodyAsync(BlockBody body, Environment env, CancellationToken cancellationToken = default)
+    private async ValueTask<CopValue> EvalBlockBodyAsync(BlockBody body, Environment env,
+        bool isCommand, CancellationToken cancellationToken = default)
     {
         CopValue result = CopNull.Instance;
         foreach (Statement stmt in body.Statements)
@@ -2595,6 +2614,11 @@ public sealed class Evaluator
             if (stmt is ExpressionStatement es)
             {
                 result = (await EvalAsync(es.Expr, env, cancellationToken: cancellationToken));
+                if (isCommand && result is CopString
+                    && es.Expr is LiteralExpr { Value: string } or InterpolatedStringExpr)
+                {
+                    await CallPrintAsync(result, env, cancellationToken);
+                }
             }
             else
             {

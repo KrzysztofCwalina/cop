@@ -74,7 +74,7 @@ Individual rule IDs remain stable; the aggregate lists are `default-violations`,
 
 The checks inspect parsed facts, but some are deliberately limited: import rules report
 types in importing files, name rules are heuristics, and project-setting rules reject
-nonblank invalid values without detecting empty or missing settings.
+invalid declared values, including empty values, without requiring missing settings.
 
 ## Default and package-source rules
 
@@ -164,10 +164,10 @@ These rules live under `cop/derived/`.
 ## Project settings
 | Rule | Description |
 |------|-------------|
-| `target-framework.cop` | Reject nonblank `TargetFramework` values other than `net10.0`; empty/missing values are not detected. |
-| `nullable-enabled.cop` | Reject nonblank `Nullable` values other than `enable`; empty/missing values are not detected. |
-| `implicit-usings.cop` | Reject nonblank `ImplicitUsings` values other than `enable`; empty/missing values are not detected. |
-| `single-target-framework.cop` | Reject any parsed `TargetFrameworks` property, even with only one framework. Empty properties are omitted by the provider and cannot be detected. |
+| `target-framework.cop` | Reject declared `TargetFramework` values other than `net10.0`, including empty values; missing settings are not detected. |
+| `nullable-enabled.cop` | Reject declared `Nullable` values other than `enable`, including empty values; missing settings are not detected. |
+| `implicit-usings.cop` | Reject declared `ImplicitUsings` values other than `enable`, including empty values; missing settings are not detected. |
+| `single-target-framework.cop` | Reject any parsed `TargetFrameworks` property, including empty properties and those with only one framework. |
 
 ## Tests
 | Rule | Description |

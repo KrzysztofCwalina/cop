@@ -7,8 +7,6 @@ namespace Cop.Tests;
 public class IntrinsicArgumentRegressionTests
 {
     [Test]
-    [Explicit("Issue #61: verify does not check intrinsic argument types - remove when fixed")]
-    [Category("PendingFix")]
     public void Issue061_VerifyRejectsIncompatibleIntrinsicArguments()
     {
         var repo = TestContext.CurrentContext.TestDirectory;
@@ -25,7 +23,19 @@ public class IntrinsicArgumentRegressionTests
                 import code
                 command MAIN = CHECK(ai.judge('The core must remain general-purpose.', 'source text'))
                 """);
+            var diagnostics = VerifyCommand.CollectDiagnostics([script], root, File.ReadAllText);
+            Assert.That(diagnostics.Select(d => d.Message),
+                Does.Contain("'ai.judge' argument 2 expects Codebase, got string"));
             Assert.That(VerifyCommand.Execute(script), Is.EqualTo(1));
+
+            File.WriteAllText(script, """
+                import ai
+                import code
+                import csharp
+                command MAIN = CHECK(ai.judge('The core must remain general-purpose.', csharp.parse()))
+                """);
+            diagnostics = VerifyCommand.CollectDiagnostics([script], root, File.ReadAllText);
+            Assert.That(diagnostics, Is.Empty, string.Join("\n", diagnostics.Select(d => d.Message)));
         }
         finally
         {

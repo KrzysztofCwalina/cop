@@ -29,6 +29,7 @@ public sealed partial class TypeChecker
     private readonly Dictionary<string, HashSet<string>> _bases = new(StringComparer.Ordinal);
     private readonly Dictionary<string, Dictionary<string, TypeRef>> _props = new(StringComparer.Ordinal);
     private readonly Dictionary<string, List<Sig>> _funcs = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, List<Sig>> _qualifiedFuncs = new(StringComparer.Ordinal);
     private readonly Dictionary<string, List<(TypeRef? Input, TypeRef Output)>> _narrowings = new(StringComparer.Ordinal); // predicate name -> narrowing overloads
     private readonly HashSet<string> _enums = new(StringComparer.Ordinal);
     private readonly HashSet<string> _knownTypes = new(StringComparer.Ordinal);
@@ -57,10 +58,32 @@ public sealed partial class TypeChecker
     public static IReadOnlyList<CopDiagnostic> Check(
         IEnumerable<ModuleNode> allModules,
         IEnumerable<(ModuleNode Module, string FilePath, string Source)> filesToCheck)
+        => Check(allModules, filesToCheck, null);
+
+    /// <summary>Checks modules using package-qualified callable signatures.</summary>
+    public static IReadOnlyList<CopDiagnostic> Check(
+        IEnumerable<ModuleNode> allModules,
+        IEnumerable<(ModuleNode Module, string FilePath, string Source)> filesToCheck,
+        IReadOnlyDictionary<string, List<ModuleNode>>? packageModules)
     {
         TypeChecker checker = new TypeChecker();
         List<(ModuleNode Module, string FilePath, string Source)> files = filesToCheck.ToList();
         checker.BuildModel(allModules, files.Select(f => f.Module));
+        if (packageModules is not null)
+        {
+            foreach ((string package, List<ModuleNode> modules) in packageModules)
+            {
+                foreach (FunctionDecl function in modules.SelectMany(m => m.Declarations)
+                    .OfType<FunctionDecl>().Where(f => f.IsExported))
+                {
+                    string name = $"{package}.{function.Name}";
+                    List<Sig> signatures = checker._qualifiedFuncs.TryGetValue(name, out List<Sig>? existing)
+                        ? existing : (checker._qualifiedFuncs[name] = []);
+                    signatures.Add(CreateSignature(function, name));
+                }
+            }
+        }
+
         foreach ((ModuleNode? module, string? filePath, string? source) in files)
         {
             checker.CheckModule(module, filePath, source);
@@ -143,9 +166,7 @@ public sealed partial class TypeChecker
 
                 case FunctionDecl fn:
                     List<Sig> sigs = _funcs.TryGetValue(fn.Name, out List<Sig>? s) ? s : (_funcs[fn.Name] = []);
-                    List<TypeRef?> ps = fn.Params.Select(pp => pp.Type).ToList();
-                    bool variadic = ps.Count > 0 && ps[^1] is { IsCollection: true };
-                    sigs.Add(new Sig(fn.Name, ps, variadic, fn.ReturnType, fn.IsPredicate, fn));
+                    sigs.Add(CreateSignature(fn, fn.Name));
                     // A narrowing predicate (`predicate p(T) : NarrowType => ...`) narrows the
                     // element type when used as a filter. A plain boolean predicate (ReturnType
                     // "bool" or none) does NOT narrow — it preserves the element type. Narrowing
@@ -161,6 +182,13 @@ public sealed partial class TypeChecker
                     break;
             }
         }
+    }
+
+    private static Sig CreateSignature(FunctionDecl function, string name)
+    {
+        List<TypeRef?> parameters = function.Params.Select(p => p.Type).ToList();
+        bool variadic = parameters.Count > 0 && parameters[^1] is { IsCollection: true };
+        return new Sig(name, parameters, variadic, function.ReturnType, function.IsPredicate, function);
     }
 
     // ── Checking ────────────────────────────────────────────────────────────
@@ -286,18 +314,27 @@ public sealed partial class TypeChecker
     /// <summary>Checks a direct call <c>f(args)</c> against the declared signature(s) of f.</summary>
     private void CheckDirectCall(CallExpr call)
     {
-        if (call.Callee is not IdentifierExpr id)
+        string? name = call.Callee switch
+        {
+            IdentifierExpr id => id.Name,
+            MemberExpr { Object: IdentifierExpr package } member
+                when !_locals.ContainsKey(package.Name) && !_topLevelLets.ContainsKey(package.Name)
+                => $"{package.Name}.{member.Member}",
+            _ => null
+        };
+        if (name is null)
         {
             return;
         }
 
-        if (!_funcs.TryGetValue(id.Name, out List<Sig>? overloads))
+        Dictionary<string, List<Sig>> functions = call.Callee is IdentifierExpr ? _funcs : _qualifiedFuncs;
+        if (!functions.TryGetValue(name, out List<Sig>? overloads))
         {
             return;
         }
 
         List<IT?> argTypes = call.Args.Select(InferExpr).ToList();
-        CheckAgainstOverloads(id.Name, overloads, argTypes, call.Line);
+        CheckAgainstOverloads(name, overloads, argTypes, call.Line);
     }
 
     /// <summary>
@@ -343,6 +380,14 @@ public sealed partial class TypeChecker
     /// </summary>
     private void CheckAgainstOverloads(string name, List<Sig> overloads, List<IT?> args, int line)
     {
+        List<Sig> matchingArity = overloads.Where(sig =>
+            args.Count >= sig.Params.Count - (sig.LastIsVariadic ? 1 : 0)
+            && (sig.LastIsVariadic || args.Count <= sig.Params.Count)).ToList();
+        if (matchingArity.Count > 0)
+        {
+            overloads = matchingArity;
+        }
+
         // If any overload plausibly accepts the args, accept (overload resolution is permissive).
         foreach (Sig sig in overloads)
         {
@@ -355,13 +400,16 @@ public sealed partial class TypeChecker
         // No overload accepts. Find the most specific concrete mismatch to report (single-overload
         // case gives the clearest message; with multiple overloads we only report if every overload
         // fails for the SAME definite reason on the same argument).
-        if (overloads.Count == 1)
+        List<string?> mismatches = [];
+        foreach (Sig overload in overloads)
         {
-            Accepts(overloads[0], args, out string? mismatch);
-            if (mismatch is not null)
-            {
-                Report(mismatch, line);
-            }
+            Accepts(overload, args, out string? mismatch);
+            mismatches.Add(mismatch);
+        }
+        if (mismatches.Count > 0 && mismatches[0] is { } first
+            && mismatches.All(m => m == first))
+        {
+            Report(first, line);
         }
     }
 
@@ -703,6 +751,12 @@ public sealed partial class TypeChecker
 
     private IT? InferCall(CallExpr call)
     {
+        if (call.Callee is MemberExpr { Member: "Where" or "where" } where
+            && InferExpr(where.Object) is { IsCollection: true } collection)
+        {
+            return collection;
+        }
+
         if (call.Callee is not IdentifierExpr id)
         {
             return null;
