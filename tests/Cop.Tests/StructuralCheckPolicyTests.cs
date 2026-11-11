@@ -66,6 +66,28 @@ public class StructuralCheckPolicyTests
         Assert.That(diagnostics, Is.Empty);
     }
 
+    [TestCase("Name", false)]
+    [TestCase("Source", true)]
+    public void Issue116_ChainedWherePreservesSemanticElementType(string member, bool isRaw)
+    {
+        var diagnostics = Check(Model + $$"""
+            let samples : [Sample] = []
+            let selected : [Sample] = samples
+                .Where(item.Name:contains('a'))
+                .Where(item.{{member}}:endsWith('b'))
+            """);
+
+        if (isRaw)
+        {
+            Assert.That(diagnostics, Has.Count.EqualTo(1));
+            Assert.That(diagnostics[0].Message, Does.Contain("'Source'"));
+        }
+        else
+        {
+            Assert.That(diagnostics, Is.Empty);
+        }
+    }
+
     [TestCase("Comment.Content:startsWith(' ')")]
     public void AllowsFormattingChecksOnParsedCommentContent(string expression)
     {

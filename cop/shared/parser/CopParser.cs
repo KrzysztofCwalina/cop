@@ -37,6 +37,22 @@ public class CopParser
         return parser.ParseModule();
     }
 
+    /// <summary>Parses one complete expression without registering a declaration.</summary>
+    public static Expression ParseExpressionSource(string source, string? filePath = null)
+    {
+        filePath ??= "<expression>";
+        List<Token> tokens = new Tokenizer(source, filePath).Tokenize();
+        CopParser parser = new CopParser(tokens, filePath, source);
+        Expression expression = parser.ParseExpression();
+        if (!parser.IsAtEnd())
+        {
+            Token token = parser.Peek();
+            throw new ParseException($"Unexpected token '{token.Value}'", filePath, token.Line,
+                sourceLine: ParseException.GetSourceLine(source, token.Line));
+        }
+        return expression;
+    }
+
     /// <summary>
     /// Parses with declaration-level error recovery, returning the partial AST plus any parse errors
     /// instead of throwing on the first one. For tooling (the language server) that needs a best-effort
@@ -738,15 +754,35 @@ public class CopParser
         FunctionBody body;
         if (Match(TokenKind.Equals))
         {
+            int equalsLine = Previous().Line;
             if (Check(TokenKind.LBrace))
             {
                 body = ParseBlockBody();
             }
             else
             {
-                // Single statement → wrap in block
+                int bodyLine = CurrentLine();
+                int bodyIndent = bodyLine > equalsLine ? GetLineIndent(bodyLine) : -1;
+                if (bodyIndent <= GetLineIndent(line))
+                {
+                    bodyIndent = -1;
+                }
+
                 Statement? stmt = ParseStatement();
                 List<Statement> stmts = stmt is not null ? new List<Statement> { stmt } : new List<Statement>();
+                while (!IsAtEnd())
+                {
+                    if (IsForeachComposition())
+                    {
+                        Advance();
+                    }
+                    else if (!(bodyIndent >= 0 && IsKeyword(Peek(), "foreach")
+                        && Peek().Line > Previous().Line && GetLineIndent(Peek().Line) >= bodyIndent))
+                    {
+                        break;
+                    }
+                    stmts.Add(ParseForEachStatement());
+                }
                 body = new BlockBody(stmts);
             }
         }
@@ -996,8 +1032,9 @@ public class CopParser
     private Expression ParseBitwiseOr()
     {
         Expression left = ParseBitwiseAnd();
-        while (Match(TokenKind.Pipe))
+        while (Check(TokenKind.Pipe) && !IsForeachComposition())
         {
+            Advance();
             int line = Previous().Line;
             Expression right = ParseBitwiseAnd();
             left = new BinaryExpr(left, BinaryOp.BitwiseOr, right, line);
@@ -1784,6 +1821,10 @@ public class CopParser
             if (stmt is not null)
             {
                 stmts.Add(stmt);
+                if (IsForeachComposition())
+                {
+                    Advance();
+                }
             }
             else
             {
@@ -1792,6 +1833,41 @@ public class CopParser
         }
         Expect(TokenKind.RBrace, "'}'");
         return new BlockBody(stmts);
+    }
+
+    private int GetLineIndent(int line)
+    {
+        string? text = _source is null ? null : ParseException.GetSourceLine(_source, line);
+        if (text is null)
+        {
+            return -1;
+        }
+
+        int indent = 0;
+        while (indent < text.Length && char.IsWhiteSpace(text[indent]))
+        {
+            indent++;
+        }
+        return indent;
+    }
+
+    private bool IsForeachComposition()
+    {
+        if (!Check(TokenKind.Pipe) || !IsKeyword(PeekNext(), "foreach"))
+        {
+            return false;
+        }
+
+        CopParser lookahead = new CopParser(_tokens, _filePath, _source) { _pos = _pos + 2 };
+        try
+        {
+            lookahead.ParseExpression();
+            return lookahead.Check(TokenKind.Arrow);
+        }
+        catch (ParseException)
+        {
+            return false;
+        }
     }
 
     /// <summary>

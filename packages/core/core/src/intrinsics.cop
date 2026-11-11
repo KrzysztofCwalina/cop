@@ -186,3 +186,11 @@ export predicate lessOrEqual(value: object, limit: object) => value <= limit
 
 ## Short form of lessOrEqual.
 export predicate le(value: object, limit: object) => lessOrEqual(value, limit)
+
+## Returns true when the string contains the value (case-insensitive).
+## Example: 'RegexCache':contains('regex')
+export predicate contains(value: string, search: string) => intrinsic
+
+## Returns true if any value is a case-insensitive substring of the string.
+## Example: 'RegexCache':containsAny(['regex', 'filter'])
+export predicate containsAny(value: string, values: [string]) => intrinsic

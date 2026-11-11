@@ -2,6 +2,7 @@
 
 using Cop.Core;
 using Cop.Lang;
+using Cop.Lang.Interpreter;
 
 namespace Cop.Providers;
 
@@ -37,6 +38,11 @@ public class ReplContext : IAsyncDisposable
     /// <summary>Service for executing path-scoped provider queries.</summary>
     public ProviderQueryService QueryService { get; set; }
 
+    internal LanguageBridge? Bridge { get; init; }
+    internal ModuleLoader? ModuleLoader { get; init; }
+    internal List<PrintOutput> Outputs { get; init; } = [];
+    internal Dictionary<string, List<string>> FileOutputLines { get; init; } = [];
+
     /// <summary>Creates a session context from parsed scripts and provider metadata.</summary>
     public ReplContext(List<Engine.ParsedModule> modules, TypeRegistry typeRegistry,
         string rootPath, string scriptsDir,
@@ -49,7 +55,7 @@ public class ReplContext : IAsyncDisposable
         ProviderPackages = providerPackages;
         TotalFileCount = modules.Count;
         QueryService = new ProviderQueryService(
-            Directory.GetCurrentDirectory(), Engine.ExcludedDirectoryNames);
+            rootPath, Engine.ExcludedDirectoryNames);
     }
 
     /// <summary>Releases external providers retained for interactive queries.</summary>

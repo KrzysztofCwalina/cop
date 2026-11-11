@@ -222,10 +222,24 @@ public static class VerifyCommand
         // flagged as undefined. Used as a fallback only — not added to any scope, so it never
         // triggers a duplicate-declaration diagnostic.
         HashSet<string> programNames = new HashSet<string>(StringComparer.Ordinal);
+        HashSet<string> programTypeNames = new HashSet<string>(StringComparer.Ordinal);
         foreach ((ModuleNode? programModule, string _, string _) in modules)
         {
             foreach (Declaration decl in programModule.Declarations)
             {
+                if (decl is TypeDecl type)
+                {
+                    programTypeNames.Add(type.Name);
+                }
+                else if (decl is EnumDecl enumDecl)
+                {
+                    programTypeNames.Add(enumDecl.Name);
+                }
+                else if (decl is FlagsDecl flags)
+                {
+                    programTypeNames.Add(flags.Name);
+                }
+
                 string? declName = decl switch
                 {
                     TypeDecl td => td.Name,
@@ -273,7 +287,8 @@ public static class VerifyCommand
 
         foreach ((ModuleNode? module, string? filePath, string? source) in modules)
         {
-            Binder binder = new Binder(filePath, externalSymbols, programNames, reportUndefinedIdentifiers: true);
+            Binder binder = new Binder(filePath, externalSymbols, programNames,
+                reportUndefinedIdentifiers: true, programTypeNames: programTypeNames);
             BindingResult bindingResult = binder.Bind(module);
 
             foreach (BindingDiagnostic bd in bindingResult.Diagnostics)
@@ -299,7 +314,7 @@ public static class VerifyCommand
         // Conservative: only confident, concrete incompatibilities are reported.
         IEnumerable<ModuleNode> typeModel = modules.Select(m => m.Module).Concat(moduleLoader.LoadedModules);
         IEnumerable<(ModuleNode Module, string FilePath, string Source)> toCheck = modules.Select(m => (m.Module, m.FilePath, m.Source));
-        diagnostics.AddRange(TypeChecker.Check(typeModel, toCheck));
+        diagnostics.AddRange(TypeChecker.Check(typeModel, toCheck, moduleLoader.PackageModules));
 
         if (strictStructure)
         {

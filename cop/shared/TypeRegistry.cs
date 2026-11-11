@@ -22,6 +22,7 @@ public class TypeRegistry
     public Dictionary<string, Func<object, CancellationToken, ValueTask<object?>>>?
         GetAsyncAccessors(string typeName) => _asyncAccessors.GetValueOrDefault(typeName);
     private readonly Dictionary<string, TypeDescriptor> _types = new();
+    private readonly HashSet<string> _declaredTypeNames = new(StringComparer.Ordinal);
     private readonly Dictionary<string, CollectionDeclaration> _collections = new();
     private readonly Dictionary<string, FlagsDefinition> _flagsTypes = new();
     private readonly Dictionary<string, int> _flagsConstants = new();
@@ -775,6 +776,15 @@ public class TypeRegistry
 
     /// <summary>Whether the registry contains a type with the specified name.</summary>
     public bool HasType(string name) => _types.ContainsKey(name);
+
+    /// <summary>Records declared types without replacing provider-backed descriptors.</summary>
+    public void RegisterDeclaredTypeNames(IEnumerable<string> names)
+    {
+        _declaredTypeNames.UnionWith(names);
+    }
+
+    /// <summary>Whether a type has a descriptor or is declared in the current program.</summary>
+    public bool IsKnownType(string name) => HasType(name) || _declaredTypeNames.Contains(name);
 
     /// <summary>
     /// Whether the registry contains a collection with the specified name.

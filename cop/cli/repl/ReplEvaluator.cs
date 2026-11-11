@@ -220,8 +220,7 @@ public class ReplEvaluator
             return null;
         }
 
-        await Engine.LoadProvidersAsync(_context, cancellationToken);
-        return RunWithCommand(input);
+        return await Engine.RunReplCommandAsync(_context, input, cancellationToken);
     }
 
     private async ValueTask<List<string>?> TryEvaluateLetBindingAsync(
@@ -242,34 +241,14 @@ public class ReplEvaluator
             return null;
         }
 
-        await Engine.LoadProvidersAsync(_context, cancellationToken);
-        string snippet = $"foreach {input} => '{{item}}'";
-        return EvaluateSnippet(snippet);
+        return await EvaluateExpressionAsync(letDecl.Name, cancellationToken);
     }
 
     private async ValueTask<List<string>> EvaluateExpressionAsync(
         string input, CancellationToken cancellationToken)
     {
-        await Engine.LoadProvidersAsync(_context, cancellationToken);
-        return EvaluateSnippet(input);
+        return await Engine.EvaluateReplExpressionAsync(_context, input, cancellationToken);
     }
-
-
-
-    private List<string> EvaluateSnippet(string snippet)
-    {
-        // TODO: Migrate REPL snippet execution to the new evaluator pipeline.
-        _ = snippet;
-        return ["REPL evaluation not yet migrated to new pipeline"];
-    }
-
-    private List<string> RunWithCommand(string commandName)
-    {
-        // TODO: Migrate REPL command execution to the new evaluator pipeline.
-        _ = commandName;
-        return ["REPL evaluation not yet migrated to new pipeline"];
-    }
-
 
     /// <summary>
     /// Gets all available identifiers for completion: commands, lets, collections.

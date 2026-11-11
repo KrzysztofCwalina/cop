@@ -145,7 +145,7 @@ public class SelfCheckStructureTests
 
         Assert.That(result.HasFatalErrors, Is.False, string.Join("\n", result.Errors));
         Assert.That(result.Outputs.Select(o => o.Message), Is.Empty);
-        Assert.That(result.ExitCode, Is.EqualTo(0));
+        Assert.That(result.ExitCode, Is.EqualTo(0), string.Join("\n", result.Warnings ?? []));
     }
 
     [TestCase(false)]
@@ -188,8 +188,6 @@ public class SelfCheckStructureTests
     }
 
     [Test]
-    [Explicit("Issue #112: csharp.parse() fails a Codebase parameter at runtime — remove when fixed")]
-    [Category("PendingFix")]
     public async Task Issue112_CSharpParseCanBePassedToCodebaseParameters()
     {
         var target = Path.Combine(_root, "target");
@@ -200,7 +198,10 @@ public class SelfCheckStructureTests
             import code
             import csharp
             let production = withoutFolders(csharp.parse(), ['tests/', 'samples/'])
-            command MAIN = print('{production.Types.Name}')
+            command MAIN = {
+                print('{production.Types.Name}')
+                0
+            }
             """);
         var diagnostics = VerifyCommand.CollectDiagnostics([main], _root, File.ReadAllText);
         Assert.That(diagnostics, Is.Empty, string.Join("\n", diagnostics.Select(d => d.Message)));
@@ -212,6 +213,43 @@ public class SelfCheckStructureTests
         Assert.That(result.HasFatalErrors, Is.False, string.Join("\n", result.Errors));
         Assert.That(result.Outputs.Select(o => o.Message), Is.EqualTo(new[] { "[Ordinary]" }));
         Assert.That(result.ExitCode, Is.EqualTo(0));
+    }
+
+    [TestCase(false)]
+    [TestCase(true)]
+    public async Task Issue111_CSharpChecksAcceptsCSharpParseResult(bool importCore)
+    {
+        var target = Path.Combine(_root, "target");
+        Directory.CreateDirectory(target);
+        File.WriteAllText(Path.Combine(target, "Input.cs"), """
+            using System.Threading;
+            namespace Fixture;
+            class Ordinary {
+                void Run() { Thread.Sleep(1); }
+            }
+            """);
+        var main = Path.Combine(_root, "main.cop");
+        File.WriteAllText(main, (importCore ? "import core\n" : "") + """
+            import code
+            import csharp
+            import csharp-checks
+            let violations = csharpChecks(csharp.parse())
+                .Where(item.Message:equals('Use Task.Delay instead of Thread.Sleep'))
+            command MAIN = CHECK(violations)
+            """);
+        var diagnostics = VerifyCommand.CollectDiagnostics([main], _root, File.ReadAllText);
+        Assert.That(diagnostics, Is.Empty, string.Join("\n", diagnostics.Select(d => d.Message)));
+        var result = await Engine.RunAsync(_root, target, new EngineRunOptions
+        {
+            AdditionalFeedPaths = [Path.Combine(_repo, "packages")],
+        });
+
+        Assert.That(result.HasFatalErrors, Is.False, string.Join("\n", result.Errors));
+        Assert.That(result.Outputs.Select(o => o.Message), Is.EqualTo(new[]
+        {
+            "Input.cs(4): error: Use Task.Delay instead of Thread.Sleep [thread-sleep-calls]"
+        }));
+        Assert.That(result.ExitCode, Is.EqualTo(1));
     }
 
     [Test]
@@ -235,8 +273,6 @@ public class SelfCheckStructureTests
     }
 
     [Test]
-    [Explicit("Issue #55: verifying code/src imports its own CHECK declaration twice - remove when fixed")]
-    [Category("PendingFix")]
     public void Issue055_CodePackageSourceVerifiesWithoutSelfImportDuplicates()
     {
         var source = Path.Combine(_repo, "packages", "core", "code", "src");
@@ -633,10 +669,9 @@ public class SelfCheckStructureTests
             "remove Microsoft.AspNetCore.App for single-file publishing");
     }
 
-    [Test]
-    [Explicit("Issue #113: documented string containsAny fails at runtime — remove when fixed")]
-    [Category("PendingFix")]
-    public async Task Issue113_StringContainsAnyMatchesDocumentedSubstrings()
+    [TestCase(false)]
+    [TestCase(true)]
+    public async Task Issue113_StringContainsAnyMatchesDocumentedSubstrings(bool importCore)
     {
         var target = Path.Combine(_root, "target");
         Directory.CreateDirectory(target);
@@ -645,12 +680,22 @@ public class SelfCheckStructureTests
             class CustomRegexCacheWrapper { }
             class Unexpected { }
             """);
-        File.WriteAllText(Path.Combine(_root, "main.cop"), """
+        File.WriteAllText(Path.Combine(_root, "main.cop"), (importCore ? "import core\n" : "") + """
             import code
             import csharp
             let cb = codebase(csharp.parse())
+            let collectionMatch = ['alpha', 'beta']:containsAny(['beta'])
+            let collectionMiss = ['alpha', 'beta']:containsAny(['bet'])
+            let empty = 'anything':containsAny([])
+            let alias = 'RegexCache':ca(['regex'])
+            let scalarContains = 'RegexCache':contains('regex')
+            let collectionContains = ['alpha', 'beta']:contains('beta')
+            let collectionSubstring = ['alpha', 'beta']:contains('bet')
             command MAIN = {
-                foreach cb.Types.Where(item.Name:containsAny(['RegexCache'])) => '{item.Name}'
+                foreach cb.Types.Where(item.Name:containsAny(['regexcache'])) => '{item.Name}'
+                print('collections:{collectionMatch}:{collectionMiss}')
+                print('empty:{empty};alias:{alias}')
+                print('contains:{scalarContains}:{collectionContains}:{collectionSubstring}')
                 0
             }
             """);
@@ -661,7 +706,8 @@ public class SelfCheckStructureTests
 
         Assert.That(result.HasFatalErrors, Is.False, string.Join("\n", result.Errors));
         Assert.That(result.Outputs.Select(o => o.Message),
-            Is.EqualTo(new[] { "CustomRegexCacheWrapper" }));
+            Is.EqualTo(new[] { "CustomRegexCacheWrapper", "collections:true:false", "empty:false;alias:true",
+                "contains:true:true:false" }));
         Assert.That(result.ExitCode, Is.EqualTo(0));
     }
 
@@ -784,9 +830,11 @@ public class SelfCheckStructureTests
     }
 
     [TestCase(null, false)]
+    [TestCase("", true)]
+    [TestCase("   ", true)]
     [TestCase("net10.0", true)]
     [TestCase("net10.0;net9.0", true)]
-    public async Task MultiTargetingCheckRejectsNonblankTargetFrameworksProperties(string? value, bool hasViolation)
+    public async Task MultiTargetingCheckRejectsDeclaredTargetFrameworksProperties(string? value, bool hasViolation)
     {
         var setting = value is null ? "" : $"<TargetFrameworks>{value}</TargetFrameworks>";
         await AssertCheck(Path.Combine("csharp", "derived", "single-target-framework.cop"),
@@ -797,8 +845,6 @@ public class SelfCheckStructureTests
     }
 
     [Test]
-    [Explicit("Issue #101: empty project properties are omitted from the parsed model — remove when fixed")]
-    [Category("PendingFix")]
     public async Task Issue101_EmptyTargetFrameworksPropertyRemainsVisibleToStructuralChecks()
     {
         await AssertCheck(Path.Combine("csharp", "derived", "single-target-framework.cop"),
@@ -829,7 +875,7 @@ public class SelfCheckStructureTests
             command MAIN = CHECK({binding})
             """);
 
-        foreach (var value in new[] { forbidden, allowed, null })
+        foreach (var value in new[] { forbidden, "", "   ", allowed, null })
         {
             var setting = value is null ? "" : $"<{property}>{value}</{property}>";
             File.WriteAllText(Path.Combine(target, "Input.csproj"),
@@ -840,10 +886,11 @@ public class SelfCheckStructureTests
             }));
 
             Assert.That(result.HasFatalErrors, Is.False, string.Join("\n", result.Errors));
-            Assert.That(result.Outputs.Select(o => o.Message), Is.EqualTo(value == forbidden
+            var invalid = value is not null && value != allowed;
+            Assert.That(result.Outputs.Select(o => o.Message), Is.EqualTo(invalid
                 ? new[] { $"Input.csproj(0): error: {message}" }
                 : Array.Empty<string>()), $"Setting: {value ?? "(missing)"}");
-            Assert.That(result.ExitCode, Is.EqualTo(value == forbidden ? 1 : 0));
+            Assert.That(result.ExitCode, Is.EqualTo(invalid ? 1 : 0));
         }
     }
 

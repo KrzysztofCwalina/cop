@@ -806,6 +806,53 @@ public static class StandardLibrary
             return CopBool.Of(str.Contains(sub, StringComparison.OrdinalIgnoreCase));
         });
 
+        ffi.RegisterAsync("containsAny", async (args, env, cancellationToken) =>
+        {
+            if (args.Count != 2)
+            {
+                throw new CopEvaluationException("containsAny() requires a value and a collection of strings");
+            }
+
+            CopValue subject = await Evaluator.ForceValueAsync(args[0], cancellationToken);
+            CopValue candidates = await Evaluator.ForceValueAsync(args[1], cancellationToken);
+            if (candidates is not (CopList or CopLazyCollection or CopQueryable))
+            {
+                throw new CopEvaluationException("containsAny() requires a collection of strings as its second argument");
+            }
+
+            List<string> values = [];
+            await foreach (CopValue candidate in CoerceToEnumerableAsync(candidates, cancellationToken))
+            {
+                if (await Evaluator.ForceValueAsync(candidate, cancellationToken) is not CopString value)
+                {
+                    throw new CopEvaluationException("containsAny() requires a collection of strings as its second argument");
+                }
+                values.Add(value.Value);
+            }
+
+            if (subject is CopString text)
+            {
+                return CopBool.Of(values.Any(value => text.Value.Contains(value, StringComparison.OrdinalIgnoreCase)));
+            }
+            if (subject is CopList or CopLazyCollection or CopQueryable)
+            {
+                await foreach (CopValue item in CoerceToEnumerableAsync(subject, cancellationToken))
+                {
+                    if (await Evaluator.ForceValueAsync(item, cancellationToken) is not CopString value)
+                    {
+                        throw new CopEvaluationException("containsAny() requires a string or a collection of strings");
+                    }
+                    if (values.Contains(value.Value, StringComparer.Ordinal))
+                    {
+                        return CopBool.True;
+                    }
+                }
+                return CopBool.False;
+            }
+
+            throw new CopEvaluationException("containsAny() requires a string or a collection of strings");
+        });
+
         ffi.RegisterAsync("equals", async (args, env, cancellationToken) =>
         {
             if (args.Count < 2)

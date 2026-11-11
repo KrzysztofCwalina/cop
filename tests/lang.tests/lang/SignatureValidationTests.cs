@@ -1,4 +1,5 @@
 using NUnit.Framework;
+using Cop.Lang;
 using Cop.Lang.Ast;
 using Cop.Lang.Interpreter;
 using Cop.Lang.Parser;
@@ -79,6 +80,18 @@ command main = double(21)", cancellationToken: CancellationToken.None));
 function items() : [object] => [1, 2, 3]
 command main = items()", cancellationToken: CancellationToken.None));
         Assert.That(result, Is.InstanceOf<CopList>());
+    }
+
+    [Test]
+    public async Task CollectionOverloadsPreserveExistingArityFallback()
+    {
+        var result = await EvalAsync("""
+            function choose(items : [string]) : string => 'strings'
+            function choose(items : [int]) : string => 'ints'
+            command main = choose([1])
+            """);
+
+        Assert.That(((CopString)result).Value, Is.EqualTo("ints"));
     }
 
     [Test]
@@ -354,6 +367,18 @@ command main = text(42)", "test.cop");
         Assert.That(TypeValidator.IsCompatible(error, new TypeRef("Error")), Is.True);
         Assert.That(TypeValidator.IsCompatible(error, new TypeRef("Other")), Is.False);
         Assert.That(TypeValidator.IsCompatible(CopNull.Instance, new TypeRef("Error")), Is.False);
+    }
+
+    [Test]
+    public void IsCompatible_ProviderProxyAcceptsDeclaredButNotUnknownTypes()
+    {
+        var registry = new TypeRegistry();
+        registry.RegisterDeclaredTypeNames(["DeclaredRecord"]);
+        var proxy = new CopProviderProxy("sample", new Cop.Lang.Interpreter.Environment());
+
+        Assert.That(TypeValidator.IsCompatible(proxy, new TypeRef("DeclaredRecord"), registry), Is.True);
+        Assert.That(TypeValidator.IsCompatible(proxy, new TypeRef("UnknownRecord"), registry), Is.False);
+        Assert.That(TypeValidator.IsCompatible(proxy, new TypeRef("int"), registry), Is.False);
     }
 
     [Test]

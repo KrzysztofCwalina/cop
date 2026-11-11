@@ -3215,6 +3215,18 @@ const packages = {
         "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/core/src/intrinsics.cop#L188"
       },
       {
+        "name": "contains",
+        "appliesTo": "string",
+        "desc": "Returns true when the string contains the value (case-insensitive).\nExample: 'RegexCache':contains('regex')",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/core/src/intrinsics.cop#L192"
+      },
+      {
+        "name": "containsAny",
+        "appliesTo": "string",
+        "desc": "Returns true if any value is a case-insensitive substring of the string.\nExample: 'RegexCache':containsAny(['regex', 'filter'])",
+        "sourceUrl": "https://github.com/KrzysztofCwalina/cop/blob/master/packages/core/core/src/intrinsics.cop#L196"
+      },
+      {
         "name": "text",
         "appliesTo": "string",
         "desc": "Converts a string to text (identity — returns string as-is).",

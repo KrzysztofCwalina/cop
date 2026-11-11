@@ -111,7 +111,7 @@ public static class CSharpProjectDiscovery
                 {
                     string elName = el.Name.LocalName;
                     string elValue = el.Value;
-                    if (!string.IsNullOrWhiteSpace(elValue) && s_propertyNames.Contains(elName))
+                    if (s_propertyNames.Contains(elName))
                     {
                         properties[elName] = elValue.Trim();
                         AddTargetFrameworks(frameworks, elName, elValue);

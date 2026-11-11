@@ -1169,6 +1169,9 @@ function STATISTICS() = { TYPE-COUNT & FILE-COUNT }
 
 Running `cop STATISTICS` executes both functions in order.
 
+Indented `command` bodies can also compose `foreach` statements with `|`; each loop runs once,
+in order. An indented string literal in the command body is printed before the following loop.
+
 #### Conditional Commands
 
 Use `predicate? command` to conditionally execute a command — a degenerate ternary where the command is skipped when the condition is false:

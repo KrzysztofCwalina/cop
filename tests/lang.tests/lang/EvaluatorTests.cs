@@ -252,6 +252,19 @@ public class EvaluatorTests
     }
 
     [Test]
+    public async Task UserDefinedContainsAnyOverloadsPreservePerItemFiltering()
+    {
+        var result = await EvalAsync("""
+            function containsAny(items: [string], values: [string]) : bool => false
+            predicate containsAny(value: string, values: [string]) => value == 'alpha'
+            let names = ['alpha', 'beta']
+            command main = names:containsAny(['unused']).Count
+            """);
+
+        Assert.That(((CopInt)result).Value, Is.EqualTo(1));
+    }
+
+    [Test]
     public async Task EvalCall_TextJoinOnCollection_ResolvesTwoArgOverload()
     {
         // Regression (#30): `coll.text(sep)` must join the collection. The single-arg `text(value)`
