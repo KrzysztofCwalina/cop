@@ -45,6 +45,41 @@ public class SampleValidationTests
         }
     }
 
+    [Test]
+    public async Task FindFilesSampleReportsEmptyFoldersAndFilesAboveTheSizeThreshold()
+    {
+        var target = Path.Combine(TestContext.CurrentContext.WorkDirectory, "find-files-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(target);
+        try
+        {
+            Directory.CreateDirectory(Path.Combine(target, "empty"));
+            using (var file = File.Create(Path.Combine(target, "boundary.bin")))
+                file.SetLength(1_000_000);
+            using (var file = File.Create(Path.Combine(target, "large.bin")))
+                file.SetLength(1_000_001);
+
+            var sampleDirectory = Path.Combine(PackagesDir, "core", "files", "samples");
+            var sample = Path.Combine(sampleDirectory, "find-files.cop");
+            var result = await Engine.RunAsync(sampleDirectory, target, new EngineRunOptions
+            {
+                ScriptFiles = [sample],
+                AdditionalFeedPaths = [PackagesDir],
+            });
+
+            Assert.That(result.HasParseErrors, Is.False, string.Join("\n", result.ParseErrors));
+            Assert.That(result.HasFatalErrors, Is.False, string.Join("\n", result.Errors));
+            Assert.That(result.Outputs.Select(output => output.Message), Is.EqualTo(new[]
+            {
+                "Empty: empty",
+                "Large: large.bin (1000001 bytes)",
+            }));
+        }
+        finally
+        {
+            Directory.Delete(target, recursive: true);
+        }
+    }
+
     [TestCaseSource(nameof(GetSampleFiles))]
     public async Task SampleCompiles(string sampleFilePath)
     {

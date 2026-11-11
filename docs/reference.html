@@ -5394,7 +5394,7 @@ const packages = {
     "samples": [
       {
         "title": "Find files",
-        "code": "import files\n\n# Find empty folders and large files\nlet large-files = files.files():where(File.Size > 1000000)\n\ncommand MAIN =\n    foreach files.folders():empty => 'Empty: {item.Path}' |\n    foreach large-files => 'Large: {item.Path} ({item.Size} bytes)'"
+        "code": "import files\n\n# Find empty folders and large files\nlet large-files = files.files().Where(item.Size > 1000000)\n\ncommand MAIN =\n    foreach files.folders():empty => 'Empty: {item.Path}' |\n    foreach large-files => 'Large: {item.Path} ({item.Size} bytes)'"
       }
     ],
     "collections": [],
