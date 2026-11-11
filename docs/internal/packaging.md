@@ -474,6 +474,11 @@ semantic model, since nullable flow can change nested annotations such as `Clien
 The nullable-analysis option is experimental in the pinned Roslyn version, so its diagnostic
 suppression is limited to this call site. Full interface enrichment remains unchanged.
 
+Relevant syntax nodes (imports, declarations, calls, creations, and catches) are indexed
+once per immutable C# syntax tree and reused by deferred fact preparation and semantic
+enrichment. The weakly keyed index does not keep completed source snapshots alive or reuse
+nodes after a source edit.
+
 Invocation resolution and inferred declaration types have separate, memoized demand phases.
 Reading a call's `TypeName` does not infer every `var` declaration; reading a syntactically
 known type (including object creation) does not construct a compilation. Each phase is

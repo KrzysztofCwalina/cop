@@ -6,6 +6,7 @@ using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Cop.Providers.SourceModel;
 using CheckTypeKind = Cop.Providers.SourceModel.TypeKind;
 using Microsoft.CodeAnalysis.Text;
+using System.Runtime.CompilerServices;
 
 namespace Cop.Providers.SourceParsers;
 
@@ -21,6 +22,54 @@ public class CSharpSourceParser : ISourceParser
 
     internal static CSharpParseOptions ParseOptions { get; } = CSharpParseOptions.Default
         .WithFeatures([KeyValuePair.Create("FileBasedProgram", "true")]);
+
+    private static readonly ConditionalWeakTable<SyntaxTree, SyntaxIndex> s_syntaxIndexes = new();
+
+    // Syntax trees are immutable. Reuse the relevant nodes across syntax extraction and
+    // deferred semantic passes without keeping completed provider snapshots alive.
+    private sealed class SyntaxIndex
+    {
+        internal List<UsingDirectiveSyntax> Usings { get; } = [];
+        internal List<TypeDeclarationSyntax> Types { get; } = [];
+        internal Dictionary<int, CatchClauseSyntax> Catches { get; } = [];
+        internal List<BaseObjectCreationExpressionSyntax> Creations { get; } = [];
+        internal List<ExpressionSyntax> Calls { get; } = [];
+        internal List<SyntaxNode> SemanticNodes { get; } = [];
+
+        internal SyntaxIndex(SyntaxTree tree)
+        {
+            foreach (SyntaxNode node in tree.GetRoot().DescendantNodes())
+            {
+                switch (node)
+                {
+                    case UsingDirectiveSyntax directive:
+                        Usings.Add(directive);
+                        break;
+                    case TypeDeclarationSyntax declaration:
+                        Types.Add(declaration);
+                        break;
+                    case CatchClauseSyntax clause:
+                        Catches.Add(clause.SpanStart, clause);
+                        break;
+                    case BaseObjectCreationExpressionSyntax creation:
+                        Creations.Add(creation);
+                        Calls.Add(creation);
+                        SemanticNodes.Add(creation);
+                        break;
+                    case InvocationExpressionSyntax invocation:
+                        Calls.Add(invocation);
+                        SemanticNodes.Add(invocation);
+                        break;
+                    case LocalDeclarationStatementSyntax declaration when declaration.Declaration.Type.IsVar:
+                        SemanticNodes.Add(declaration);
+                        break;
+                }
+            }
+        }
+    }
+
+    private static SyntaxIndex GetSyntaxIndex(SyntaxTree tree) =>
+        s_syntaxIndexes.GetValue(tree, static key => new SyntaxIndex(key));
 
     /// <inheritdoc />
     public override ValueTask<SourceFile?> ParseAsync(
@@ -51,11 +100,12 @@ public class CSharpSourceParser : ISourceParser
         }
 
         CompilationUnitSyntax root = tree.GetCompilationUnitRoot();
+        SyntaxIndex syntax = GetSyntaxIndex(tree);
 
         List<TypeDeclaration> types = new List<TypeDeclaration>();
 
         // Extract using directives
-        List<string> usings = root.DescendantNodes().OfType<UsingDirectiveSyntax>()
+        List<string> usings = syntax.Usings
             .Select(u => u.Name?.ToString() ?? u.ToString().TrimEnd(';').Trim())
             .Where(u => !string.IsNullOrWhiteSpace(u))
             .ToList();
@@ -130,7 +180,8 @@ public class CSharpSourceParser : ISourceParser
         DeferCatchFilterFacts(tree, allStatements, () => standaloneModel.Value);
         DeferCancellationFacts(tree, allStatements, () => standaloneModel.Value);
         DeferOwnershipFacts(tree, allStatements, () => standaloneModel.Value);
-        (List<RegionInfo>? regions, HashSet<int>? commentLines) = ExtractTrivia(root, sourceText, allStatements);
+        (List<RegionInfo>? regions, HashSet<int>? commentLines, List<CommentInfo> comments) =
+            ExtractTrivia(root, sourceText, allStatements);
         allStatements = allStatements.OrderBy(s => s.Line)
             .ThenBy(s => (s as CSharpStatementInfo)?.SyntaxStart ?? -1).ToList();
 
@@ -144,7 +195,7 @@ public class CSharpSourceParser : ISourceParser
         return new SourceFile(filePath, "csharp", types, allStatements, sourceText)
         {
             Usings = usings,
-            Imports = root.DescendantNodes().OfType<UsingDirectiveSyntax>().Select(u => new ImportInfo(u.Name?.ToString() ?? string.Empty, LineOf(u))
+            Imports = syntax.Usings.Select(u => new ImportInfo(u.Name?.ToString() ?? string.Empty, LineOf(u))
             {
                 Alias = u.Alias?.Name.Identifier.ValueText,
                 IsStatic = u.StaticKeyword.IsKind(SyntaxKind.StaticKeyword),
@@ -153,9 +204,7 @@ public class CSharpSourceParser : ISourceParser
             Namespace = ns,
             Regions = regions,
             CommentLines = commentLines,
-            Comments = root.DescendantTrivia().Where(t => t.IsKind(SyntaxKind.SingleLineCommentTrivia))
-                .Select(t => new CommentInfo("singleLine", t.ToString()[2..],
-                    t.GetLocation().GetLineSpan().StartLinePosition.Line + 1)).ToList(),
+            Comments = comments,
             ParseErrors = CollectSyntaxErrors(filePath, tree)
         };
     }
@@ -285,8 +334,7 @@ public class CSharpSourceParser : ISourceParser
         }
 
         Lazy<SemanticModel> model = new(getModel);
-        Dictionary<int, CatchClauseSyntax> clauses = tree.GetRoot().DescendantNodes()
-            .OfType<CatchClauseSyntax>().ToDictionary(clause => clause.SpanStart);
+        Dictionary<int, CatchClauseSyntax> clauses = GetSyntaxIndex(tree).Catches;
         foreach (CSharpStatementInfo statement in catches)
         {
             if (clauses.TryGetValue(statement.SyntaxStart, out CatchClauseSyntax? clause))
@@ -301,8 +349,7 @@ public class CSharpSourceParser : ISourceParser
         Func<SemanticModel> getModel)
     {
         Lazy<SemanticModel> model = new(getModel);
-        Dictionary<int, CatchClauseSyntax> clauses = tree.GetRoot().DescendantNodes()
-            .OfType<CatchClauseSyntax>().ToDictionary(clause => clause.SpanStart);
+        Dictionary<int, CatchClauseSyntax> clauses = GetSyntaxIndex(tree).Catches;
         foreach (CSharpStatementInfo statement in statements.OfType<CSharpStatementInfo>()
                      .Where(statement => statement.Kind == "catch"))
         {
@@ -322,8 +369,7 @@ public class CSharpSourceParser : ISourceParser
             .GroupBy(statement => statement.SyntaxStart)
             .ToDictionary(group => group.Key, group => group.ToArray());
         Lazy<SemanticModel> model = new(getModel);
-        foreach (BaseObjectCreationExpressionSyntax creation in tree.GetRoot().DescendantNodes()
-                     .OfType<BaseObjectCreationExpressionSyntax>())
+        foreach (BaseObjectCreationExpressionSyntax creation in GetSyntaxIndex(tree).Creations)
         {
             if (!calls.TryGetValue(creation.SpanStart, out CSharpStatementInfo[]? matches))
             {
@@ -466,7 +512,7 @@ public class CSharpSourceParser : ISourceParser
         List<TypeDeclaration> types, List<StatementInfo> allStatements, bool typeNamesOnly,
         SemanticModel? inferenceModel = null, bool resolveInvocations = true, bool resolveInferences = true)
     {
-        CompilationUnitSyntax root = tree.GetCompilationUnitRoot();
+        SyntaxIndex syntax = GetSyntaxIndex(tree);
 
         Dictionary<int, TypeDeclaration> typesByStart = new Dictionary<int, TypeDeclaration>();
         void AddTypes(IEnumerable<TypeDeclaration> declarations)
@@ -485,7 +531,7 @@ public class CSharpSourceParser : ISourceParser
 
         // Enrich type declarations with interface information
         foreach (TypeDeclarationSyntax node in typeNamesOnly ? Enumerable.Empty<TypeDeclarationSyntax>()
-                     : root.DescendantNodes().OfType<TypeDeclarationSyntax>())
+                     : syntax.Types)
         {
             if (typesByStart.TryGetValue(node.SpanStart, out TypeDeclaration? typeDecl))
             {
@@ -511,7 +557,7 @@ public class CSharpSourceParser : ISourceParser
             list.Add(s);
         }
 
-        foreach (SyntaxNode node in root.DescendantNodes())
+        foreach (SyntaxNode node in syntax.SemanticNodes)
         {
             if (node is ObjectCreationExpressionSyntax or ImplicitObjectCreationExpressionSyntax)
             {
@@ -1533,8 +1579,7 @@ public class CSharpSourceParser : ISourceParser
 
         // Statement extraction already covers direct calls. Walk syntax to include calls in
         // conditions, field initializers, arguments, and other nested expressions exactly once.
-        foreach (ExpressionSyntax? invocation in root.DescendantNodes().OfType<ExpressionSyntax>()
-                     .Where(n => n is InvocationExpressionSyntax or ObjectCreationExpressionSyntax or ImplicitObjectCreationExpressionSyntax))
+        foreach (ExpressionSyntax invocation in GetSyntaxIndex(root.SyntaxTree).Calls)
         {
             if (bySpan.TryGetValue(SpanOf(invocation), out CSharpStatementInfo? existing)
                 && existing.Kind == "call")
@@ -1639,11 +1684,12 @@ public class CSharpSourceParser : ISourceParser
     private static string ExtractBaseTypeName(TypeSyntax type) =>
         type is GenericNameSyntax generic ? generic.Identifier.Text : type.ToString();
 
-    private static (List<RegionInfo> Regions, HashSet<int> CommentLines) ExtractTrivia(
+    private static (List<RegionInfo> Regions, HashSet<int> CommentLines, List<CommentInfo> Comments) ExtractTrivia(
         CompilationUnitSyntax root, string sourceText, List<StatementInfo> statements)
     {
         List<RegionInfo> regions = new List<RegionInfo>();
         HashSet<int> commentLines = new HashSet<int>();
+        List<CommentInfo> comments = new List<CommentInfo>();
         Stack<(string Name, int Line)> stack = new Stack<(string Name, int Line)>();
         string[]? lines = null;
 
@@ -1652,6 +1698,10 @@ public class CSharpSourceParser : ISourceParser
             switch (trivia.Kind())
             {
                 case SyntaxKind.SingleLineCommentTrivia:
+                    comments.Add(new CommentInfo("singleLine", trivia.ToString()[2..],
+                        trivia.GetLocation().GetLineSpan().StartLinePosition.Line + 1));
+                    commentLines.Add(trivia.GetLocation().GetLineSpan().StartLinePosition.Line + 1);
+                    break;
                 case SyntaxKind.SingleLineDocumentationCommentTrivia:
                     commentLines.Add(trivia.GetLocation().GetLineSpan().StartLinePosition.Line + 1);
                     break;
@@ -1705,6 +1755,6 @@ public class CSharpSourceParser : ISourceParser
             }
         }
 
-        return (regions, commentLines);
+        return (regions, commentLines, comments);
     }
 }
