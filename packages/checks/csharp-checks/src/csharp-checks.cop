@@ -141,8 +141,8 @@ predicate isExecutableProject(Project) =>
 function consoleCallsOutsideFiles(statements: [Statement], executable-files: [string])
     : [Statement] =>
     statements:isConsoleCall:notIgnored
-        .Where(!item.File.FullPath:in(executable-files) &&
-            !item.File.Path:in(executable-files))
+        .WhereNotIn(item.File.FullPath, executable-files)
+        .WhereNotIn(item.File.Path, executable-files)
 
 ## Avoid Console output in library code
 export function consoleCalls(cb: Codebase) : [Violation] => consoleCallsOutsideFiles(cb.Statements, reduce(cb.Projects:isExecutableProject,

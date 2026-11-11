@@ -6,7 +6,7 @@ let providers-outside-namespace = ['TypeSpecHttpProvider', 'TypeSpecRawProvider'
 let shipped-provider-types : [Type] = shipped-code.Types
     .Where(derivesFromAny(item, ['DataProvider']))
 let checked-provider-types : [Type] = shipped-provider-types
-    .Where(!item.Name:in(providers-outside-namespace))
+    .WhereNotIn(item.Name, providers-outside-namespace)
 
 export let derived-provider-namespace = checked-provider-types
     .Where(!item.File.Namespace:startsWith('Cop.Providers'))

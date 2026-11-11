@@ -151,7 +151,7 @@ the allowed paths once rather than rebuilding `included-files.Path` for every ca
 
 ```cop skip
 let included-paths = included-files.Path
-let selected-calls = cb.Calls.Where(item.File.Path:in(included-paths))
+let selected-calls = cb.Calls.WhereIn(item.File.Path, included-paths)
 ```
 
 `let` bindings remain demand-driven and reuse their evaluated result. Completed

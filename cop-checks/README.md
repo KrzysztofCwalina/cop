@@ -39,7 +39,7 @@ named steps, then report the result with `:toError('...')`.
 let allowed-interfaces = ['ICopCallable']
 
 let interfaces : [Type] = production-code.Types:isInterface
-let new-interfaces : [Type] = interfaces.Where(!item.Name:in(allowed-interfaces))
+let new-interfaces : [Type] = interfaces.WhereNotIn(item.Name, allowed-interfaces)
 
 export let no-new-interfaces = new-interfaces
     :toError('Use an abstract class instead of interface {item.Name} ({item.File.Path})')
