@@ -3,9 +3,8 @@
 # ICopCallable lets callable values retain their CopValue base class.
 let allowed-interfaces = ['ICopCallable']
 
-let interfaces : [Type] = source-code.Types:isInterface
-let non-example-interfaces : [Type] = interfaces.Where(!inFolders(item.File, ['examples/']))
-let new-interfaces : [Type] = non-example-interfaces.Where(!item.Name:in(allowed-interfaces))
+let interfaces : [Type] = production-code.Types:isInterface
+let new-interfaces : [Type] = interfaces.Where(!item.Name:in(allowed-interfaces))
 
 export let no-new-interfaces = new-interfaces
     :toError('Use an abstract class instead of interface {item.Name} ({item.File.Path})')

@@ -104,6 +104,8 @@ public class IssueRegressionCoverageIndexTests
         new(108, CoverageKind.ImplementedHere, "PackageDependencyRegressionTests"),
         new(112, CoverageKind.ImplementedHere, "SelfCheckStructureTests.Issue112_CSharpParseCanBePassedToCodebaseParameters (PendingFix)"),
         new(113, CoverageKind.ImplementedHere, "SelfCheckStructureTests.Issue113_StringContainsAnyMatchesDocumentedSubstrings (PendingFix)"),
+        new(116, CoverageKind.ImplementedHere, "SelfCheckStructureTests.Issue116_ChainedSourceScopeFiltersPassStrictVerification (PendingFix)"),
+        new(117, CoverageKind.ImplementedHere, "SelfCheckStructureTests.Issue117_PublishedCliPassesRepositorySelfChecks (PendingFix)"),
     ];
 
     [Test]
@@ -113,8 +115,8 @@ public class IssueRegressionCoverageIndexTests
         Assert.That(duplicates, Is.Empty, "Each issue must appear exactly once in the regression coverage index.");
 
         var coveredIssues = Coverage.Select(c => c.Issue).OrderBy(i => i).ToArray();
-        Assert.That(coveredIssues, Is.EqualTo(Enumerable.Range(1, 55).Concat([60, 61, 62, 63, 65, 66, 70, 71, 72, 73, 75, 76, 78, 80, 83, 84, 85, 86, 87, 88, 89, 90, 91, 93, 94, 95, 96, 97, 101, 103, 108, 112, 113]).ToArray()),
-            "Regression coverage index must cover issues #1 through #55, #60-#63, #65-#66, #70-#73, #75-#76, #78, #80, #83-#91, #93-#97, #101, #103, #108, and #112-#113.");
+        Assert.That(coveredIssues, Is.EqualTo(Enumerable.Range(1, 55).Concat([60, 61, 62, 63, 65, 66, 70, 71, 72, 73, 75, 76, 78, 80, 83, 84, 85, 86, 87, 88, 89, 90, 91, 93, 94, 95, 96, 97, 101, 103, 108, 112, 113, 116, 117]).ToArray()),
+            "Regression coverage index must cover issues #1 through #55, #60-#63, #65-#66, #70-#73, #75-#76, #78, #80, #83-#91, #93-#97, #101, #103, #108, #112-#113, and #116-#117.");
 
         var untracked = Coverage.Where(c => string.IsNullOrWhiteSpace(c.Detail)).Select(c => c.Issue).ToArray();
         Assert.That(untracked, Is.Empty, "Every issue must be ImplementedHere, CoveredBy(suiteName), or OutOfScope(reason).");

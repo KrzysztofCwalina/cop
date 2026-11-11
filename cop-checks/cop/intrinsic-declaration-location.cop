@@ -2,6 +2,8 @@
 
 import cop
 
-export let intrinsics-in-wrong-file = codebase.Methods:asCop:isIntrinsic
+let methods-outside-intrinsics : [Method] = codebase.Methods
     .Where(!item.File.Path:endsWith('intrinsics.cop'))
+
+export let intrinsics-in-wrong-file = methods-outside-intrinsics:asCop:isIntrinsic
     :toError('Intrinsic declaration must be in intrinsics.cop, not {item.File.Path}')
