@@ -19,5 +19,6 @@ let provider-names = [
 ]
 
 export let derived-provider-isolation = codebase.Projects
-    .Where(item.Name:in(provider-names) && referencesAny(item, provider-names))
+    .WhereIn(item.Name, provider-names)
+    .Where(referencesAny(item, provider-names))
     :toError('Provider project {item.Name} must not reference another provider project')
