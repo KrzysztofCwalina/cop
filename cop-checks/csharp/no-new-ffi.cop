@@ -13,8 +13,7 @@ predicate isFfiRegistration(Statement) =>
     Statement.MemberName:equals('Register') &&
     hasIdentifierReceiverIgnoringCase(Statement, 'ffi')
 
-let non-test-calls : [Statement] = codebase.Calls.Where(!inFolders(item.File, ['tests/']))
-let ffi-registrations : [Statement] = non-test-calls.Where(isFfiRegistration(item))
+let ffi-registrations : [Statement] = non-test-code.Calls.Where(isFfiRegistration(item))
 let unapproved-ffi-registrations : [Statement] = ffi-registrations
     .Where(!hasStringArgumentIn(item, 0, approved-ffi-names))
 

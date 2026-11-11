@@ -15,7 +15,13 @@ Group folders are not standalone programs. The separate package-source suite is
 
 - `codebase` — everything: C# and Cop sources, including tests, samples, and examples.
 - `source-code` — production code: `codebase` without `tests/` and `samples/`.
+- `production-code` — `source-code` without `examples/`.
+- `non-test-code` — `codebase` without `tests/`; samples and examples remain included.
+- `shipped-code` — `codebase` without `samples/` and `examples/`; tests remain included.
+- `csharp-code` — all C# sources, including tests, samples, and examples.
+- `csharp-source-code` — C# sources without tests, samples, and examples.
 - `core-types` — the language core: types under `cop/shared/` and `cop/runtime/`.
+- `check-statements` — statements in files under `cop-checks/`.
 
 The default suite also runs `csharpChecks(csharp-source-code)`: C# sources without tests,
 samples, and examples.
@@ -23,25 +29,27 @@ Tests, samples, and examples remain available as intentional negative-test fixtu
 
 ## Reading and maintaining a rule
 
-Keep every rule readable at a glance. Build it step by step, one idea per line: start from
-a named scope, narrow it in named steps, then report the result with `:toError('...')`.
+Keep every rule readable at a glance. Select the source collection first, including all
+folder and language exclusions, before applying any rule predicates. Build the rule in
+named steps, then report the result with `:toError('...')`.
 
 ```cop skip
 # Use abstract classes for production abstractions instead of new interfaces.
 
 let allowed-interfaces = ['ICopCallable']
 
-let interfaces : [Type] = source-code.Types:isInterface
-let non-example-interfaces : [Type] = interfaces.Where(!inFolders(item.File, ['examples/']))
-let new-interfaces : [Type] = non-example-interfaces.Where(!item.Name:in(allowed-interfaces))
+let interfaces : [Type] = production-code.Types:isInterface
+let new-interfaces : [Type] = interfaces.Where(!item.Name:in(allowed-interfaces))
 
 export let no-new-interfaces = new-interfaces
     :toError('Use an abstract class instead of interface {item.Name} ({item.File.Path})')
 ```
 
 - Start with one or two lines explaining the rule's purpose and rationale.
-- Start from a named scope (`source-code`, `core-types`, `codebase`) instead of repeating
-  folder exclusions inside conditions.
+- Start from a named scope (`production-code`, `source-code`, `core-types`, `codebase`).
+  Never select rule matches from all sources and then remove tests, samples, or examples.
+  For a rule-specific path scope, select and name that source collection before testing
+  declarations, imports, calls, or other rule conditions.
 - Give each intermediate step a descriptive name and its element type (`[Type]`,
   `[Statement]`, `[Project]`). Avoid long expressions that combine many conditions.
 - Write the message inline in `:toError(...)`. It renders once per matching item.

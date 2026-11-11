@@ -19,7 +19,6 @@ export let no-environment = (env-calls - allowed-calls)
 
 # Calls to inspect.
 let env-calls : [Statement] = source-code.Calls:isCSharp:isEnvironmentVariableAccess
-let env-reads = env-calls:isEnvRead
 
 # Allowed groups.
 let secret-markers = ['TOKEN', 'SECRET', 'PASSWORD']
@@ -27,21 +26,22 @@ let secret-calls = env-calls.Where(stringArgumentContainsAny(item, 0, secret-mar
 let path-calls = env-calls.Where(hasStringArgument(item, 0, 'PATH'))
 let tool-search-path-reads = path-calls:isEnvRead
 
-let installer-path-calls = path-calls
-    .Where(
-        item.File.Path == 'cop/cli/commands/CopInstallation.cs' &&
-        item.Method.Name == 'ConfigurePath')
+let installer-calls : [Statement] = source-code.Calls
+    .Where(item.File.Path == 'cop/cli/commands/CopInstallation.cs')
+let installer-path-calls = installer-calls:isCSharp:isEnvironmentVariableAccess
+    .Where(item.Method.Name == 'ConfigurePath' && hasStringArgument(item, 0, 'PATH'))
 
-let java-classpath-reads = env-reads
+let java-context-calls : [Statement] = source-code.Calls
+    .Where(item.File.Path == 'providers/java-provider/src/JavaSemanticContext.cs')
+let java-classpath-reads = java-context-calls:isCSharp:isEnvRead
     .Where(
-        item.File.Path == 'providers/java-provider/src/JavaSemanticContext.cs' &&
         item.Method.Name == 'Discover' &&
         hasStringArgument(item, 0, 'CLASSPATH'))
 
-let rust-toolchain-reads = env-reads
-    .Where(
-        item.File.Path == 'providers/rust-provider/src/RustFrontend.cs' &&
-        item.Method.Name == 'Bind')
+let rust-frontend-calls : [Statement] = source-code.Calls
+    .Where(item.File.Path == 'providers/rust-provider/src/RustFrontend.cs')
+let rust-toolchain-reads = rust-frontend-calls:isCSharp:isEnvRead
+    .Where(item.Method.Name == 'Bind')
 
 let cargo-home-reads = rust-toolchain-reads
     .Where(hasStringArgument(item, 0, 'CARGO_HOME'))

@@ -3,5 +3,5 @@
 let cli-projects : [Project] = codebase.Projects.Where(item.Path:contains('cop/cli'))
 
 export let no-aspnet-in-cli = cli-projects
-    .Where(hasFramework(item, 'Microsoft.AspNetCore.App'))
+    .Where(referencesFramework(item, 'Microsoft.AspNetCore.App'))
     :toError('Project {item.Name}: remove Microsoft.AspNetCore.App for single-file publishing')

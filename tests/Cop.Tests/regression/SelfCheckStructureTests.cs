@@ -1,6 +1,9 @@
 using Cop.Cli.Commands;
+using Cop.Lang.Ast;
+using Cop.Lang.Parser;
 using Cop.Providers;
 using NUnit.Framework;
+using System.Diagnostics;
 
 namespace Cop.Tests;
 
@@ -53,6 +56,47 @@ public class SelfCheckStructureTests
         }
 
         Assert.That(overlongLines, Is.Empty, string.Join("\n", overlongLines));
+    }
+
+    [Test]
+    public void SelfChecksSelectSourceScopesBeforeRulePredicates()
+    {
+        var checks = Path.Combine(_repo, "cop-checks");
+        var modules = Directory.GetFiles(checks, "*.cop", SearchOption.AllDirectories)
+            .Select(file => (File: file, Module: CopParser.Parse(File.ReadAllText(file), file)))
+            .ToArray();
+        var bindings = modules.Where(m => m.File != Path.Combine(checks, "cop", "packages", "main.cop"))
+            .SelectMany(m => m.Module.Declarations.OfType<LetDecl>())
+            .ToDictionary(binding => binding.Name, binding => binding.Value);
+        var violations = new List<string>();
+        foreach (var (file, module) in modules)
+        {
+            var walker = new SourceScopeOrderWalker(bindings);
+            walker.Visit(module);
+            violations.AddRange(walker.LateScopes.Select(line =>
+                $"{Path.GetRelativePath(checks, file)}:{line}: source scope follows a rule predicate"));
+        }
+
+        Assert.That(violations, Is.Empty, string.Join("\n", violations));
+    }
+
+    [Test]
+    public void Issue116_ChainedSourceScopeFiltersPassStrictVerification()
+    {
+        var main = Path.Combine(_root, "main.cop");
+        File.WriteAllText(main, """
+            import code
+            import cop
+            let cb = codebase(cop.parse())
+            let selected : [Statement] = cb.Statements
+                .Where(item.File.Path:contains('cop-checks/'))
+                .Where(!item.File.Path:endsWith('main.cop'))
+            command MAIN = print(selected.Count)
+            """);
+
+        var diagnostics = VerifyCommand.CollectDiagnostics([main], _root, File.ReadAllText,
+            strictStructure: true);
+        Assert.That(diagnostics, Is.Empty, string.Join("\n", diagnostics.Select(d => d.Message)));
     }
 
     [Test]
@@ -146,6 +190,38 @@ public class SelfCheckStructureTests
         Assert.That(result.HasFatalErrors, Is.False, string.Join("\n", result.Errors));
         Assert.That(result.Outputs.Select(o => o.Message), Is.Empty);
         Assert.That(result.ExitCode, Is.EqualTo(0), string.Join("\n", result.Warnings ?? []));
+    }
+
+    [Test]
+    [Platform("Win")]
+    public async Task Issue117_PublishedCliPassesRepositorySelfChecks()
+    {
+        var executable = Path.Combine(_repo, "install", "win-x64", "cop.exe");
+        Assert.That(File.Exists(executable), Is.True, "Publish win-x64 before running this regression.");
+        var startInfo = new ProcessStartInfo(executable)
+        {
+            WorkingDirectory = _repo,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+        };
+        startInfo.ArgumentList.Add(Path.Combine(_repo, "cop-checks", "main.cop"));
+        startInfo.ArgumentList.Add("-t");
+        startInfo.ArgumentList.Add(_repo);
+        startInfo.ArgumentList.Add("--no-user-checks");
+        startInfo.ArgumentList.Add("--no-color");
+        using var process = Process.Start(startInfo)
+            ?? throw new InvalidOperationException("Failed to start the published CLI.");
+        var stdout = process.StandardOutput.ReadToEndAsync();
+        var stderr = process.StandardError.ReadToEndAsync();
+        await process.WaitForExitAsync();
+        var output = await stdout;
+        var errors = await stderr;
+
+        Assert.That(process.ExitCode, Is.EqualTo(0), output + errors);
+        Assert.That(output, Is.Empty);
+        Assert.That(errors.Trim(), Does.Match(
+            @"\ASummary   [1-9]\d* input files processed, 65 checks evaluated in \d+(?:\.\d+)?s\.\z"));
     }
 
     [TestCase(false)]
@@ -927,6 +1003,67 @@ public class SelfCheckStructureTests
             Assert.That(result.HasParseErrors, Is.False, string.Join("\n", result.ParseErrors));
             Assert.That(result.HasFatalErrors, Is.False, string.Join("\n", result.Errors));
             Assert.That(result.Outputs.Select(o => o.Message), Is.EqualTo(expected), $"Run {run + 1}");
+        }
+    }
+
+    private sealed class SourceScopeOrderWalker(IReadOnlyDictionary<string, Expression> bindings) : AstWalker
+    {
+        public List<int> LateScopes { get; } = [];
+
+        public override object? VisitCallExpr(CallExpr node)
+        {
+            if (node.Callee is MemberExpr { Member: "Where" } member &&
+                node.Args.Any(IsScopePredicate) && HasRuleFilter(member.Object))
+            {
+                LateScopes.Add(node.Line);
+            }
+
+            return base.VisitCallExpr(node);
+        }
+
+        public override object? VisitFilterExpr(FilterExpr node)
+        {
+            if (IsScopePredicate(node.Predicate) && HasRuleFilter(node.Collection))
+            {
+                LateScopes.Add(node.Line);
+            }
+
+            return base.VisitFilterExpr(node);
+        }
+
+        private bool HasRuleFilter(Expression expression) => expression switch
+        {
+            IdentifierExpr name when bindings.TryGetValue(name.Name, out var value) => HasRuleFilter(value),
+            FilterExpr filter => !IsScopePredicate(filter.Predicate) || HasRuleFilter(filter.Collection),
+            CallExpr { Callee: MemberExpr { Member: "Where" } member } call =>
+                !call.Args.Any(IsScopePredicate) || HasRuleFilter(member.Object),
+            _ => false
+        };
+
+        private static bool IsScopePredicate(Expression expression)
+        {
+            var walker = new SourceScopePredicateWalker();
+            walker.Visit(expression);
+            return walker.IsScope;
+        }
+    }
+
+    private sealed class SourceScopePredicateWalker : AstWalker
+    {
+        public bool IsScope { get; private set; }
+
+        public override object? VisitInterpolatedStringExpr(InterpolatedStringExpr node) => null;
+
+        public override object? VisitMemberExpr(MemberExpr node)
+        {
+            IsScope |= node.Member is "Path" or "Language";
+            return base.VisitMemberExpr(node);
+        }
+
+        public override object? VisitIdentifierExpr(IdentifierExpr node)
+        {
+            IsScope |= node.Name is "inFolders" or "inPureCore" or "isCSharp" or "asCop";
+            return base.VisitIdentifierExpr(node);
         }
     }
 }

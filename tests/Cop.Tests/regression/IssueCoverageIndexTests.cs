@@ -106,8 +106,8 @@ public class IssueRegressionCoverageIndexTests
         new(111, CoverageKind.CoveredBy, "SelfCheckStructureTests.Issue111_CSharpChecksAcceptsCSharpParseResult"),
         new(112, CoverageKind.ImplementedHere, "SelfCheckStructureTests.Issue112_CSharpParseCanBePassedToCodebaseParameters"),
         new(113, CoverageKind.ImplementedHere, "SelfCheckStructureTests.Issue113_StringContainsAnyMatchesDocumentedSubstrings"),
-        new(116, CoverageKind.CoveredBy, "StructuralCheckPolicyTests.Issue116_ChainedWherePreservesSemanticElementType"),
-        new(117, CoverageKind.ImplementedHere, "IssueRegressionTests.Issue117_PublishedSelfChecksAnalyzeFixtureWithoutMissingMethod"),
+        new(116, CoverageKind.ImplementedHere, "SelfCheckStructureTests.Issue116_ChainedSourceScopeFiltersPassStrictVerification; StructuralCheckPolicyTests.Issue116_ChainedWherePreservesSemanticElementType"),
+        new(117, CoverageKind.ImplementedHere, "SelfCheckStructureTests.Issue117_PublishedCliPassesRepositorySelfChecks; IssueRegressionTests.Issue117_PublishedSelfChecksAnalyzeFixtureWithoutMissingMethod"),
     ];
 
     [Test]
