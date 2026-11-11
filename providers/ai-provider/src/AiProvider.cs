@@ -330,7 +330,8 @@ public partial class AiProvider : DataProvider
                 path = Member(project, "Path"),
                 references = Items(project, "References"),
                 packages = Items(project, "Packages"),
-                frameworks = Items(project, "Frameworks")
+                frameworks = Items(project, "Frameworks"),
+                frameworkReferences = Items(project, "FrameworkReferences")
             })
         });
     }
@@ -345,7 +346,7 @@ public partial class AiProvider : DataProvider
             ["Types"] = ["Name", "Kind", "File", "Line", "Modifiers", "BaseTypes", "Interfaces"],
             ["Methods"] = ["Name", "File", "Line", "ReturnType", "Parameters"],
             ["Calls"] = ["File", "Line", "TypeName", "MemberName"],
-            ["Projects"] = ["Name", "Path", "References", "Packages", "Frameworks"]
+            ["Projects"] = ["Name", "Path", "References", "Packages", "Frameworks", "FrameworkReferences"]
         };
         foreach ((string collection, string[] fields) in demandedFields)
         {

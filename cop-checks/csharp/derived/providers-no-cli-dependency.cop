@@ -1,8 +1,7 @@
 # Keep providers independent of the CLI command and REPL layers.
 
-let cli-dependent-types : [Type] = codebase.Types
-    .Where(importsAny(item.File, ['Cop.Cli.Commands', 'Cop.Repl']))
+let provider-types : [Type] = codebase.Types.Where(item.File.Path:startsWith('providers/'))
 
-export let derived-providers-no-cli-dependency = cli-dependent-types
-    .Where(item.File.Path:startsWith('providers/'))
+export let derived-providers-no-cli-dependency = provider-types
+    .Where(importsAny(item.File, ['Cop.Cli.Commands', 'Cop.Repl']))
     :toError('Provider type {item.Name} depends on the CLI (Cop.Cli/Cop.Repl) ({item.File.Path})')

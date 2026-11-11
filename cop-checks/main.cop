@@ -12,12 +12,19 @@ let codebase = codebase(csharp-code, cop.parse())
 # Production code: the codebase without tests and samples.
 let source-code = withoutFolders(codebase, ['tests/', 'samples/'])
 
+let production-code = withoutFolders(source-code, ['examples/'])
+let non-test-code = withoutFolders(codebase, ['tests/'])
+let shipped-code = withoutFolders(codebase, ['samples/', 'examples/'])
+
 # C# production code for the generic C# package checks; examples are also left out.
 let csharp-source-code = withoutFolders(csharp-code, ['tests/', 'samples/', 'examples/'])
 
 # The language core: cop/shared and cop/runtime.
 let core-types : [Type] = codebase.Types
     .Where(item.File.Path:contains('cop/shared/') || item.File.Path:contains('cop/runtime/'))
+
+let check-statements : [Statement] = codebase.Statements
+    .Where(item.File.Path:contains('cop-checks/'))
 
 let csharp-source-violations = csharpChecks(csharp-source-code)
 

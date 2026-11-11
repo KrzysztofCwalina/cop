@@ -12,9 +12,13 @@ export predicate referencesAny(Project, names: [string]) =>
 export predicate hasPackage(Project, name: string) =>
     Project.Packages:contains(name)
 
-## Tests whether a project declares the supplied framework reference.
-export predicate hasFramework(Project, name: string) =>
+## Tests whether a project targets the supplied framework, such as net10.0.
+export predicate targetsFramework(Project, name: string) =>
     Project.Frameworks:contains(name)
+
+## Tests whether a project references the supplied shared framework, such as Microsoft.AspNetCore.App.
+export predicate referencesFramework(Project, name: string) =>
+    Project.FrameworkReferences:contains(name)
 
 ## Tests for a parsed property; missing or omitted properties do not match.
 export predicate hasProjectProperty(Project, name: string) =>

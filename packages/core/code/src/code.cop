@@ -335,7 +335,10 @@ export type Project = {
     Language : Language?,
     References : [string],
     Packages : [string],
+    ## Target frameworks, such as net10.0.
     Frameworks : [string],
+    ## Referenced shared frameworks, such as Microsoft.AspNetCore.App.
+    FrameworkReferences : [string],
     SourceFiles : [string]?,
     Properties : [ProjectProperty]
 }

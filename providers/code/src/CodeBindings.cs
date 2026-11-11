@@ -385,6 +385,7 @@ public static class CodeBindings
                 ["References"] = o => (object)((ProjectInfo)o).References,
                 ["Packages"] = o => (object)((ProjectInfo)o).Packages,
                 ["Frameworks"] = o => (object)((ProjectInfo)o).Frameworks,
+                ["FrameworkReferences"] = o => (object)((ProjectInfo)o).FrameworkReferences,
                 ["SourceFiles"] = o => ((ProjectInfo)o).SourceFiles,
                 ["Properties"] = o => (object)((ProjectInfo)o).Properties
                     .Select(kv => new ProjectProperty(kv.Key, kv.Value)).ToList(),
