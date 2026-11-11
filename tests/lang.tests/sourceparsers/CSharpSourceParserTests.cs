@@ -11,6 +11,31 @@ public class CSharpSourceParserTests
     private readonly CSharpSourceParser _parser = new();
 
     [Test]
+    public void Parse_SyntaxIndexDoesNotReuseNodesAcrossEditsAtTheSamePath()
+    {
+        foreach (string name in new[] { "Alpha", "Beta" })
+        {
+            string source = $$"""
+                using Alias = System.String;
+                // {{name}} comment
+                class {{name}} {
+                    class Nested { void Run() { System.Console.WriteLine(new {{name}}()); } }
+                }
+                """;
+            var file = _parser.Parse("Input.cs", source)!;
+            Assert.That(file.ParseErrors, Is.Empty);
+            Assert.That(file.Usings, Is.EqualTo(new[] { "System.String" }));
+            Assert.That(file.Imports.Single().Alias, Is.EqualTo("Alias"));
+            Assert.That(file.Comments.Single().Content, Is.EqualTo($" {name} comment"));
+            Assert.That(file.CommentLines, Is.EqualTo(new[] { 2 }));
+            Assert.That(file.Types.Single().Name, Is.EqualTo(name));
+            Assert.That(file.Types.Single().NestedTypes.Single().Name, Is.EqualTo("Nested"));
+            Assert.That(file.Statements.Where(s => s.Kind == "call").Select(s => s.TypeName),
+                Is.EqualTo(new[] { "System.Console", name }));
+        }
+    }
+
+    [Test]
     public void Parse_CSharp14FileBasedDirectives_UseFileBasedProgramOptions()
     {
         var file = _parser.Parse("app.cs", """
