@@ -103,15 +103,18 @@ below, the catalog's filenames refer to `csharp/derived/`.
 Run: `cop cop-checks/main.cop -t . -c DERIVED`
 
 Structural self-checks use parsed model facts, not regex or source-text parsing.
-The only approved source-text checks are tab and trailing-whitespace detection:
+The user-approved source-text checks are tab and trailing-whitespace detection.
+These inspect whitespace, not code structure. Both are part of the default imported
+C# suite, so repository verification must include their two named exceptions:
 
 ```text
 cop verify cop-checks/ --strict-structure \
   --allow-text-check hasTab --allow-text-check hasTrailingWhitespace
 ```
 
-Pass these options on one line in PowerShell. Named approvals may select a private
-predicate from an imported package; ambiguous imported names are rejected.
+Pass these options on one line in PowerShell. No other text checks are approved.
+Named approvals may select a private predicate from an imported package;
+ambiguous imported names are rejected.
 Names, paths, imports, project settings, and decoded literal values can still be compared
 as strings. Calls use `CallTarget`/`ArgumentExpressions`; nullable directives use their
 parsed `Kind` and `Keywords`. The environment check exempts secrets only by the actual

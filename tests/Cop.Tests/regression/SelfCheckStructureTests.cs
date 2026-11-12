@@ -29,11 +29,17 @@ public class SelfCheckStructureTests
     public void TearDown() => Directory.Delete(_root, recursive: true);
 
     [Test]
-    public void Issue054_AllSelfChecksPassStrictStructureWithApprovedFormattingChecks()
+    public void Issue054_120_AllSelfChecksPassStrictStructureWithApprovedFormattingChecks()
     {
         var checks = Path.Combine(_repo, "cop-checks");
         var files = Directory.GetFiles(checks, "*.cop", SearchOption.AllDirectories);
         Assert.That(files, Has.Length.EqualTo(41));
+        var unapproved = VerifyCommand.CollectDiagnostics(files, checks, File.ReadAllText,
+            strictStructure: true);
+        Assert.That(unapproved, Has.Count.EqualTo(2));
+        Assert.That(unapproved.Select(d => d.Message), Has.One.Contains("--allow-text-check hasTab "));
+        Assert.That(unapproved.Select(d => d.Message), Has.One.Contains("--allow-text-check hasTrailingWhitespace "));
+
         var diagnostics = VerifyCommand.CollectDiagnostics(files, checks, File.ReadAllText,
             strictStructure: true, allowTextChecks: ["hasTab", "hasTrailingWhitespace"]);
         Assert.That(diagnostics, Is.Empty, string.Join("\n", diagnostics.Select(d => d.Message)));
