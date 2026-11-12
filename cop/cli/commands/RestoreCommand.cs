@@ -123,7 +123,7 @@ public static class RestoreCommand
             string repoRoot = Path.GetDirectoryName(filePath) ?? Directory.GetCurrentDirectory();
 
             // Get GitHub token from environment variable if available
-            string? githubToken = Environment.GetEnvironmentVariable("GITHUB_TOKEN");
+            string? githubToken = HostEnvironment.GetEnvironmentVariable("GITHUB_TOKEN");
 
             // Create HttpClient and GitHubPackageSource
             using HttpClient httpClient = new HttpClient();

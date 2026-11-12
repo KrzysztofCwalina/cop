@@ -1,6 +1,7 @@
 // Resolves Java source roots, dependencies, and compiler context from project files.
 
 using System.Xml.Linq;
+using Cop.Core;
 using Cop.Providers.SourceModel;
 
 namespace Cop.Providers.SourceParsers;
@@ -162,7 +163,7 @@ internal sealed record JavaSemanticContext(string Path, List<string> Sources, Li
                 classpath.AddRange(jars);
             }
         }
-        if (!string.IsNullOrEmpty(Environment.GetEnvironmentVariable("CLASSPATH")))
+        if (!string.IsNullOrEmpty(HostEnvironment.GetEnvironmentVariable("CLASSPATH")))
         {
             errors.Add("Java semantic analysis ignores ambient CLASSPATH; use local lib/libs jars or declared Maven dependencies.");
         }

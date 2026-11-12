@@ -1,5 +1,7 @@
 // Locates installed Cop executables and installation assets.
 
+using Cop.Core;
+
 namespace Cop.Cli.Commands;
 
 internal static class CopInstallation
@@ -95,7 +97,7 @@ internal static class CopInstallation
         IEnumerable<string> entries = (path ?? "").Split(';', StringSplitOptions.RemoveEmptyEntries)
             .Where(entry =>
             {
-                string expanded = Environment.ExpandEnvironmentVariables(entry.Trim().Trim('"'))
+                string expanded = HostEnvironment.ExpandEnvironmentVariables(entry.Trim().Trim('"'))
                     .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
                 if (expanded.Equals(canonical, StringComparison.OrdinalIgnoreCase))
                 {
@@ -120,14 +122,14 @@ internal static class CopInstallation
             return;
         }
 
-        string? userPath = Environment.GetEnvironmentVariable("PATH", EnvironmentVariableTarget.User);
+        string? userPath = HostEnvironment.GetEnvironmentVariable("PATH", EnvironmentVariableTarget.User);
         string updated = WindowsPath(userPath, userHome);
         if (updated != userPath)
         {
-            Environment.SetEnvironmentVariable("PATH", updated, EnvironmentVariableTarget.User);
+            HostEnvironment.SetEnvironmentVariable("PATH", updated, EnvironmentVariableTarget.User);
             Console.WriteLine("Updated user PATH. Open a new terminal to use the installed Cop.");
         }
-        Environment.SetEnvironmentVariable("PATH", WindowsPath(Environment.GetEnvironmentVariable("PATH"), userHome));
+        HostEnvironment.SetEnvironmentVariable("PATH", WindowsPath(HostEnvironment.GetEnvironmentVariable("PATH"), userHome));
     }
 
     private static void DeleteBackup(string path)

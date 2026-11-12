@@ -30,7 +30,7 @@ public static class ToolchainProcess
         string[] extensions = OperatingSystem.IsWindows() && !Path.HasExtension(name)
             ? new[] { ".exe", ".com" }
             : new[] { "" };
-        foreach (string entry in (searchPath ?? Environment.GetEnvironmentVariable("PATH") ?? "")
+        foreach (string entry in (searchPath ?? HostEnvironment.GetEnvironmentVariable("PATH") ?? "")
             .Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries))
         {
             string directory = entry.Trim().Trim('"');

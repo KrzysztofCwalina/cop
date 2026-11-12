@@ -289,6 +289,7 @@ public class CodeQueryTests
                     System.Environment.GetEnvironmentVariable("two", System.EnvironmentVariableTarget.Process);
                     System.Environment.SetEnvironmentVariable("three", "value");
                     System.Environment.GetEnvironmentVariables();
+                    System.Environment.ExpandEnvironmentVariables("value");
                 }
             }
             """);
@@ -303,7 +304,7 @@ public class CodeQueryTests
                 foreach cb.Types.Methods:isAsyncVoid => 'async:{item.Name}'
                 0
             }
-            """, ["access:6", "access:7", "access:8", "read:6", "read:7",
+            """, ["access:6", "access:7", "access:8", "access:9", "access:10", "read:6", "read:7",
                 "nullable:1", "async:Fire"]);
     }
 

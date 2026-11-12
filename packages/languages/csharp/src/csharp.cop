@@ -28,12 +28,17 @@ export predicate disablesNullable(Statement) =>
     Statement.Keywords:contains('nullable') &&
     Statement.Keywords:contains('disable')
 
-## Matches syntactic System.Environment variable reads or writes.
+## Matches syntactic System.Environment variable reads, writes, enumeration, or expansion.
 ## Unqualified names are recognized; aliases and resolved symbols are not inferred.
 export predicate isEnvironmentVariableAccess(Statement) =>
     Statement.TypeName:in(
         ['Environment', 'System.Environment', 'global::System.Environment']) &&
-    Statement.MemberName:in(['GetEnvironmentVariable', 'SetEnvironmentVariable'])
+    Statement.MemberName:in([
+        'GetEnvironmentVariable',
+        'SetEnvironmentVariable',
+        'GetEnvironmentVariables',
+        'ExpandEnvironmentVariables'
+    ])
 
 ## Identifies GetEnvironmentVariable access, including overloads with a target argument.
 export predicate isEnvironmentVariableRead(Statement) =>
