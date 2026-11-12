@@ -1,5 +1,7 @@
 # Keep the language and runtime host-independent: no CLI command or REPL imports.
 
+let core-forbidden-cli-namespaces = ['Cop.Cli.Commands', 'Cop.Repl']
+
 export let derived-core-no-cli-dependency = core-types
-    .Where(importsAny(item.File, ['Cop.Cli.Commands', 'Cop.Repl']))
+    .Where(importsAny(item.File, core-forbidden-cli-namespaces))
     :toError('{item.Name}: remove CLI/REPL dependencies; keep the core host-independent')

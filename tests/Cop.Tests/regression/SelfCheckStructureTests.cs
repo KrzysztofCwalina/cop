@@ -59,6 +59,28 @@ public class SelfCheckStructureTests
     }
 
     [Test]
+    public void SelfCheckPolicySetsAreNamedAndNotHiddenInLocalPredicates()
+    {
+        var checks = Path.Combine(_repo, "cop-checks");
+        var modules = Directory.GetFiles(checks, "*.cop", SearchOption.AllDirectories)
+            .Select(file => (File: file, Module: CopParser.Parse(File.ReadAllText(file), file)))
+            .ToArray();
+        var sets = modules.SelectMany(m => m.Module.Declarations.OfType<LetDecl>())
+            .Where(binding => binding.Value is ListExpr)
+            .Select(binding => binding.Name).ToHashSet(StringComparer.Ordinal);
+        var violations = new List<string>();
+        foreach (var (file, module) in modules)
+        {
+            var walker = new PolicySetWalker(sets);
+            walker.Visit(module);
+            violations.AddRange(walker.Violations.Select(message =>
+                $"{Path.GetRelativePath(checks, file)}:{message}"));
+        }
+
+        Assert.That(violations, Is.Empty, string.Join("\n", violations));
+    }
+
+    [Test]
     public void SelfChecksSelectSourceScopesBeforeRulePredicates()
     {
         var checks = Path.Combine(_repo, "cop-checks");
@@ -487,6 +509,24 @@ public class SelfCheckStructureTests
             "Unapproved runtime function; use a .cop package or get explicit approval");
     }
 
+    [Test]
+    public async Task FfiMembershipRejectsMissingAndNonliteralArguments()
+    {
+        await AssertCheck(Path.Combine("csharp", "no-new-ffi.cop"), "no-new-ffi", "Input.cs", """
+            class Example {
+                void RegisterAll(Registry ffi, string name) {
+                    ffi.Register("PRINT");
+                    ffi.Register();
+                    ffi.Register(name);
+                    ffi.Register(null);
+                    ffi.Register("print" + name);
+                    ffi.Register("unapproved", "print");
+                }
+            }
+            """, "csharp", [4, 5, 6, 7, 8],
+            "Unapproved runtime function; use a .cop package or get explicit approval");
+    }
+
     [TestCase("tests/lang.tests/lang/EvaluatorTests.cs", false)]
     [TestCase("tests/lang.tests/lang/OtherTests.cs", false)]
     [TestCase("cop/shared/interpreter/StandardLibrary.cs", true)]
@@ -803,6 +843,37 @@ public class SelfCheckStructureTests
             "Unexpected: use parsers instead of System.Text.RegularExpressions");
     }
 
+    [TestCase("DomainAnalyzer", true)]
+    [TestCase("DomainLinter", true)]
+    [TestCase("DomainCodeSmell", true)]
+    [TestCase("DomainCodeReview", true)]
+    [TestCase("customanalyzerwrapper", true)]
+    [TestCase("Analysis", false)]
+    [TestCase("Ordinary", false)]
+    public async Task CoreDomainPolicyMatchesNamedSubstrings(string name, bool hasViolation)
+    {
+        await AssertCheck(Path.Combine("csharp", "derived", "core-domain-purity.cop"),
+            "derived-core-domain-purity", "cop/shared/Input.cs",
+            $"namespace Fixture; class {name} {{ }}", "csharp", hasViolation ? [1] : [],
+            $"Core type {name}: move analysis-specific logic to a .cop package");
+    }
+
+    [TestCase("cop/shared/interpreter/Input.cs", true)]
+    [TestCase("cop/shared/ast/Input.cs", true)]
+    [TestCase("cop/shared/parser/Input.cs", true)]
+    [TestCase("cop/shared/tokenizer/Input.cs", true)]
+    [TestCase("cop/runtime/Input.cs", true)]
+    [TestCase("cop/shared/output/Input.cs", false)]
+    [TestCase("cop/shared/parser-extra/Input.cs", false)]
+    public async Task PureCorePolicyMatchesNamedPaths(string file, bool hasViolation)
+    {
+        await AssertCheck(Path.Combine("csharp", "derived", "no-console-in-pure-core.cop"),
+            "derived-no-console-in-pure-core", file,
+            "namespace Fixture; class Example { void Run() { Console.WriteLine(\"value\"); } }",
+            "csharp", hasViolation ? [1] : [],
+            "Console.WriteLine: use the core output abstraction, not Console");
+    }
+
     [Test]
     public async Task Issue103_NamedDiagnosticTemplateRendersEveryType()
     {
@@ -1006,6 +1077,51 @@ public class SelfCheckStructureTests
         }
     }
 
+    private sealed class PolicySetWalker(IReadOnlySet<string> sets) : AstWalker
+    {
+        private bool _inPredicate;
+
+        public List<string> Violations { get; } = [];
+
+        public override object? VisitLetDecl(LetDecl node) =>
+            node.Value is ListExpr ? null : base.VisitLetDecl(node);
+
+        public override object? VisitListExpr(ListExpr node)
+        {
+            Violations.Add($"{node.Line}: put the policy set in a named top-level array");
+            return base.VisitListExpr(node);
+        }
+
+        public override object? VisitBinaryExpr(BinaryExpr node)
+        {
+            if (node.Op == BinaryOp.Or)
+            {
+                Violations.Add($"{node.Line}: express policy alternatives as a named array");
+            }
+
+            return base.VisitBinaryExpr(node);
+        }
+
+        public override object? VisitFunctionDecl(FunctionDecl node)
+        {
+            _inPredicate = node.IsPredicate;
+            var result = base.VisitFunctionDecl(node);
+            _inPredicate = false;
+            return result;
+        }
+
+        public override object? VisitIdentifierExpr(IdentifierExpr node)
+        {
+            if (_inPredicate && (sets.Contains(node.Name) ||
+                node.Name is "in" or "contains" or "containsAny" or "any"))
+            {
+                Violations.Add($"{node.Line}: use policy membership directly, not a local predicate");
+            }
+
+            return base.VisitIdentifierExpr(node);
+        }
+    }
+
     private sealed class SourceScopeOrderWalker(IReadOnlyDictionary<string, Expression> bindings) : AstWalker
     {
         public List<int> LateScopes { get; } = [];
@@ -1062,7 +1178,7 @@ public class SelfCheckStructureTests
 
         public override object? VisitIdentifierExpr(IdentifierExpr node)
         {
-            IsScope |= node.Name is "inFolders" or "inPureCore" or "isCSharp" or "asCop";
+            IsScope |= node.Name is "inFolders" or "isCSharp" or "asCop";
             return base.VisitIdentifierExpr(node);
         }
     }

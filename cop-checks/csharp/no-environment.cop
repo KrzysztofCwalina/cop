@@ -1,5 +1,7 @@
 # The environment supplies execution context, not a second configuration API.
 
+let secret-markers = ['TOKEN', 'SECRET', 'PASSWORD']
+
 let allowed-calls =
     # Keep runtime credentials separate from shareable configuration.
     secret-calls +
@@ -21,7 +23,6 @@ export let no-environment = (env-calls - allowed-calls)
 let env-calls : [Statement] = source-code.Calls:isCSharp:isEnvironmentVariableAccess
 
 # Allowed groups.
-let secret-markers = ['TOKEN', 'SECRET', 'PASSWORD']
 let secret-calls = env-calls.Where(stringArgumentContainsAny(item, 0, secret-markers))
 let path-calls = env-calls.Where(hasStringArgument(item, 0, 'PATH'))
 let tool-search-path-reads = path-calls:isEnvRead

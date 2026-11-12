@@ -53,8 +53,13 @@ export let no-new-interfaces = new-interfaces
 - Give each intermediate step a descriptive name and its element type (`[Type]`,
   `[Statement]`, `[Project]`). Avoid long expressions that combine many conditions.
 - Write the message inline in `:toError(...)`. It renders once per matching item.
-- Add a local predicate only when it names a real concept (e.g. `mayUseRegex`,
-  `isFfiRegistration`). Sibling files share one namespace, so step names must be unique
+- Put policy sets in named arrays at the top of the file, not chains of `||`, inline
+  arrays inside queries, or local predicates that only hide membership tests.
+  Use `WhereIn` / `WhereNotIn` for exact membership and `containsAny` for substring
+  sets; do not replace substring matching with exact equality.
+- Add a local predicate only for structural logic (e.g. `isFfiRegistration`), never
+  just to test a value against a policy set.
+  Sibling files share one namespace, so step names must be unique
   and a rule must not depend on another rule's steps; reusable queries go in packages.
 - Keep Cop source lines within 100 characters.
 

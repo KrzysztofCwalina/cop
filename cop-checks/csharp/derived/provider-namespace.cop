@@ -2,9 +2,10 @@
 
 # The TypeSpec providers keep their own namespace.
 let providers-outside-namespace = ['TypeSpecHttpProvider', 'TypeSpecRawProvider']
+let namespaced-provider-base-types = ['DataProvider']
 
 let shipped-provider-types : [Type] = shipped-code.Types
-    .Where(derivesFromAny(item, ['DataProvider']))
+    .Where(derivesFromAny(item, namespaced-provider-base-types))
 let checked-provider-types : [Type] = shipped-provider-types
     .WhereNotIn(item.Name, providers-outside-namespace)
 

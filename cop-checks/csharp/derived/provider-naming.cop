@@ -1,5 +1,7 @@
 # Name DataProvider subclasses *Provider; their display names omit the suffix.
 
+let named-provider-base-types = ['DataProvider']
+
 export let derived-provider-naming = codebase.Types
-    .Where(derivesFromAny(item, ['DataProvider']) && !item.Name:endsWith('Provider'))
+    .Where(derivesFromAny(item, named-provider-base-types) && !item.Name:endsWith('Provider'))
     :toError('{item.Name} extends DataProvider but is not named *Provider ({item.File.Path})')

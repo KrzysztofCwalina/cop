@@ -15,7 +15,11 @@ predicate isFfiRegistration(Statement) =>
 
 let ffi-registrations : [Statement] = non-test-code.Calls.Where(isFfiRegistration(item))
 let unapproved-ffi-registrations : [Statement] = ffi-registrations
-    .Where(!hasStringArgumentIn(item, 0, approved-ffi-names))
+    .WhereNotIn(
+        item.ArgumentExpressions.Count > 0 &&
+        item.ArgumentExpressions[0].Kind == stringLiteral
+            ? item.ArgumentExpressions[0].StringValue : nic,
+        approved-ffi-names)
 
 export let no-new-ffi = unapproved-ffi-registrations
     :toError('Unapproved runtime function; use a .cop package or get explicit approval')

@@ -1,13 +1,12 @@
 # Route core output through the output abstraction, not Console.
 
-predicate inPureCore(File) =>
-    File.Path:contains('cop/shared/interpreter/') ||
-    File.Path:contains('cop/shared/ast/') ||
-    File.Path:contains('cop/shared/parser/') ||
-    File.Path:contains('cop/shared/tokenizer/') ||
-    File.Path:contains('cop/runtime/')
+let pure-core-paths = [
+    'cop/shared/interpreter/', 'cop/shared/ast/', 'cop/shared/parser/',
+    'cop/shared/tokenizer/', 'cop/runtime/'
+]
 
-let pure-core-statements : [Statement] = codebase.Statements.Where(inPureCore(item.File))
+let pure-core-statements : [Statement] = codebase.Statements
+    .Where(item.File.Path:containsAny(pure-core-paths))
 
 export let derived-no-console-in-pure-core = pure-core-statements
     .Where(item.TypeName:equals('Console'))

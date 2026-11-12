@@ -1,6 +1,9 @@
 # Give Exception-derived types an Exception suffix so their purpose is clear.
 
-let exception-types : [Type] = source-code.Types.Where(derivesFromAny(item, ['Exception']))
+let exception-base-types = ['Exception']
+
+let exception-types : [Type] = source-code.Types
+    .Where(derivesFromAny(item, exception-base-types))
 
 export let derived-exception-naming = exception-types
     .Where(!item.Name:endsWith('Exception'))
