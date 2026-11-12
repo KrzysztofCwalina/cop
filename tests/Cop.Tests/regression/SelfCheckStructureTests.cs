@@ -880,10 +880,9 @@ public class SelfCheckStructureTests
         Assert.That(result.ExitCode, Is.EqualTo(1));
     }
 
-    [TestCase("providers/java-provider/src/JavaSemanticContext.cs", "Discover", false)]
-    [TestCase("providers/rust-provider/src/RustFrontend.cs", "Bind", true)]
-    public async Task FrontendEnvironmentExemptionsRequireExactlyOneArgument(
-        string file, string method, bool allowsComputedName)
+    [TestCase("providers/java-provider/src/JavaSemanticContext.cs", "Discover")]
+    [TestCase("providers/rust-provider/src/RustFrontend.cs", "Bind")]
+    public async Task FrontendEnvironmentCallsRequireFacade(string file, string method)
     {
         await AssertCheck(Path.Combine("csharp", "no-environment.cop"), "no-environment", file, $$"""
             using System;
@@ -896,7 +895,7 @@ public class SelfCheckStructureTests
                     return Environment.GetEnvironmentVariable(name);
                 }
             }
-            """, "csharp", allowsComputedName ? [5, 6, 7] : [5, 6, 7, 8],
+            """, "csharp", [5, 6, 7, 8],
             "Use CLI flags or config instead of environment variables for Cop settings");
     }
 
