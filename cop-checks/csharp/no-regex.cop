@@ -1,12 +1,10 @@
 # Reserve regex for :matches() and glob matching; use parsers elsewhere.
 
 let allowed-regex-types = ['RegexCache', 'FilterCompiler', 'FilterEvaluator', 'StandardLibrary']
-
-predicate mayUseRegex(Type) =>
-    allowed-regex-types:any((name) => Type.Name:contains(name))
+let regex-namespaces = ['System.Text.RegularExpressions']
 
 let regex-users : [Type] = codebase.Types:isCSharp
-    .Where(importsAny(item.File, ['System.Text.RegularExpressions']))
+    .Where(importsAny(item.File, regex-namespaces))
 
-export let no-regex = regex-users.Where(!mayUseRegex(item))
+export let no-regex = regex-users.Where(!item.Name:containsAny(allowed-regex-types))
     :toError('{item.Name}: use parsers instead of System.Text.RegularExpressions')

@@ -2,11 +2,10 @@
 # Providers handle network I/O.
 
 let network-namespaces = ['System.Net', 'System.Net.Http', 'System.Net.Sockets']
+let network-isolated-paths = ['cop/shared/interpreter/', 'cop/runtime/']
 
 let interpreter-and-runtime-types : [Type] = codebase.Types
-    .Where(
-        item.File.Path:contains('cop/shared/interpreter/') ||
-        item.File.Path:contains('cop/runtime/'))
+    .Where(item.File.Path:containsAny(network-isolated-paths))
 
 export let derived-core-network-isolation = interpreter-and-runtime-types
     .Where(importsAny(item.File, network-namespaces))

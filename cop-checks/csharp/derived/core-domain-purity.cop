@@ -1,10 +1,7 @@
 # Flag analysis-related type names in the core; code-analysis logic belongs in packages.
 
-predicate hasAnalysisName(Type) =>
-    Type.Name:contains('Analyzer') ||
-    Type.Name:contains('Linter') ||
-    Type.Name:contains('CodeSmell') ||
-    Type.Name:contains('CodeReview')
+let analysis-name-markers = ['Analyzer', 'Linter', 'CodeSmell', 'CodeReview']
 
-export let derived-core-domain-purity = core-types.Where(hasAnalysisName(item))
+export let derived-core-domain-purity = core-types
+    .Where(item.Name:containsAny(analysis-name-markers))
     :toError('Core type {item.Name}: move analysis-specific logic to a .cop package')
