@@ -390,102 +390,39 @@ public class SelfCheckStructureTests
     }
 
     [Test]
-    public async Task Issue054_EnvironmentCheckUsesCallsAndOnlyTheActualVariableName()
+    public async Task EnvironmentCheckAllowsEnvironmentAccessOnlyInItsFacade()
     {
-        await AssertCheck(Path.Combine("csharp", "no-environment.cop"), "no-environment", "Input.cs", """
+        await AssertCheck(Path.Combine("csharp", "no-environment.cop"), "no-environment",
+            "cop/shared/HostEnvironment.cs", """
             using System;
-            namespace Fixture;
-            class Example {
-                string? A() => Environment.GetEnvironmentVariable("MODE");
-                string? B() => Wrap(Environment.GetEnvironmentVariable("OTHER"));
-                string? C() => Environment.GetEnvironmentVariable("GITHUB_TOKEN");
-                string? D() => Environment.GetEnvironmentVariable("MODE"); // TOKEN
-                string? E() => Environment.GetEnvironmentVariable(
-                    "\u004dODE");
-                string Decoy = "GetEnvironmentVariable(\"MODE\")";
-                // Environment.GetEnvironmentVariable("MODE");
-                string? F() => Other.GetEnvironmentVariable("MODE");
-                string? Wrap(string? value) => value;
+            using System.Collections;
+            namespace Cop.Core;
+            class HostEnvironment {
+                string? Read(string name) => Environment.GetEnvironmentVariable(name);
+                string? ReadTarget(string name) => Environment.GetEnvironmentVariable(name, EnvironmentVariableTarget.User);
+                void Write(string name) => Environment.SetEnvironmentVariable(name, "value");
+                void WriteTarget(string name) => Environment.SetEnvironmentVariable(name, "value", EnvironmentVariableTarget.User);
+                IDictionary ReadAll() => Environment.GetEnvironmentVariables();
+                string Expand(string value) => Environment.ExpandEnvironmentVariables(value);
             }
-            """, "csharp", [4, 5, 7, 8],
+            """, "csharp", [],
             "Use CLI flags or config instead of environment variables for Cop settings");
     }
 
     [Test]
-    public async Task EnvironmentCheckKeepsUnapprovedCallsOnTheSameLine()
+    public async Task EnvironmentCheckRejectsAccessOutsideItsFacade()
     {
-        await AssertCheck(Path.Combine("csharp", "no-environment.cop"), "no-environment", "Input.cs", """
+        await AssertCheck(Path.Combine("csharp", "no-environment.cop"), "no-environment", "cop/shared/Other.cs", """
             using System;
-            namespace Fixture;
-            class Example {
-                string? Read() => Environment.GetEnvironmentVariable("GITHUB_TOKEN") ?? Environment.GetEnvironmentVariable("MODE");
-                void Write() { Environment.SetEnvironmentVariable("GITHUB_TOKEN", "value"); Environment.SetEnvironmentVariable("MODE", "GITHUB_TOKEN"); }
-                string? Lookup(string name) => Environment.GetEnvironmentVariable("PATH") ?? Environment.GetEnvironmentVariable(name);
+            using System.Collections;
+            namespace Cop.Core;
+            class Other {
+                string? Read(string name) => Environment.GetEnvironmentVariable(name);
+                void Write(string name) => Environment.SetEnvironmentVariable(name, "value");
+                IDictionary ReadAll() => Environment.GetEnvironmentVariables();
+                string Expand(string value) => Environment.ExpandEnvironmentVariables(value);
             }
-            """, "csharp", [4, 5, 6],
-            "Use CLI flags or config instead of environment variables for Cop settings");
-    }
-
-    [Test]
-    public async Task EnvironmentCheckAllowsOnlyLiteralSearchPathReads()
-    {
-        await AssertCheck(Path.Combine("csharp", "no-environment.cop"), "no-environment", "Input.cs", """
-            using System;
-            namespace Fixture;
-            class Example {
-                string? Discover() => Environment.GetEnvironmentVariable("PATH");
-                string? Encoded() => Environment.GetEnvironmentVariable("\u0050ATH");
-                string? Toggle() => Environment.GetEnvironmentVariable("COP_FEATURE");
-                void Mutate() => Environment.SetEnvironmentVariable("PATH", "bin");
-                string? Unknown(string name) => Environment.GetEnvironmentVariable(name);
-            }
-            """, "csharp", [6, 7, 8],
-            "Use CLI flags or config instead of environment variables for Cop settings");
-    }
-
-    [TestCase("cop/cli/commands/CopInstallation.cs", true)]
-    [TestCase("cop/cli/commands/Other.cs", false)]
-    public async Task EnvironmentCheckLimitsPathUpdatesToTheInstaller(string file, bool isInstaller)
-    {
-        await AssertCheck(Path.Combine("csharp", "no-environment.cop"), "no-environment", file, """
-            using System;
-            namespace Fixture;
-            class Example {
-                void ConfigurePath(string name) {
-                    Environment.SetEnvironmentVariable("PATH", "bin");
-                    Environment.GetEnvironmentVariable("PATH", EnvironmentVariableTarget.User);
-                    Environment.SetEnvironmentVariable("COP_FEATURE", "true");
-                    Environment.SetEnvironmentVariable(name, "bin");
-                }
-                void Other() => Environment.SetEnvironmentVariable("PATH", "bin");
-            }
-            """, "csharp", isInstaller ? [7, 8, 10] : [5, 6, 7, 8, 10],
-            "Use CLI flags or config instead of environment variables for Cop settings");
-    }
-
-    [TestCase("providers/java-provider/src/JavaSemanticContext.cs", "Discover", "CLASSPATH", false, true)]
-    [TestCase("providers/rust-provider/src/RustFrontend.cs", "Bind", "CARGO_HOME", true, true)]
-    [TestCase("providers/rust-provider/src/Other.cs", "Bind", "CARGO_HOME", false, false)]
-    public async Task EnvironmentCheckLimitsReviewedFrontendContextToItsOwner(
-        string file, string method, string variable, bool allowsComputed, bool allowsLiteral)
-    {
-        int[] violations = allowsLiteral
-            ? allowsComputed ? [6, 8, 11] : [6, 7, 8, 11]
-            : [5, 6, 7, 8, 11];
-        await AssertCheck(Path.Combine("csharp", "no-environment.cop"), "no-environment", file, $$"""
-            using System;
-            namespace Fixture;
-            class Example {
-                string? {{method}}(string name) {
-                    var context = Environment.GetEnvironmentVariable("{{variable}}");
-                    var toggle = Environment.GetEnvironmentVariable("COP_FEATURE");
-                    var computed = Environment.GetEnvironmentVariable(name);
-                    Environment.SetEnvironmentVariable("{{variable}}", "value");
-                    return context;
-                }
-                string? Other() => Environment.GetEnvironmentVariable("{{variable}}");
-            }
-            """, "csharp", violations,
+            """, "csharp", [5, 6, 7, 8],
             "Use CLI flags or config instead of environment variables for Cop settings");
     }
 

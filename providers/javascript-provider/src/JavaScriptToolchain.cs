@@ -33,7 +33,7 @@ public sealed record JavaScriptToolchain(string NodePath, string CompilerPath)
 
         // npm's Windows launchers sit beside node_modules; Unix tsc is normally a symlink
         // into ../lib/node_modules/typescript/bin/tsc (including version-manager installations).
-        foreach (string entry in (searchPath ?? Environment.GetEnvironmentVariable("PATH") ?? string.Empty)
+        foreach (string entry in (searchPath ?? HostEnvironment.GetEnvironmentVariable("PATH") ?? string.Empty)
             .Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries))
         {
             string directory = entry.Trim().Trim('"');

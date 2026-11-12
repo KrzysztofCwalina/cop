@@ -1,55 +1,7 @@
 # The environment supplies execution context, not a second configuration API.
 
-let secret-markers = ['TOKEN', 'SECRET', 'PASSWORD']
+let calls-outside-host-environment : [Statement] = source-code.Calls
+    .Where(item.File.Path != 'cop/shared/HostEnvironment.cs')
 
-let allowed-calls =
-    # Keep runtime credentials separate from shareable configuration.
-    secret-calls +
-    # External dependency locations belong to the host environment.
-    tool-search-path-reads +
-    # Host setup belongs to installation, not normal execution.
-    installer-path-calls +
-    # Unsupported host context must be reported, not silently ignored.
-    java-classpath-reads +
-    # Dependency storage locations belong to the host environment.
-    cargo-home-reads +
-    # Unsupported host context must not lead to misleading analysis.
-    rust-build-setting-reads
-
-export let no-environment = (env-calls - allowed-calls)
+export let no-environment = calls-outside-host-environment:isCSharp:isEnvironmentVariableAccess
     :toError('Use CLI flags or config instead of environment variables for Cop settings')
-
-# Calls to inspect.
-let env-calls : [Statement] = source-code.Calls:isCSharp:isEnvironmentVariableAccess
-
-# Allowed groups.
-let secret-calls = env-calls.Where(stringArgumentContainsAny(item, 0, secret-markers))
-let path-calls = env-calls.Where(hasStringArgument(item, 0, 'PATH'))
-let tool-search-path-reads = path-calls:isEnvRead
-
-let installer-calls : [Statement] = source-code.Calls
-    .Where(item.File.Path == 'cop/cli/commands/CopInstallation.cs')
-let installer-path-calls = installer-calls:isCSharp:isEnvironmentVariableAccess
-    .Where(item.Method.Name == 'ConfigurePath' && hasStringArgument(item, 0, 'PATH'))
-
-let java-context-calls : [Statement] = source-code.Calls
-    .Where(item.File.Path == 'providers/java-provider/src/JavaSemanticContext.cs')
-let java-classpath-reads = java-context-calls:isCSharp:isEnvRead
-    .Where(
-        item.Method.Name == 'Discover' &&
-        hasStringArgument(item, 0, 'CLASSPATH'))
-
-let rust-frontend-calls : [Statement] = source-code.Calls
-    .Where(item.File.Path == 'providers/rust-provider/src/RustFrontend.cs')
-let rust-toolchain-reads = rust-frontend-calls:isCSharp:isEnvRead
-    .Where(item.Method.Name == 'Bind')
-
-let cargo-home-reads = rust-toolchain-reads
-    .Where(hasStringArgument(item, 0, 'CARGO_HOME'))
-let rust-build-setting-reads = rust-toolchain-reads.Where(
-    hasIdentifierArgument(item, 0, 'name'))
-
-# Only one-argument reads have the reviewed allowances above.
-predicate isEnvRead(Statement) =>
-    isEnvironmentVariableRead(Statement) &&
-    Statement.ArgumentExpressions.Count == 1

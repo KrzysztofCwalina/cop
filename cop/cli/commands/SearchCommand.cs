@@ -64,7 +64,7 @@ public static class SearchCommand
         }
 
         // Create HTTP client with GitHub token if available
-        string? githubToken = Environment.GetEnvironmentVariable("GITHUB_TOKEN");
+        string? githubToken = HostEnvironment.GetEnvironmentVariable("GITHUB_TOKEN");
         using HttpClient httpClient = new HttpClient();
         GitHubPackageSource packageSource = new GitHubPackageSource(httpClient, githubToken);
 

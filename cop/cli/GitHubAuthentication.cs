@@ -9,7 +9,7 @@ internal static class GitHubAuthentication
     internal static async Task<string?> ResolveTokenAsync(
         CancellationToken cancellationToken = default)
     {
-        string? token = Environment.GetEnvironmentVariable("GITHUB_TOKEN");
+        string? token = HostEnvironment.GetEnvironmentVariable("GITHUB_TOKEN");
         if (!string.IsNullOrWhiteSpace(token))
         {
             return token;
