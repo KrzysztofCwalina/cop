@@ -56,6 +56,15 @@ public static class PythonBindings
             ["IsComprehension"] = o => (object)((PythonStatementInfo)o).IsComprehension,
             ["IsGlobal"] = o => (object)((PythonStatementInfo)o).IsGlobal,
             ["IsNonlocal"] = o => (object)((PythonStatementInfo)o).IsNonlocal,
+            ["IsYield"] = o => ((PythonStatementInfo)o).IsYield,
+            ["IsAsyncFor"] = o => ((PythonStatementInfo)o).IsAsyncFor,
+            ["IsUsingResource"] = o => ((PythonStatementInfo)o).IsUsingResource,
+            ["IsOwnershipTransferred"] = o => ((PythonStatementInfo)o).IsOwnershipTransferred,
+            ["IsOriginalExceptionAlwaysRethrown"] = o => ((PythonStatementInfo)o).IsOriginalExceptionAlwaysRethrown,
+            ["IsCancellationHandler"] = o => ((PythonStatementInfo)o).IsCancellationHandler,
+            ["IsCallerCancellationPreserved"] = o => ((PythonStatementInfo)o).IsCallerCancellationPreserved,
+            ["IsEnvironmentVariableAccess"] = o => ((PythonStatementInfo)o).IsEnvironmentVariableAccess,
+            ["IsEnvironmentVariableRead"] = o => ((PythonStatementInfo)o).IsEnvironmentVariableRead,
         };
         bindings.Accessors["PythonStatement"] = pythonStatementAccessors;
 

@@ -53,10 +53,29 @@ public static class JavaBindings
             ["IsEnhancedFor"] = o => (object)((JavaStatementInfo)o).IsEnhancedFor,
             ["IsThrow"] = o => (object)((JavaStatementInfo)o).IsThrow,
             ["IsAssert"] = o => (object)((JavaStatementInfo)o).IsAssert,
+            ["IsOriginalExceptionAlwaysRethrown"] = o => ((JavaStatementInfo)o).IsOriginalExceptionAlwaysRethrown,
+            ["IsUsingResource"] = o => ((JavaStatementInfo)o).IsUsingResource,
+            ["IsOwnershipTransferred"] = o =>
+            {
+                JavaStatementInfo statement = (JavaStatementInfo)o;
+                statement.WarnIfUnavailable();
+                return statement.IsOwnershipTransferred;
+            },
+            ["IsCancellationHandler"] = o => ((JavaStatementInfo)o).IsCancellationHandler,
+            ["IsCallerCancellationPreserved"] = o => ((JavaStatementInfo)o).IsCallerCancellationPreserved,
         };
         bindings.Accessors["JavaStatement"] = javaStatementAccessors;
 
         CodeBindings.AddDerivedAsyncAccessors(bindings);
+        foreach (string field in new[]
+                 { "IsOwnershipTransferred", "IsCancellationHandler", "IsCallerCancellationPreserved" })
+        {
+            bindings.AsyncAccessors["JavaStatement"][field] = async (item, token) =>
+            {
+                await ((StatementInfo)item).EnsureSemanticAnalysisAsync(token).ConfigureAwait(false);
+                return bindings.Accessors["JavaStatement"][field](item);
+            };
+        }
         return bindings;
     }
 }

@@ -17,7 +17,7 @@ export function load(path : string) : Codebase => provider('csharp', path)
 export predicate isInterface(Type:isCSharp) => Type.Kind == Interface
 
 ## Identifies async methods returning void; does not decide whether they are permitted.
-export predicate isAsyncVoid(Method) =>
+export predicate isAsyncVoid(Method:isCSharp) =>
     Method.Modifiers:isSet(Async) &&
     Method.ReturnType.Name:equals('void')
 
@@ -30,10 +30,8 @@ export predicate disablesNullable(Statement) =>
 
 ## Matches syntactic System.Environment variable reads, writes, enumeration, or expansion.
 ## Unqualified names are recognized; aliases and resolved symbols are not inferred.
-export predicate isEnvironmentVariableAccess(Statement) =>
-    Statement.TypeName:in(
-        ['Environment', 'System.Environment', 'global::System.Environment']) &&
-    Statement.MemberName:in([
+export predicate isEnvironmentVariableAccess(Statement:isCSharp) =>
+    callsTo(Statement, 'System.Environment', [
         'GetEnvironmentVariable',
         'SetEnvironmentVariable',
         'GetEnvironmentVariables',
@@ -41,7 +39,7 @@ export predicate isEnvironmentVariableAccess(Statement) =>
     ])
 
 ## Identifies GetEnvironmentVariable access, including overloads with a target argument.
-export predicate isEnvironmentVariableRead(Statement) =>
+export predicate isEnvironmentVariableRead(Statement:isCSharp) =>
     isEnvironmentVariableAccess(Statement) &&
     Statement.MemberName == 'GetEnvironmentVariable'
 

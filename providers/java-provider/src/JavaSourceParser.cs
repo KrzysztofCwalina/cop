@@ -33,8 +33,10 @@ public class JavaSourceParser(string? toolchainSearchPath = null,
         List<JavaToken> tokens = lexer.Tokenize();
         JavaParser parser = new JavaParser(tokens, lexer.Errors, sourceText);
         cancellationToken.ThrowIfCancellationRequested();
+        SourceFile file = parser.Parse(filePath);
+        JavaFallbackQueryFacts.Enrich(file, tokens);
         return await JavaNativeAnalysis.EnrichAsync(
-            parser.Parse(filePath), toolchainSearchPath, nativeRequest, cancellationToken)
+            file, toolchainSearchPath, nativeRequest, cancellationToken)
             .ConfigureAwait(false);
     }
 }

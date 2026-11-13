@@ -300,6 +300,7 @@ internal sealed class PythonParserCore
             return null;
         }
         string className = Consume().Text;
+        List<string> typeParameters = ParseTypeParameters();
 
         // Optional base types: (Base1, Base2, ...)
         List<string> baseTypes = new List<string>();
@@ -335,7 +336,8 @@ internal sealed class PythonParserCore
         if (!At(TK.Indent))
         {
             AddError(classTok.Line, classTok.Col, $"expected indented block for class '{className}'");
-            return BuildClassDecl(className, classTok.Line, baseTypes, decorators, [], [], false, false);
+            return BuildClassDecl(className, classTok.Line, baseTypes, decorators, [], [], false, false)
+                with { TypeParameters = typeParameters };
         }
         Consume(); // INDENT
 
@@ -431,7 +433,8 @@ internal sealed class PythonParserCore
         }
 
         return BuildClassDecl(className, classTok.Line, baseTypes, decorators,
-            constructors, methods, hasDocstring, hasSlots) with { NestedTypes = nestedTypes };
+            constructors, methods, hasDocstring, hasSlots)
+            with { NestedTypes = nestedTypes, TypeParameters = typeParameters };
     }
 
     private TypeDeclaration BuildClassDecl(string name, int line, List<string> baseTypes,
@@ -479,6 +482,7 @@ internal sealed class PythonParserCore
             return null;
         }
         string methodName = Consume().Text;
+        List<string> typeParameters = ParseTypeParameters();
 
         if (!At(TK.LParen))
         {
@@ -573,6 +577,7 @@ internal sealed class PythonParserCore
         {
             Statements   = bodyStatements,
             HasDocComment = hasDocstring,
+            TypeParameters = typeParameters,
         }
         .AsPython(isGenerator: bodyStatements.Exists(s => s.Kind == "yield"));
         foreach (StatementInfo statement in bodyStatements)
@@ -581,6 +586,44 @@ internal sealed class PythonParserCore
         }
 
         return method;
+    }
+
+    private List<string> ParseTypeParameters()
+    {
+        if (!At(TK.LBrack))
+        {
+            return [];
+        }
+        Consume();
+        List<Tok> parameters = CollectUntilBalanced(TK.RBrack);
+        if (At(TK.RBrack))
+        {
+            Consume();
+        }
+        List<string> names = [];
+        int depth = 0;
+        bool expectName = true;
+        foreach (Tok token in parameters)
+        {
+            if (depth == 0 && expectName && token.Kind == TK.Name)
+            {
+                names.Add(token.Text);
+                expectName = false;
+            }
+            if (token.Kind is TK.LParen or TK.LBrack or TK.LBrace)
+            {
+                depth++;
+            }
+            else if (token.Kind is TK.RParen or TK.RBrack or TK.RBrace)
+            {
+                depth--;
+            }
+            else if (depth == 0 && token.Kind == TK.Comma)
+            {
+                expectName = true;
+            }
+        }
+        return names;
     }
 
     // ── Flat body scanner ───────────────────────────────────────────────────
@@ -843,12 +886,62 @@ internal sealed class PythonParserCore
             (bool ok, string? typeName, string? memberName) = DetectCall(lt[index..]);
             if (ok)
             {
-                out_.Add(new PythonStatementInfo(new StatementInfo("call", [], typeName, memberName, [], lt[index].Line, isInMethod)));
+                ExpressionInfo target = new("identifier") { Name = lt[index].Text };
+                int part = index + 1;
+                while (part + 1 < lt.Count && lt[part].Kind == TK.Dot && lt[part + 1].Kind == TK.Name)
+                {
+                    target = new("memberAccess") { Name = lt[part + 1].Text, Target = target };
+                    part += 2;
+                }
+                out_.Add(new PythonStatementInfo(new StatementInfo("call", [], typeName, memberName, [], lt[index].Line, isInMethod))
+                {
+                    Column = lt[index].Col,
+                    CallTarget = target,
+                });
+            }
+        }
+        for (int index = 0; index + 3 < lt.Count; index++)
+        {
+            if (!lt[index].Is("os") || index > 0 && lt[index - 1].Kind == TK.Dot
+                || lt[index + 1].Kind != TK.Dot || !lt[index + 2].Is("environ")
+                || lt[index + 3].Kind != TK.LBrack)
+            {
+                continue;
+            }
+            int depth = 1;
+            int end = index + 4;
+            while (end < lt.Count && depth > 0)
+            {
+                if (lt[end].Kind == TK.LBrack)
+                {
+                    depth++;
+                }
+                else if (lt[end].Kind == TK.RBrack)
+                {
+                    depth--;
+                }
+                end++;
+            }
+            if (depth == 0)
+            {
+                out_.Add(new PythonStatementInfo(new StatementInfo("access", [], null, null, [], lt[index].Line, isInMethod))
+                {
+                    Column = lt[index].Col,
+                    IsEnvironmentVariableAccess = true,
+                    IsEnvironmentVariableRead = !first.Is("del") && !lt.Skip(end).Any(t => t.Kind == TK.Eq),
+                });
             }
         }
         if (first.Text is "if" or "elif" or "while" && lt.Count > 1 && lt[1].Kind == TK.Colon)
         {
             AddError(lineNum, first.Col, $"expected condition after '{first.Text}'");
+        }
+        if (first.Is("for") || first.Is("async") && lt.Count > 1 && lt[1].Is("for"))
+        {
+            out_.Add(new PythonStatementInfo(new StatementInfo("foreach", [], null, null, [], lineNum, isInMethod))
+            {
+                IsAsyncFor = first.Is("async"),
+            });
         }
 
         // yield anywhere on the line → yield statement (return early, matches original)

@@ -60,6 +60,11 @@ public static class JavaSchema
                     new ProviderPropertySchema { Name = "IsEnhancedFor", Type = "bool" },
                     new ProviderPropertySchema { Name = "IsThrow", Type = "bool" },
                     new ProviderPropertySchema { Name = "IsAssert", Type = "bool" },
+                    new ProviderPropertySchema { Name = "IsOriginalExceptionAlwaysRethrown", Type = "bool" },
+                    new ProviderPropertySchema { Name = "IsUsingResource", Type = "bool" },
+                    new ProviderPropertySchema { Name = "IsOwnershipTransferred", Type = "bool" },
+                    new ProviderPropertySchema { Name = "IsCancellationHandler", Type = "bool" },
+                    new ProviderPropertySchema { Name = "IsCallerCancellationPreserved", Type = "bool" },
                 ],
             },
         };

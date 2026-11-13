@@ -11,6 +11,21 @@ export function parse() : Codebase => provider('java')
 ## Example: let cb = java.parse('/path/to/project')
 export function parse(path : string) : Codebase => provider('java', path)
 
+## True for Java interface declarations (including annotation interfaces).
+export predicate isInterface(Type:isJava) => Type.Kind == Interface
+
+## Matches syntactic System.getenv / java.lang.System.getenv calls, including enumeration.
+## System properties are not environment variables. Static imports and aliases are not inferred.
+export predicate isEnvironmentVariableAccess(Statement:isJava) =>
+    Statement.Kind == call &&
+    (Statement.TypeName == 'System' || Statement.TypeName == 'java.lang.System') &&
+    Statement.MemberName == 'getenv'
+
+## True for a named Java environment-variable read; zero-argument getenv enumerates variables.
+export predicate isEnvironmentVariableRead(Statement:isJava) =>
+    isEnvironmentVariableAccess(Statement) &&
+    Statement.ArgumentExpressions.Count == 1
+
 ## A Java-specific view of a Type, exposing Java-only facts that are
 ## flattened in the language-agnostic model. Obtain one by narrowing with `asJava`.
 export type JavaType = Type & {
@@ -40,7 +55,12 @@ export type JavaStatement = Statement & {
     IsTryWithResources : bool,
     IsEnhancedFor : bool,
     IsThrow : bool,
-    IsAssert : bool
+    IsAssert : bool,
+    IsOriginalExceptionAlwaysRethrown : bool,
+    IsUsingResource : bool,
+    IsOwnershipTransferred : bool,
+    IsCancellationHandler : bool,
+    IsCallerCancellationPreserved : bool
 }
 
 ## Narrows a Type to a JavaType (Java types only), exposing Java-specific fields.
@@ -102,3 +122,29 @@ export predicate isThrow(JavaStatement) => JavaStatement.IsThrow
 
 ## True for Java `assert` statements.
 export predicate isAssert(JavaStatement) => JavaStatement.IsAssert
+
+## Proves supported explicit paths rethrow the original catch binding.
+## Single throws, nested blocks and side-effect-free if/else paths are supported.
+## Reassignment, nested functions, unsupported flow and enclosing finally are not proofs.
+## Implicit exception effects are outside this syntax proof.
+export predicate alwaysRethrowsOriginalException(JavaStatement) =>
+    JavaStatement.IsOriginalExceptionAlwaysRethrown
+
+## True for a call directly initializing a try-with-resources variable.
+## Nested argument/body calls and Java 9 existing-variable resources do not qualify.
+export predicate isUsingResource(JavaStatement) => JavaStatement.IsUsingResource
+
+## True for object creation directly returned or stored in a compiler-bound field.
+## Proves the escape site, not eventual disposal. Local/argument/array storage is not a transfer.
+## Direct returns work without a JDK; field storage requires attribution and is diagnosed if unavailable.
+export predicate transfersResourceOwnership(JavaStatement) => JavaStatement.IsOwnershipTransferred
+
+## True for a compiler-bound InterruptedException (or subtype) catch, not arbitrary cancellation errors.
+## Requires JDK attribution; fallback returns false with a diagnostic.
+export predicate isCancellationHandler(JavaStatement) => JavaStatement.IsCancellationHandler
+
+## Proves original InterruptedException propagation or Thread.currentThread().interrupt() restoration.
+## Supports explicit if/else paths and void returns after restoration, not arbitrary replacement throws.
+## No finally, reassignment, nested function, clearing call or unknown flow is accepted.
+## Requires JDK attribution; implicit exception effects and token/future cancellation are not modeled.
+export predicate isCallerCancellationPreserved(JavaStatement) => JavaStatement.IsCallerCancellationPreserved
