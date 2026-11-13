@@ -308,7 +308,8 @@ public class JavaScriptParityTests
             }
             """, cancellationToken: CancellationToken.None))!;
         var calls = file.Statements.Where(s => s.Kind == "call").ToList();
-        Assert.That((await calls.ToAsyncEnumerable().Select(async (Cop.Providers.SourceModel.StatementInfo s, CancellationToken cancellationToken) => (await AsyncSourceFacts.TypeNameAsync(s, CancellationToken.None)).TypeName).ToArrayAsync()), Is.EqualTo(new string?[] { "Actual", null, "Console" }));
+        Assert.That((await calls.ToAsyncEnumerable().Select(async (Cop.Providers.SourceModel.StatementInfo s, CancellationToken cancellationToken) => (await AsyncSourceFacts.TypeNameAsync(s, CancellationToken.None)).TypeName).ToArrayAsync()), Is.EqualTo(new string?[] { "client", "dynamic", "console" }));
+        Assert.That(await calls.ToAsyncEnumerable().Select(async (Cop.Providers.SourceModel.StatementInfo s, CancellationToken cancellationToken) => (await AsyncSourceFacts.SemanticAsync(s, CancellationToken.None)).ReceiverType?.Name).ToArrayAsync(), Is.EqualTo(new string?[] { "Actual", null, "Console" }));
         Assert.That(calls.Select(s => s.CallTarget!.Target!.Name), Is.EqualTo(new[] { "client", "dynamic", "console" }));
         Assert.That(calls[0].Method!.Name, Is.EqualTo("run"));
     }
@@ -344,7 +345,7 @@ public class JavaScriptParityTests
             var parser = new JavaScriptSourceParser();
             await using var scope = new Cop.Core.ToolchainExecutionScope();
             var first = (await parser.ParseAsync(main, source, cancellationToken: CancellationToken.None))!;
-            Assert.That((await AsyncSourceFacts.TypeNameAsync(first.Statements.Single(s => s.Kind == "call"), CancellationToken.None)).TypeName, Is.EqualTo("First"));
+            Assert.That((await AsyncSourceFacts.TypeNameAsync(first.Statements.Single(s => s.Kind == "call"), CancellationToken.None)).TypeName, Is.EqualTo("client"));
             var firstCall = first.Statements.Single(s => s.Kind == "call");
             Assert.That((await AsyncSourceFacts.SemanticAsync(firstCall, CancellationToken.None)).ReceiverType!.Name, Is.EqualTo("First"));
             Assert.That((await AsyncSourceFacts.SemanticAsync(firstCall, CancellationToken.None)).ValueType!.Name, Is.EqualTo("number"));
@@ -356,7 +357,7 @@ public class JavaScriptParityTests
             File.WriteAllText(imported, "class Second { send(value: string): boolean { return true; } } export const client = new Second();");
             File.SetLastWriteTimeUtc(imported, DateTime.UtcNow.AddSeconds(2));
             var second = (await parser.ParseAsync(main, source, cancellationToken: CancellationToken.None))!;
-            Assert.That((await AsyncSourceFacts.TypeNameAsync(second.Statements.Single(s => s.Kind == "call"), CancellationToken.None)).TypeName, Is.EqualTo("Second"));
+            Assert.That((await AsyncSourceFacts.TypeNameAsync(second.Statements.Single(s => s.Kind == "call"), CancellationToken.None)).TypeName, Is.EqualTo("client"));
             var secondCall = second.Statements.Single(s => s.Kind == "call");
             Assert.That((await AsyncSourceFacts.SemanticAsync(secondCall, CancellationToken.None)).ReceiverType!.Name, Is.EqualTo("Second"));
             Assert.That((await AsyncSourceFacts.SemanticAsync(secondCall, CancellationToken.None)).ValueType!.Name, Is.EqualTo("boolean"));
