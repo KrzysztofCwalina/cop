@@ -7,8 +7,6 @@ namespace Cop.Tests;
 public class StrictVerificationApiRegressionTests
 {
     [Test]
-    [Explicit("Issue #128: strict verification flags parsed names and diagnostic data - remove when fixed")]
-    [Category("PendingFix")]
     public void Issue128_StrictVerificationAcceptsParsedNamesAndDiagnosticData()
     {
         var directory = new DirectoryInfo(TestContext.CurrentContext.TestDirectory);

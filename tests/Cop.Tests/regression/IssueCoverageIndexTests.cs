@@ -111,7 +111,7 @@ public class IssueRegressionCoverageIndexTests
         new(120, CoverageKind.ImplementedHere, "SelfCheckStructureTests.Issue054_120_AllSelfChecksPassStrictStructureWithApprovedFormattingChecks"),
         new(124, CoverageKind.ImplementedHere, "IssueRegressionTests.Issue124_PublishedVarCheckResolvesValueTypesAndProjects; SelfCheckStructureTests.Issue117_PublishedCliPassesRepositorySelfChecks"),
         new(127, CoverageKind.CoveredBy, "CrossLanguageQueryParityTests.CommonCallQueriesExecuteAgainstEverySourceLanguage; JavaScriptQueryParityTests.CallsTo_UsesSyntacticReceiverAndDecodedArgumentPositions_ColdAndWarm"),
-        new(128, CoverageKind.ImplementedHere, "SelfCheckStructureTests.Issue128_CodePackageSourcePassesStrictStructure; StructuralCheckPolicyTests.Issue128_AllowsDiagnosticFormattingWithoutAllowingMessageBasedSelection"),
+        new(128, CoverageKind.ImplementedHere, "SelfCheckStructureTests.Issue128_CodePackageSourcePassesStrictStructure; StructuralCheckPolicyTests.Issue128_AllowsDiagnosticFormattingWithoutAllowingMessageBasedSelection; StrictVerificationApiRegressionTests.Issue128_StrictVerificationAcceptsParsedNamesAndDiagnosticData"),
     ];
 
     [Test]
