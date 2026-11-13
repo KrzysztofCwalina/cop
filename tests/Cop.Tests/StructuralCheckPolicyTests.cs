@@ -66,6 +66,23 @@ public class StructuralCheckPolicyTests
         Assert.That(diagnostics, Is.Empty);
     }
 
+    [Test]
+    public void Issue128_AllowsMembershipOnProjectedParsedNames()
+    {
+        const string source = """
+            type Type = { MethodNames : [string], Source : string }
+            type Statement = { MemberName : string? }
+            let Types : [Type] = []
+            predicate hasAsyncVariant(Statement) =>
+                Types.MethodNames:contains(Statement.MemberName + 'Async')
+            """;
+        Assert.That(Check(source), Is.Empty);
+
+        var diagnostics = Check(source + "\npredicate bad(Statement) => Types.Source:contains('class')\n");
+        Assert.That(diagnostics, Has.Count.EqualTo(1));
+        Assert.That(diagnostics[0].Message, Does.Contain("'Source'"));
+    }
+
     [TestCase("Name", false)]
     [TestCase("Source", true)]
     public void Issue116_ChainedWherePreservesSemanticElementType(string member, bool isRaw)
@@ -220,6 +237,95 @@ public class StructuralCheckPolicyTests
             let two = sample.toError('Found {item.Source}')
             """;
         Assert.That(Check(source), Is.Empty);
+    }
+
+    [Test]
+    public void Issue128_AllowsDiagnosticFormattingWithoutAllowingMessageBasedSelection()
+    {
+        const string source = """
+            type Violation = { Message : string }
+            let violations : [Violation] = []
+            function format(Violation) : string => 'diagnostic: {item.Message}'
+            command MAIN = {
+                foreach violations => format(item)
+                0
+            }
+            """;
+        Assert.That(Check(source), Is.Empty);
+
+        var diagnostics = Check(source + """
+
+            predicate selects(Violation) => format(item):contains('secret')
+            let selected = violations:selects
+            """);
+        Assert.That(diagnostics, Has.Count.EqualTo(1));
+        Assert.That(diagnostics[0].Message, Does.Contain("'Message'"));
+    }
+
+    [Test]
+    public void Issue128_RejectsTextBasedConditionsInsideDiagnosticFormatting()
+    {
+        var diagnostics = Check("""
+            type Violation = { Message : string }
+            let violations : [Violation] = []
+            function format(Violation) : string =>
+                item.Message:contains('secret') ? 'bad' : 'ok'
+            command MAIN = {
+                foreach violations => format(item)
+                0
+            }
+            """);
+        Assert.That(diagnostics, Has.Count.EqualTo(1));
+        Assert.That(diagnostics[0].Message, Does.Contain("'Message'"));
+    }
+
+    [TestCase("item.Message == 'secret' ? 'bad' : 'ok'")]
+    [TestCase("item.Message ? 'secret' => 'bad' | _ => 'ok'")]
+    public void Issue128_RejectsMessageBasedDecisionsInsideFormatting(string expression)
+    {
+        var diagnostics = Check($$"""
+            type Violation = { Message : string }
+            let violations : [Violation] = []
+            function format(Violation) : string => {{expression}}
+            command MAIN = {
+                foreach violations => format(item)
+                0
+            }
+            """);
+        Assert.That(diagnostics, Has.Count.EqualTo(1));
+        Assert.That(diagnostics[0].Message, Does.Contain("'Message'"));
+    }
+
+    [Test]
+    public void Issue128_RejectsMessageBasedSelectionBeforeReporting()
+    {
+        var diagnostics = Check("""
+            type Violation = { Message : string }
+            let violations : [Violation] = []
+            command MAIN = {
+                foreach violations.Where(item.Message:contains('secret')) => '{item.Message}'
+                0
+            }
+            """);
+        Assert.That(diagnostics, Has.Count.EqualTo(1));
+        Assert.That(diagnostics[0].Message, Does.Contain("'Message'"));
+    }
+
+    [Test]
+    public void Issue128_RejectsRawTextPassedToFormattingHelpers()
+    {
+        var diagnostics = Check("""
+            type Violation = { Message : string }
+            let violations : [Violation] = []
+            function format(value: string) : string =>
+                value:contains('secret') ? 'bad' : 'ok'
+            command MAIN = {
+                foreach violations => format(item.Message)
+                0
+            }
+            """);
+        Assert.That(diagnostics, Has.Count.EqualTo(1));
+        Assert.That(diagnostics[0].Message, Does.Contain("'Message'"));
     }
 
     [Test]

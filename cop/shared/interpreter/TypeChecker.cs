@@ -713,8 +713,13 @@ public sealed partial class TypeChecker
 
         if (obj.IsCollection)
         {
-            // A few well-known collection members; everything else is unknown.
-            return me.Member is "Count" ? new IT("int", false) : null;
+            if (me.Member is "Count")
+            {
+                return new IT("int", false);
+            }
+
+            TypeRef? projected = LookupProperty(obj.Name, me.Member);
+            return projected is null ? null : new IT(projected.Name, true);
         }
         TypeRef? pt = LookupProperty(obj.Name, me.Member);
         return pt is null ? null : ToIT(pt);

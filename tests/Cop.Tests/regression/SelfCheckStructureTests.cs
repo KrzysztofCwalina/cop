@@ -386,6 +386,16 @@ public class SelfCheckStructureTests
     }
 
     [Test]
+    public void Issue128_CodePackageSourcePassesStrictStructure()
+    {
+        var package = Path.Combine(_repo, "packages", "core", "code");
+        var files = Directory.GetFiles(package, "*.cop", SearchOption.AllDirectories);
+        var diagnostics = VerifyCommand.CollectDiagnostics(files, package, File.ReadAllText,
+            strictStructure: true);
+        Assert.That(diagnostics, Is.Empty, string.Join("\n", diagnostics.Select(d => d.Message)));
+    }
+
+    [Test]
     public void CorePackageSourceVerifiesWithDefaultLibrary()
     {
         var source = Path.Combine(_repo, "packages", "core", "core", "src");
