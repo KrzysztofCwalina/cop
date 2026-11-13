@@ -357,6 +357,20 @@ internal sealed class TypeScriptProjection(string? searchPath)
         public bool IsGenericErrorHandler { get; set; }
         /// <summary>Gets or sets whether the statement body is braced.</summary>
         public bool IsBraced { get; set; }
+        /// <summary>Gets or sets parsed environment access classification.</summary>
+        public bool IsEnvironmentVariableAccess { get; set; }
+        /// <summary>Gets or sets parsed environment read classification.</summary>
+        public bool IsEnvironmentVariableRead { get; set; }
+        /// <summary>Gets or sets the conservative original-throw proof.</summary>
+        public bool IsOriginalExceptionAlwaysRethrown { get; set; }
+        /// <summary>Gets or sets positive AbortError guard recognition.</summary>
+        public bool IsCancellationHandler { get; set; }
+        /// <summary>Gets or sets the conservative AbortError preservation proof.</summary>
+        public bool IsCallerCancellationPreserved { get; set; }
+        /// <summary>Gets or sets direct construction transfer classification.</summary>
+        public bool IsOwnershipTransferred { get; set; }
+        /// <summary>Gets or sets direct using initializer classification.</summary>
+        public bool IsUsingResource { get; set; }
         /// <summary>Gets or sets the source condition expression.</summary>
         public string? Condition { get; set; }
         /// <summary>Gets or sets the source value expression.</summary>
@@ -381,7 +395,13 @@ internal sealed class TypeScriptProjection(string? searchPath)
                 IsBraced = IsBraced, Condition = Condition, Expression = Expression, ValueExpression = ValueExpression,
                 Column = Column, EndLine = EndLine, EndColumn = EndColumn,
                 ConstructedTypeInterfaces = ConstructedTypeInterfaces,
-                ReceiverType = ReceiverType, ValueType = ValueType, ReferencedCallable = ReferencedCallable
+                ReceiverType = ReceiverType, ValueType = ValueType, ReferencedCallable = ReferencedCallable,
+                IsEnvironmentVariableAccess = IsEnvironmentVariableAccess,
+                IsEnvironmentVariableRead = IsEnvironmentVariableRead,
+                IsOriginalExceptionAlwaysRethrown = IsOriginalExceptionAlwaysRethrown,
+                IsCancellationHandler = IsCancellationHandler,
+                IsCallerCancellationPreserved = IsCallerCancellationPreserved,
+                IsOwnershipTransferred = IsOwnershipTransferred, IsUsingResource = IsUsingResource
             };
     }
 }

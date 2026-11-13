@@ -481,7 +481,7 @@ internal class JavaParser(List<JavaToken> tokens, IReadOnlyList<(int line, int c
             }
         }
         List<StatementInfo> initializerStatements = new List<StatementInfo>();
-        JavaStructuralFacts.Enrich(tokens, initializerStart, _pos, initializerStatements, inMethod: false);
+        JavaStructuralFacts.Enrich(tokens, initializerStart, _pos, initializerStatements, sourceText, inMethod: false);
         allStatements.AddRange(initializerStatements);
         if (Check(";"))
         {
@@ -696,7 +696,7 @@ internal class JavaParser(List<JavaToken> tokens, IReadOnlyList<(int line, int c
 
             Advance();
         }
-        JavaStructuralFacts.Enrich(tokens, blockStart + 1, _pos, statements);
+        JavaStructuralFacts.Enrich(tokens, blockStart + 1, _pos, statements, sourceText);
     }
 
     private Modifier ParseModifiers(out bool isSealed, out bool isNonSealed, out bool isFinal)

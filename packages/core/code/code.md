@@ -26,7 +26,7 @@ Keep thresholds, allowlists, exclusions, severity, and diagnostic wording in the
 | Projects | `referencesAny`, `hasPackage`, `targetsFramework`, `referencesFramework` |
 | Properties | `hasProjectProperty`, `hasProjectPropertyValue`, `hasOtherProjectPropertyValue` |
 | Declarations | `derivesFromAny`, `hasDecorator`, `hasNamespace`, `interfacesExcept` |
-| Named statements | `hasMemberName`, `hasTypeName` |
+| Named statements | `hasMemberName`, `hasTypeName`, `callsTo` |
 | Expressions | `isIdentifier`, `isMemberOf`, `hasIdentifierReceiver`, `hasMemberReceiver` |
 | Arguments | `hasStringArgument`, `hasStringArgumentIn`, `hasIdentifierArgument` |
 | Argument contents | `stringArgumentContainsAny` |
@@ -54,6 +54,64 @@ Project-property helpers inspect only properties exposed by the selected provide
 `hasOtherProjectPropertyValue` detects a declared differing value; it does not treat a
 missing property as invalid. Use `hasProjectProperty` separately to require presence.
 The C# provider currently exposes selected project settings, not every MSBuild property.
+
+### Cross-language API contracts
+
+The `code` queries are shared APIs, not C# wrappers. Receiver and argument queries operate
+on parsed expression trees from C#, Python, JavaScript/TypeScript, Java, Go, Rust, and Cop.
+`callsTo` also accepts Rust `::` paths, not just dot-qualified names. Its member list is
+case-sensitive. It matches call statements only and does not resolve imports, aliases,
+shadowed names, or dynamically computed receivers.
+
+Language packages expose corresponding concepts where they exist, not identical lists
+of keywords. Use language narrowing before queries on specialized declaration views.
+
+| C# concept | Corresponding language concepts |
+|-----------|--------------------------------|
+| `parse()` / `parse(path)` | All seven source-language packages |
+| `load(path)` for .NET assemblies | C# only; not a source parsing API |
+| Interfaces | Java/TypeScript interfaces, Go interfaces, Rust traits, Python protocols |
+| Generic declarations | Parsed type parameters; not constructed generic types or inferred type arguments |
+| Records | Java records, Python dataclasses; these are distinct language constructs |
+| `lock` / synchronized execution | Java synchronized methods/blocks; not Go goroutines or arbitrary Python context managers |
+| `yield` / async streams | Python/JavaScript generators; not Go channels or Rust iterators by name |
+| Native/unsafe declarations | Java native methods and Rust extern/unsafe functions where applicable |
+| Nullable directives, `ref struct`, `fixed`, partial declarations | C#-specific; no fabricated counterparts |
+| Exception filters | C# `when`; typed catches elsewhere are not equivalent filters |
+| Resource scope | C# `using`, Java try-with-resources, Python with/async with; Go defer and Rust drop have different lifetime semantics |
+| Cancellation | .NET cancellation, Python task cancellation, Java interruption, and JavaScript abort signals have different propagation contracts |
+
+Same-named language predicates must retain their language scope when packages are imported
+together. Environment queries describe the standard environment-variable APIs of each
+language, not any method with a familiar member name. A call to `os.Expand` is not
+`os.ExpandEnv`; Java system properties are not environment variables; Rust process arguments
+are not environment variables. Consult each language package for supported expression forms
+and semantic-analysis limits.
+
+Provider facts are not interchangeable merely because their names look similar.
+An all-path rethrow proof is stronger than `Statement.Rethrows` (which can report the
+presence of a rethrow). A resource escape does not prove that the receiver disposes it.
+Cancellation preservation must follow that language's actual cancellation mechanism.
+Unsupported analysis must be documented as a capability gap, not implemented as a
+placeholder predicate that always returns false.
+
+The provider-backed helper names have the following deliberately different contracts:
+
+| Helper | Applicable providers and proof boundary |
+|--------|----------------------------------------|
+| `alwaysRethrowsOriginalException` | C#, Java, Python, JS/TS: all supported explicit handler paths rethrow the original value; conditional-only throws, replacement values, and overriding cleanup do not qualify |
+| `isUsingResource` | C# direct using initializers, Java direct try-resource initializers, Python direct context-manager calls, JS/TS direct explicit-resource initializers; argument/body calls do not qualify |
+| `transfersResourceOwnership` | C# supports selected local-flow proofs; Java, Python, JS/TS support documented direct escapes. These do not promise disposal by the receiver |
+| `isCancellationHandler` | C# bound cancellation exceptions, Java bound interruption exceptions, Python named standard-library cancellation exceptions, JS/TS explicit AbortError guards |
+| `isCallerCancellationPreserved` | Supported explicit propagation paths for the above mechanisms. Python/JS do not prove caller task/signal lineage; Java interrupt restoration is not .NET token preservation |
+
+Go's `defer`, returned errors and contexts, and Rust's drop/move, `Result`/`?`, and task
+cancellation are **not** exception-handler equivalents. `isDefer` and Rust declaration
+queries remain available, but this package does not claim whole-program Go context
+propagation, Rust cancellation safety, or interprocedural ownership/disposal proofs.
+Cop and TypeSpec do not expose these runtime exception/resource mechanisms.
+Optional compiler-backed proofs require the corresponding local toolchain; structural
+fallback limits and diagnostic behavior are documented in each language package.
 
 ### Interface allowlists
 

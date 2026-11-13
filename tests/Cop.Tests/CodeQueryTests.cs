@@ -270,7 +270,7 @@ public class CodeQueryTests
             let cb = codebase(csharp.parse(), javascript.parse())
             command MAIN = {
                 foreach cb.Types.Where(item.Name == 'ITypeScriptContract') => 'foreign:{item.Name}'
-                foreach cb.Types:isInterface => 'selected:{item.Name}'
+                foreach cb.Types.Where(csharp.isInterface(item)) => 'selected:{item.Name}'
                 0
             }
             """, ["foreign:ITypeScriptContract", "selected:ICSharpContract"]);
@@ -302,6 +302,36 @@ public class CodeQueryTests
                 0
             }
             """, ["qualified:ICSharpContract", "csharp:ICSharpContract", "go:GoContract"]);
+    }
+
+    [Test]
+    public async Task CallsToMatchesQualifiedTypeSpellingsAndListedMembersOnly()
+    {
+        Write("target/Input.cs", """
+            using System;
+            namespace Fixture;
+            class Example {
+                void Run() {
+                    Environment.GetEnvironmentVariable("a");
+                    System.Environment.SetEnvironmentVariable("b", "c");
+                    global::System.Environment.GetEnvironmentVariables();
+                    Environment.Exit(0);
+                    Other.GetEnvironmentVariable("d");
+                    MySystem.Environment.GetEnvironmentVariable("e");
+                }
+            }
+            """);
+        await AssertProgram("""
+            import code
+            import csharp
+            let cb = csharp.parse()
+            command MAIN = {
+                foreach cb.Calls:callsTo('System.Environment',
+                    ['GetEnvironmentVariable', 'SetEnvironmentVariable', 'GetEnvironmentVariables'])
+                    => 'env:{item.Line}'
+                0
+            }
+            """, ["env:5", "env:6", "env:7"]);
     }
 
     [Test]

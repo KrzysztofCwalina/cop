@@ -12,6 +12,17 @@ export function parse() : Codebase => provider('rust')
 ## Example: let cb = rust.parse('/path/to/project')
 export function parse(path : string) : Codebase => provider('rust', path)
 
+## Matches std::env variable reads and enumeration, including env:: suffix spellings.
+## Imports, aliases, and shadowed names are not resolved.
+export predicate isEnvironmentVariableRead(Statement:isRust) =>
+    callsTo(Statement, 'std::env', ['var', 'var_os', 'vars', 'vars_os'])
+
+## Matches std::env variable reads and mutations, not args or directory operations.
+## Imports, aliases, and shadowed names are not resolved.
+export predicate isEnvironmentVariableAccess(Statement:isRust) =>
+    isEnvironmentVariableRead(Statement) ||
+    callsTo(Statement, 'std::env', ['set_var', 'remove_var'])
+
 ## A Rust-specific view of a Type, exposing Rust-only facts that have no place in the
 ## language-agnostic common model. Obtain one by narrowing with `asRust`.
 export type RustType = Type & {
@@ -31,6 +42,12 @@ export predicate asRust(Type) : RustType => Type.File.Language == rust
 
 ## True for Rust `trait` declarations.
 export predicate isTrait(RustType) => RustType.IsTrait
+
+## Selects Rust traits as the language's interface-like declarations, not impl blocks.
+export predicate isInterface(RustType) => RustType.IsTrait
+
+## True when a Rust type declaration has parsed type parameters.
+export predicate isGenericType(RustType) => RustType.TypeParameters.Count > 0
 
 ## True for synthetic types that represent an `impl` block. Methods belong to the declared
 ## type when its same-file module-qualified owner is unambiguous; otherwise remain on the impl.
@@ -71,6 +88,9 @@ export predicate isConstFn(RustMethod) => RustMethod.IsConst
 
 ## True for `extern` functions (FFI).
 export predicate isExternFn(RustMethod) => RustMethod.IsExtern
+
+## True when a Rust function declares parsed type parameters.
+export predicate isGenericMethod(RustMethod) => RustMethod.TypeParameters.Count > 0
 
 ## A Rust-specific view of a Statement, exposing Rust-only facts (macro invocations, panic-like
 ## macros) absent from the common model. Reached by narrowing with `asRust`.

@@ -67,6 +67,21 @@ export predicate hasTypeName(Statement, names: [string]) =>
     Statement.TypeName != nic &&
     names:any((name) => Statement.TypeName == name)
 
+## Matches calls to listed members of a type, e.g. callsTo('System.Environment', ['Exit']).
+## Accepts dot-qualified names, Rust :: paths, their qualified suffixes, and C# global::.
+## Imports and aliases are not resolved, so a same-named type or module also matches.
+## Trim removes an exact suffix, unlike Cop's case-insensitive endsWith predicate.
+export predicate callsTo(Statement, qualifiedType: string, members: [string]) =>
+    Statement.Kind == call &&
+    Statement.TypeName != nic &&
+    Statement.MemberName != nic &&
+    (Statement.TypeName == qualifiedType ||
+        Statement.TypeName == 'global::' + qualifiedType ||
+        Statement.TypeName == '::' + qualifiedType ||
+        qualifiedType.Trim('.' + Statement.TypeName) != qualifiedType ||
+        qualifiedType.Trim('::' + Statement.TypeName) != qualifiedType) &&
+    hasMemberName(Statement, members)
+
 ## Matches an identifier expression, not a string containing its name.
 export predicate isIdentifier(CodeExpression, name: string) =>
     CodeExpression.Kind == identifier &&

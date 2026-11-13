@@ -137,6 +137,113 @@ public class CopJavaAnalysis {
         return "{\"kind\":\"other\"}";
     }
 
+    static ExpressionTree unwrap(ExpressionTree value) {
+        while (value instanceof ParenthesizedTree) value = ((ParenthesizedTree)value).getExpression();
+        return value;
+    }
+
+    static boolean pure(ExpressionTree value) {
+        value = unwrap(value);
+        if (value instanceof IdentifierTree || value instanceof LiteralTree) return true;
+        if (value instanceof MemberSelectTree) return pure(((MemberSelectTree)value).getExpression());
+        if (value instanceof BinaryTree)
+            return pure(((BinaryTree)value).getLeftOperand()) && pure(((BinaryTree)value).getRightOperand());
+        return value instanceof UnaryTree && value.getKind() == Tree.Kind.LOGICAL_COMPLEMENT
+            && pure(((UnaryTree)value).getExpression());
+    }
+
+    static boolean originalThrow(StatementTree statement, String variable) {
+        if (!(statement instanceof ThrowTree)) return false;
+        ExpressionTree value = unwrap(((ThrowTree)statement).getExpression());
+        return value instanceof IdentifierTree && ((IdentifierTree)value).getName().contentEquals(variable);
+    }
+
+    static boolean rethrows(StatementTree statement, String variable) {
+        if (originalThrow(statement, variable)) return true;
+        if (statement instanceof BlockTree) {
+            List<? extends StatementTree> body = ((BlockTree)statement).getStatements();
+            return body.size() == 1 && rethrows(body.get(0), variable);
+        }
+        if (statement instanceof IfTree) {
+            IfTree branch = (IfTree)statement;
+            return pure(branch.getCondition()) && rethrows(branch.getThenStatement(), variable)
+                && branch.getElseStatement() != null && rethrows(branch.getElseStatement(), variable);
+        }
+        return false;
+    }
+
+    static boolean hasFinally(Iterable<Tree> ancestry) {
+        for (Tree parent : ancestry) {
+            if (parent instanceof MethodTree || parent instanceof LambdaExpressionTree || parent instanceof ClassTree) break;
+            if (parent instanceof TryTree && ((TryTree)parent).getFinallyBlock() != null) return true;
+        }
+        return false;
+    }
+
+    static List<Tree> ancestry(TreePath path) {
+        List<Tree> result = new ArrayList<>();
+        for (; path != null; path = path.getParentPath()) result.add(path.getLeaf());
+        return result;
+    }
+
+    static int valueParent(List<Tree> path) {
+        int index = 1;
+        while (index < path.size() && path.get(index) instanceof ParenthesizedTree) index++;
+        return index;
+    }
+
+    static boolean usingResource(List<Tree> path) {
+        int index = valueParent(path);
+        if (index + 1 >= path.size() || !(path.get(index) instanceof VariableTree)
+            || !(path.get(index + 1) instanceof TryTree)) return false;
+        VariableTree variable = (VariableTree)path.get(index);
+        return unwrap(variable.getInitializer()) == path.get(0)
+            && ((TryTree)path.get(index + 1)).getResources().contains(variable);
+    }
+
+    static boolean directReturn(List<Tree> path) {
+        int index = valueParent(path);
+        return index < path.size() && path.get(index) instanceof ReturnTree && !hasFinally(path);
+    }
+
+    static boolean methodIs(Trees trees, CompilationUnitTree unit, MethodInvocationTree invocation,
+                            String owner, String name) {
+        Element element = trees.getElement(TreePath.getPath(unit, invocation));
+        return element instanceof ExecutableElement && element.getSimpleName().contentEquals(name)
+            && element.getEnclosingElement() instanceof TypeElement
+            && ((TypeElement)element.getEnclosingElement()).getQualifiedName().contentEquals(owner);
+    }
+
+    static boolean restoresInterrupt(StatementTree statement, Trees trees, CompilationUnitTree unit) {
+        if (!(statement instanceof ExpressionStatementTree)) return false;
+        ExpressionTree value = unwrap(((ExpressionStatementTree)statement).getExpression());
+        if (!(value instanceof MethodInvocationTree)) return false;
+        MethodInvocationTree interrupt = (MethodInvocationTree)value;
+        if (!interrupt.getArguments().isEmpty() || !methodIs(trees, unit, interrupt, "java.lang.Thread", "interrupt")
+            || !(interrupt.getMethodSelect() instanceof MemberSelectTree)) return false;
+        ExpressionTree receiver = unwrap(((MemberSelectTree)interrupt.getMethodSelect()).getExpression());
+        return receiver instanceof MethodInvocationTree
+            && ((MethodInvocationTree)receiver).getArguments().isEmpty()
+            && methodIs(trees, unit, (MethodInvocationTree)receiver, "java.lang.Thread", "currentThread");
+    }
+
+    static boolean preservesInterrupt(StatementTree statement, String variable, Trees trees, CompilationUnitTree unit) {
+        if (originalThrow(statement, variable) || restoresInterrupt(statement, trees, unit)) return true;
+        if (statement instanceof BlockTree) {
+            List<? extends StatementTree> body = ((BlockTree)statement).getStatements();
+            if (body.size() == 1) return preservesInterrupt(body.get(0), variable, trees, unit);
+            return body.size() == 2 && restoresInterrupt(body.get(0), trees, unit)
+                && body.get(1) instanceof ReturnTree && ((ReturnTree)body.get(1)).getExpression() == null;
+        }
+        if (statement instanceof IfTree) {
+            IfTree branch = (IfTree)statement;
+            return pure(branch.getCondition()) && preservesInterrupt(branch.getThenStatement(), variable, trees, unit)
+                && branch.getElseStatement() != null
+                && preservesInterrupt(branch.getElseStatement(), variable, trees, unit);
+        }
+        return false;
+    }
+
     static String analyze(JavaCompiler compiler, String path, String source) throws IOException {
         DiagnosticCollector<JavaFileObject> diagnostics = new DiagnosticCollector<>();
         JavaFileObject input = new SimpleJavaFileObject(URI.create("string:///Input.java"), JavaFileObject.Kind.SOURCE) {
@@ -162,10 +269,14 @@ public class CopJavaAnalysis {
                 for (Tree declaration : unit.getTypeDecls())
                     if (declaration instanceof ClassTree) declarations.add(model.type((ClassTree)declaration));
                 new TreeScanner<Void, Void>() {
+                    final Deque<Tree> ancestry = new ArrayDeque<>();
                     String parent = "";
                     long methodLine = 0;
                     long methodColumn = 0;
-                    String id(Tree node) { return positions(node) + ":" + node.getKind().name(); }
+                    String id(Tree node) {
+                        return positions(node) + ":" + trees.getSourcePositions().getEndPosition(unit, node)
+                            + ":" + node.getKind().name();
+                    }
                     long positions(Tree node) { return trees.getSourcePositions().getStartPosition(unit, node); }
                     String kind(Tree node) {
                         switch (node.getKind()) {
@@ -187,6 +298,7 @@ public class CopJavaAnalysis {
                     }
                     public Void scan(Tree node, Void unused) {
                         if (node == null) return null;
+                        ancestry.push(node);
                         String previousParent = parent;
                         long previousMethod = methodLine;
                         long previousColumn = methodColumn;
@@ -222,6 +334,8 @@ public class CopJavaAnalysis {
                                 + ",\"kind\":" + quote(kind) + ",\"typeName\":" + quote(type)
                                 + ",\"condition\":" + quote(condition) + ",\"expression\":" + quote(expression)
                                 + ",\"genericError\":" + generic + ",\"rethrow\":" + rethrow
+                                + ",\"originalAlwaysRethrown\":" + (node instanceof CatchTree && !hasFinally(ancestry)
+                                    && rethrows(((CatchTree)node).getBlock(), ((CatchTree)node).getParameter().getName().toString()))
                                 + ",\"enhancedFor\":" + (node instanceof EnhancedForLoopTree)
                                 + ",\"tryWithResources\":" + (node instanceof TryTree && !((TryTree)node).getResources().isEmpty())
                                 + "," + model.span(node) + "}");
@@ -232,6 +346,7 @@ public class CopJavaAnalysis {
                         parent = previousParent;
                         methodLine = previousMethod;
                         methodColumn = previousColumn;
+                        ancestry.pop();
                         return result;
                     }
                     void call(Tree node, String type, String member, String target,
@@ -250,6 +365,8 @@ public class CopJavaAnalysis {
                         calls.add("{\"id\":" + quote(id(node)) + ",\"parentID\":" + quote(callParent)
                             + ",\"methodLine\":" + methodLine + ",\"methodColumn\":" + methodColumn + "," + model.span(node) + ",\"typeName\":" + quote(type)
                             + ",\"memberName\":" + quote(member) + ",\"callTarget\":" + target
+                            + ",\"usingResource\":" + usingResource(new ArrayList<>(ancestry))
+                            + ",\"ownershipTransferred\":" + (node instanceof NewClassTree && directReturn(new ArrayList<>(ancestry)))
                             + ",\"arguments\":[" + String.join(",", text)
                             + "],\"argumentExpressions\":[" + String.join(",", expressions) + "]}");
                     }
@@ -309,7 +426,7 @@ public class CopJavaAnalysis {
     static String semantic(JavaCompiler compiler, String path, String source, String sources,
                            String classpath, String sourcepath) throws IOException {
         DiagnosticCollector<JavaFileObject> diagnostics = new DiagnosticCollector<>();
-        List<String> facts = new ArrayList<>(), errors = new ArrayList<>();
+        List<String> facts = new ArrayList<>(), queryFacts = new ArrayList<>(), errors = new ArrayList<>();
         try (StandardJavaFileManager manager = compiler.getStandardFileManager(diagnostics, null, StandardCharsets.UTF_8)) {
             JavaFileObject original = manager.getJavaFileObjects(new File(path)).iterator().next();
             JavaFileObject target = new ForwardingJavaFileObject<JavaFileObject>(original) {
@@ -397,7 +514,34 @@ public class CopJavaAnalysis {
                     }
                     public Void visitNewClass(NewClassTree node, Void unused) {
                         bind(node, null, null);
+                        if (trees.getSourcePositions().getStartPosition(unit, node) < 0
+                            || trees.getSourcePositions().getEndPosition(unit, node) < 0)
+                            return super.visitNewClass(node, unused);
+                        List<Tree> pathNodes = ancestry(getCurrentPath());
+                        int index = valueParent(pathNodes);
+                        boolean transferred = directReturn(pathNodes);
+                        if (!hasFinally(pathNodes) && index < pathNodes.size()) {
+                            Tree parent = pathNodes.get(index);
+                            Element destination = null;
+                            if (parent instanceof VariableTree && unwrap(((VariableTree)parent).getInitializer()) == node)
+                                destination = trees.getElement(TreePath.getPath(unit, parent));
+                            if (parent instanceof AssignmentTree && unwrap(((AssignmentTree)parent).getExpression()) == node)
+                                destination = trees.getElement(TreePath.getPath(unit, ((AssignmentTree)parent).getVariable()));
+                            transferred |= destination != null && destination.getKind() == ElementKind.FIELD;
+                        }
+                        queryFacts.add("{" + model.span(node) + ",\"ownershipTransferred\":" + transferred + "}");
                         return super.visitNewClass(node, unused);
+                    }
+                    public Void visitCatch(CatchTree node, Void unused) {
+                        TypeMirror caught = trees.getTypeMirror(TreePath.getPath(unit, node.getParameter().getType()));
+                        TypeElement interrupted = task.getElements().getTypeElement("java.lang.InterruptedException");
+                        boolean handler = caught != null && caught.getKind() == TypeKind.DECLARED
+                            && interrupted != null && task.getTypes().isSubtype(caught, interrupted.asType());
+                        boolean preserved = handler && !hasFinally(ancestry(getCurrentPath()))
+                            && preservesInterrupt(node.getBlock(), node.getParameter().getName().toString(), trees, unit);
+                        queryFacts.add("{" + model.span(node) + ",\"cancellationHandler\":" + handler
+                            + ",\"callerCancellationPreserved\":" + preserved + "}");
+                        return super.visitCatch(node, unused);
                     }
                 }.scan(unit, null);
             }
@@ -406,7 +550,7 @@ public class CopJavaAnalysis {
             if (diagnostic.getKind() == Diagnostic.Kind.ERROR)
                 errors.add(quote("Java semantic context: " + (diagnostic.getSource() == null ? path : diagnostic.getSource().getName())
                     + "(" + diagnostic.getLineNumber() + "): " + diagnostic.getMessage(Locale.ROOT)));
-        return "{\"facts\":" + array(facts) + ",\"errors\":" + array(errors) + "}";
+        return "{\"facts\":" + array(facts) + ",\"queryFacts\":" + array(queryFacts) + ",\"errors\":" + array(errors) + "}";
     }
 
     public static void main(String[] args) throws Exception {

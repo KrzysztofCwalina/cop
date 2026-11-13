@@ -155,6 +155,27 @@ internal static class JavaNativeAnalysis
                 call.ValueType = fact.ValueType;
                 call.ReferencedCallable = fact.Callable;
             }
+            if (response.QueryFacts is not null)
+            {
+                foreach (QueryFact fact in response.QueryFacts)
+                {
+                    JavaStatementInfo? statement = file.Statements.OfType<JavaStatementInfo>().FirstOrDefault(s =>
+                        s.Line == fact.Line && s.Column == fact.Column && s.EndLine == fact.EndLine && s.EndColumn == fact.EndColumn
+                        && s.Kind is "call" or "catch");
+                    if (statement is null)
+                    {
+                        throw new InvalidOperationException("Java semantic query fact has no matching source statement.");
+                    }
+
+                    statement.IsOwnershipTransferred |= fact.OwnershipTransferred;
+                    statement.CancellationHandler = fact.CancellationHandler;
+                    statement.CallerCancellationPreserved = fact.CallerCancellationPreserved;
+                }
+                foreach (JavaStatementInfo statement in file.Statements.OfType<JavaStatementInfo>())
+                {
+                    statement.QuerySemanticsAvailable = true;
+                }
+            }
             return true;
         });
         foreach (StatementInfo statement in file.Statements)
@@ -163,7 +184,9 @@ internal static class JavaNativeAnalysis
         }
     }
 
-    private sealed record SemanticResponse(List<SemanticFact>? Facts, List<string>? Errors);
+    private sealed record SemanticResponse(List<SemanticFact>? Facts, List<string>? Errors, List<QueryFact>? QueryFacts);
+    private sealed record QueryFact(int Line, int Column, int EndLine, int EndColumn,
+        bool OwnershipTransferred, bool CancellationHandler, bool CallerCancellationPreserved);
     private sealed record SemanticFact(int Line, int Column, int EndLine, int EndColumn, TypeReference? ReceiverType,
         TypeReference? ValueType, CallableReference? Callable);
 
@@ -364,7 +387,8 @@ internal static class JavaNativeAnalysis
                     IsGenericErrorHandler = fact.GenericError,
                     HasRethrow = fact.Rethrow,
                     IsEnhancedFor = fact.EnhancedFor,
-                    IsTryWithResources = fact.TryWithResources
+                    IsTryWithResources = fact.TryWithResources,
+                    IsOriginalExceptionAlwaysRethrown = fact.OriginalAlwaysRethrown
                 });
         }
 
@@ -382,7 +406,9 @@ internal static class JavaNativeAnalysis
                 EndLine = fact.EndLine,
                 EndColumn = fact.EndColumn,
                 CallTarget = fact.CallTarget,
-                ArgumentExpressions = fact.ArgumentExpressions
+                ArgumentExpressions = fact.ArgumentExpressions,
+                IsUsingResource = fact.UsingResource,
+                IsOwnershipTransferred = fact.OwnershipTransferred
             };
             Add(fact.ID, fact.ParentID, fact.MethodLine, fact.MethodColumn, call);
         }
@@ -407,9 +433,10 @@ internal static class JavaNativeAnalysis
     private sealed record NativeResponse(List<NativeCall>? Calls, List<string>? Errors, List<NativeType>? Types,
         string? Namespace, List<string>? Imports, List<NativeStatement>? Statements, List<ImportInfo>? ImportFacts);
     private sealed record NativeCall(string ID, string? ParentID, int MethodLine, int MethodColumn, int Line, int Column, int EndLine, int EndColumn,
-        string? TypeName, string? MemberName, List<string>? Arguments, ExpressionInfo? CallTarget, List<ExpressionInfo>? ArgumentExpressions);
+        string? TypeName, string? MemberName, List<string>? Arguments, ExpressionInfo? CallTarget, List<ExpressionInfo>? ArgumentExpressions,
+        bool UsingResource, bool OwnershipTransferred);
     private sealed record NativeStatement(string ID, string? ParentID, int MethodLine, int MethodColumn, string Kind, string? TypeName, string? Condition,
-        string? Expression, bool GenericError, bool Rethrow, bool EnhancedFor, bool TryWithResources,
+        string? Expression, bool GenericError, bool Rethrow, bool EnhancedFor, bool TryWithResources, bool OriginalAlwaysRethrown,
         int Line, int Column, int EndLine, int EndColumn);
     private record NativeSpan(int Line, int Column, int EndLine, int EndColumn);
     private sealed record NativeParameter(string Name, string Type, bool Variadic, int Line, int Column, int EndLine, int EndColumn)

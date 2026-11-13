@@ -42,7 +42,16 @@ export type PythonStatement = Statement & {
     IsAssert : bool,
     IsComprehension : bool,
     IsGlobal : bool,
-    IsNonlocal : bool
+    IsNonlocal : bool,
+    IsYield : bool,
+    IsAsyncFor : bool,
+    IsUsingResource : bool,
+    IsOwnershipTransferred : bool,
+    IsOriginalExceptionAlwaysRethrown : bool,
+    IsCancellationHandler : bool,
+    IsCallerCancellationPreserved : bool,
+    IsEnvironmentVariableAccess : bool,
+    IsEnvironmentVariableRead : bool
 }
 
 ## Narrows a Type to a PythonType (Python types only), exposing Python-specific fields.
@@ -58,64 +67,116 @@ export predicate asPython(Method) : PythonMethod => Method.File.Language == pyth
 export predicate asPython(Statement) : PythonStatement => Statement.File.Language == python
 
 ## True for classes decorated with `@dataclass`.
-export predicate isDataclass(PythonType) => PythonType.IsDataclass
+export predicate isDataclass(PythonType:isPython) => PythonType.IsDataclass
 
 ## True for classes deriving from `Enum` (IntEnum, StrEnum, Flag, ...).
-export predicate isEnum(PythonType) => PythonType.IsEnum
+export predicate isEnum(PythonType:isPython) => PythonType.IsEnum
 
 ## True for classes deriving from ABC/ABCMeta.
-export predicate isAbstractClass(PythonType) => PythonType.IsAbstract
+export predicate isAbstractClass(PythonType:isPython) => PythonType.IsAbstract
 
 ## True for classes deriving from NamedTuple.
-export predicate isNamedTuple(PythonType) => PythonType.IsNamedTuple
+export predicate isNamedTuple(PythonType:isPython) => PythonType.IsNamedTuple
 
 ## True for classes deriving from Protocol.
-export predicate isProtocol(PythonType) => PythonType.IsProtocol
+export predicate isProtocol(PythonType:isPython) => PythonType.IsProtocol
 
 ## True for classes deriving from Exception, Error, or BaseException.
-export predicate isException(PythonType) => PythonType.IsException
+export predicate isException(PythonType:isPython) => PythonType.IsException
 
 ## True for classes declaring __slots__.
-export predicate hasSlots(PythonType) => PythonType.HasSlots
+export predicate hasSlots(PythonType:isPython) => PythonType.HasSlots
 
 ## True for methods decorated with @staticmethod.
-export predicate isStaticmethod(PythonMethod) => PythonMethod.IsStaticmethod
+export predicate isStaticmethod(PythonMethod:isPython) => PythonMethod.IsStaticmethod
 
 ## True for methods decorated with @classmethod.
-export predicate isClassmethod(PythonMethod) => PythonMethod.IsClassmethod
+export predicate isClassmethod(PythonMethod:isPython) => PythonMethod.IsClassmethod
 
 ## True for methods decorated with @property.
-export predicate isProperty(PythonMethod) => PythonMethod.IsProperty
+export predicate isProperty(PythonMethod:isPython) => PythonMethod.IsProperty
 
 ## True for async Python methods.
-export predicate isAsyncMethod(PythonMethod) => PythonMethod.IsAsync
+export predicate isAsyncMethod(PythonMethod:isPython) => PythonMethod.IsAsync
 
 ## True when a method body contains yield.
-export predicate isGeneratorMethod(PythonMethod) => PythonMethod.IsGenerator
+export predicate isGeneratorMethod(PythonMethod:isPython) => PythonMethod.IsGenerator
 
 ## True for methods decorated with @abstractmethod.
-export predicate isAbstractMethod(PythonMethod) => PythonMethod.IsAbstractMethod
+export predicate isAbstractMethod(PythonMethod:isPython) => PythonMethod.IsAbstractMethod
 
 ## True for Python dunder methods such as __str__.
-export predicate isDunderMethod(PythonMethod) => PythonMethod.IsDunder
+export predicate isDunderMethod(PythonMethod:isPython) => PythonMethod.IsDunder
 
 ## True for a Python with statement.
-export predicate isWith(PythonStatement) => PythonStatement.IsWith
+export predicate isWith(PythonStatement:isPython) => PythonStatement.IsWith
 
 ## True for a Python async with statement.
-export predicate isAsyncWith(PythonStatement) => PythonStatement.IsAsyncWith
+export predicate isAsyncWith(PythonStatement:isPython) => PythonStatement.IsAsyncWith
 
 ## True for a Python raise statement.
-export predicate isRaise(PythonStatement) => PythonStatement.IsRaise
+export predicate isRaise(PythonStatement:isPython) => PythonStatement.IsRaise
 
 ## True for a Python assert statement.
-export predicate isAssertStmt(PythonStatement) => PythonStatement.IsAssert
+export predicate isAssertStmt(PythonStatement:isPython) => PythonStatement.IsAssert
 
 ## True for a Python comprehension expression statement.
-export predicate isComprehension(PythonStatement) => PythonStatement.IsComprehension
+export predicate isComprehension(PythonStatement:isPython) => PythonStatement.IsComprehension
 
 ## True for a Python global statement.
-export predicate isGlobalStmt(PythonStatement) => PythonStatement.IsGlobal
+export predicate isGlobalStmt(PythonStatement:isPython) => PythonStatement.IsGlobal
 
 ## True for a Python nonlocal statement.
-export predicate isNonlocalStmt(PythonStatement) => PythonStatement.IsNonlocal
+export predicate isNonlocalStmt(PythonStatement:isPython) => PythonStatement.IsNonlocal
+
+## True for yield and yield from expressions.
+export predicate isYield(PythonStatement:isPython) => PythonStatement.IsYield
+
+## True for Python async for statements, the asynchronous-iteration counterpart of await foreach.
+export predicate isAwaitForeach(PythonStatement:isPython) => PythonStatement.IsAsyncFor
+
+## True for Python async for statements.
+export predicate isAsyncFor(PythonStatement:isPython) => PythonStatement.IsAsyncFor
+
+## True for Python protocols, the structural-interface counterpart of C# interfaces.
+export predicate isInterface(PythonType:isPython) => PythonType.IsProtocol
+
+## True for PEP 695 type declarations with explicit type parameters (Python 3.12+).
+## Legacy Generic[T] bases are not declarations of explicit type parameters.
+export predicate isGenericType(Type:isPython) => Type.TypeParameters.Count > 0
+
+## True for PEP 695 functions with explicit type parameters (Python 3.12+).
+export predicate isGenericMethod(Method:isPython) => Method.TypeParameters.Count > 0
+
+## Syntactic os.getenv/putenv/unsetenv, os.environ methods and subscripts.
+## Exact qualified spellings only; imports, aliases and shadowing are not resolved.
+export predicate isEnvironmentVariableAccess(PythonStatement:isPython) =>
+    PythonStatement.IsEnvironmentVariableAccess
+
+## Syntactic os.getenv, os.environ.get, or a load from os.environ[key].
+export predicate isEnvironmentVariableRead(PythonStatement:isPython) =>
+    PythonStatement.IsEnvironmentVariableRead
+
+## True for a call directly supplying a with/async with context expression.
+## Argument calls and calls in the managed body are not resource initializers.
+export predicate isUsingResource(PythonStatement:isPython) => PythonStatement.IsUsingResource
+
+## True for a directly returned call result or a result assigned to an instance receiver member.
+## This proves an escape site, not resource creation or disposal by the receiver.
+## Local aliases, indirect transfers and return-overriding finally paths are not proved.
+export predicate transfersResourceOwnership(PythonStatement:isPython) => PythonStatement.IsOwnershipTransferred
+
+## Every supported explicit path must raise the original exception (bare raise or unmodified caught name).
+## Supports sequences and if/else; loops, nested try, context managers and suspension are unknown.
+## Enclosing finally must have only supported fall-through paths. Implicit call exceptions are not modeled.
+export predicate alwaysRethrowsOriginalException(PythonStatement:isPython) =>
+    PythonStatement.IsOriginalExceptionAlwaysRethrown
+
+## Names asyncio.CancelledError, asyncio.exceptions.CancelledError or concurrent.futures.CancelledError.
+## Includes exception tuples. Exact qualified syntax only, not symbol resolution or derived types.
+export predicate isCancellationHandler(PythonStatement:isPython) => PythonStatement.IsCancellationHandler
+
+## True only when every supported explicit handler path raises the original exception.
+## This preserves cancellation if that handler receives it; task/token lineage is not inferred.
+export predicate isCallerCancellationPreserved(PythonStatement:isPython) =>
+    PythonStatement.IsCallerCancellationPreserved

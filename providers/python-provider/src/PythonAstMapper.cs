@@ -12,6 +12,9 @@ internal sealed class PythonAstMapper(string path, string source)
     private readonly List<StatementInfo> _statements = [];
     private readonly List<string> _imports = [];
     private readonly List<ImportInfo> _importFacts = [];
+    private readonly HashSet<(int Line, int Column)> _usingCalls = [];
+    private readonly HashSet<(int Line, int Column)> _escapingCalls = [];
+    private readonly HashSet<(int Line, int Column)> _rethrowingHandlers = [];
 
     /// <summary>Projects a Python AST response into a file-scoped source model.</summary>
     public SourceFile Parse(JsonElement document)
@@ -24,7 +27,9 @@ internal sealed class PythonAstMapper(string path, string source)
             };
         }
 
-        Walk(document.GetProperty("tree"), null, null);
+        JsonElement tree = document.GetProperty("tree");
+        AnalyzeQueryFacts(tree, default, null, []);
+        Walk(tree, null, null);
         return new(path, "python", _types, _statements, source)
         {
             Methods = _functions.OrderBy(m => m.Line).ToList(),
@@ -379,7 +384,9 @@ internal sealed class PythonAstMapper(string path, string source)
             "Global" => "global", "Nonlocal" => "nonlocal", "Break" => "break", "Continue" => "continue",
             "Assign" or "AnnAssign" or "AugAssign" => "assignment",
             "ListComp" or "SetComp" or "DictComp" or "GeneratorExp" => "comprehension",
-            "Match" => "switch", _ => null,
+            "Match" => "switch",
+            "Subscript" when QualifiedName(Get(node, "value")) == "os.environ" => "access",
+            _ => null,
         };
         if (statementKind is not null)
         {
@@ -412,11 +419,20 @@ internal sealed class PythonAstMapper(string path, string source)
                     String(k, "arg") == string.Empty ? "spread" : "namedArgument")
                 { Name = String(k, "arg") == string.Empty ? null : String(k, "arg"), Children = [Expression(Get(k, "value"))] })).ToList(),
                 Condition = kind is "If" or "While" or "Assert" ? Text(Get(node, "test")) : null,
+                ConditionExpression = kind is "If" or "While" or "Assert" ? Expression(Get(node, "test")) : null,
                 Expression = Text(Get(node, "value")),
                 ValueExpression = Get(node, "value").ValueKind == JsonValueKind.Object ? Expression(Get(node, "value")) : null,
                 IsErrorHandler = kind == "ExceptHandler",
                 IsGenericErrorHandler = kind == "ExceptHandler" && (typeName is null or "Exception" or "BaseException"),
                 HasRethrow = kind == "ExceptHandler" && Items(Get(node, "body")).Any(ContainsRethrow),
+                IsAsyncFor = kind == "AsyncFor",
+                IsUsingResource = kind == "Call" && _usingCalls.Contains(Location(node)),
+                IsOwnershipTransferred = kind == "Call" && _escapingCalls.Contains(Location(node)),
+                IsOriginalExceptionAlwaysRethrown = kind == "ExceptHandler" && _rethrowingHandlers.Contains(Location(node)),
+                IsCancellationHandler = kind == "ExceptHandler" && IsCancellationType(Get(node, "type")),
+                IsCallerCancellationPreserved = kind == "ExceptHandler" && _rethrowingHandlers.Contains(Location(node)),
+                IsEnvironmentVariableAccess = IsEnvironmentAccess(node),
+                IsEnvironmentVariableRead = IsEnvironmentRead(node),
             };
             _statements.Add(statement);
             method?.Statements.Add(statement);
@@ -426,6 +442,190 @@ internal sealed class PythonAstMapper(string path, string source)
         foreach (JsonElement child in Children(node))
         {
             Walk(child, method, parent, declareMember);
+        }
+    }
+
+    private static (int Line, int Column) Location(JsonElement node) =>
+        (Line(node), Position(node, "column") ?? 0);
+
+    private static string QualifiedName(JsonElement node) => Kind(node) switch
+    {
+        "Name" => String(node, "id"),
+        "Attribute" when QualifiedName(Get(node, "value")) is { Length: > 0 } receiver =>
+            receiver + "." + String(node, "attr"),
+        _ => string.Empty,
+    };
+
+    private static bool IsCancellationType(JsonElement node) =>
+        QualifiedName(node) is "asyncio.CancelledError" or "asyncio.exceptions.CancelledError"
+            or "concurrent.futures.CancelledError"
+        || Kind(node) == "Tuple" && Items(Get(node, "elts")).Any(IsCancellationType);
+
+    private static bool IsEnvironmentAccess(JsonElement node) =>
+        Kind(node) == "Subscript" && QualifiedName(Get(node, "value")) == "os.environ"
+        || Kind(node) == "Call" && QualifiedName(Get(node, "func")) is
+            "os.getenv" or "os.putenv" or "os.unsetenv" or "os.environ.get" or "os.environ.pop"
+            or "os.environ.setdefault" or "os.environ.update" or "os.environ.clear"
+            or "os.environ.items" or "os.environ.keys" or "os.environ.values" or "os.environ.copy";
+
+    private static bool IsEnvironmentRead(JsonElement node) =>
+        Kind(node) == "Subscript" && QualifiedName(Get(node, "value")) == "os.environ"
+            && String(node, "context") == "Load"
+        || Kind(node) == "Call" && QualifiedName(Get(node, "func")) is "os.getenv" or "os.environ.get";
+
+    private sealed record ReceiverContext(string Name, IReadOnlyDictionary<string, int> MemberWrites);
+
+    private void AnalyzeQueryFacts(JsonElement node, JsonElement parent, ReceiverContext? receiver,
+        List<JsonElement> ancestors)
+    {
+        string kind = Kind(node);
+        if (kind is "FunctionDef" or "AsyncFunctionDef" or "Lambda")
+        {
+            string? receiverName = Kind(parent) == "ClassDef"
+                && !Items(Get(node, "decorator_list")).Any()
+                ? String(Items(Get(Get(node, "args"), "posonlyargs"))
+                    .Concat(Items(Get(Get(node, "args"), "args"))).FirstOrDefault(), "arg") : null;
+            receiver = receiverName is { Length: > 0 } && !Items(Get(node, "body")).Any(n => Rebinds(n, receiverName))
+                ? new(receiverName, Descendants(node).Where(n => Kind(n) == "Attribute"
+                    && String(n, "context") is "Store" or "Del"
+                    && Kind(Get(n, "value")) == "Name" && String(Get(n, "value"), "id") == receiverName)
+                    .GroupBy(n => String(n, "attr")).ToDictionary(g => g.Key, g => g.Count(), StringComparer.Ordinal))
+                : null;
+            ancestors = [];
+        }
+        if (kind is "ClassDef")
+        {
+            receiver = null;
+            ancestors = [];
+        }
+        if (kind is "With" or "AsyncWith")
+        {
+            foreach (JsonElement item in Items(Get(node, "items")))
+            {
+                JsonElement expression = Get(item, "context_expr");
+                if (Kind(expression) == "Await")
+                {
+                    expression = Get(expression, "value");
+                }
+                if (Kind(expression) == "Call")
+                {
+                    _usingCalls.Add(Location(expression));
+                }
+            }
+        }
+        if (kind == "Return" && Kind(Get(node, "value")) == "Call"
+            && !ancestors.Any(a => Kind(a) is "Try" or "TryStar"
+                && Flow(Items(Get(a, "finalbody")), null) != Completion.Next))
+        {
+            _escapingCalls.Add(Location(Get(node, "value")));
+        }
+        if (kind is "Assign" or "AnnAssign" && Kind(Get(node, "value")) == "Call")
+        {
+            List<JsonElement> targets = kind == "Assign" ? Items(Get(node, "targets")).ToList() : [Get(node, "target")];
+            if (targets.Count == 1 && Kind(targets[0]) == "Attribute"
+                && Kind(Get(targets[0], "value")) == "Name"
+                && receiver is not null && String(Get(targets[0], "value"), "id") == receiver.Name
+                && receiver.MemberWrites.GetValueOrDefault(String(targets[0], "attr")) == 1)
+            {
+                _escapingCalls.Add(Location(Get(node, "value")));
+            }
+        }
+        if (kind == "ExceptHandler")
+        {
+            string alias = String(node, "name");
+            List<JsonElement> body = Items(Get(node, "body")).ToList();
+            bool rebound = alias.Length > 0 && body.Any(n => Rebinds(n, alias));
+            bool safeCleanup = !ancestors.Any(a => Kind(a) is "With" or "AsyncWith" or "TryStar"
+                || Kind(a) is "Try" or "TryStar" && Flow(Items(Get(a, "finalbody")), null) != Completion.Next);
+            if (!rebound && safeCleanup && Flow(body, alias) == Completion.Rethrow)
+            {
+                _rethrowingHandlers.Add(Location(node));
+            }
+        }
+        foreach (JsonElement child in Children(node))
+        {
+            AnalyzeQueryFacts(child, node, receiver, [.. ancestors, node]);
+        }
+    }
+
+    [Flags]
+    private enum Completion { Next = 1, Rethrow = 2, Exit = 4, Unknown = 8 }
+
+    private static Completion Flow(IEnumerable<JsonElement> body, string? alias)
+    {
+        Completion result = Completion.Next;
+        foreach (JsonElement statement in body)
+        {
+            if (!result.HasFlag(Completion.Next))
+            {
+                break;
+            }
+            result = (result & ~Completion.Next) | StatementFlow(statement, alias);
+        }
+        return result;
+    }
+
+    private static Completion StatementFlow(JsonElement node, string? alias)
+    {
+        switch (Kind(node))
+        {
+            case "Raise":
+                JsonElement exception = Get(node, "exc");
+                return Get(node, "cause").ValueKind == JsonValueKind.Null
+                    && (exception.ValueKind == JsonValueKind.Null || alias is { Length: > 0 }
+                        && Kind(exception) == "Name" && String(exception, "id") == alias)
+                    ? Completion.Rethrow : Completion.Exit;
+            case "If":
+                return ContainsSuspension(Get(node, "test")) ? Completion.Unknown
+                    : Flow(Items(Get(node, "body")), alias) | Flow(Items(Get(node, "orelse")), alias);
+            case "Return":
+            case "Break":
+            case "Continue":
+                return Completion.Exit;
+            case "Pass":
+            case "Import":
+            case "ImportFrom":
+            case "Global":
+            case "Nonlocal":
+            case "FunctionDef":
+            case "AsyncFunctionDef":
+            case "ClassDef":
+                return Completion.Next;
+            case "Expr":
+            case "Assign":
+            case "AnnAssign":
+            case "AugAssign":
+            case "Delete":
+            case "Assert":
+                return ContainsSuspension(node) ? Completion.Unknown : Completion.Next;
+            default:
+                // Loops, match, nested try/except and context-manager suppression need richer flow.
+                return Completion.Unknown;
+        }
+    }
+
+    private static bool ContainsSuspension(JsonElement node) =>
+        Kind(node) is "Await" or "Yield" or "YieldFrom" || Children(node).Any(ContainsSuspension);
+
+    private static bool Rebinds(JsonElement node, string alias) =>
+        Kind(node) == "Name" && String(node, "id") == alias && String(node, "context") is "Store" or "Del"
+        || Kind(node) is "FunctionDef" or "AsyncFunctionDef" or "ClassDef" or "ExceptHandler"
+            && String(node, "name") == alias
+        || Kind(node) is "Import" or "ImportFrom" && Items(Get(node, "names")).Any(n =>
+            String(n, "asname") == alias || String(n, "name") == "*"
+            || String(n, "asname").Length == 0
+                && (Kind(node) == "Import" ? String(n, "name").Split('.')[0] : String(n, "name")) == alias)
+        || Children(node).Any(child => Rebinds(child, alias));
+
+    private static IEnumerable<JsonElement> Descendants(JsonElement node)
+    {
+        foreach (JsonElement child in Children(node))
+        {
+            yield return child;
+            foreach (JsonElement descendant in Descendants(child))
+            {
+                yield return descendant;
+            }
         }
     }
 

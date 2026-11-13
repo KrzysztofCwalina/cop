@@ -51,6 +51,15 @@ public static class JavaScriptBindings
             ["IsThrow"] = o => (object)((JavaScriptStatementInfo)o).IsThrow,
             ["IsAwait"] = o => (object)((JavaScriptStatementInfo)o).IsAwait,
             ["IsTryCatch"] = o => (object)((JavaScriptStatementInfo)o).IsTryCatch,
+            ["IsYield"] = o => ((JavaScriptStatementInfo)o).IsYield,
+            ["IsAwaitForeach"] = o => ((JavaScriptStatementInfo)o).IsAwaitForeach,
+            ["IsEnvironmentVariableAccess"] = o => ((JavaScriptStatementInfo)o).IsEnvironmentVariableAccess,
+            ["IsEnvironmentVariableRead"] = o => ((JavaScriptStatementInfo)o).IsEnvironmentVariableRead,
+            ["IsOriginalExceptionAlwaysRethrown"] = o => ((JavaScriptStatementInfo)o).IsOriginalExceptionAlwaysRethrown,
+            ["IsCancellationHandler"] = o => ((JavaScriptStatementInfo)o).IsCancellationHandler,
+            ["IsCallerCancellationPreserved"] = o => ((JavaScriptStatementInfo)o).IsCallerCancellationPreserved,
+            ["IsOwnershipTransferred"] = o => ((JavaScriptStatementInfo)o).IsOwnershipTransferred,
+            ["IsUsingResource"] = o => ((JavaScriptStatementInfo)o).IsUsingResource,
         };
         bindings.Accessors["JavaScriptStatement"] = jsStatementAccessors;
 

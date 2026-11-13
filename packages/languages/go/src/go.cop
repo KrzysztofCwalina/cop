@@ -11,6 +11,17 @@ export function parse() : Codebase => provider('go')
 ## Example: let cb = go.parse('/path/to/project')
 export function parse(path : string) : Codebase => provider('go', path)
 
+## Matches os environment reads, enumeration, and expansion using parsed call names.
+## Imports, aliases, and shadowed names are not resolved.
+export predicate isEnvironmentVariableRead(Statement:isGo) =>
+    callsTo(Statement, 'os', ['Getenv', 'LookupEnv', 'Environ', 'ExpandEnv'])
+
+## Matches os environment reads and mutations; os.Expand is not an environment API.
+## Imports, aliases, and shadowed names are not resolved.
+export predicate isEnvironmentVariableAccess(Statement:isGo) =>
+    isEnvironmentVariableRead(Statement) ||
+    callsTo(Statement, 'os', ['Setenv', 'Unsetenv', 'Clearenv'])
+
 ## A Go-specific Type view. IsStruct distinguishes actual structs from other named types
 ## represented by the coarse common Kind. Obtain one by narrowing with asGo.
 export type GoType = Type & {
@@ -60,6 +71,9 @@ export predicate isInterface(GoType) => GoType.IsInterface
 
 ## True for Go `struct` types.
 export predicate isStruct(GoType) => GoType.IsStruct
+
+## True when a Go type declaration has parsed type parameters.
+export predicate isGenericType(GoType) => GoType.TypeParameters.Count > 0
 
 ## True for Go `type X = Y` aliases.
 export predicate isTypeAlias(GoType) => GoType.IsTypeAlias

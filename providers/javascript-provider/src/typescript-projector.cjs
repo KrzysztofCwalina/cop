@@ -166,7 +166,7 @@ function project(request) {
         if (ts.isPropertyAccessExpression(node))
             return { Kind: 'memberAccess', Name: node.name.text, Target: nested(node.expression) };
         if (ts.isElementAccessExpression(node))
-            return { Kind: 'other', Target: nested(node.expression), Children: [nested(node.argumentExpression)] };
+            return { Kind: 'elementAccess', Target: nested(node.expression), Children: [nested(node.argumentExpression)] };
         if (ts.isCallExpression(node) || ts.isNewExpression(node))
             return { Kind: 'invocation', Target: nested(node.expression),
                 Children: (node.arguments || []).map(nested) };
@@ -190,17 +190,23 @@ function project(request) {
         return { Kind: 'other', Children: children };
     }
     function receiverType(call) {
-        if (!ts.isNewExpression(call) && !ts.isPropertyAccessExpression(call.expression)) return null;
-        const receiver = ts.isNewExpression(call) ? call : call.expression.expression;
-        const type = checker.getTypeAtLocation(receiver);
-        if (!(type.flags & (ts.TypeFlags.Any | ts.TypeFlags.Unknown))) {
-            const symbol = type.aliasSymbol || type.getSymbol();
-            if (symbol && !symbol.name.startsWith('__')) return symbol.name;
-            if (type.flags & ts.TypeFlags.StringLike) return 'string';
-            if (type.flags & ts.TypeFlags.NumberLike) return 'number';
+        const callee = unwrap(call.expression);
+        const receiver = ts.isNewExpression(call) ? callee :
+            ts.isPropertyAccessExpression(callee) || ts.isElementAccessExpression(callee) ? callee.expression : null;
+        function syntaxName(node) {
+            node = unwrap(node);
+            if (!node) return null;
+            if (ts.isIdentifier(node)) return node.text;
+            if (node.kind === ts.SyntaxKind.ThisKeyword) return 'this';
+            if (node.kind === ts.SyntaxKind.SuperKeyword) return 'super';
+            if (ts.isPropertyAccessExpression(node)) {
+                const target = syntaxName(node.expression);
+                return target ? target + '.' + node.name.text : null;
+            }
+            return null;
         }
-        // A syntactic receiver is not a resolved type. CallTarget retains its exact identity.
-        return null;
+        // TypeName is syntax identity; ReceiverType carries separately bound compiler types.
+        return syntaxName(receiver);
     }
     function binding(node) {
         const call = ts.isCallExpression(node) || ts.isNewExpression(node);
@@ -282,6 +288,124 @@ function project(request) {
         if (ts.isFunctionLike(node)) return false;
         if (ts.isThrowStatement(node)) return true;
         return !!ts.forEachChild(node, containsThrow);
+    }
+    function unwrap(node) {
+        while (node && ts.isParenthesizedExpression(node)) node = node.expression;
+        return node;
+    }
+    function member(node, expected) {
+        node = unwrap(node);
+        return node && (ts.isPropertyAccessExpression(node) && node.name.text === expected ||
+            ts.isElementAccessExpression(node) && ts.isStringLiteralLike(node.argumentExpression) &&
+                node.argumentExpression.text === expected);
+    }
+    function environment(node) {
+        node = unwrap(node);
+        if (!node || !(ts.isPropertyAccessExpression(node) || ts.isElementAccessExpression(node))) return false;
+        const receiver = unwrap(node.expression);
+        return member(receiver, 'env') && ts.isIdentifier(unwrap(receiver.expression)) &&
+            unwrap(receiver.expression).text === 'process' ||
+            member(node, 'env') && ts.isIdentifier(receiver) && receiver.text === 'process';
+    }
+    function environmentRead(node) {
+        while (ts.isParenthesizedExpression(node.parent)) node = node.parent;
+        const parent = node.parent;
+        return !(ts.isDeleteExpression(parent) ||
+            ts.isBinaryExpression(parent) && parent.left === node &&
+                parent.operatorToken.kind === ts.SyntaxKind.EqualsToken);
+    }
+    function hasFinally(node) {
+        for (let parent = node.parent; parent; parent = parent.parent) {
+            if (ts.isFunctionLike(parent)) break;
+            if (ts.isTryStatement(parent) && parent.finallyBlock) return true;
+        }
+        return false;
+    }
+    // A deliberately small explicit-flow proof. Reject even unrelated assignments/declarations
+    // rather than inventing binding or alias analysis for the no-runtime backend.
+    function safeCatchBody(node) {
+        let safe = true;
+        function scan(child) {
+            if (ts.isFunctionLike(child) || ts.isClassDeclaration(child) || ts.isClassExpression(child) ||
+                ts.isVariableDeclaration(child) || ts.isTryStatement(child) ||
+                ts.isBinaryExpression(child) && child.operatorToken.kind >= ts.SyntaxKind.FirstAssignment &&
+                    child.operatorToken.kind <= ts.SyntaxKind.LastAssignment ||
+                (ts.isPrefixUnaryExpression(child) || ts.isPostfixUnaryExpression(child)) &&
+                    [ts.SyntaxKind.PlusPlusToken, ts.SyntaxKind.MinusMinusToken].includes(child.operator) ||
+                ts.isDeleteExpression(child) || ts.isAwaitExpression(child) || ts.isYieldExpression(child)) {
+                safe = false;
+                return;
+            }
+            if (ts.isCallExpression(child) && ts.isIdentifier(child.expression) && child.expression.text === 'eval') {
+                safe = false;
+                return;
+            }
+            ts.forEachChild(child, scan);
+        }
+        scan(node);
+        return safe;
+    }
+    // Outcomes are normal fallthrough=1, original throw=2, all other/unsupported exits=4.
+    function explicitFlow(node, caught) {
+        if (!node) return 1;
+        if (ts.isBlock(node)) {
+            let result = 1;
+            for (const child of node.statements)
+                if (result & 1) result = (result & ~1) | explicitFlow(child, caught);
+            return result;
+        }
+        if (ts.isThrowStatement(node)) {
+            const value = unwrap(node.expression);
+            return value && ts.isIdentifier(value) && value.text === caught ? 2 : 4;
+        }
+        if (ts.isIfStatement(node))
+            return explicitFlow(node.thenStatement, caught) | explicitFlow(node.elseStatement, caught);
+        if (ts.isEmptyStatement(node)) return 1;
+        if (ts.isExpressionStatement(node) &&
+            (ts.isCallExpression(unwrap(node.expression)) || ts.isNewExpression(unwrap(node.expression)))) return 1;
+        return 4;
+    }
+    function abortGuard(node, caught) {
+        node = unwrap(node);
+        if (!node || !ts.isBinaryExpression(node) ||
+            ![ts.SyntaxKind.EqualsEqualsToken, ts.SyntaxKind.EqualsEqualsEqualsToken].includes(node.operatorToken.kind))
+            return false;
+        function pair(access, value) {
+            access = unwrap(access); value = unwrap(value);
+            return member(access, 'name') && ts.isIdentifier(unwrap(access.expression)) &&
+                unwrap(access.expression).text === caught && ts.isStringLiteralLike(value) && value.text === 'AbortError';
+        }
+        return pair(node.left, node.right) || pair(node.right, node.left);
+    }
+    function catchFacts(node) {
+        const caught = node.variableDeclaration && node.variableDeclaration.name;
+        if (!caught || !ts.isIdentifier(caught)) return {};
+        const first = node.block.statements[0];
+        const handler = !!first && ts.isIfStatement(first) && abortGuard(first.expression, caught.text);
+        const safe = !hasFinally(node) && safeCatchBody(node.block);
+        return {
+            IsOriginalExceptionAlwaysRethrown: safe && explicitFlow(node.block, caught.text) === 2,
+            IsCancellationHandler: handler,
+            IsCallerCancellationPreserved: handler && safe && explicitFlow(first.thenStatement, caught.text) === 2
+        };
+    }
+    function creationTransferred(node) {
+        if (!ts.isNewExpression(node) || hasFinally(node)) return false;
+        let value = node;
+        while (ts.isParenthesizedExpression(value.parent)) value = value.parent;
+        const parent = value.parent;
+        if (ts.isReturnStatement(parent)) return true;
+        if (!ts.isBinaryExpression(parent) || parent.right !== value ||
+            parent.operatorToken.kind !== ts.SyntaxKind.EqualsToken) return false;
+        const left = unwrap(parent.left);
+        return (ts.isPropertyAccessExpression(left) || ts.isElementAccessExpression(left)) &&
+            unwrap(left.expression).kind === ts.SyntaxKind.ThisKeyword;
+    }
+    function usingInitializer(node) {
+        let value = node;
+        while (ts.isParenthesizedExpression(value.parent)) value = value.parent;
+        return ts.isVariableDeclaration(value.parent) && value.parent.initializer === value &&
+            !!(value.parent.parent.flags & ts.NodeFlags.Using);
     }
     function visit(node, owner = null, parent = null, container = null) {
         if (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) {
@@ -404,6 +528,7 @@ function project(request) {
             current = statement(node, 'call', owner, parent, {
                 TypeName: receiverType(node), MemberName: memberName, CallTarget: expression(callee),
                 Arguments: (node.arguments || []).map(text), ArgumentExpressions: (node.arguments || []).map(n => expression(n)),
+                IsOwnershipTransferred: creationTransferred(node), IsUsingResource: usingInitializer(node),
                 ConstructedTypeInterfaces: ts.isNewExpression(node) ? (() => {
                     const symbol = checker.getTypeAtLocation(node).getSymbol();
                     return [...new Set((symbol?.declarations || []).flatMap(d => implementedInterfaces(d)))];
@@ -414,7 +539,8 @@ function project(request) {
                 importModule(node.arguments[0].text);
         } else if (ts.isVariableDeclaration(node)) {
             const declarationList = node.parent;
-            const keyword = declarationList.flags & ts.NodeFlags.Const ? 'const' :
+            const keyword = declarationList.flags & ts.NodeFlags.Using ? 'using' :
+                declarationList.flags & ts.NodeFlags.Const ? 'const' :
                 declarationList.flags & ts.NodeFlags.Let ? 'let' : 'var';
             current = statement(node, 'declaration', owner, parent, {
                 MemberName: name(node), Keywords: [keyword], Expression: text(node.initializer),
@@ -428,6 +554,11 @@ function project(request) {
             current = statement(node, 'await', owner, parent, {
                 Expression: text(node.expression), ValueExpression: expression(node.expression), TypeName: primitive
             });
+        } else if (ts.isYieldExpression(node)) {
+            current = statement(node, 'yield', owner, parent, {
+                ValueExpression: node.expression ? expression(node.expression) : null,
+                Expression: text(node.expression)
+            });
         } else if (ts.isIfStatement(node) || ts.isWhileStatement(node) || ts.isDoStatement(node) ||
             ts.isForStatement(node) || ts.isForOfStatement(node) || ts.isForInStatement(node) ||
             ts.isSwitchStatement(node)) {
@@ -435,7 +566,8 @@ function project(request) {
                 ts.isDoStatement(node) ? 'do' : ts.isForOfStatement(node) ? 'for-of' :
                     ts.isForInStatement(node) ? 'for-in' : ts.isSwitchStatement(node) ? 'switch' : 'for';
             current = statement(node, kind, owner, parent, {
-                Keywords: [kind.startsWith('for') ? 'for' : kind],
+                Keywords: ts.isForOfStatement(node) && node.awaitModifier ? ['for', 'await'] :
+                    [kind.startsWith('for') ? 'for' : kind],
                 Condition: text(node.condition || node.expression), IsBraced: !!node.statement &&
                     ts.isBlock(node.statement) || ts.isIfStatement(node) && ts.isBlock(node.thenStatement)
             });
@@ -443,7 +575,8 @@ function project(request) {
             current = statement(node, 'try', owner, parent, { IsBraced: true });
         } else if (ts.isCatchClause(node)) {
             current = statement(node, 'catch', owner, parent, {
-                IsErrorHandler: true, IsGenericErrorHandler: true, HasRethrow: containsThrow(node.block), IsBraced: true
+                IsErrorHandler: true, IsGenericErrorHandler: true, HasRethrow: containsThrow(node.block), IsBraced: true,
+                ...catchFacts(node)
             });
         } else if (ts.isReturnStatement(node) || ts.isThrowStatement(node)) {
             current = statement(node, ts.isReturnStatement(node) ? 'return' : 'throw', owner, parent, {
@@ -453,6 +586,13 @@ function project(request) {
             });
         } else if (node.kind === ts.SyntaxKind.DebuggerStatement) {
             current = statement(node, 'call', owner, parent, { MemberName: 'debugger', Keywords: ['debugger'] });
+        } else if ((ts.isPropertyAccessExpression(node) || ts.isElementAccessExpression(node)) &&
+            environment(node) && !((ts.isPropertyAccessExpression(node.parent) ||
+                ts.isElementAccessExpression(node.parent)) && environment(node.parent))) {
+            current = statement(node, 'environment-access', owner, parent, {
+                ValueExpression: expression(node), IsEnvironmentVariableAccess: true,
+                IsEnvironmentVariableRead: environmentRead(node)
+            });
         }
         ts.forEachChild(node, child => visit(child, owner, current, container));
     }

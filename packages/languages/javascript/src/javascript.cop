@@ -39,7 +39,16 @@ export type JavaScriptStatement = Statement & {
     IsForIn : bool,
     IsThrow : bool,
     IsAwait : bool,
-    IsTryCatch : bool
+    IsTryCatch : bool,
+    IsYield : bool,
+    IsAwaitForeach : bool,
+    IsEnvironmentVariableAccess : bool,
+    IsEnvironmentVariableRead : bool,
+    IsOriginalExceptionAlwaysRethrown : bool,
+    IsCancellationHandler : bool,
+    IsCallerCancellationPreserved : bool,
+    IsOwnershipTransferred : bool,
+    IsUsingResource : bool
 }
 
 ## Narrows a Type to a JavaScriptType (JS/TS types only), exposing JS-specific fields.
@@ -95,3 +104,49 @@ export predicate isAwait(JavaScriptStatement) => JavaScriptStatement.IsAwait
 
 ## True for a JavaScript `try` statement.
 export predicate isTryCatch(JavaScriptStatement) => JavaScriptStatement.IsTryCatch
+
+## True for yield and yield* expressions in JavaScript generators.
+export predicate isYield(JavaScriptStatement) => JavaScriptStatement.IsYield
+
+## True for JavaScript for await (... of ...) asynchronous iteration.
+export predicate isAwaitForeach(JavaScriptStatement) => JavaScriptStatement.IsAwaitForeach
+
+## True for TypeScript interface declarations; JavaScript has no interface declarations.
+export predicate isInterface(Type:isJavaScript) => Type.Kind == Interface
+
+## True when a JS/TS function or method declares type parameters.
+export predicate isGenericMethod(JavaScriptMethod) => JavaScriptMethod.TypeParameters.Count > 0
+
+## Syntactic process.env access, including property/index reads, writes and deletes.
+## This is not a getter call or a resolved Node.js symbol; aliases are not inferred.
+export predicate isEnvironmentVariableAccess(JavaScriptStatement) =>
+    JavaScriptStatement.IsEnvironmentVariableAccess
+
+## True for a process.env access that reads; plain assignment/delete targets are excluded.
+export predicate isEnvironmentVariableRead(JavaScriptStatement) =>
+    JavaScriptStatement.IsEnvironmentVariableRead
+
+## Proves all supported explicit catch paths throw the unchanged caught value.
+## Blocks, branches and fallthrough are tracked; unsupported flow, assignments,
+## nested functions, declarations and enclosing finally blocks are conservative false.
+## Implicit exceptions from expressions are not modeled.
+export predicate alwaysRethrowsOriginalException(JavaScriptStatement) =>
+    JavaScriptStatement.IsOriginalExceptionAlwaysRethrown
+
+## Recognizes a catch whose first statement positively tests caught.name == 'AbortError'.
+## JS catches are untyped: this is a name convention, not a bound exception-type test.
+export predicate isCancellationHandler(JavaScriptStatement) =>
+    JavaScriptStatement.IsCancellationHandler
+
+## Proves the recognized AbortError branch rethrows the unchanged caught value.
+## This preserves the caught cancellation value, not AbortSignal/caller-token lineage.
+export predicate isCallerCancellationPreserved(JavaScriptStatement) =>
+    JavaScriptStatement.IsCallerCancellationPreserved
+
+## True for new expressions directly returned or assigned to a this member.
+## Does not infer disposable types, local aliases, factories or member ownership contracts.
+export predicate transfersResourceOwnership(JavaScriptStatement) =>
+    JavaScriptStatement.IsOwnershipTransferred
+
+## True for calls directly initializing using/await using declarations, not nested calls.
+export predicate isUsingResource(JavaScriptStatement) => JavaScriptStatement.IsUsingResource

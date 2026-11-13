@@ -1928,6 +1928,11 @@ const packages = {
         "desc": "Matches parsed type names without inferring aliases or resolving symbols."
       },
       {
+        "name": "callsTo",
+        "appliesTo": "Statement",
+        "desc": "Matches calls to listed members of a type, e.g. callsTo('System.Environment', ['Exit']).\nAccepts dot-qualified names, Rust :: paths, their qualified suffixes, and C# global::.\nImports and aliases are not resolved, so a same-named type or module also matches.\nTrim removes an exact suffix, unlike Cop's case-insensitive endsWith predicate."
+      },
+      {
         "name": "isIdentifier",
         "appliesTo": "CodeExpression",
         "desc": "Matches an identifier expression, not a string containing its name."
@@ -5174,6 +5179,16 @@ const packages = {
     },
     "predicates": [
       {
+        "name": "isEnvironmentVariableRead",
+        "appliesTo": "Statement",
+        "desc": "Matches os environment reads, enumeration, and expansion using parsed call names.\nImports, aliases, and shadowed names are not resolved."
+      },
+      {
+        "name": "isEnvironmentVariableAccess",
+        "appliesTo": "Statement",
+        "desc": "Matches os environment reads and mutations; os.Expand is not an environment API.\nImports, aliases, and shadowed names are not resolved."
+      },
+      {
         "name": "asGo",
         "appliesTo": "Type",
         "narrows": "GoType",
@@ -5200,6 +5215,11 @@ const packages = {
         "name": "isStruct",
         "appliesTo": "GoType",
         "desc": "True for Go `struct` types."
+      },
+      {
+        "name": "isGenericType",
+        "appliesTo": "GoType",
+        "desc": "True when a Go type declaration has parsed type parameters."
       },
       {
         "name": "isTypeAlias",
@@ -5635,11 +5655,51 @@ const packages = {
             "name": "IsAssert",
             "type": "bool",
             "desc": ""
+          },
+          {
+            "name": "IsOriginalExceptionAlwaysRethrown",
+            "type": "bool",
+            "desc": ""
+          },
+          {
+            "name": "IsUsingResource",
+            "type": "bool",
+            "desc": ""
+          },
+          {
+            "name": "IsOwnershipTransferred",
+            "type": "bool",
+            "desc": ""
+          },
+          {
+            "name": "IsCancellationHandler",
+            "type": "bool",
+            "desc": ""
+          },
+          {
+            "name": "IsCallerCancellationPreserved",
+            "type": "bool",
+            "desc": ""
           }
         ]
       }
     },
     "predicates": [
+      {
+        "name": "isInterface",
+        "appliesTo": "Type",
+        "desc": "True for Java interface declarations (including annotation interfaces)."
+      },
+      {
+        "name": "isEnvironmentVariableAccess",
+        "appliesTo": "Statement",
+        "desc": "Matches syntactic System.getenv / java.lang.System.getenv calls, including enumeration.\nSystem properties are not environment variables. Static imports and aliases are not inferred."
+      },
+      {
+        "name": "isEnvironmentVariableRead",
+        "appliesTo": "Statement",
+        "desc": "True for a named Java environment-variable read; zero-argument getenv enumerates variables."
+      },
       {
         "name": "asJava",
         "appliesTo": "Type",
@@ -5737,6 +5797,31 @@ const packages = {
         "name": "isAssert",
         "appliesTo": "JavaStatement",
         "desc": "True for Java `assert` statements."
+      },
+      {
+        "name": "alwaysRethrowsOriginalException",
+        "appliesTo": "JavaStatement",
+        "desc": "Proves supported explicit paths rethrow the original catch binding.\nSingle throws, nested blocks and side-effect-free if/else paths are supported.\nReassignment, nested functions, unsupported flow and enclosing finally are not proofs.\nImplicit exception effects are outside this syntax proof."
+      },
+      {
+        "name": "isUsingResource",
+        "appliesTo": "JavaStatement",
+        "desc": "True for a call directly initializing a try-with-resources variable.\nNested argument/body calls and Java 9 existing-variable resources do not qualify."
+      },
+      {
+        "name": "transfersResourceOwnership",
+        "appliesTo": "JavaStatement",
+        "desc": "True for object creation directly returned or stored in a compiler-bound field.\nProves the escape site, not eventual disposal. Local/argument/array storage is not a transfer.\nDirect returns work without a JDK; field storage requires attribution and is diagnosed if unavailable."
+      },
+      {
+        "name": "isCancellationHandler",
+        "appliesTo": "JavaStatement",
+        "desc": "True for a compiler-bound InterruptedException (or subtype) catch, not arbitrary cancellation errors.\nRequires JDK attribution; fallback returns false with a diagnostic."
+      },
+      {
+        "name": "isCallerCancellationPreserved",
+        "appliesTo": "JavaStatement",
+        "desc": "Proves original InterruptedException propagation or Thread.currentThread().interrupt() restoration.\nSupports explicit if/else paths and void returns after restoration, not arbitrary replacement throws.\nNo finally, reassignment, nested function, clearing call or unknown flow is accepted.\nRequires JDK attribution; implicit exception effects and token/future cancellation are not modeled."
       }
     ],
     "functions": [
@@ -5903,6 +5988,51 @@ const packages = {
             "name": "IsTryCatch",
             "type": "bool",
             "desc": ""
+          },
+          {
+            "name": "IsYield",
+            "type": "bool",
+            "desc": ""
+          },
+          {
+            "name": "IsAwaitForeach",
+            "type": "bool",
+            "desc": ""
+          },
+          {
+            "name": "IsEnvironmentVariableAccess",
+            "type": "bool",
+            "desc": ""
+          },
+          {
+            "name": "IsEnvironmentVariableRead",
+            "type": "bool",
+            "desc": ""
+          },
+          {
+            "name": "IsOriginalExceptionAlwaysRethrown",
+            "type": "bool",
+            "desc": ""
+          },
+          {
+            "name": "IsCancellationHandler",
+            "type": "bool",
+            "desc": ""
+          },
+          {
+            "name": "IsCallerCancellationPreserved",
+            "type": "bool",
+            "desc": ""
+          },
+          {
+            "name": "IsOwnershipTransferred",
+            "type": "bool",
+            "desc": ""
+          },
+          {
+            "name": "IsUsingResource",
+            "type": "bool",
+            "desc": ""
           }
         ]
       }
@@ -5995,6 +6125,61 @@ const packages = {
         "name": "isTryCatch",
         "appliesTo": "JavaScriptStatement",
         "desc": "True for a JavaScript `try` statement."
+      },
+      {
+        "name": "isYield",
+        "appliesTo": "JavaScriptStatement",
+        "desc": "True for yield and yield* expressions in JavaScript generators."
+      },
+      {
+        "name": "isAwaitForeach",
+        "appliesTo": "JavaScriptStatement",
+        "desc": "True for JavaScript for await (... of ...) asynchronous iteration."
+      },
+      {
+        "name": "isInterface",
+        "appliesTo": "Type",
+        "desc": "True for TypeScript interface declarations; JavaScript has no interface declarations."
+      },
+      {
+        "name": "isGenericMethod",
+        "appliesTo": "JavaScriptMethod",
+        "desc": "True when a JS/TS function or method declares type parameters."
+      },
+      {
+        "name": "isEnvironmentVariableAccess",
+        "appliesTo": "JavaScriptStatement",
+        "desc": "Syntactic process.env access, including property/index reads, writes and deletes.\nThis is not a getter call or a resolved Node.js symbol; aliases are not inferred."
+      },
+      {
+        "name": "isEnvironmentVariableRead",
+        "appliesTo": "JavaScriptStatement",
+        "desc": "True for a process.env access that reads; plain assignment/delete targets are excluded."
+      },
+      {
+        "name": "alwaysRethrowsOriginalException",
+        "appliesTo": "JavaScriptStatement",
+        "desc": "Proves all supported explicit catch paths throw the unchanged caught value.\nBlocks, branches and fallthrough are tracked; unsupported flow, assignments,\nnested functions, declarations and enclosing finally blocks are conservative false.\nImplicit exceptions from expressions are not modeled."
+      },
+      {
+        "name": "isCancellationHandler",
+        "appliesTo": "JavaScriptStatement",
+        "desc": "Recognizes a catch whose first statement positively tests caught.name == 'AbortError'.\nJS catches are untyped: this is a name convention, not a bound exception-type test."
+      },
+      {
+        "name": "isCallerCancellationPreserved",
+        "appliesTo": "JavaScriptStatement",
+        "desc": "Proves the recognized AbortError branch rethrows the unchanged caught value.\nThis preserves the caught cancellation value, not AbortSignal/caller-token lineage."
+      },
+      {
+        "name": "transfersResourceOwnership",
+        "appliesTo": "JavaScriptStatement",
+        "desc": "True for new expressions directly returned or assigned to a this member.\nDoes not infer disposable types, local aliases, factories or member ownership contracts."
+      },
+      {
+        "name": "isUsingResource",
+        "appliesTo": "JavaScriptStatement",
+        "desc": "True for calls directly initializing using/await using declarations, not nested calls."
       }
     ],
     "functions": [
@@ -6820,6 +7005,51 @@ const packages = {
             "name": "IsNonlocal",
             "type": "bool",
             "desc": ""
+          },
+          {
+            "name": "IsYield",
+            "type": "bool",
+            "desc": ""
+          },
+          {
+            "name": "IsAsyncFor",
+            "type": "bool",
+            "desc": ""
+          },
+          {
+            "name": "IsUsingResource",
+            "type": "bool",
+            "desc": ""
+          },
+          {
+            "name": "IsOwnershipTransferred",
+            "type": "bool",
+            "desc": ""
+          },
+          {
+            "name": "IsOriginalExceptionAlwaysRethrown",
+            "type": "bool",
+            "desc": ""
+          },
+          {
+            "name": "IsCancellationHandler",
+            "type": "bool",
+            "desc": ""
+          },
+          {
+            "name": "IsCallerCancellationPreserved",
+            "type": "bool",
+            "desc": ""
+          },
+          {
+            "name": "IsEnvironmentVariableAccess",
+            "type": "bool",
+            "desc": ""
+          },
+          {
+            "name": "IsEnvironmentVariableRead",
+            "type": "bool",
+            "desc": ""
           }
         ]
       }
@@ -6947,6 +7177,71 @@ const packages = {
         "name": "isNonlocalStmt",
         "appliesTo": "PythonStatement",
         "desc": "True for a Python nonlocal statement."
+      },
+      {
+        "name": "isYield",
+        "appliesTo": "PythonStatement",
+        "desc": "True for yield and yield from expressions."
+      },
+      {
+        "name": "isAwaitForeach",
+        "appliesTo": "PythonStatement",
+        "desc": "True for Python async for statements, the asynchronous-iteration counterpart of await foreach."
+      },
+      {
+        "name": "isAsyncFor",
+        "appliesTo": "PythonStatement",
+        "desc": "True for Python async for statements."
+      },
+      {
+        "name": "isInterface",
+        "appliesTo": "PythonType",
+        "desc": "True for Python protocols, the structural-interface counterpart of C# interfaces."
+      },
+      {
+        "name": "isGenericType",
+        "appliesTo": "Type",
+        "desc": "True for PEP 695 type declarations with explicit type parameters (Python 3.12+).\nLegacy Generic[T] bases are not declarations of explicit type parameters."
+      },
+      {
+        "name": "isGenericMethod",
+        "appliesTo": "Method",
+        "desc": "True for PEP 695 functions with explicit type parameters (Python 3.12+)."
+      },
+      {
+        "name": "isEnvironmentVariableAccess",
+        "appliesTo": "PythonStatement",
+        "desc": "Syntactic os.getenv/putenv/unsetenv, os.environ methods and subscripts.\nExact qualified spellings only; imports, aliases and shadowing are not resolved."
+      },
+      {
+        "name": "isEnvironmentVariableRead",
+        "appliesTo": "PythonStatement",
+        "desc": "Syntactic os.getenv, os.environ.get, or a load from os.environ[key]."
+      },
+      {
+        "name": "isUsingResource",
+        "appliesTo": "PythonStatement",
+        "desc": "True for a call directly supplying a with/async with context expression.\nArgument calls and calls in the managed body are not resource initializers."
+      },
+      {
+        "name": "transfersResourceOwnership",
+        "appliesTo": "PythonStatement",
+        "desc": "True for a directly returned call result or a result assigned to an instance receiver member.\nThis proves an escape site, not resource creation or disposal by the receiver.\nLocal aliases, indirect transfers and return-overriding finally paths are not proved."
+      },
+      {
+        "name": "alwaysRethrowsOriginalException",
+        "appliesTo": "PythonStatement",
+        "desc": "Every supported explicit path must raise the original exception (bare raise or unmodified caught name).\nSupports sequences and if/else; loops, nested try, context managers and suspension are unknown.\nEnclosing finally must have only supported fall-through paths. Implicit call exceptions are not modeled."
+      },
+      {
+        "name": "isCancellationHandler",
+        "appliesTo": "PythonStatement",
+        "desc": "Names asyncio.CancelledError, asyncio.exceptions.CancelledError or concurrent.futures.CancelledError.\nIncludes exception tuples. Exact qualified syntax only, not symbol resolution or derived types."
+      },
+      {
+        "name": "isCallerCancellationPreserved",
+        "appliesTo": "PythonStatement",
+        "desc": "True only when every supported explicit handler path raises the original exception.\nThis preserves cancellation if that handler receives it; task/token lineage is not inferred."
       }
     ],
     "functions": [
@@ -7550,6 +7845,16 @@ const packages = {
     },
     "predicates": [
       {
+        "name": "isEnvironmentVariableRead",
+        "appliesTo": "Statement",
+        "desc": "Matches std::env variable reads and enumeration, including env:: suffix spellings.\nImports, aliases, and shadowed names are not resolved."
+      },
+      {
+        "name": "isEnvironmentVariableAccess",
+        "appliesTo": "Statement",
+        "desc": "Matches std::env variable reads and mutations, not args or directory operations.\nImports, aliases, and shadowed names are not resolved."
+      },
+      {
         "name": "asRust",
         "appliesTo": "Type",
         "narrows": "RustType",
@@ -7559,6 +7864,16 @@ const packages = {
         "name": "isTrait",
         "appliesTo": "RustType",
         "desc": "True for Rust `trait` declarations."
+      },
+      {
+        "name": "isInterface",
+        "appliesTo": "RustType",
+        "desc": "Selects Rust traits as the language's interface-like declarations, not impl blocks."
+      },
+      {
+        "name": "isGenericType",
+        "appliesTo": "RustType",
+        "desc": "True when a Rust type declaration has parsed type parameters."
       },
       {
         "name": "isImpl",
@@ -7610,6 +7925,11 @@ const packages = {
         "name": "isExternFn",
         "appliesTo": "RustMethod",
         "desc": "True for `extern` functions (FFI)."
+      },
+      {
+        "name": "isGenericMethod",
+        "appliesTo": "RustMethod",
+        "desc": "True when a Rust function declares parsed type parameters."
       },
       {
         "name": "asRust",

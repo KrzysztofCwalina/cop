@@ -73,6 +73,7 @@ public class PythonSourceParser : ISourceParser
 
         SourceFile fallback = new PythonParserCore(filePath, tokens, lexer.CommentLines, lexer.LexErrors)
             .ParseModule(sourceText);
+        PythonFallbackQueryFacts.Attach(fallback, tokens);
         foreach (StatementInfo statement in fallback.Statements)
         {
             statement.DeferSemanticAnalysis(new(() =>

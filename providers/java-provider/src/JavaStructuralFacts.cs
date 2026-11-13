@@ -8,7 +8,8 @@ namespace Cop.Providers.SourceParsers;
 internal static class JavaStructuralFacts
 {
     /// <summary>Adds expression and control-flow facts for a Java token range.</summary>
-    public static void Enrich(List<JavaToken> tokens, int start, int end, List<StatementInfo> statements, bool inMethod = true)
+    internal static void Enrich(List<JavaToken> tokens, int start, int end, List<StatementInfo> statements,
+        string source, bool inMethod = true)
     {
         statements.RemoveAll(s => s.Kind == "call");
         Stack<StatementInfo?> scopes = new Stack<StatementInfo?>();
@@ -19,6 +20,7 @@ internal static class JavaStructuralFacts
         for (int i = start; i < end; i++)
         {
             JavaToken token = tokens[i];
+            int column = token.Start - source.LastIndexOf('\n', Math.Max(0, token.Start - 1));
             while (callScopes.Count > 0 && callScopes.Peek().End <= i)
             {
                 callScopes.Pop();
@@ -50,7 +52,11 @@ internal static class JavaStructuralFacts
                 token.Value is "if" or "while" or "return" or "switch" or "else" or "do" or "break" or "continue")
             {
                 JavaStatementInfo statement = new JavaStatementInfo(new StatementInfo(token.Value, [], null, null, [], token.Line, inMethod))
-                { IsBraced = i + 1 < end && tokens[i + 1].Value == "{" };
+                {
+                    IsBraced = i + 1 < end && tokens[i + 1].Value == "{",
+                    Column = column,
+                    SyntaxStart = token.Start
+                };
                 Attach(statement, parent);
                 statements.Add(statement);
                 if (token.Value is "if" or "while" or "switch" or "else" or "do")
@@ -58,9 +64,15 @@ internal static class JavaStructuralFacts
                     pending = statement;
                 }
             }
-            StatementInfo? control = statements.FirstOrDefault(s => s.Line == token.Line && s.Kind == token.Value && s.Kind != "call");
+            StatementInfo? control = statements.FirstOrDefault(s => s.Line == token.Line && s.Kind == token.Value
+                && s.Kind != "call" && (s.Column is null || s.Column == column));
             if (control is not null)
             {
+                control.Column = column;
+                if (control is JavaStatementInfo javaControl)
+                {
+                    javaControl.SyntaxStart = token.Start;
+                }
                 Attach(control, parent);
                 if (token.Value is "for" or "try" or "catch" or "synchronized")
                 {
@@ -129,7 +141,10 @@ internal static class JavaStructuralFacts
                 args.Select(a => Text(tokens, a.Start, a.End)).ToList(), token.Line, inMethod))
             {
                 CallTarget = constructor ? new("memberAccess") { Name = "<init>", Target = target } : target,
-                ArgumentExpressions = args.Select(a => Expression(tokens, a.Start, a.End)).ToList()
+                ArgumentExpressions = args.Select(a => Expression(tokens, a.Start, a.End)).ToList(),
+                Column = column,
+                SyntaxStart = token.Start,
+                SyntaxEnd = tokens[close].End
             };
             Attach(call, callScopes.Count > 0 ? callScopes.Peek().Call : pending ?? parent);
             statements.Add(call);

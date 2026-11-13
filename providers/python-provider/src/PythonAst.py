@@ -69,6 +69,8 @@ def main(request):
                 result = {"kind": type(node).__name__}
                 if isinstance(node, ast.Constant):
                     result["constant_type"] = type(node.value).__name__
+                if hasattr(node, "ctx"):
+                    result["context"] = type(node.ctx).__name__
                 if hasattr(node, "lineno"):
                     result["line"] = node.lineno
                     result["column"] = len(lines[node.lineno - 1].encode("utf-8")[:node.col_offset].decode("utf-8").encode("utf-16-le")) // 2 + 1
