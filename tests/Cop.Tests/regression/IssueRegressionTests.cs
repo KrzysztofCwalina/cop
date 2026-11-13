@@ -115,6 +115,106 @@ public class IssueRegressionTests
         Assert.That(result.Stderr, Does.Not.Contain("MissingMethodException"), Describe(result));
     }
 
+    [TestCase("python.parse()")]
+    [TestCase("python.parse('.')")]
+    public void Issue060_PublishedPythonParseReturnsComposableCodebase(string parse)
+    {
+        File.WriteAllText(Path.Combine(_workDir, "example.py"), "class Example:\n    pass\n");
+        File.WriteAllText(Path.Combine(_workDir, "main.cop"), $$"""
+            import code
+            import python
+            let cb = codebase({{parse}})
+            command MAIN = print('{cb.Files.Count}:{cb.Types.Count}:{cb.Types[0].Name}')
+            """);
+
+        var result = RunCop($"\"{Path.Combine(_workDir, "main.cop")}\" -t \"{_workDir}\"");
+
+        Assert.That(result.ExitCode, Is.EqualTo(0), Describe(result));
+        Assert.That(Normalize(result.Stdout), Is.EqualTo("1:1:Example"), Describe(result));
+        Assert.That(result.Stderr, Does.Not.Contain("error:"), Describe(result));
+    }
+
+    [Test]
+    public void Issue080_PublishedPythonAcceptsQuotedReturnAnnotation()
+    {
+        File.WriteAllText(Path.Combine(_workDir, "client.py"), """
+            class GoodClient:
+                @classmethod
+                def from_connection_string(cls, conn_str: str, **kwargs) -> "GoodClient":
+                    return cls(conn_str, None, **kwargs)
+            """);
+        File.WriteAllText(Path.Combine(_workDir, "main.cop"), """
+            import python
+            let cb = python.parse()
+            command MAIN = print('{cb.Types.Count}:{cb.Types[0].Name}:{cb.Methods.Count}:{cb.Methods[0].Name}')
+            """);
+
+        var result = RunCop($"\"{Path.Combine(_workDir, "main.cop")}\" -t \"{_workDir}\"");
+
+        Assert.That(result.ExitCode, Is.EqualTo(0), Describe(result));
+        Assert.That(Normalize(result.Stdout),
+            Is.EqualTo("1:GoodClient:1:from_connection_string"), Describe(result));
+        Assert.That(result.Stderr, Does.Not.Contain("error:"), Describe(result));
+    }
+
+    [Test]
+    public void Issue083_PublishedPythonClassCompoundStatementTerminates()
+    {
+        File.WriteAllText(Path.Combine(_workDir, "example.py"),
+            "class C:\n    if True:\n        value = 1\n    def method(self):\n        useful()\n");
+        File.WriteAllText(Path.Combine(_workDir, "main.cop"), """
+            import python
+            let cb = python.parse()
+            command MAIN = print('{cb.Types.Count}:{cb.Types[0].Name}:{cb.Types[0].Methods[0].Name}:{cb.Calls.Count}')
+            """);
+
+        var result = RunCop($"\"{Path.Combine(_workDir, "main.cop")}\" -t \"{_workDir}\"");
+
+        Assert.That(result.ExitCode, Is.EqualTo(0), Describe(result));
+        Assert.That(Normalize(result.Stdout), Is.EqualTo("1:C:method:1"), Describe(result));
+        Assert.That(result.Stderr, Does.Not.Contain("error:"), Describe(result));
+    }
+
+    [Test]
+    public void Issue124_PublishedVarCheckResolvesValueTypesAndProjects()
+    {
+        File.WriteAllText(Path.Combine(_workDir, "Sample.cs"), """
+            namespace Fixture;
+            class Sample
+            {
+                string Read()
+                {
+                    var value = "example";
+                    var anonymous = new { Name = value };
+                    var nested = new[] { anonymous };
+                    return value;
+                }
+            }
+            """);
+        File.WriteAllText(Path.Combine(_workDir, "Fixture.csproj"), """
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup>
+            </Project>
+            """);
+        File.WriteAllText(Path.Combine(_workDir, "main.cop"), """
+            import code
+            import csharp
+            import csharp-checks
+            let cb = csharp.parse()
+            command MAIN = CHECK(varDeclarations(cb)) | print('projects:{cb.Projects.Count}')
+            """);
+
+        for (int run = 0; run < 2; run++)
+        {
+            var result = RunCop($"\"{Path.Combine(_workDir, "main.cop")}\" -t \"{_workDir}\"");
+
+            Assert.That(result.ExitCode, Is.EqualTo(1), Describe(result));
+            Assert.That(Normalize(result.Stdout), Is.EqualTo(
+                "Sample.cs(6): error: Do not use 'var' for value [var-declarations]\nprojects:1"), Describe(result));
+            Assert.That(result.Stderr, Does.Not.Contain("MissingMethodException"), Describe(result));
+        }
+    }
+
     // Issue #5
     [Test]
     [Explicit("Issue #5: verify does not flag duplicate command MAIN across a folder — remove when fixed")]

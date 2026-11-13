@@ -71,7 +71,7 @@ public class IssueRegressionCoverageIndexTests
         new(53, CoverageKind.CoveredBy, "StructuralCheckPolicyTests"),
         new(54, CoverageKind.ImplementedHere, "SelfCheckStructureTests"),
         new(55, CoverageKind.ImplementedHere, "SelfCheckStructureTests.Issue055_CodePackageSourceVerifiesWithoutSelfImportDuplicates"),
-        new(60, CoverageKind.ImplementedHere, "PythonCodebaseRegressionTests.Issue060_PythonParseReturnsCodebase"),
+        new(60, CoverageKind.ImplementedHere, "PythonCodebaseRegressionTests.Issue060_PythonParseReturnsCodebase; IssueRegressionTests.Issue060_PublishedPythonParseReturnsComposableCodebase"),
         new(61, CoverageKind.ImplementedHere, "IntrinsicArgumentRegressionTests.Issue061_VerifyRejectsIncompatibleIntrinsicArguments"),
         new(62, CoverageKind.ImplementedHere, "PackageNamespaceRegressionTests.Issue062_QualifiedPurePackageFunctionExecutes"),
         new(63, CoverageKind.ImplementedHere, "LazySourceLocationRegressionTests.Issue063_ToErrorResolvesLazySourceLocationWithoutPriorFieldReads"),
@@ -84,8 +84,8 @@ public class IssueRegressionCoverageIndexTests
         new(75, CoverageKind.ImplementedHere, "ProviderQueryRegressionTests.Issue075_CrossFilePredicatesUseLocalProviderAndPushBothFilters; DeferredProviderExecutionTests.ExistingProviderBinaries"),
         new(76, CoverageKind.ImplementedHere, "ProviderQueryRegressionTests.Issue076_OrderedLazyCollectionLastReturnsLastRecord"),
         new(78, CoverageKind.ImplementedHere, "ProviderQueryRegressionTests.Issue078_CSharpFileBasedAppDirectivesAreAccepted"),
-        new(80, CoverageKind.ImplementedHere, "ProviderQueryRegressionTests.Issue080_PythonQuotedReturnAnnotationsAreAccepted"),
-        new(83, CoverageKind.ImplementedHere, "PythonCodebaseRegressionTests.Issue083_ClassCompoundStatementTerminatesWithExpectedClassMember"),
+        new(80, CoverageKind.ImplementedHere, "ProviderQueryRegressionTests.Issue080_PythonQuotedReturnAnnotationsAreAccepted; IssueRegressionTests.Issue080_PublishedPythonAcceptsQuotedReturnAnnotation"),
+        new(83, CoverageKind.ImplementedHere, "IssueRegressionTests.Issue083_PublishedPythonClassCompoundStatementTerminates"),
         new(84, CoverageKind.ImplementedHere, "ForeachPipelineRegressionTests.Issue084_PipeSeparatedForeachCommandsProduceBothOutputs"),
         new(85, CoverageKind.ImplementedHere, "ToolchainCliIntegrationTests.ExplicitLocalFeed_DoesNotAttemptRemoteRestore"),
         new(86, CoverageKind.CoveredBy, "ForeachPipelineRegressionTests.Issue086_ThreePipeSeparatedForeachCommandsExecuteInOrder"),
@@ -108,6 +108,8 @@ public class IssueRegressionCoverageIndexTests
         new(113, CoverageKind.ImplementedHere, "SelfCheckStructureTests.Issue113_StringContainsAnyMatchesDocumentedSubstrings"),
         new(116, CoverageKind.ImplementedHere, "SelfCheckStructureTests.Issue116_ChainedSourceScopeFiltersPassStrictVerification; StructuralCheckPolicyTests.Issue116_ChainedWherePreservesSemanticElementType"),
         new(117, CoverageKind.ImplementedHere, "SelfCheckStructureTests.Issue117_PublishedCliPassesRepositorySelfChecks; IssueRegressionTests.Issue117_PublishedSelfChecksAnalyzeFixtureWithoutMissingMethod"),
+        new(120, CoverageKind.ImplementedHere, "SelfCheckStructureTests.Issue054_120_AllSelfChecksPassStrictStructureWithApprovedFormattingChecks"),
+        new(124, CoverageKind.ImplementedHere, "IssueRegressionTests.Issue124_PublishedVarCheckResolvesValueTypesAndProjects; SelfCheckStructureTests.Issue117_PublishedCliPassesRepositorySelfChecks"),
     ];
 
     [Test]
@@ -117,8 +119,8 @@ public class IssueRegressionCoverageIndexTests
         Assert.That(duplicates, Is.Empty, "Each issue must appear exactly once in the regression coverage index.");
 
         var coveredIssues = Coverage.Select(c => c.Issue).OrderBy(i => i).ToArray();
-        Assert.That(coveredIssues, Is.EqualTo(Enumerable.Range(1, 55).Concat([60, 61, 62, 63, 65, 66, 70, 71, 72, 73, 75, 76, 78, 80, 83, 84, 85, 86, 87, 88, 89, 90, 91, 93, 94, 95, 96, 97, 101, 103, 107, 108, 111, 112, 113, 116, 117]).ToArray()),
-            "Regression coverage index must cover issues #1 through #55, #60-#63, #65-#66, #70-#73, #75-#76, #78, #80, #83-#91, #93-#97, #101, #103, #107-#108, #111-#113, and #116-#117.");
+        Assert.That(coveredIssues, Is.EqualTo(Enumerable.Range(1, 55).Concat([60, 61, 62, 63, 65, 66, 70, 71, 72, 73, 75, 76, 78, 80, 83, 84, 85, 86, 87, 88, 89, 90, 91, 93, 94, 95, 96, 97, 101, 103, 107, 108, 111, 112, 113, 116, 117, 120, 124]).ToArray()),
+            "Regression coverage index must cover issues #1 through #55, #60-#63, #65-#66, #70-#73, #75-#76, #78, #80, #83-#91, #93-#97, #101, #103, #107-#108, #111-#113, #116-#117, #120, and #124.");
 
         var untracked = Coverage.Where(c => string.IsNullOrWhiteSpace(c.Detail)).Select(c => c.Issue).ToArray();
         Assert.That(untracked, Is.Empty, "Every issue must be ImplementedHere, CoveredBy(suiteName), or OutOfScope(reason).");
