@@ -88,6 +88,23 @@ public class SemanticModelTests
     }
 
     [Test]
+    public void Issue128_InfersProjectedNamesAndNullableNameConcatenation()
+    {
+        var model = Build("""
+            type SourceType = { Name : string, MethodNames : [string] }
+            type Statement = { MemberName : string? }
+            let Types : [SourceType] = []
+            """);
+        var locals = new Dictionary<string, TypeInfo> { ["Statement"] = new TypeInfo("Statement", false) };
+
+        Assert.That(model.InferExpressionType("Types.Name")?.Display, Is.EqualTo("[string]"));
+        Assert.That(model.InferExpressionType("Types.MethodNames")?.Display, Is.EqualTo("[string]"));
+        Assert.That(model.InferExpressionType("Statement.MemberName + 'Async'", locals)?.Display,
+            Is.EqualTo("string"));
+        Assert.That(model.InferExpressionType("Types.Missing"), Is.Null);
+    }
+
+    [Test]
     public void PropertiesOf_IncludesInheritedProperties()
     {
         var m = Build(Program);

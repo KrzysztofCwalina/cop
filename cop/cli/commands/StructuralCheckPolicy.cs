@@ -9,6 +9,9 @@ using IdentifierExpr = Cop.Lang.Ast.IdentifierExpr;
 using CallExpr = Cop.Lang.Ast.CallExpr;
 using LiteralExpr = Cop.Lang.Ast.LiteralExpr;
 using BinaryExpr = Cop.Lang.Ast.BinaryExpr;
+using ConditionalExpr = Cop.Lang.Ast.ConditionalExpr;
+using MatchExpr = Cop.Lang.Ast.MatchExpr;
+using MatchArm = Cop.Lang.Ast.MatchArm;
 
 namespace Cop.Cli.Commands;
 
@@ -44,9 +47,12 @@ internal sealed class StructuralCheckPolicy
         IEnumerable<string> exceptions)
     {
         _exceptions = new(exceptions, StringComparer.Ordinal);
-        _model = SemanticModel.Build(local.Select(f => f.Module).Concat(imported.Select(f => f.Module)));
+        HashSet<string> localPaths = new(local.Select(f => Path.GetFullPath(f.FilePath)),
+            OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+        var importedOnly = imported.Where(f => !localPaths.Contains(Path.GetFullPath(f.FilePath))).ToArray();
+        _model = SemanticModel.Build(local.Select(f => f.Module).Concat(importedOnly.Select(f => f.Module)));
         Add(local, true);
-        Add(imported, false);
+        Add(importedOnly, false);
     }
 
     internal static IReadOnlyList<CopDiagnostic> Check(
@@ -180,6 +186,20 @@ internal sealed class StructuralCheckPolicy
     private sealed class ReferenceCollector : AstWalker
     {
         internal HashSet<string> Names { get; } = new(StringComparer.Ordinal);
+
+        public override object? VisitFunctionDecl(FunctionDecl node)
+        {
+            if (node.Body is BlockBody block)
+            {
+                foreach (Statement statement in block.Statements)
+                {
+                    Visit(statement);
+                }
+            }
+
+            return base.VisitFunctionDecl(node);
+        }
+
         protected override object? DefaultVisit(AstNode node)
         {
             if (node is ForEachExpr loop)
@@ -277,6 +297,14 @@ internal sealed class StructuralCheckPolicy
                 _locals["item"] = new(first.Name.TrimEnd('?'), first.IsCollection);
             }
 
+            if (node.Body is BlockBody block)
+            {
+                foreach (Statement statement in block.Statements)
+                {
+                    Visit(statement);
+                }
+            }
+
             return base.VisitFunctionDecl(node);
         }
 
@@ -337,6 +365,8 @@ internal sealed class StructuralCheckPolicy
 
         public override object? VisitFilterExpr(FilterExpr node)
         {
+            bool savedReporting = _reporting;
+            _reporting = false;
             Visit(node.Collection);
             string? name = node.Predicate switch
             {
@@ -357,6 +387,7 @@ internal sealed class StructuralCheckPolicy
                 Visit(node.Predicate);
                 _implicitReceiver = saved;
             });
+            _reporting = savedReporting;
             return null;
         }
 
@@ -405,12 +436,9 @@ internal sealed class StructuralCheckPolicy
                 for (int i = 0; i < node.Args.Count; i++)
                 {
                     bool saved = _reporting;
-                    // Only the message argument is presentation; check names/severities stay structural.
-                    if (name is not null && s_messageFunctions.Contains(name) &&
-                        (!policy._entries.TryGetValue(name, out List<Entry>? overloads) || !overloads.Any(e => e.Local)))
-                    {
-                        _reporting |= i == messageIndex;
-                    }
+                    _reporting = name is not null && s_messageFunctions.Contains(name) &&
+                        (!policy._entries.TryGetValue(name, out List<Entry>? overloads) || !overloads.Any(e => e.Local)) &&
+                        i == messageIndex;
                     if (name is not null && policy._model.Callable(name) is { } callable)
                     {
                         int parameterIndex = i + (messageIndex == 0 ? 1 : 0);
@@ -439,6 +467,12 @@ internal sealed class StructuralCheckPolicy
 
         public override object? VisitBinaryExpr(BinaryExpr node)
         {
+            bool savedReporting = _reporting;
+            if (node.Op != BinaryOp.Add)
+            {
+                _reporting = false;
+            }
+
             bool nullCheck = node.Op is BinaryOp.Equal or BinaryOp.NotEqual &&
                 (node.Left is LiteralExpr { Value: null } ||
                  node.Right is LiteralExpr { Value: null });
@@ -447,7 +481,34 @@ internal sealed class StructuralCheckPolicy
                 CheckTextConversion(node.Left);
                 CheckTextConversion(node.Right);
             }
-            return base.VisitBinaryExpr(node);
+            base.VisitBinaryExpr(node);
+            _reporting = savedReporting;
+            return null;
+        }
+
+        public override object? VisitConditionalExpr(ConditionalExpr node)
+        {
+            bool savedReporting = _reporting;
+            _reporting = false;
+            Visit(node.Condition);
+            _reporting = savedReporting;
+            Visit(node.Then);
+            Visit(node.Else);
+            return null;
+        }
+
+        public override object? VisitMatchExpr(MatchExpr node)
+        {
+            bool savedReporting = _reporting;
+            _reporting = false;
+            Visit(node.Discriminant);
+            _reporting = savedReporting;
+            foreach (MatchArm arm in node.Arms)
+            {
+                Visit(arm.Body);
+            }
+
+            return null;
         }
 
         public override object? VisitObjectExpr(ObjectExpr node)
@@ -464,7 +525,10 @@ internal sealed class StructuralCheckPolicy
 
         public override object? VisitLetStatement(LetStatement node)
         {
+            bool savedReporting = _reporting;
+            _reporting = false;
             Visit(node.Value);
+            _reporting = savedReporting;
             if (node.TypeAnnotation is { } annotation)
             {
                 _locals[node.Name] = new(annotation.Name, annotation.IsCollection);
@@ -500,6 +564,8 @@ internal sealed class StructuralCheckPolicy
 
         public override object? VisitForEachStatement(ForEachStatement node)
         {
+            bool savedReporting = _reporting;
+            _reporting = false;
             Visit(node.Collection);
             InScope(Infer(node.Collection), () =>
             {
@@ -510,9 +576,11 @@ internal sealed class StructuralCheckPolicy
 
                 foreach (Statement statement in node.Body)
                 {
+                    _reporting = statement is ExpressionStatement;
                     Visit(statement);
                 }
             });
+            _reporting = savedReporting;
             return null;
         }
 

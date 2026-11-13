@@ -164,8 +164,11 @@ export command CHECK(violations) = {
 
 # Common predicates
 
+predicate hasAsyncMethodName(names: [string], statement: Statement) =>
+    names:contains(statement.MemberName + 'Async')
+
 # Flags sync method calls when an async variant exists on any type in the codebase
 export predicate isSyncWhenAsyncExists(Statement) =>
     Statement.Kind:equals('call')
     && Statement.MemberName:endsWith('Async') == false
-    && Types.MethodNames:contains(Statement.MemberName + 'Async')
+    && hasAsyncMethodName(Types.MethodNames, item)

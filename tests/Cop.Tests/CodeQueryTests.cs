@@ -24,6 +24,34 @@ public class CodeQueryTests
     [TearDown]
     public void TearDown() => Directory.Delete(_root, recursive: true);
 
+    [Test]
+    public async Task Issue128_AsyncCounterpartMatchesOnlyTheSynchronousCall()
+    {
+        Write("target/Input.cs", """
+            namespace Fixture;
+            class Example {
+                void Load() {}
+                void LoadAsync() {}
+                void Save() {}
+                void Run() {
+                    Load();
+                    LoadAsync();
+                    Save();
+                }
+            }
+            """);
+        await AssertProgram("""
+            import code
+            import csharp
+            let cb = csharp.parse()
+            let Types = cb.Types
+            command MAIN = {
+                foreach cb.Calls:isSyncWhenAsyncExists => '{item.MemberName}:{item.Line}'
+                0
+            }
+            """, ["Load:7"]);
+    }
+
     [TestCase("hasStringArgument(item, 0, 'print')", new[] { 4, 7 })]
     [TestCase("hasStringArgument(item, 0, 'PRINT')", new int[] { })]
     [TestCase("hasStringArgumentIn(item, 0, ['PRINT'])", new[] { 4, 7 })]
