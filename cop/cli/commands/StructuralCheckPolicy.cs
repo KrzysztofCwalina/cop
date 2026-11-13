@@ -49,7 +49,8 @@ internal sealed class StructuralCheckPolicy
         _exceptions = new(exceptions, StringComparer.Ordinal);
         HashSet<string> localPaths = new(local.Select(f => Path.GetFullPath(f.FilePath)),
             OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
-        var importedOnly = imported.Where(f => !localPaths.Contains(Path.GetFullPath(f.FilePath))).ToArray();
+        (ModuleNode Module, string FilePath, string Source)[] importedOnly =
+            imported.Where(f => !localPaths.Contains(Path.GetFullPath(f.FilePath))).ToArray();
         _model = SemanticModel.Build(local.Select(f => f.Module).Concat(importedOnly.Select(f => f.Module)));
         Add(local, true);
         Add(importedOnly, false);
