@@ -188,6 +188,7 @@ public class CliCommandTests
     [TestCase("test", "-d")]
     [TestCase("update", "--force")]
     [TestCase("package", "feed")]
+    [TestCase("checks", "--output")]
     public void CommandHelp_PrintsDetails_ExitZero(string verb, string expected)
     {
         var (exit, stdout, _) = RunCop($"{verb} -h");
@@ -205,6 +206,76 @@ public class CliCommandTests
         Assert.That(exit, Is.EqualTo(0));
         Assert.That(stdout, Does.Contain("--claude"));
         Assert.That(stdout, Does.Contain("--checks"));
+    }
+
+    [Test]
+    public void Checks_WritesStandaloneCatalogueWithoutExecutingTheChecks()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "cop-catalogue-" + Guid.NewGuid().ToString("N"));
+        var checksDir = Path.Combine(root, "cop-checks");
+        var outputPath = Path.Combine(root, "checks.html");
+        var sourcePath = Path.Combine(checksDir, "main.cop");
+        Directory.CreateDirectory(checksDir);
+        File.WriteAllText(sourcePath, """
+            # Finds sample policy violations.
+            type Violation = { Message : string }
+            export let riskyCheck : [Violation] = error('CATALOGUE_MUST_NOT_EXECUTE')
+            command MAIN = CHECK(riskyCheck)
+            """);
+        File.WriteAllText(Path.Combine(checksDir, "ignored.cop"), "not valid Cop syntax !!!");
+
+        try
+        {
+            var (exit, stdout, stderr) = RunCop(
+                $"checks \"{sourcePath}\" --output \"{outputPath}\"");
+
+            Assert.That(exit, Is.EqualTo(0), stderr);
+            Assert.That(stderr, Is.Empty);
+            Assert.That(stdout, Does.Contain(outputPath));
+            Assert.That(stdout, Does.Not.Contain("CATALOGUE_MUST_NOT_EXECUTE"));
+            Assert.That(File.Exists(outputPath), Is.True);
+            var html = File.ReadAllText(outputPath);
+            Assert.That(html, Does.Contain("riskyCheck"));
+            Assert.That(html, Does.Contain("Finds sample policy violations."));
+            Assert.That(html, Does.Contain("MAIN"));
+            Assert.That(html, Does.Contain("CATALOGUE_MUST_NOT_EXECUTE"),
+                "the catalogue should expose source without evaluating it");
+        }
+        finally { Directory.Delete(root, recursive: true); }
+    }
+
+    [Test]
+    public void ChecksRename_UpdatesReferencesAcrossFilesAndRefusesCollisions()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "cop-rename-" + Guid.NewGuid().ToString("N"));
+        var group = Path.Combine(root, "rules");
+        Directory.CreateDirectory(group);
+        File.WriteAllText(Path.Combine(group, "bad-names.cop"), """
+            # Flags bad names.
+            let bad-names = ['a', 'b']
+            """);
+        File.WriteAllText(Path.Combine(root, "main.cop"), """
+            let others = ['c']
+            let all-findings = bad-names + others
+            command MAIN = PRINT('{all-findings.Count}')
+            """);
+
+        try
+        {
+            var (collisionExit, _, collisionError) = RunCop($"checks rename bad-names others \"{root}\"");
+            Assert.That(collisionExit, Is.EqualTo(1));
+            Assert.That(collisionError, Does.Contain("'others' is already declared"));
+            Assert.That(File.Exists(Path.Combine(group, "bad-names.cop")), Is.True);
+
+            var (exit, stdout, stderr) = RunCop($"checks rename bad-names poor-names \"{root}\"");
+
+            Assert.That(exit, Is.EqualTo(0), stderr);
+            Assert.That(stdout, Does.Contain("Renamed 'bad-names' to 'poor-names': 2 reference(s) in 2 file(s)."));
+            Assert.That(File.Exists(Path.Combine(group, "bad-names.cop")), Is.False);
+            Assert.That(File.ReadAllText(Path.Combine(group, "poor-names.cop")), Does.Contain("let poor-names = ['a', 'b']"));
+            Assert.That(File.ReadAllText(Path.Combine(root, "main.cop")), Does.Contain("let all-findings = poor-names + others"));
+        }
+        finally { Directory.Delete(root, recursive: true); }
     }
 
     // The main help shows options inline (in [ ]) and has NO separate global "options" section.

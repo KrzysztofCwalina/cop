@@ -36,7 +36,7 @@ if (args.Contains("--no-user-checks"))
 // Known verbs (subcommands) — anything else is treated as a program to run
 HashSet<string> knownVerbs = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
 {
-    "run", "test", "syntax", "verify", "langserver", "lock", "unlock", "help", "package", "repl", "init", "update", "vscode"
+    "run", "test", "syntax", "verify", "langserver", "lock", "unlock", "help", "package", "repl", "init", "update", "vscode", "checks"
 };
 
 // Once-a-day "new version available" notice + a "what's new" summary after an update.
@@ -152,6 +152,12 @@ if (args[0] == "update")
 if (args[0] == "vscode")
 {
     return await VscodeCommand.ExecuteAsync();
+}
+
+// cop checks — inspect repository check declarations without running them
+if (args[0].Equals("checks", StringComparison.OrdinalIgnoreCase))
+{
+    return await CheckCatalogueCommand.ExecuteFromArgsAsync(args.Skip(1).ToArray());
 }
 
 // Explicit run: `cop run <package|file.cop|url|command>` resolves and runs anything,
@@ -487,7 +493,7 @@ static void WriteError(string message)
 /// </summary>
 static string? SuggestVerb(string input)
 {
-    string[] verbs = { "run", "test", "syntax", "verify", "langserver", "lock", "unlock", "help", "package", "repl", "init", "update", "vscode" };
+    string[] verbs = { "run", "test", "syntax", "verify", "langserver", "lock", "unlock", "help", "package", "repl", "init", "update", "vscode", "checks" };
     string? best = null;
     int bestDist = int.MaxValue;
     string lower = input.ToLowerInvariant();

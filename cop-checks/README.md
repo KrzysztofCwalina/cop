@@ -25,6 +25,22 @@ Group folders are not standalone programs. The separate package-source suite is
 
 The default suite also runs `csharpChecks(csharp-source-code)`: C# sources without tests,
 samples, and examples.
+
+To browse the self-checks, run this from the repository root:
+
+```bash
+cop checks
+```
+
+It generates a temporary website and opens your default browser; no flags or server
+are needed. A compact overview shows the source groups and commands. The left tree
+groups checks by folder or imported package and supports nested subgroups. Select
+a group for a dense check table, then a check for its description, source, and command
+membership. Search and command filters narrow the whole tree.
+
+Checks are not executed. Unreferenced checks are included, and unresolved or conditional
+membership is called out rather than guessed. To export a shareable copy instead, use
+`cop checks cop-checks --output checks.html`.
 Tests, samples, and examples remain available as intentional negative-test fixtures.
 
 ## Reading and maintaining a rule

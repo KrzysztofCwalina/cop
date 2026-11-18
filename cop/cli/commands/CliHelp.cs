@@ -29,6 +29,7 @@ internal static class CliHelp
         ("cop run <package> [-t <target>]", "run a package from a feed (auto-restores)"),
         ("cop <file.cop> [-t <target>]", "run a local .cop file"),
         ("cop package list", "browse available packages"),
+        ("cop checks", "open the check explorer in your browser"),
         ("cop help language", "full language reference"),
         ("cop help <package>", "package documentation"),
         ("cop init [--claude]", "generate copilot instructions"),
@@ -143,6 +144,23 @@ internal static class CliHelp
             "launch the interactive read-eval-print loop for prototyping checks.",
             Array.Empty<(string, string)>(),
             new[] { "cop repl" }),
+
+        ["checks"] = new(
+            "cop checks [<file.cop|directory>] [--output <file>] [--open]",
+            "run `cop checks` from the repository root to browse its checks. generates a temporary, standalone website and opens your default browser. checks are not executed. optional paths and export options are listed below.",
+            new[]
+            {
+                ("--output, -o <file>", "write a shareable HTML catalogue to this path"),
+                ("--open", "open the generated catalogue in the default browser"),
+                ("rename <old> <new> [<path>]", "rename a check and update its references (verified before writing)"),
+            },
+            new[]
+            {
+                "cop checks",
+                "cop checks cop-checks --output checks.html",
+                "cop checks cop-checks\\main.cop --open",
+                "cop checks rename bad-names poorly-named-types",
+            }),
 
         ["help"] = new(
             "cop help [language | <package> | <file.cop>]",

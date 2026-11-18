@@ -376,6 +376,91 @@ Sample output:
 
 See [Testing with Agent Cop](testing-with-cop.md) for a full guide on writing tests.
 
+## cop checks
+
+From the repository root, run:
+
+```bash
+cop checks
+```
+
+That's all: Cop scans `cop-checks/`, generates a standalone website in a temporary
+location, and opens it in your default browser. No server, output path, or flags are
+needed. It does not execute checks or load providers.
+
+The explorer opens on a compact overview of source groups and command membership.
+The left navigation groups checks by workspace folder or imported package, with
+nested subgroups (three or more levels are supported). Select a group for a dense,
+paginated table led by what each rule does, or select a check to read its description
+first. Names, locations, and command membership are compact secondary information;
+the implementation is shown expanded, and command-level scope arguments expand on demand.
+Search and command filters apply
+across the tree; breadcrumbs and browser Back/Forward support drilling in and out.
+Grouping uses existing source locations, not inferred topics or new annotations.
+
+Optional source and export controls:
+
+```bash
+cop checks [<file.cop|directory>] [--output <file>] [--open]
+```
+
+A file path scans only that file; a directory scans its `.cop` files recursively.
+Use `--output` (or `-o`) to save a shareable HTML file, and `--open` to also open that
+saved file in a browser. Without `--output`, the catalogue is temporary and opens
+automatically.
+
+The catalogue lists unreferenced checks as well as checks reached from each local
+command. It reports unresolved imports, cyclic compositions, and conditional membership
+as warnings; warnings are written to stderr and produce exit code 1, but the catalogue
+is still saved. Missing imports are not automatically restored.
+
+```bash
+cop checks
+cop checks cop-checks --output checks.html
+cop checks cop-checks/main.cop --open
+```
+
+### Renaming checks
+
+```bash
+cop checks rename <old-name> <new-name> [<file.cop|directory>]
+```
+
+Renames a check (a `let` or `function`) and updates every reference in the program's
+`.cop` files (default folder: `cop-checks`; a file path uses its folder). Comments,
+literal string text and member names such as `item.name` are left unchanged. Names
+declared locally or by imported packages are refused, and the edited program is verified
+before anything is written; if it would introduce errors, no file changes. A file whose
+name matches the old check name (`old-name.cop`) is renamed too.
+
+```bash
+cop checks rename bad-names poorly-named-types
+```
+
+### GitHub Copilot app canvas
+
+The **Check explorer** canvas is published as the `cop-check-explorer` plugin in this
+repository's `cop` plugin marketplace. Add the marketplace `KrzysztofCwalina/cop` in the
+app's **Customize** view and install the plugin, or run
+`copilot plugin install cop-check-explorer@cop`. This repository enables the plugin for
+its contributors through `.github/copilot/settings.json`.
+
+Open the panel by asking the agent, or use an app canvas menu if your version offers one.
+By default, it shows the session's `cop-checks` folder if present. Enter any Cop program
+file or folder in the panel's path field to open it without asking the agent.
+
+It uses the same explorer inside the app, with **Refresh** to regenerate in place
+and agent actions to search or select a check. Checks and folders in the opened program
+can be renamed inline with the small pencil icons. A pencil beside a check's source
+location also renames its `.cop` file without changing declaration names; paths in
+scripts and docs are not updated. Checks from
+imported packages are read-only. Cop supporting `cop checks` must be on
+PATH. Start a new session after installing the plugin.
+
+See the [plugin guide](../plugins/cop-check-explorer/com.github.copilot/extensions/cop-check-explorer/README.md)
+for setup, path selection, and actions. The standalone
+`cop checks <file-or-folder>` page remains available without the app.
+
 ## cop help
 
 Show help for the Cop language or a package.
