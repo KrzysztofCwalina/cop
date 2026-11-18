@@ -1,0 +1,19 @@
+{
+  "name": "cop",
+  "owner": {
+    "name": "Krzysztof Cwalina",
+    "url": "https://github.com/KrzysztofCwalina"
+  },
+  "metadata": {
+    "description": "GitHub Copilot plugins for Cop.",
+    "version": "1.0.0"
+  },
+  "plugins": [
+    {
+      "name": "cop-check-explorer",
+      "source": "plugins/cop-check-explorer",
+      "description": "Check explorer canvas: browse the checks defined by a Cop program, grouped in a tree with descriptions and source.",
+      "version": "1.0.0"
+    }
+  ]
+}

@@ -104,6 +104,9 @@ internal sealed class LeafCheckCatalog
         {
             BinaryExpr { Op: BinaryOp.Add } add =>
                 CombinesChecks(add.Left, checkFunctions, checkLets) && CombinesChecks(add.Right, checkFunctions, checkLets),
+            ConditionalExpr conditional =>
+                CombinesChecks(conditional.Then, checkFunctions, checkLets) &&
+                CombinesChecks(conditional.Else, checkFunctions, checkLets),
             IdentifierExpr identifier => checkLets.Contains(identifier.Name),
             MemberExpr member => checkLets.Contains(member.Member),
             CallExpr { Callee: IdentifierExpr callee } => checkFunctions.Contains(callee.Name),

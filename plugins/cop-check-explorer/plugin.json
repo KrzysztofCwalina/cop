@@ -1,0 +1,14 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "cop-check-explorer",
+  "description": "Check explorer canvas: browse the checks defined by a Cop program, grouped in a tree with descriptions and source.",
+  "version": "1.0.0",
+  "author": {
+    "name": "Krzysztof Cwalina",
+    "url": "https://github.com/KrzysztofCwalina"
+  },
+  "homepage": "https://github.com/KrzysztofCwalina/cop",
+  "repository": "https://github.com/KrzysztofCwalina/cop",
+  "license": "MIT",
+  "keywords": ["cop", "checks", "static-analysis", "canvas"]
+}

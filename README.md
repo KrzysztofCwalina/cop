@@ -86,6 +86,46 @@ cop cop-checks/main.cop -t src/
 
 Exit code 1 if violations found, 0 if clean — suitable for CI. Agents see these errors and fix them automatically, just like compiler errors.
 
+### 4. Browse Your Checks
+
+Agent-written checks pile up quickly. To see what is being checked, run this from the
+repository root:
+
+```bash
+cop checks
+```
+
+It opens a check explorer in your default browser: a tree of check groups, what each
+rule does, and its source. Pass a file or folder to browse another Cop program, e.g.
+`cop checks analysis/rules`. Checks are not executed.
+
+**In the GitHub Copilot app**, you can browse checks in a side panel instead. The
+Check explorer is a Copilot plugin (`cop-check-explorer`) published from this
+repository's plugin marketplace (`cop`). Install it once:
+
+1. Install a version of Cop that supports `cop checks` and make sure `cop` is on your PATH.
+2. In the app, open **Customize**, add the marketplace `KrzysztofCwalina/cop`, and
+   install **cop-check-explorer**. From a terminal you can run
+   `copilot plugin marketplace add KrzysztofCwalina/cop` and then
+   `copilot plugin install cop-check-explorer@cop` instead.
+3. Start a new session. Plugins load when a session starts.
+
+Contributors to this repository don't need step 2. `.github/copilot/settings.json`
+enables the plugin for everyone working in this repository.
+
+Ask the agent to open the panel, or use an app canvas menu if your version offers one.
+It shows the `cop-checks` folder of the session's repository if present. Enter another
+Cop program file or folder in the panel's path field and select **Open**, or ask the agent:
+
+> "Open the Check explorer for analysis/rules"
+
+The panel runs `cop checks` to generate the inventory, and **Refresh** regenerates it.
+You can also search the panel or ask the agent to jump to a check.
+
+The canvas integration is experimental. See the
+[plugin guide](plugins/cop-check-explorer/com.github.copilot/extensions/cop-check-explorer/README.md)
+for details, and use the browser command above as a fallback.
+
 ## Running Built-In Checks
 
 Agent Cop ships with pre-built check packages for common rules. No `.cop` files needed:

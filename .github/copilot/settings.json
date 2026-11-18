@@ -1,0 +1,13 @@
+{
+  "extraKnownMarketplaces": {
+    "cop": {
+      "source": {
+        "source": "github",
+        "repo": "KrzysztofCwalina/cop"
+      }
+    }
+  },
+  "enabledPlugins": {
+    "cop-check-explorer@cop": true
+  }
+}
