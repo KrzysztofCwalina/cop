@@ -6,6 +6,7 @@
 
 import go
 import code
+import code-quality-checks
 
 let cb = codebase(go.parse())
 
@@ -119,6 +120,6 @@ export let undocumented-functions = cb.Types:isProdType:hasUndocumentedFn
 export let go-doc-checks = undocumented-types + undocumented-functions
 
 ## All Go checks combined
-export let go-checks = go-correctness-checks + go-style-checks + go-complexity-checks + go-doc-checks
+export let go-checks = go-correctness-checks + go-style-checks + go-complexity-checks + go-doc-checks + codeQualityChecks(cb)
 
 command MAIN = CHECK(go-checks)

@@ -18,8 +18,8 @@ namespace Cop.Cli.Commands;
 /// </summary>
 public static class ValidateCommand
 {
-    // True if version is exactly three dot-separated numeric parts (X.Y.Z).
-    private static bool IsSemVer3(string? version)
+    /// <summary>True if version is exactly three dot-separated numeric parts (X.Y.Z).</summary>
+    internal static bool IsSemVer3(string? version)
     {
         if (string.IsNullOrEmpty(version))
         {

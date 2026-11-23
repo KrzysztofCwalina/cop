@@ -13,6 +13,7 @@
   "language": "JavaScript",
   "dependencies": [
     "github.com/KrzysztofCwalina/cop/javascript: 2.0.0",
-    "github.com/KrzysztofCwalina/cop/code: 1.2.0"
+    "github.com/KrzysztofCwalina/cop/code: 1.2.0",
+    "github.com/KrzysztofCwalina/cop/code-quality-checks: 1.0.0"
   ]
 }

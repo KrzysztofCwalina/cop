@@ -212,23 +212,37 @@ internal class GoLexer(string source)
         return new GoToken(GoTokenKind.BlockComment, source[start.._pos], line, col, start, _pos);
     }
 
-    private GoToken ReadString()
+    private GoToken ReadString() => ReadQuoted('"', raw: false, "unterminated string literal");
+
+    private GoToken ReadRawString() => ReadQuoted('`', raw: true, "unterminated raw string literal");
+
+    // Interpreted strings honor escapes and must not span lines; raw strings may span lines.
+    private GoToken ReadQuoted(char quote, bool raw, string unterminatedMessage)
     {
         int start = _pos;
         int line = _line;
         int col = ColAt(start);
-        _pos++; // skip "
+        _pos++; // skip opening quote
         bool closed = false;
         while (_pos < source.Length)
         {
             char c = source[_pos];
-            if (c == '"') { _pos++; closed = true; break; }
+            if (c == quote) { _pos++; closed = true; break; }
             if (c == '\n')
             {
-                break; // Go interpreted strings must not span lines
-            }
+                if (!raw)
+                {
+                    break;
+                }
 
-            if (c == '\\') { _pos++; if (_pos < source.Length)
+                _pos++;
+                _line++;
+                _lineStart = _pos;
+            }
+            else if (!raw && c == '\\')
+            {
+                _pos++;
+                if (_pos < source.Length)
                 {
                     _pos++;
                 }
@@ -240,31 +254,7 @@ internal class GoLexer(string source)
         }
         if (!closed)
         {
-            _lexErrors.Add((line, col, "unterminated string literal"));
-        }
-
-        return new GoToken(GoTokenKind.StringLiteral, source[start.._pos], line, col, start, _pos);
-    }
-
-    private GoToken ReadRawString()
-    {
-        int start = _pos;
-        int line = _line;
-        int col = ColAt(start);
-        _pos++; // skip `
-        bool closed = false;
-        while (_pos < source.Length)
-        {
-            if (source[_pos] == '`') { _pos++; closed = true; break; }
-            if (source[_pos] == '\n') { _pos++; _line++; _lineStart = _pos; }
-            else
-            {
-                _pos++;
-            }
-        }
-        if (!closed)
-        {
-            _lexErrors.Add((line, col, "unterminated raw string literal"));
+            _lexErrors.Add((line, col, unterminatedMessage));
         }
 
         return new GoToken(GoTokenKind.StringLiteral, source[start.._pos], line, col, start, _pos);

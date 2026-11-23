@@ -319,7 +319,9 @@ internal sealed class RustAstProjection
         string kind = node.Kind switch
         {
             "CALL_EXPR" or "METHOD_CALL_EXPR" => "invocation", "MACRO_EXPR" => "macroInvocation",
-            "PATH_EXPR" => "identifier", "FIELD_EXPR" => "memberAccess", "LITERAL" =>
+            "PATH_EXPR" => "identifier", "FIELD_EXPR" => "memberAccess",
+            "LITERAL" when node.Tokens.Any(t => t is "true" or "false") => "booleanLiteral",
+            "LITERAL" =>
                 node.Tokens.Any(t => t.StartsWith('"') || t.StartsWith("r\"", StringComparison.Ordinal)
                     || t.StartsWith("r#", StringComparison.Ordinal)) ? "stringLiteral" : "literal",
             "BIN_EXPR" => "binary", "PREFIX_EXPR" or "REF_EXPR" => "unary", "TUPLE_EXPR" => "tuple",
@@ -357,6 +359,7 @@ internal sealed class RustAstProjection
         return new(kind)
         {
             Name = name, Target = target, Children = children.Select(n => Expression(n, depth + 1)).ToList(),
+            BooleanValue = kind == "booleanLiteral" ? node.Tokens.Contains("true") : null,
             StringValue = kind == "stringLiteral" ? RustBodyParser.DecodeString(Text(node)) : null
         };
     }

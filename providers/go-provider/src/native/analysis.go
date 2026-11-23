@@ -252,6 +252,11 @@ func expr(e ast.Expr) *expression {
 				return &expression{Kind: "stringLiteral", StringValue: &value}
 			}
 		}
+		if n.Kind == token.INT || n.Kind == token.FLOAT {
+			return &expression{Kind: "numericLiteral", Name: n.Value}
+		}
+	case *ast.BinaryExpr:
+		return &expression{Kind: "binary", Name: n.Op.String(), Children: []*expression{expr(n.X), expr(n.Y)}}
 	case *ast.ParenExpr:
 		return expr(n.X)
 	case *ast.CallExpr:

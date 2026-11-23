@@ -554,9 +554,13 @@ internal sealed class RustBodyParser(List<RustToken> tokens, string source, List
             return new(new(decoded is not null ? "stringLiteral" : "literal")
             { StringValue = decoded }, start, _pos, []);
         }
-        if (token.Kind == RustTokenKind.NumberLiteral || token.Value is "true" or "false")
+        if (token.Value is "true" or "false")
         {
-            return new(new("literal") { Name = token.Value }, start, _pos, []);
+            return new(new("booleanLiteral") { BooleanValue = token.Value == "true" }, start, _pos, []);
+        }
+        if (token.Kind == RustTokenKind.NumberLiteral)
+        {
+            return new(new("numericLiteral") { Name = token.Value }, start, _pos, []);
         }
 
         return new(new(token.Kind is RustTokenKind.Identifier || token.Value is "self" or "Self" or "crate" or "super"

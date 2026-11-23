@@ -205,7 +205,7 @@ public static class PowerShellParser
 
     private static string GetCommandName(string segment)
     {
-        List<string> tokens = Tokenize(segment);
+        List<string> tokens = ShellWordTokenizer.Tokenize(segment, '`', "(){},");
         int i = 0;
 
         if (tokens.Count > 0 && tokens[0].StartsWith('$'))
@@ -243,79 +243,6 @@ public static class PowerShellParser
 
     private static bool IsAssignmentLike(string token)
         => token.StartsWith("$", StringComparison.Ordinal) || token == "=" || token.EndsWith("=", StringComparison.Ordinal);
-
-    private static List<string> Tokenize(string segment)
-    {
-        List<string> tokens = new List<string>();
-        StringBuilder current = new StringBuilder();
-        char quote = '\0';
-        bool escaped = false;
-
-        foreach (char c in segment)
-        {
-            if (escaped)
-            {
-                current.Append(c);
-                escaped = false;
-                continue;
-            }
-
-            if (c == '`')
-            {
-                escaped = true;
-                continue;
-            }
-
-            if (quote != '\0')
-            {
-                if (c == quote)
-                {
-                    quote = '\0';
-                }
-                else
-                {
-                    current.Append(c);
-                }
-
-                continue;
-            }
-
-            if (c == '\'' || c == '"')
-            {
-                quote = c;
-                continue;
-            }
-
-            if (char.IsWhiteSpace(c))
-            {
-                if (current.Length > 0)
-                {
-                    tokens.Add(current.ToString());
-                    current.Clear();
-                }
-                continue;
-            }
-
-            if (c is '(' or ')' or '{' or '}' or ',')
-            {
-                if (current.Length > 0)
-                {
-                    tokens.Add(current.ToString());
-                    current.Clear();
-                }
-                continue;
-            }
-
-            current.Append(c);
-        }
-
-        if (current.Length > 0)
-        {
-            tokens.Add(current.ToString());
-        }
-
-        return tokens;
-    }
 
     private static string StripComments(string line, ref bool inBlockComment)
     {

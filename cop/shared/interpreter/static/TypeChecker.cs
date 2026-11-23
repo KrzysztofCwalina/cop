@@ -12,13 +12,7 @@ public sealed partial class TypeChecker
     private bool _staticInference;
     private readonly HashSet<FunctionDecl> _inferringFunctions = new(ReferenceEqualityComparer.Instance);
 
-    internal static TypeChecker ForStaticModel(IEnumerable<ModuleNode> modules)
-    {
-        TypeChecker checker = new TypeChecker { _staticInference = true };
-        List<ModuleNode> all = modules.ToList();
-        checker.BuildModel(all, all);
-        return checker;
-    }
+    internal static TypeChecker ForStaticModel(IEnumerable<ModuleNode> modules) => ForModel(modules, staticInference: true);
 
     private T WithStaticLocals<T>(IReadOnlyDictionary<string, TypeInfo?>? locals, Func<T> query)
     {

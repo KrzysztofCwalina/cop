@@ -92,6 +92,7 @@ namespace Cop.Core
         /// Load the file checksums manifest from disk
         /// </summary>
         /// <returns>Dictionary of file paths to checksums, or null if manifest doesn't exist</returns>
+        /// <exception cref="InvalidDataException">The manifest exists but is not valid JSON.</exception>
         public Dictionary<string, string>? LoadManifest()
         {
             string manifestPath = GetManifestPath();
@@ -121,10 +122,9 @@ namespace Cop.Core
                     }
                 }
             }
-            catch (JsonException)
+            catch (JsonException ex)
             {
-                // Invalid JSON, treat as no manifest
-                return null;
+                throw new InvalidDataException($"Checksum manifest '{manifestPath}' is not valid JSON: {ex.Message}", ex);
             }
 
             return null;

@@ -104,21 +104,6 @@ public static class Engine
         return result;
     }
 
-    /// <summary>
-    /// Runs a streaming command (e.g., HTTP server) that processes items indefinitely.
-    /// Returns only when cancelled via the CancellationToken.
-    /// </summary>
-    public static async Task RunStreamingAsync(
-        string scriptsDir,
-        string? commandName,
-        CancellationToken cancellationToken,
-        Action<string>? diagLog = null,
-        string[]? additionalFeedPaths = null)
-    {
-        await Task.Yield();
-        throw new NotImplementedException("Streaming support has not been reimplemented for the new evaluator pipeline yet.");
-    }
-
 
     private static List<ParsedModule> ParseModules(IEnumerable<string> filePaths, List<string> parseErrors)
     {

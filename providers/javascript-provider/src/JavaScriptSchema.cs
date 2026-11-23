@@ -15,62 +15,14 @@ public static class JavaScriptSchema
     /// <summary>Serializes the JavaScript provider schema as UTF-8 JSON.</summary>
     public static ReadOnlyMemory<byte> GetJson() => s_schema.ToJson();
 
-    private static ProviderSchema Build()
-    {
-        ProviderSchema baseSchema = CodeSchema.Get();
-
-        List<ProviderTypeSchema> types = new List<ProviderTypeSchema>(baseSchema.Types)
-        {
-            new()
-            {
-                Name = "JavaScriptType",
-                Base = "Type",
-                Properties =
-                [
-                    new ProviderPropertySchema { Name = "IsExported", Type = "bool" },
-                    new ProviderPropertySchema { Name = "HasBaseClass", Type = "bool" },
-                    new ProviderPropertySchema { Name = "IsAbstract", Type = "bool" },
-                    new ProviderPropertySchema { Name = "IsGeneric", Type = "bool" },
-                    new ProviderPropertySchema { Name = "HasImplements", Type = "bool" },
-                ],
-            },
-            new()
-            {
-                Name = "JavaScriptMethod",
-                Base = "Method",
-                Properties =
-                [
-                    new ProviderPropertySchema { Name = "IsGenerator", Type = "bool" },
-                    new ProviderPropertySchema { Name = "IsArrow", Type = "bool" },
-                    new ProviderPropertySchema { Name = "IsGetter", Type = "bool" },
-                    new ProviderPropertySchema { Name = "IsSetter", Type = "bool" },
-                    new ProviderPropertySchema { Name = "IsConstructor", Type = "bool" },
-                ],
-            },
-            new()
-            {
-                Name = "JavaScriptStatement",
-                Base = "Statement",
-                Properties =
-                [
-                    new ProviderPropertySchema { Name = "IsForOf", Type = "bool" },
-                    new ProviderPropertySchema { Name = "IsForIn", Type = "bool" },
-                    new ProviderPropertySchema { Name = "IsThrow", Type = "bool" },
-                    new ProviderPropertySchema { Name = "IsAwait", Type = "bool" },
-                    new ProviderPropertySchema { Name = "IsTryCatch", Type = "bool" },
-                    new ProviderPropertySchema { Name = "IsYield", Type = "bool" },
-                    new ProviderPropertySchema { Name = "IsAwaitForeach", Type = "bool" },
-                    new ProviderPropertySchema { Name = "IsEnvironmentVariableAccess", Type = "bool" },
-                    new ProviderPropertySchema { Name = "IsEnvironmentVariableRead", Type = "bool" },
-                    new ProviderPropertySchema { Name = "IsOriginalExceptionAlwaysRethrown", Type = "bool" },
-                    new ProviderPropertySchema { Name = "IsCancellationHandler", Type = "bool" },
-                    new ProviderPropertySchema { Name = "IsCallerCancellationPreserved", Type = "bool" },
-                    new ProviderPropertySchema { Name = "IsOwnershipTransferred", Type = "bool" },
-                    new ProviderPropertySchema { Name = "IsUsingResource", Type = "bool" },
-                ],
-            },
-        };
-
-        return new ProviderSchema { Types = types, Collections = baseSchema.Collections };
-    }
+    private static ProviderSchema Build() => CodeSchema.Extend(
+        CodeSchema.BoolSubtype("JavaScriptType", "Type",
+            "IsExported", "HasBaseClass", "IsAbstract", "IsGeneric", "HasImplements"),
+        CodeSchema.BoolSubtype("JavaScriptMethod", "Method",
+            "IsGenerator", "IsArrow", "IsGetter", "IsSetter", "IsConstructor"),
+        CodeSchema.BoolSubtype("JavaScriptStatement", "Statement",
+            "IsForOf", "IsForIn", "IsThrow", "IsAwait", "IsTryCatch", "IsYield", "IsAwaitForeach",
+            "IsEnvironmentVariableAccess", "IsEnvironmentVariableRead", "IsOriginalExceptionAlwaysRethrown",
+            "IsCancellationHandler", "IsCallerCancellationPreserved", "IsOwnershipTransferred",
+            "IsUsingResource"));
 }

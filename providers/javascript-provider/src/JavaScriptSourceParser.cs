@@ -51,11 +51,13 @@ public class JavaScriptSourceParser : ISourceParser
         JsParser p = new JsParser(allToks, lexer.Errors, filePath, sourceText);
         if (compiled is not null)
         {
+            compiled.Statements.AddRange(JavaScriptDirectives.Extract(allToks));
             return compiled with { Regions = p.Regions };
         }
 
         WarnFallback();
         p.Parse();
+        p.Statements.AddRange(JavaScriptDirectives.Extract(allToks));
         return new SourceFile(filePath, "javascript", p.Types, p.Statements, sourceText)
         {
             Usings = p.Usings,
@@ -1310,6 +1312,35 @@ public class JavaScriptSourceParser : ISourceParser
             return result;
         }
 
+        // Last binary '+' outside brackets; bails out on lower-precedence operators it cannot nest.
+        private int TopLevelPlus(int start, int end)
+        {
+            int found = -1;
+            for (int index = start; index < end; index++)
+            {
+                JsToken token = _tok[index];
+                if (token.IsPunct("(") || token.IsPunct("[") || token.IsPunct("{"))
+                {
+                    int close = FindMatchingClose(index);
+                    if (close < index || close >= end) { return -1; }
+                    index = close;
+                    continue;
+                }
+                if (token.Kind != JsTok.Punct) { continue; }
+                if (token.Value is "?" or "=>" or "&&" or "||" or "??" or "==" or "===" or "!=" or "!==" or "=" or ":" or ",")
+                {
+                    return -1;
+                }
+                if (token.Value == "+" && index > start &&
+                    (_tok[index - 1].IsIdent || _tok[index - 1].IsStr || _tok[index - 1].Kind == JsTok.Number ||
+                        _tok[index - 1].IsPunct(")") || _tok[index - 1].IsPunct("]")))
+                {
+                    found = index;
+                }
+            }
+            return found;
+        }
+
         private ExpressionInfo ParseExpression(int start, int end)
         {
             if (start >= end || start >= _tok.Count)
@@ -1331,12 +1362,16 @@ public class JavaScriptSourceParser : ISourceParser
                 JsToken token = _tok[start];
                 if (token.IsStr)
                 {
+                    if (token.Value.StartsWith('`') && token.Value.Contains("${", StringComparison.Ordinal))
+                    {
+                        return new("interpolation");
+                    }
                     return new("stringLiteral") { StringValue = DecodeString(token.Value) };
                 }
 
                 if (token.IsWord("true") || token.IsWord("false"))
                 {
-                    return new("booleanLiteral") { Name = token.Value };
+                    return new("booleanLiteral") { Name = token.Value, BooleanValue = token.IsWord("true") };
                 }
 
                 if (token.IsWord("null"))
@@ -1365,6 +1400,32 @@ public class JavaScriptSourceParser : ISourceParser
             if (_tok[start].IsPunct("{") && FindMatchingClose(start) == end - 1)
             {
                 return new("objectLiteral");
+            }
+
+            // Only project a complete, top-level assertion; nested tokens belong to their operands.
+            for (int index = start; index <= end - 2; index++)
+            {
+                if (_tok[index].IsPunct("(") || _tok[index].IsPunct("[") || _tok[index].IsPunct("{"))
+                {
+                    int close = FindMatchingClose(index);
+                    if (close < index || close >= end) { break; }
+                    index = close;
+                    continue;
+                }
+                if (index > start && _tok[index].IsWord("as") && index + 2 == end &&
+                    _tok[index + 1].IsWord("any"))
+                {
+                    return new("cast") { Name = "any", Target = ParseExpression(start, index) };
+                }
+            }
+
+            int plus = TopLevelPlus(start, end);
+            if (plus > start)
+            {
+                return new("binary")
+                {
+                    Name = "+", Children = [ParseExpression(start, plus), ParseExpression(plus + 1, end)]
+                };
             }
 
             if (_tok[end - 1].IsPunct(")"))

@@ -1,0 +1,9 @@
+{
+  "name": "code-quality-checks",
+  "version": "1.0.0",
+  "description": "Shared deterministic quality checks for the standard source-language suites",
+  "title": "Code Quality Checks",
+  "authors": "cop-team",
+  "tags": ["checks", "quality"],
+  "dependencies": ["github.com/KrzysztofCwalina/cop/code: 1.2.0"]
+}

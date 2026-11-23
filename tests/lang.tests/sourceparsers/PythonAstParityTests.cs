@@ -112,7 +112,7 @@ public class PythonAstParityTests
         Assert.That(send.ArgumentExpressions[2].Name, Is.EqualTo("label"));
         Assert.That(send.ArgumentExpressions[2].Children.Single().StringValue, Is.EqualTo("value"));
         Assert.That(calls[2].CallTarget!.Target!.Kind, Is.EqualTo("invocation"));
-        Assert.That(calls[2].ArgumentExpressions.Select(e => e.Kind), Is.EqualTo(new[] { "literal", "other" }));
+        Assert.That(calls[2].ArgumentExpressions.Select(e => e.Kind), Is.EqualTo(new[] { "literal", "interpolation" }));
         Assert.That(calls[2].ArgumentExpressions[0].StringValue, Is.Null, "Bytes are not decoded string literals.");
         Assert.That(file.ParseErrors, Is.Empty);
     }

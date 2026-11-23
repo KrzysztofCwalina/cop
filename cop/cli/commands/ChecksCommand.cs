@@ -129,7 +129,7 @@ public static class ChecksCommand
         }
 
         Console.WriteLine();
-        Console.WriteLine("\u2713 cop-checks/ generated, verified, and run successfully. Run: cop cop-checks/main.cop -t .");
+        Console.WriteLine("cop-checks/ generated, verified, and run successfully. Run: cop cop-checks/main.cop -t .");
         return 0;
     }
 

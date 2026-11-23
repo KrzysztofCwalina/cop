@@ -37,6 +37,8 @@ export type Api : TextFilePosition = { filePath => item.File.Path, line => item.
 export type Line : TextFilePosition = { filePath => item.File.Path, line => item.Number, fullPath => item.File.FullPath }
 export type Region : TextFilePosition = { filePath => item.File.Path, line => item.StartLine, fullPath => item.File.FullPath }
 export type Folder : TextFilePosition = { filePath => item.Path, line => 0, fullPath => item.Path }
+export type File : TextFilePosition = { filePath => item.Path, line => 0, fullPath => item.FullPath }
+export type Import : TextFilePosition = { filePath => item.File.Path, line => item.Line, fullPath => item.File.FullPath }
 
 # Violation creation functions
 

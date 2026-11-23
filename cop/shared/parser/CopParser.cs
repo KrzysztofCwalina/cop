@@ -37,6 +37,19 @@ public class CopParser
         return parser.ParseModule();
     }
 
+    /// <summary>Parses a complete module, returning null instead of throwing when the source is invalid.</summary>
+    public static ModuleNode? ParseOrNull(string source, string? filePath = null)
+    {
+        try
+        {
+            return Parse(source, filePath);
+        }
+        catch (ParseException)
+        {
+            return null;
+        }
+    }
+
     /// <summary>Parses one complete expression without registering a declaration.</summary>
     public static Expression ParseExpressionSource(string source, string? filePath = null)
     {
@@ -1859,10 +1872,15 @@ public class CopParser
         }
 
         CopParser lookahead = new CopParser(_tokens, _filePath, _source) { _pos = _pos + 2 };
+        return lookahead.TryParseExpression() && lookahead.Check(TokenKind.Arrow);
+    }
+
+    private bool TryParseExpression()
+    {
         try
         {
-            lookahead.ParseExpression();
-            return lookahead.Check(TokenKind.Arrow);
+            ParseExpression();
+            return true;
         }
         catch (ParseException)
         {
@@ -2439,31 +2457,25 @@ public class CopParser
             sourceLine: ParseException.GetSourceLine(_source ?? "", line));
     }
 
-    private string ExpectIdentifier(string context)
-    {
-        Token token = Peek();
-        if (IsIdentifierLike(token))
-        {
-            Advance();
-            return token.Value;
-        }
-        int line = CurrentLine();
-        throw new ParseException($"Expected {context} (identifier), got '{token.Value}' ({token.Kind})", _filePath, line,
-            sourceLine: ParseException.GetSourceLine(_source ?? "", line));
-    }
+    private string ExpectIdentifier(string context) => ExpectName(context, allowLiterals: false);
 
-    private string ExpectIdentifierOrString(string context)
+    private string ExpectIdentifierOrString(string context) => ExpectName(context, allowLiterals: true);
+
+    private string ExpectName(string context, bool allowLiterals)
     {
         Token token = Peek();
-        if (token.Kind == TokenKind.StringLiteral || token.Kind == TokenKind.VerbatimStringLiteral
-            || token.Kind == TokenKind.IntLiteral
-            || token.Kind == TokenKind.NumberLiteral || IsIdentifierLike(token))
+        bool literal = token.Kind is TokenKind.StringLiteral or TokenKind.VerbatimStringLiteral
+            or TokenKind.IntLiteral or TokenKind.NumberLiteral;
+        if (allowLiterals && literal || IsIdentifierLike(token))
         {
             Advance();
             return token.Value;
         }
+        string message = allowLiterals
+            ? $"Expected {context}, got '{token.Value}'"
+            : $"Expected {context} (identifier), got '{token.Value}' ({token.Kind})";
         int line = CurrentLine();
-        throw new ParseException($"Expected {context}, got '{token.Value}'", _filePath, line,
+        throw new ParseException(message, _filePath, line,
             sourceLine: ParseException.GetSourceLine(_source ?? "", line));
     }
 

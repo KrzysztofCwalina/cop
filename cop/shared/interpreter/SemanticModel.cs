@@ -68,13 +68,9 @@ public sealed class SemanticModel
             return null;
         }
 
-        ModuleNode probe;
-        try
-        {
-            // Reuse the REAL parser: wrap the chain as a let value so a single expression parses.
-            probe = CopParser.Parse("let __semanticmodel_probe = " + exprText, "__semanticmodel_probe__");
-        }
-        catch (ParseException)
+        // Reuse the REAL parser: wrap the chain as a let value so a single expression parses.
+        ModuleNode? probe = CopParser.ParseOrNull("let __semanticmodel_probe = " + exprText, "__semanticmodel_probe__");
+        if (probe is null)
         {
             return null;
         }

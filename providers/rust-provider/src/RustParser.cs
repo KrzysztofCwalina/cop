@@ -520,34 +520,19 @@ internal class RustParser(List<RustToken> tokens, string sourceText, IReadOnlyLi
         { HasDocComment = hasDoc, Fields = fields, DocComment = DocumentationAt(line), TypeParameters = generics };
     }
 
-    private List<FieldDeclaration> ParseTupleFields()
+    private List<FieldDeclaration> ParseTupleFields() => ParseFieldList(")", ParseTupleField);
+
+    private List<FieldDeclaration> ParseStructFields() => ParseFieldList("}", ParseStructField);
+
+    private List<FieldDeclaration> ParseFieldList(string close, Action<List<FieldDeclaration>> parseField)
     {
         List<FieldDeclaration> fields = new List<FieldDeclaration>();
-        Advance();
-        while (!IsAtEnd() && !Check(")"))
+        Advance(); // skip opening delimiter
+        while (!IsAtEnd() && !Check(close))
         {
-            int start = _pos;
-            SkipCommentsAndAttributes();
-            int line = CurrentLine();
-            Modifier visibility = ReadVisibility();
-            string text = ConsumeType();
-            if (text.Length > 0)
-            {
-                fields.Add(new FieldDeclaration(fields.Count.ToString(System.Globalization.CultureInfo.InvariantCulture),
-                    ParseTypeReference(text), visibility, line));
-            }
-
-            if (Check(","))
-            {
-                Advance();
-            }
-
-            if (_pos == start)
-            {
-                Advance();
-            }
+            parseField(fields);
         }
-        if (Check(")"))
+        if (Check(close))
         {
             Advance();
         }
@@ -555,42 +540,55 @@ internal class RustParser(List<RustToken> tokens, string sourceText, IReadOnlyLi
         return fields;
     }
 
-    private List<FieldDeclaration> ParseStructFields()
+    private void ParseTupleField(List<FieldDeclaration> fields)
     {
-        List<FieldDeclaration> fields = new List<FieldDeclaration>();
-        Advance(); // skip {
-        while (!IsAtEnd() && !Check("}"))
+        int start = _pos;
+        SkipCommentsAndAttributes();
+        int line = CurrentLine();
+        Modifier visibility = ReadVisibility();
+        string text = ConsumeType();
+        if (text.Length > 0)
         {
-            SkipCommentsAndAttributes();
-            if (Check("}"))
-            {
-                break;
-            }
-
-            Modifier vis = ReadVisibility();
-
-            if (Check("}"))
-            {
-                break;
-            }
-
-            int line = CurrentLine();
-            string fieldName = ConsumeIdentifier();
-            if (fieldName == string.Empty || !Check(":")) { SkipUntilCommaOrBrace(); continue; }
-            Advance(); // skip :
-            string fieldType = ConsumeType();
-            fields.Add(new FieldDeclaration(fieldName, ParseTypeReference(fieldType), vis, line));
-            if (Check(","))
-            {
-                Advance();
-            }
+            fields.Add(new FieldDeclaration(fields.Count.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                ParseTypeReference(text), visibility, line));
         }
-        if (Check("}"))
+
+        if (Check(","))
         {
             Advance();
         }
 
-        return fields;
+        if (_pos == start)
+        {
+            Advance();
+        }
+    }
+
+    private void ParseStructField(List<FieldDeclaration> fields)
+    {
+        SkipCommentsAndAttributes();
+        if (Check("}"))
+        {
+            return;
+        }
+
+        Modifier vis = ReadVisibility();
+
+        if (Check("}"))
+        {
+            return;
+        }
+
+        int line = CurrentLine();
+        string fieldName = ConsumeIdentifier();
+        if (fieldName == string.Empty || !Check(":")) { SkipUntilCommaOrBrace(); return; }
+        Advance(); // skip :
+        string fieldType = ConsumeType();
+        fields.Add(new FieldDeclaration(fieldName, ParseTypeReference(fieldType), vis, line));
+        if (Check(","))
+        {
+            Advance();
+        }
     }
 
     private TypeDeclaration ParseEnum(Modifier vis, List<string> attributes, bool hasDoc)

@@ -115,7 +115,7 @@ public class TypeSpecHttpProvider : DataProvider
         Dictionary<HttpOperation, int> opIndexMap = new Dictionary<HttpOperation, int>(ReferenceEqualityComparer.Instance);
         foreach (HttpOperation o in httpSpec.Operations)
         {
-            if (query.Collection == "Operations" && !MatchesFilter(query.CollectionFilters?.GetValueOrDefault("Operations") ?? query.Filter, "Name", o.Name, "Verb", o.Verb))
+            if (query.Collection == "Operations" && !TypeSpecRawProvider.MatchesFilter(query.CollectionFilters?.GetValueOrDefault("Operations") ?? query.Filter, "Name", o.Name, "Verb", o.Verb))
             {
                 continue;
             }
@@ -129,7 +129,7 @@ public class TypeSpecHttpProvider : DataProvider
         {
             foreach (HttpService s in httpSpec.Services)
             {
-                if (!MatchesFilter(query.CollectionFilters?.GetValueOrDefault("Services") ?? query.Filter, "Name", s.Name, "Namespace", s.Namespace))
+                if (!TypeSpecRawProvider.MatchesFilter(query.CollectionFilters?.GetValueOrDefault("Services") ?? query.Filter, "Name", s.Name, "Namespace", s.Namespace))
                 {
                     continue;
                 }
@@ -225,22 +225,5 @@ public class TypeSpecHttpProvider : DataProvider
             decorators.SetRange(row, 1, argStart, d.Arguments.Count);
         }
         return (start, items.Count);
-    }
-
-    private static bool MatchesFilter(FilterExpression? filter, string prop1, string? val1,
-        string? prop2 = null, string? val2 = null)
-    {
-        if (filter is null)
-        {
-            return true;
-        }
-
-        Dictionary<string, Func<object, object?>> accessors = new Dictionary<string, Func<object, object?>> { [prop1] = _ => val1 };
-        if (prop2 is not null)
-        {
-            accessors[prop2] = _ => val2;
-        }
-
-        return FilterCompiler.Compile(filter, accessors)(filter);
     }
 }

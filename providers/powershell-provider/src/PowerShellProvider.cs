@@ -77,44 +77,27 @@ public sealed class PowerShellProvider : DataProvider
             .ConfigureAwait(false);
     }
 
-    private readonly Dictionary<string, DeferredFormatSnapshot> _snapshots = new(StringComparer.Ordinal);
+    private DeferredFormatFiles? _files;
+
+    private DeferredFormatFiles Files => _files ??= new("powershell", s_schema, CollectPowerShellFiles, ParseFileAsync);
+
     private readonly PowerShellAstParser _parser = new();
 
     /// <inheritdoc />
     public override ValueTask<object?> QueryDeferredAsync(
         ProviderQuery query, CancellationToken cancellationToken = default)
-    {
-        if (query.RootPath is null)
-        {
-            return ValueTask.FromResult<object?>(new DeferredProviderResult(
-                new Dictionary<string, IAsyncEnumerable<object>>()));
-        }
+        => Files.QueryAsync(query, GetRuntimeBindings(), cancellationToken);
 
-        string key = DeferredFormatSnapshot.Key(query);
-        string root = Path.GetFullPath(query.RootPath);
-        if (!_snapshots.TryGetValue(key, out DeferredFormatSnapshot? snapshot))
+    private async ValueTask<Dictionary<string, List<object>>> ParseFileAsync(
+        SourceModel.SourceFile file, string path, CancellationToken token)
+    {
+        PowerShellParser.PowerShellParseResult script =
+            await _parser.ParseAsync(file.RawText, path, token).ConfigureAwait(false);
+        return new Dictionary<string, List<object>>
         {
-            snapshot = new(() =>
-            {
-                List<string> paths = new List<string>();
-                CollectPowerShellFiles(root, query.ExcludedDirectories, paths);
-                return paths;
-            }, async (path, token) =>
-            {
-                string text = await File.ReadAllTextAsync(path, token).ConfigureAwait(false);
-                SourceFile file = new SourceFile(Path.GetRelativePath(root, path).Replace('\\', '/'), "powershell", [], [], text);
-                PowerShellParser.PowerShellParseResult script =
-                    await _parser.ParseAsync(text, path, token).ConfigureAwait(false);
-                return new()
-                {
-                    ["Commands"] = script.Commands.Select(c => (object)(c with { File = file })).ToList(),
-                    ["Scripts"] = [script.Script with { File = file }]
-                };
-            });
-            _snapshots.Add(key, snapshot);
-        }
-        cancellationToken.ThrowIfCancellationRequested();
-        return ValueTask.FromResult<object?>(snapshot.Query(query, s_schema, GetRuntimeBindings()));
+            ["Commands"] = script.Commands.Select(c => (object)(c with { File = file })).ToList(),
+            ["Scripts"] = [script.Script with { File = file }]
+        };
     }
 
     private static void CollectPowerShellFiles(string dir, IReadOnlySet<string>? excluded, List<string> result)

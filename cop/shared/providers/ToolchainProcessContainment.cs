@@ -10,6 +10,8 @@ namespace Cop.Core;
 /// <summary>Windows job ownership keeps descendants killable even after the launcher exits.</summary>
 internal sealed class ToolchainProcessContainment : IAsyncDisposable
 {
+    private static readonly TimeSpan s_cleanupTimeout = TimeSpan.FromSeconds(2);
+    private static readonly TimeSpan s_cleanupPollInterval = TimeSpan.FromMilliseconds(10);
     private readonly JobHandle? _job;
 
     public ToolchainProcessContainment()
@@ -71,12 +73,12 @@ internal sealed class ToolchainProcessContainment : IAsyncDisposable
                     break;
                 }
 
-                if (timer.Elapsed > TimeSpan.FromSeconds(2))
+                if (timer.Elapsed > s_cleanupTimeout)
                 {
                     throw new TimeoutException("Toolchain descendants did not exit after job termination.");
                 }
 
-                await Task.Delay(10).ConfigureAwait(false);
+                await Task.Delay(s_cleanupPollInterval).ConfigureAwait(false);
             }
         }
     }

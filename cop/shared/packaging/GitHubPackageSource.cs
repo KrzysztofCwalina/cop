@@ -177,55 +177,48 @@ public class GitHubPackageSource
         string owner, string repo, string dirPath,
         List<string> packages, CancellationToken ct)
     {
-        try
+        string url = $"{GitHubApiBaseUrl}/repos/{owner}/{repo}/contents/{dirPath}";
+        using HttpRequestMessage request = CreateRequestWithAuth(HttpMethod.Get, url);
+        using HttpResponseMessage response = await _httpClient.SendAsync(request, ct);
+        if (!response.IsSuccessStatusCode)
         {
-            string url = $"{GitHubApiBaseUrl}/repos/{owner}/{repo}/contents/{dirPath}";
-            using HttpRequestMessage request = CreateRequestWithAuth(HttpMethod.Get, url);
-            using HttpResponseMessage response = await _httpClient.SendAsync(request, ct);
-            if (!response.IsSuccessStatusCode)
-            {
-                return;
-            }
-
-            string json = await response.Content.ReadAsStringAsync(ct);
-            List<GitHubContentItem>? items = JsonSerializer.Deserialize<List<GitHubContentItem>>(
-                json,
-                new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-
-            if (items is null)
-            {
-                return;
-            }
-
-            List<GitHubContentItem> dirs = items.Where(i => i.Type == "dir").ToList();
-            HashSet<string> files = items.Where(i => i.Type == "file").Select(i => i.Name).ToHashSet();
-
-            foreach (GitHubContentItem? dir in dirs)
-            {
-                if (dir.Name.StartsWith('.'))
-                {
-                    continue;
-                }
-
-                // A directory is a package if it contains cop.json among its children.
-                bool isPackage = await IsGitHubPackageAsync(owner, repo, dir.Path, dir.Name, ct);
-                if (isPackage)
-                {
-                    if (isPackage)
-                {
-                    packages.Add(dir.Name);
-                }
-                else
-                {
-                    // Group folder — recurse
-                    await CollectPackagesAsync(owner, repo, dir.Path, packages, ct);
-                }
-                }
-            }
+            return;
         }
-        catch (HttpRequestException)
+
+        string json = await response.Content.ReadAsStringAsync(ct);
+        List<GitHubContentItem>? items = JsonSerializer.Deserialize<List<GitHubContentItem>>(
+            json,
+            new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+
+        if (items is null)
         {
-            // Ignore errors for subdirectories
+            return;
+        }
+
+        List<GitHubContentItem> dirs = items.Where(i => i.Type == "dir").ToList();
+        HashSet<string> files = items.Where(i => i.Type == "file").Select(i => i.Name).ToHashSet();
+
+        foreach (GitHubContentItem? dir in dirs)
+        {
+            if (dir.Name.StartsWith('.'))
+            {
+                continue;
+            }
+
+            // A directory is a package if it contains cop.json among its children.
+            bool isPackage = await IsGitHubPackageAsync(owner, repo, dir.Path, dir.Name, ct);
+            if (isPackage)
+            {
+                if (isPackage)
+            {
+                packages.Add(dir.Name);
+            }
+            else
+            {
+                // Group folder — recurse
+                await CollectPackagesAsync(owner, repo, dir.Path, packages, ct);
+            }
+            }
         }
     }
 
@@ -351,9 +344,10 @@ public class GitHubPackageSource
                 .OrderByDescending(v => ParseSemanticVersion(v))
                 .FirstOrDefault();
         }
-        catch (HttpRequestException)
+        catch (HttpRequestException ex)
         {
-            return null;
+            throw new PackageNotFoundException(
+                $"Failed to resolve the latest version of '{packageRef.PackageName}': {ex.Message}", ex);
         }
     }
 

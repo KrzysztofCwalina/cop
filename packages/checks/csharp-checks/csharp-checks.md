@@ -6,7 +6,7 @@ description: C# correctness, StyleCop style, and Framework Design Guidelines che
 authors: cop-team
 tags: csharp, dotnet, coding-standards, stylecop, fdg, naming, design
 language: C#
-dependencies: ['github.com/KrzysztofCwalina/cop/code: 1.2.0', 'github.com/KrzysztofCwalina/cop/csharp: 2.0.0']
+dependencies: ['github.com/KrzysztofCwalina/cop/code: 1.2.0', 'github.com/KrzysztofCwalina/cop/csharp: 2.0.0', 'github.com/KrzysztofCwalina/cop/code-quality-checks: 1.0.0']
 provider: clr
 providerEntry: Cop.Providers.CSharpProvider
 providerAssembly: csharp-provider.dll
@@ -15,6 +15,11 @@ providerAssembly: csharp-provider.dll
 # C# Checks
 
 Checks covering correctness, StyleCop style, and .NET Framework Design Guidelines.
+
+The standard suite also includes `codeQualityChecks(cb)` from
+`code-quality-checks`: concrete error-masking, assertion, unfinished-code,
+type-erasure, warning-suppression and credential review checks. See that
+package's coverage table for supported patterns and exclusions.
 
 ## Composing checks
 

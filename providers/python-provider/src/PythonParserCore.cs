@@ -965,7 +965,23 @@ internal sealed class PythonParserCore
         }
 
         if (first.Is("with"))     { out_.Add(new PythonStatementInfo(new StatementInfo("with",     [], null, null, [], lineNum, isInMethod))); return; }
-        if (first.Is("assert"))   { out_.Add(new PythonStatementInfo(new StatementInfo("assert",   [], null, null, [], lineNum, isInMethod))); return; }
+        if (first.Is("assert"))
+        {
+            out_.Add(new PythonStatementInfo(new StatementInfo("assert", [], null, null, [], lineNum, isInMethod))
+            {
+                ConditionExpression = ScalarExpression(lt.Skip(1).TakeWhile(token => token.Kind != TK.Comma).ToList())
+            });
+            return;
+        }
+        // Only scalar-literal returns become return facts; other returns keep yielding their nested calls.
+        if (first.Is("return") && ScalarExpression(lt.Skip(1).ToList()) is { Kind: not "other" } returned)
+        {
+            out_.Add(new PythonStatementInfo(new StatementInfo("return", [], null, null, [], lineNum, isInMethod))
+            {
+                ValueExpression = returned
+            });
+            return;
+        }
         if (first.Is("global"))   { out_.Add(new PythonStatementInfo(new StatementInfo("global",   [], null, null, [], lineNum, isInMethod))); return; }
         if (first.Is("nonlocal")) { out_.Add(new PythonStatementInfo(new StatementInfo("nonlocal", [], null, null, [], lineNum, isInMethod))); return; }
 
@@ -977,6 +993,24 @@ internal sealed class PythonParserCore
             return;
         }
 
+    }
+
+    private static ExpressionInfo ScalarExpression(List<Tok> tokens)
+    {
+        if (tokens.Count != 1)
+        {
+            return new("other");
+        }
+        Tok token = tokens[0];
+        if (token.Is("True") || token.Is("False"))
+        {
+            return new("booleanLiteral") { BooleanValue = token.Is("True") };
+        }
+        if (token.Is("None"))
+        {
+            return new("nullLiteral");
+        }
+        return token.Kind == TK.Number ? new("numericLiteral") { Name = token.Text } : new("other");
     }
 
     // ── Call and comprehension detection ────────────────────────────────────

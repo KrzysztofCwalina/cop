@@ -188,12 +188,7 @@ public static class FilterEvaluator
         {
             return false;
         }
-        // Each item in the collection is evaluated against the item filter.
-        // The getValue callback for sub-items delegates to the item's own properties —
-        // but at the FilterEvaluator level we only have the parent's getValue.
-        // For provider-level pushdown, the provider must supply a getValue that handles
-        // collection items. For now, return true (pass through) if we can't evaluate sub-items.
-        // The full collection-any pushdown is handled by FilterCompiler which has type accessors.
+        // Items cannot be evaluated without their accessors; FilterCompiler handles the full pushdown.
         return true;
     }
 
@@ -220,7 +215,7 @@ public static class FilterEvaluator
     /// Normalize an identifier for convention-insensitive comparison (sm predicate).
     /// Strips underscores, hyphens, and lowercases everything in a single pass.
     /// </summary>
-    private static string NormalizeIdentifier(string s)
+    internal static string NormalizeIdentifier(string s)
     {
         int len = s.Length;
         Span<char> chars = len <= 128 ? stackalloc char[len] : new char[len];

@@ -9,7 +9,7 @@ export flags Modifier = Public | Private | Protected | Internal | Static | Seale
 # Extensible enums — known values for Kind properties. Providers may return additional values.
 export enum TypeKind = Class | Struct | Interface | Enum | Alias
 export enum StatementKind = call | declaration | import | command | attribute | throw | return | using | foreach | try | catch | finally | if | else | while | do | for | switch | await | directive | label | break | continue | localfunction | pipeline | lock | unsafe | fixed | checked | unchecked | yield | goto | assignment | expression | empty
-export enum ExpressionKind = identifier | stringLiteral | numericLiteral | booleanLiteral | nullLiteral | arrayLiteral | objectLiteral | memberAccess | invocation | other | binary
+export enum ExpressionKind = identifier | stringLiteral | numericLiteral | booleanLiteral | nullLiteral | arrayLiteral | objectLiteral | memberAccess | invocation | other | binary | cast | interpolation
 export enum ApiKind = class | struct | interface | enum | enumvalue | ctor | method | property | event | field
 export enum LineKind = code | comment | blank
 export enum Language = csharp | python | javascript | rust | go | java | cop | text
@@ -63,7 +63,13 @@ export type Method = {
     Documented : bool,
     Documentation : string?,
     File : File?,
-    Source : string
+    Source : string,
+    ## Digest of parsed body structure, nested statements, conditions, callees, and literal expressions; excludes local names and does not require semantic binding.
+    Shape : string,
+    ## Lines spanned by the declaration; null when the parser does not report an end line.
+    LineCount : int?,
+    ## Comment lines inside the declaration; null when the parser does not report an end line.
+    CommentLineCount : int?
 }
 
 export type Constructor = Method & {}
@@ -175,6 +181,7 @@ export type Statement = {
 ## Parsed expression facts supplied by language parsers. StringValue is the decoded
 ## string literal value, not source text. Target is a member receiver or invocation callee;
 ## Children are invocation arguments. Unsupported expression forms have Kind = other.
+## Cast nodes have the parsed destination type name in Name and operand in Target.
 export type CodeExpression = {
     Kind : ExpressionKind,
     Name : string?,
@@ -197,7 +204,9 @@ export type CallableReference = {
     Line : int?,
     Column : int?,
     EndLine : int?,
-    EndColumn : int?
+    EndColumn : int?,
+    ## True when the compiler reports the callable or its declaring type as deprecated (C# [Obsolete]).
+    IsDeprecated : bool
 }
 
 export type Call = Statement & {
@@ -326,7 +335,9 @@ export type Import = {
     Line : int,
     Column : int?,
     EndLine : int?,
-    EndColumn : int?
+    EndColumn : int?,
+    ## Source file containing the import.
+    File : File?
 }
 
 export type Project = {

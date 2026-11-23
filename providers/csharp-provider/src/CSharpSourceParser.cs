@@ -480,6 +480,9 @@ public class CSharpSourceParser : ISourceParser
         };
     }
 
+    private static bool IsObsolete(ISymbol symbol) => symbol.GetAttributes().Any(a =>
+        a.AttributeClass?.ToDisplayString() == "System.ObsoleteAttribute");
+
     private static CallableReference? BoundCallable(IMethodSymbol symbol)
     {
         List<TypeReference> parameters = new List<TypeReference>();
@@ -501,6 +504,7 @@ public class CSharpSourceParser : ISourceParser
             ReturnType = BoundType(symbol.ReturnType),
             Parameters = parameters,
             SourceFile = span?.Path,
+            IsDeprecated = IsObsolete(symbol) || (symbol.ContainingType is { } containing && IsObsolete(containing)),
             Line = span?.StartLinePosition.Line + 1,
             Column = span?.StartLinePosition.Character + 1,
             EndLine = span?.EndLinePosition.Line + 1,
@@ -1506,10 +1510,23 @@ public class CSharpSourceParser : ISourceParser
             new("stringLiteral") { StringValue = value },
         LiteralExpressionSyntax literal when literal.Token.Value is bool value =>
             new("booleanLiteral") { BooleanValue = value },
+        LiteralExpressionSyntax literal when literal.IsKind(SyntaxKind.NullLiteralExpression) =>
+            new("nullLiteral"),
+        LiteralExpressionSyntax literal when literal.IsKind(SyntaxKind.NumericLiteralExpression) =>
+            new("numericLiteral") { Name = literal.Token.ValueText },
+        CastExpressionSyntax cast => new("cast")
+        {
+            Name = ExtractBaseTypeName(cast.Type), Target = ExtractExpression(cast.Expression)
+        },
         BinaryExpressionSyntax binary => new("binary")
         {
             Name = binary.Kind().ToString(),
             Children = [ExtractExpression(binary.Left), ExtractExpression(binary.Right)]
+        },
+        InterpolatedStringExpressionSyntax interpolated => new("interpolation")
+        {
+            Children = interpolated.Contents.OfType<InterpolationSyntax>()
+                .Select(i => ExtractExpression(i.Expression)).ToList()
         },
         IdentifierNameSyntax id => new("identifier") { Name = id.Identifier.ValueText },
         GenericNameSyntax name => new("identifier") { Name = name.Identifier.ValueText },
@@ -1752,6 +1769,15 @@ public class CSharpSourceParser : ISourceParser
 
                 statements.Add(new CSharpStatementInfo(new StatementInfo("directive", keywords, null, null, [],
                     LineOf(nullable), false)));
+            }
+            else if (trivia.GetStructure() is PragmaWarningDirectiveTriviaSyntax { IsActive: true } warning)
+            {
+                List<string> keywords = ["pragma", "warning", warning.DisableOrRestoreKeyword.ValueText];
+                keywords.AddRange(warning.ErrorCodes.Select(code => code is IdentifierNameSyntax identifier
+                    ? identifier.Identifier.ValueText
+                    : code is LiteralExpressionSyntax literal ? literal.Token.ValueText : "other"));
+                statements.Add(new CSharpStatementInfo(new StatementInfo("directive", keywords, null, null, [],
+                    LineOf(warning), false)));
             }
         }
 

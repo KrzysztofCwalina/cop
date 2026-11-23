@@ -2,6 +2,7 @@
 
 import java
 import code
+import code-quality-checks
 
 let cb = codebase(java.parse())
 
@@ -28,7 +29,15 @@ predicate isSystemExit(Statement) =>
 export let system-exit = cb.Calls:isSystemExit:isUnsuppressed
     :toError('Avoid System.exit() — throw an exception or return an error instead', nameof(system-exit))
 
+# Wrapping the error in a new exception still propagates the failure.
+predicate isSwallowingGenericHandler(Statement) =>
+    isUnrethrowingGenericHandler(Statement) && !Statement.Children:any((child) => child.Kind == throw)
+
+## Do not catch Exception/Throwable without throwing — the failure silently disappears
+export let swallowed-exceptions = cb.Statements:isSwallowingGenericHandler:isUnsuppressed
+    :toWarning('Do not swallow Exception — rethrow, wrap, or catch a specific type', nameof(swallowed-exceptions))
+
 ## All Java checks combined
-export let java-checks = console-output + print-stack-trace + system-exit
+export let java-checks = console-output + print-stack-trace + system-exit + swallowed-exceptions + codeQualityChecks(cb)
 
 command MAIN = CHECK(java-checks)

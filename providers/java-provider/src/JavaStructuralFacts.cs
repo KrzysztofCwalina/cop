@@ -5,223 +5,151 @@ using Cop.Providers.SourceModel;
 
 namespace Cop.Providers.SourceParsers;
 
-internal static class JavaStructuralFacts
+internal sealed class JavaStructuralFacts : TokenStructureWalker<JavaToken>
 {
+    private string _source = string.Empty;
+
+    private JavaStructuralFacts(List<JavaToken> tokens, int start, int end, List<StatementInfo> statements, bool inMethod)
+        : base(tokens, start, end, statements, inMethod)
+    {
+    }
+
     /// <summary>Adds expression and control-flow facts for a Java token range.</summary>
     internal static void Enrich(List<JavaToken> tokens, int start, int end, List<StatementInfo> statements,
         string source, bool inMethod = true)
+        => new JavaStructuralFacts(tokens, start, end, statements, inMethod) { _source = source }.Walk();
+
+    /// <inheritdoc />
+    protected override bool IsComment(JavaToken token)
+        => token.Kind is JavaTokenKind.LineComment or JavaTokenKind.BlockComment or JavaTokenKind.DocComment;
+
+    /// <inheritdoc />
+    protected override bool IsStringOrComment(JavaToken token) => token.Kind is JavaTokenKind.StringLiteral
+        or JavaTokenKind.LineComment or JavaTokenKind.BlockComment or JavaTokenKind.DocComment;
+
+    /// <inheritdoc />
+    protected override string ValueOf(JavaToken token) => token.Value;
+
+    /// <inheritdoc />
+    protected override void VisitToken(int i)
     {
-        statements.RemoveAll(s => s.Kind == "call");
-        Stack<StatementInfo?> scopes = new Stack<StatementInfo?>();
-        StatementInfo? parent = null;
-        StatementInfo? pending = null;
-        Stack<(int End, StatementInfo Call)> callScopes = new Stack<(int End, StatementInfo Call)>();
-        Dictionary<int, int> callStarts = new Dictionary<int, int>();
-        for (int i = start; i < end; i++)
+        List<JavaToken> tokens = Tokens;
+        int start = Start, end = End;
+        JavaToken token = tokens[i];
+        int column = token.Start - _source.LastIndexOf('\n', Math.Max(0, token.Start - 1));
+        if (token.Kind == JavaTokenKind.Keyword &&
+            token.Value is "if" or "while" or "return" or "switch" or "else" or "do" or "break" or "continue")
         {
-            JavaToken token = tokens[i];
-            int column = token.Start - source.LastIndexOf('\n', Math.Max(0, token.Start - 1));
-            while (callScopes.Count > 0 && callScopes.Peek().End <= i)
+            JavaStatementInfo statement = new JavaStatementInfo(new StatementInfo(token.Value, [], null, null, [], token.Line, InMethod))
             {
-                callScopes.Pop();
-            }
-
-            if (token.Kind is JavaTokenKind.LineComment or JavaTokenKind.BlockComment or JavaTokenKind.DocComment)
-            {
-                continue;
-            }
-
-            if (token.Value == "{")
-            {
-                scopes.Push(parent);
-                parent = pending ?? parent;
-                pending = null;
-                continue;
-            }
-            if (token.Value == "}")
-            {
-                if (scopes.Count > 0)
-                {
-                    parent = scopes.Pop();
-                }
-
-                pending = null;
-                continue;
-            }
-            if (token.Kind == JavaTokenKind.Keyword &&
-                token.Value is "if" or "while" or "return" or "switch" or "else" or "do" or "break" or "continue")
-            {
-                JavaStatementInfo statement = new JavaStatementInfo(new StatementInfo(token.Value, [], null, null, [], token.Line, inMethod))
-                {
-                    IsBraced = i + 1 < end && tokens[i + 1].Value == "{",
-                    Column = column,
-                    SyntaxStart = token.Start
-                };
-                Attach(statement, parent);
-                statements.Add(statement);
-                if (token.Value is "if" or "while" or "switch" or "else" or "do")
-                {
-                    pending = statement;
-                }
-            }
-            StatementInfo? control = statements.FirstOrDefault(s => s.Line == token.Line && s.Kind == token.Value
-                && s.Kind != "call" && (s.Column is null || s.Column == column));
-            if (control is not null)
-            {
-                control.Column = column;
-                if (control is JavaStatementInfo javaControl)
-                {
-                    javaControl.SyntaxStart = token.Start;
-                }
-                Attach(control, parent);
-                if (token.Value is "for" or "try" or "catch" or "synchronized")
-                {
-                    pending = control;
-                }
-            }
-            bool constructor = token.Value == "new";
-            if (!constructor && token.Kind != JavaTokenKind.Identifier && token.Value is not "this" and not "super")
-            {
-                continue;
-            }
-
-            bool chained = !constructor && i >= start + 2 && tokens[i - 1].Value == "."
-                && callStarts.ContainsKey(i - 2);
-            if (!constructor && i > start && tokens[i - 1].Value is "." or "new" && !chained)
-            {
-                continue;
-            }
-
-            int first = constructor ? i + 1 : i;
-            if (chained)
-            {
-                first = callStarts[i - 2];
-            }
-
-            int targetEnd = i + (constructor ? 2 : 1);
-            while (targetEnd + 1 < end && tokens[targetEnd].Value == "." &&
-                   tokens[targetEnd + 1].Kind == JavaTokenKind.Identifier)
-            {
-                targetEnd += 2;
-            }
-
-            int open = targetEnd;
-            if (open < end && tokens[open].Value == "<")
-            {
-                int depth = 1;
-                for (open++; open < end && depth > 0; open++)
-                {
-                    if (tokens[open].Value == "<")
-                    {
-                        depth++;
-                    }
-                    else if (tokens[open].Value is ">" or ">>" or ">>>")
-                    {
-                        depth -= tokens[open].Value.Length;
-                    }
-                }
-            }
-            if (open >= end || tokens[open].Value != "(")
-            {
-                continue;
-            }
-
-            int close = Matching(tokens, open, end);
-            if (close >= end)
-            {
-                continue;
-            }
-
-            List<(int Start, int End)> args = Arguments(tokens, open + 1, close);
-            ExpressionInfo target = Expression(tokens, first, targetEnd);
-            string member = constructor ? "<init>" : tokens[targetEnd - 1].Value;
-            string? receiver = constructor ? Text(tokens, first, open)
-                : targetEnd > first + 1 ? Text(tokens, first, targetEnd - 2) : null;
-            JavaStatementInfo call = new JavaStatementInfo(new StatementInfo("call", [], receiver, member,
-                args.Select(a => Text(tokens, a.Start, a.End)).ToList(), token.Line, inMethod))
-            {
-                CallTarget = constructor ? new("memberAccess") { Name = "<init>", Target = target } : target,
-                ArgumentExpressions = args.Select(a => Expression(tokens, a.Start, a.End)).ToList(),
+                IsBraced = i + 1 < end && tokens[i + 1].Value == "{",
                 Column = column,
-                SyntaxStart = token.Start,
-                SyntaxEnd = tokens[close].End
+                SyntaxStart = token.Start
             };
-            Attach(call, callScopes.Count > 0 ? callScopes.Peek().Call : pending ?? parent);
-            statements.Add(call);
-            callScopes.Push((close, call));
-            callStarts[close] = constructor ? i : first;
+            Attach(statement, Parent);
+            Statements.Add(statement);
+            if (token.Value == "return")
+            {
+                int last = i + 1;
+                while (last < end && tokens[last].Value != ";") { last++; }
+                statement.ValueExpression = Expression(i + 1, last);
+            }
+            if (token.Value is "if" or "while" or "switch" or "else" or "do")
+            {
+                Pending = statement;
+            }
         }
-        statements.Sort((a, b) => a.Line.CompareTo(b.Line));
+        StatementInfo? control = Statements.FirstOrDefault(s => s.Line == token.Line && s.Kind == token.Value
+            && s.Kind != "call" && (s.Column is null || s.Column == column));
+        if (control is not null)
+        {
+            control.Column = column;
+            if (control is JavaStatementInfo javaControl)
+            {
+                javaControl.SyntaxStart = token.Start;
+            }
+            Attach(control, Parent);
+            if (token.Value is "for" or "try" or "catch" or "synchronized")
+            {
+                Pending = control;
+            }
+        }
+        bool constructor = token.Value == "new";
+        if (!constructor && token.Kind != JavaTokenKind.Identifier && token.Value is not "this" and not "super")
+        {
+            return;
+        }
+
+        int chainStart = 0;
+        bool chained = !constructor && i >= start + 2 && tokens[i - 1].Value == "."
+            && TryGetCallStart(i - 2, out chainStart);
+        if (!constructor && i > start && tokens[i - 1].Value is "." or "new" && !chained)
+        {
+            return;
+        }
+
+        int first = constructor ? i + 1 : i;
+        if (chained)
+        {
+            first = chainStart;
+        }
+
+        int targetEnd = i + (constructor ? 2 : 1);
+        while (targetEnd + 1 < end && tokens[targetEnd].Value == "." &&
+               tokens[targetEnd + 1].Kind == JavaTokenKind.Identifier)
+        {
+            targetEnd += 2;
+        }
+
+        int open = targetEnd;
+        if (open < end && tokens[open].Value == "<")
+        {
+            int depth = 1;
+            for (open++; open < end && depth > 0; open++)
+            {
+                if (tokens[open].Value == "<")
+                {
+                    depth++;
+                }
+                else if (tokens[open].Value is ">" or ">>" or ">>>")
+                {
+                    depth -= tokens[open].Value.Length;
+                }
+            }
+        }
+        if (open >= end || tokens[open].Value != "(")
+        {
+            return;
+        }
+
+        int close = Matching(open, end);
+        if (close >= end)
+        {
+            return;
+        }
+
+        List<(int Start, int End)> args = Arguments(open + 1, close);
+        ExpressionInfo target = Expression(first, targetEnd);
+        string member = constructor ? "<init>" : tokens[targetEnd - 1].Value;
+        string? receiver = constructor ? Text(first, open)
+            : targetEnd > first + 1 ? Text(first, targetEnd - 2) : null;
+        JavaStatementInfo call = new JavaStatementInfo(new StatementInfo("call", [], receiver, member,
+            args.Select(a => Text(a.Start, a.End)).ToList(), token.Line, InMethod))
+        {
+            CallTarget = constructor ? new("memberAccess") { Name = "<init>", Target = target } : target,
+            ArgumentExpressions = args.Select(a => Expression(a.Start, a.End)).ToList(),
+            Column = column,
+            SyntaxStart = token.Start,
+            SyntaxEnd = tokens[close].End
+        };
+        AddCall(call, close, constructor ? i : first);
     }
 
-    private static void Attach(StatementInfo statement, StatementInfo? parent)
+    private int Matching(int start, int end) => Matching(start, end, "(", ")");
+
+    private ExpressionInfo Expression(int start, int end)
     {
-        statement.Parent = parent;
-        if (parent is not null && !parent.MutableChildren.Contains(statement))
-        {
-            parent.MutableChildren.Add(statement);
-        }
-    }
-
-    private static int Matching(List<JavaToken> tokens, int start, int end)
-    {
-        int depth = 0;
-        for (int i = start; i < end; i++)
-        {
-            if (tokens[i].Kind is JavaTokenKind.StringLiteral or JavaTokenKind.LineComment or JavaTokenKind.BlockComment or JavaTokenKind.DocComment)
-            {
-                continue;
-            }
-
-            if (tokens[i].Value == "(")
-            {
-                depth++;
-            }
-
-            if (tokens[i].Value == ")" && --depth == 0)
-            {
-                return i;
-            }
-        }
-        return end;
-    }
-
-    private static List<(int Start, int End)> Arguments(List<JavaToken> tokens, int start, int end)
-    {
-        List<(int, int)> result = new List<(int, int)>();
-        int depth = 0, first = start;
-        for (int i = start; i < end; i++)
-        {
-            if (tokens[i].Kind is JavaTokenKind.StringLiteral or JavaTokenKind.LineComment or JavaTokenKind.BlockComment or JavaTokenKind.DocComment)
-            {
-                continue;
-            }
-
-            if (tokens[i].Value is "(" or "[" or "{")
-            {
-                depth++;
-            }
-
-            if (tokens[i].Value is ")" or "]" or "}")
-            {
-                depth--;
-            }
-
-            if (tokens[i].Value == "," && depth == 0) { result.Add((first, i)); first = i + 1; }
-        }
-        if (first < end)
-        {
-            result.Add((first, end));
-        }
-
-        return result;
-    }
-
-    private static string Text(List<JavaToken> tokens, int start, int end) =>
-        string.Concat(tokens.GetRange(start, end - start).Select(t => t.Value));
-
-    private static ExpressionInfo Expression(List<JavaToken> tokens, int start, int end)
-    {
+        List<JavaToken> tokens = Tokens;
         while (start < end && tokens[start].Kind is JavaTokenKind.LineComment or JavaTokenKind.BlockComment or JavaTokenKind.DocComment)
         {
             start++;
@@ -235,6 +163,18 @@ internal static class JavaStructuralFacts
         if (end == start + 1)
         {
             JavaToken token = tokens[start];
+            if (token.Value is "true" or "false")
+            {
+                return new("booleanLiteral") { BooleanValue = token.Value == "true" };
+            }
+            if (token.Value == "null")
+            {
+                return new("nullLiteral");
+            }
+            if (token.Kind == JavaTokenKind.NumberLiteral)
+            {
+                return new("numericLiteral") { Name = token.Value };
+            }
             if (token.Kind == JavaTokenKind.StringLiteral && token.Value.StartsWith('"'))
             {
                 return token.Value.StartsWith("\"\"\"") ? new("other")
@@ -248,33 +188,68 @@ internal static class JavaStructuralFacts
 
             return new("other");
         }
-        if (tokens[start].Value == "(" && Matching(tokens, start, end) == end - 1)
+        if (tokens[start].Value == "(" && Matching(start, end) == end - 1)
         {
-            return Expression(tokens, start + 1, end - 1);
+            return Expression(start + 1, end - 1);
+        }
+
+        int plus = TopLevelPlus(start, end);
+        if (plus > start)
+        {
+            return new("binary")
+            {
+                Name = "+", Children = [Expression(start, plus), Expression(plus + 1, end)]
+            };
         }
 
         if (tokens[end - 1].Value == ")")
         {
             for (int i = start + 1; i < end; i++)
             {
-                if (tokens[i].Value == "(" && Matching(tokens, i, end) == end - 1)
+                if (tokens[i].Value == "(" && Matching(i, end) == end - 1)
                 {
                     return new("invocation")
                     {
                         Target = tokens[start].Value == "new"
-                            ? new("memberAccess") { Name = "<init>", Target = Expression(tokens, start + 1, i) }
-                            : Expression(tokens, start, i),
-                        Children = Arguments(tokens, i + 1, end - 1).Select(a => Expression(tokens, a.Start, a.End)).ToList()
+                            ? new("memberAccess") { Name = "<init>", Target = Expression(start + 1, i) }
+                            : Expression(start, i),
+                        Children = Arguments(i + 1, end - 1).Select(a => Expression(a.Start, a.End)).ToList()
                     };
                 }
             }
         }
-        if (tokens[end - 2].Value == "." && tokens[end - 1].Kind == JavaTokenKind.Identifier)
+        if (tokens[end - 2].Value == "." &&
+            (tokens[end - 1].Kind == JavaTokenKind.Identifier || tokens[end - 1].Value == "class"))
         {
-            return new("memberAccess") { Name = tokens[end - 1].Value, Target = Expression(tokens, start, end - 2) };
+            return new("memberAccess") { Name = tokens[end - 1].Value, Target = Expression(start, end - 2) };
         }
 
         return new("other");
+    }
+
+    // Last binary '+' outside brackets; bails out on lower-precedence operators it cannot nest.
+    private int TopLevelPlus(int start, int end)
+    {
+        List<JavaToken> tokens = Tokens;
+        int depth = 0, found = -1;
+        for (int i = start; i < end; i++)
+        {
+            JavaToken token = tokens[i];
+            if (token.Kind != JavaTokenKind.Punctuation) { continue; }
+            if (token.Value is "(" or "[" or "{") { depth++; }
+            else if (token.Value is ")" or "]" or "}") { depth--; }
+            else if (depth == 0 && token.Value is "?" or "->" or "&&" or "||" or "==" or "!=" or "=" or ":")
+            {
+                return -1;
+            }
+            else if (depth == 0 && token.Value == "+" && i > start &&
+                (tokens[i - 1].Kind is JavaTokenKind.Identifier or JavaTokenKind.StringLiteral or JavaTokenKind.NumberLiteral
+                    || tokens[i - 1].Value is ")" or "]"))
+            {
+                found = i;
+            }
+        }
+        return found;
     }
 
     private static string Decode(string text)

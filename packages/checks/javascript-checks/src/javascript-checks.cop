@@ -2,6 +2,7 @@
 
 import javascript
 import code
+import code-quality-checks
 
 let cb = codebase(javascript.parse())
 
@@ -66,6 +67,6 @@ export let await-thenable = cb.Statements:isAwaitOfNonThenable:isUnsuppressed
 export let typescript-checks = await-thenable
 
 ## All JavaScript/TypeScript checks combined
-export let javascript-checks = javascript-correctness-checks + typescript-checks
+export let javascript-checks = javascript-correctness-checks + typescript-checks + codeQualityChecks(cb)
 
 command MAIN = CHECK(javascript-checks)

@@ -30,6 +30,15 @@ internal sealed class PythonAstMapper(string path, string source)
         JsonElement tree = document.GetProperty("tree");
         AnalyzeQueryFacts(tree, default, null, []);
         Walk(tree, null, null);
+        if (document.TryGetProperty("directives", out JsonElement directives))
+        {
+            foreach (JsonElement directive in directives.EnumerateArray())
+            {
+                List<JsonElement> parts = directive.EnumerateArray().ToList();
+                _statements.Add(new StatementInfo("directive", parts.Skip(1).Select(p => p.GetString()!).ToList(),
+                    null, null, [], parts[0].GetInt32(), false));
+            }
+        }
         return new(path, "python", _types, _statements, source)
         {
             Methods = _functions.OrderBy(m => m.Line).ToList(),
@@ -706,7 +715,17 @@ internal sealed class PythonAstMapper(string path, string source)
                 Items(Get(node, "args")).Select(Expression).Concat(Items(Get(node, "keywords")).Select(k => Expression(Get(k, "value")))).ToList() },
             "Constant" when IsString(node) =>
                 new("stringLiteral") { StringValue = Get(node, "value").GetString() },
+            "Constant" when Get(node, "value").ValueKind is JsonValueKind.True or JsonValueKind.False =>
+                new("booleanLiteral") { BooleanValue = Get(node, "value").GetBoolean() },
+            "Constant" when Get(node, "value").ValueKind == JsonValueKind.Null =>
+                new("nullLiteral"),
+            "Constant" when Get(node, "value").ValueKind == JsonValueKind.Number =>
+                new("numericLiteral") { Name = Get(node, "value").GetRawText() },
             "Starred" => new("spread") { Children = [Expression(Get(node, "value"))] },
+            "BinOp" => new("binary") { Name = Kind(Get(node, "op")),
+                Children = [Expression(Get(node, "left")), Expression(Get(node, "right"))] },
+            "JoinedStr" => new("interpolation") { Children = Items(Get(node, "values"))
+                .Where(v => Kind(v) == "FormattedValue").Select(v => Expression(Get(v, "value"))).ToList() },
             "Constant" => new("literal"),
             "List" or "Tuple" or "Set" => new("collection") { Children = Items(Get(node, "elts")).Select(Expression).ToList() },
             _ => new("other") { Children = Children(node).Select(Expression).ToList() },

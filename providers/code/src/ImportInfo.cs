@@ -37,4 +37,8 @@ public record ImportInfo(string Module, int Line)
     /// The one-based exclusive ending source column, when available.
     /// </summary>
     public int? EndColumn { get; init; }
+    /// <summary>
+    /// The source file containing this import; set when the import is read through its file.
+    /// </summary>
+    public SourceFile? File { get; init; }
 }

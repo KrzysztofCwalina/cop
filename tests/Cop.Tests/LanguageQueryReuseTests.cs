@@ -65,6 +65,27 @@ public class LanguageQueryReuseTests
     }
 
     [Test]
+    public async Task JavaChecks_SwallowedExceptionsFlagsOnlyUnrethrowingGenericHandlers()
+    {
+        Write("Handlers.java", """
+            class Handlers {
+                void run() {
+                    try { work(); } catch (Exception e) { log(e); }
+                    try { work(); } catch (Throwable t) { log(t); }
+                    try { work(); } catch (Exception e) { throw new RuntimeException(e); }
+                    try { work(); } catch (java.io.IOException e) { log(e); }
+                }
+            }
+            """);
+
+        await AssertChecks("java-checks",
+        [
+            "Handlers.java(3): warning: Do not swallow Exception — rethrow, wrap, or catch a specific type [swallowed-exceptions]",
+            "Handlers.java(4): warning: Do not swallow Exception — rethrow, wrap, or catch a specific type [swallowed-exceptions]"
+        ], "swallowed-exceptions");
+    }
+
+    [Test]
     public async Task JavaScriptChecks_PreserveCallKindsReceiversHandlersAndSuppression()
     {
         Write("sample.js", """
@@ -92,8 +113,6 @@ public class LanguageQueryReuseTests
             "sample.js(5): error: Do not use eval() — it is a security risk [eval-calls]",
             "sample.js(6): error: Remove debugger statement [debugger-statements]",
             "sample.js(7): warning: Use const or let instead of var [var-declarations]",
-            "sample.js(12): warning: Use const or let instead of var [var-declarations]",
-            "sample.js(13): warning: Use const or let instead of var [var-declarations]",
             "sample.js(12): warning: Do not swallow errors — " +
                 "rethrow or handle explicitly [swallowed-exceptions]"
         ]);

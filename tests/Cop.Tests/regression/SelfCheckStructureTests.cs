@@ -249,7 +249,7 @@ public class SelfCheckStructureTests
         Assert.That(process.ExitCode, Is.EqualTo(0), output + errors);
         Assert.That(output, Is.Empty);
         Assert.That(errors.Trim(), Does.Match(
-            @"\ASummary   [1-9]\d* input files processed, 65 checks evaluated in \d+(?:\.\d+)?s\.\z"));
+            @"\ASummary   [1-9]\d* input files processed, 89 checks evaluated in \d+(?:\.\d+)?s\.\z"));
     }
 
     [TestCase(false)]

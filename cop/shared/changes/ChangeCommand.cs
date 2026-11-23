@@ -10,6 +10,7 @@ internal sealed class ChangeCommand : ChangeCommandRunner
 {
     internal static readonly TimeSpan Timeout = TimeSpan.FromSeconds(30);
     internal const int MaxOutputCharacters = 16 * 1024 * 1024;
+    private static readonly TimeSpan s_stopTimeout = TimeSpan.FromSeconds(2);
 
     /// <inheritdoc/>
     public override async ValueTask<ChangeCommandResult> RunAsync(string directory, string executable,
@@ -42,9 +43,11 @@ internal sealed class ChangeCommand : ChangeCommandRunner
         using CancellationTokenSource cancellation =
             CancellationTokenSource.CreateLinkedTokenSource(timeout.Token, cancellationToken);
         Task<string[]>? readers = null;
+        bool started = false;
         try
         {
             process.Start();
+            started = true;
             Task<string> output = ReadBoundedAsync(process.StandardOutput, cancellation);
             Task<string> error = ReadBoundedAsync(process.StandardError, cancellation);
             readers = Task.WhenAll(output, error);
@@ -57,7 +60,7 @@ internal sealed class ChangeCommand : ChangeCommandRunner
             or DecoderFallbackException)
         {
             cancellation.Cancel();
-            await StopAsync(process).ConfigureAwait(false);
+            string cleanup = started ? await StopAsync(process).ConfigureAwait(false) : string.Empty;
             if (readers is not null)
             {
                 try { await readers.ConfigureAwait(false); }
@@ -70,7 +73,7 @@ internal sealed class ChangeCommand : ChangeCommandRunner
                 ? "timed out or exceeded its output limit"
                 : "could not complete";
             throw new InvalidOperationException(
-                $"{executable} {reason}. Ensure it is installed, authentication is configured, and the repository is accessible. {exception.Message}",
+                $"{executable} {reason}. Ensure it is installed, authentication is configured, and the repository is accessible. {exception.Message}{cleanup}",
                 exception);
         }
     }
@@ -101,19 +104,21 @@ internal sealed class ChangeCommand : ChangeCommandRunner
         return text.ToString();
     }
 
-    private static async ValueTask StopAsync(Process process)
+    /// <summary>Stops the process tree; returns a note describing any cleanup failure, or an empty string.</summary>
+    private static async ValueTask<string> StopAsync(Process process)
     {
         try
         {
-            if (!process.HasExited)
-            {
-                process.Kill(entireProcessTree: true);
-                using CancellationTokenSource timeout = new(TimeSpan.FromSeconds(2));
-                try { await process.WaitForExitAsync(timeout.Token).ConfigureAwait(false); }
-                catch (OperationCanceledException) { }
-            }
+            process.Kill(entireProcessTree: true);
         }
-        catch (InvalidOperationException) { }
-        catch (System.ComponentModel.Win32Exception) { }
+        catch (Exception exception) when (exception is InvalidOperationException
+            or System.ComponentModel.Win32Exception)
+        {
+            return $" The process could not be stopped: {exception.Message}";
+        }
+
+        Task exited = process.WaitForExitAsync();
+        Task completed = await Task.WhenAny(exited, Task.Delay(s_stopTimeout)).ConfigureAwait(false);
+        return completed == exited ? string.Empty : $" The process did not exit within {s_stopTimeout.TotalSeconds} seconds of being stopped.";
     }
 }

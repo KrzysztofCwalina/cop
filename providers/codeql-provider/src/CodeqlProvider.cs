@@ -250,9 +250,9 @@ public class CodeqlProvider : DataProvider
                 }
             }
         }
-        catch (JsonException)
+        catch (JsonException ex)
         {
-            // Skip malformed SARIF files
+            violations.Add(new CodeqlViolation(filePath, 0, "warning", $"Malformed SARIF file: {ex.Message}", "codeql"));
         }
     }
 

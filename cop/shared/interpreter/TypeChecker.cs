@@ -725,7 +725,9 @@ public sealed partial class TypeChecker
         return pt is null ? null : ToIT(pt);
     }
 
-    private TypeRef? LookupProperty(string typeName, string member)
+    private TypeRef? LookupProperty(string typeName, string member) => FindDeclaredProperty(typeName, member)?.Type;
+
+    private (TypeRef Type, string DeclaringType)? FindDeclaredProperty(string typeName, string member)
     {
         HashSet<string> seen = new HashSet<string>(StringComparer.Ordinal);
         Stack<string> stack = new Stack<string>();
@@ -740,7 +742,7 @@ public sealed partial class TypeChecker
 
             if (_props.TryGetValue(t, out Dictionary<string, TypeRef>? props) && props.TryGetValue(member, out TypeRef? pt))
             {
-                return pt;
+                return (pt, t);
             }
 
             if (_bases.TryGetValue(t, out HashSet<string>? bases))
@@ -869,9 +871,11 @@ public sealed partial class TypeChecker
     // `cop verify`), exposed here so tooling never reimplements the compiler.
 
     /// <summary>Builds a checker populated with the merged type model, for editor queries.</summary>
-    internal static TypeChecker ForModel(IEnumerable<ModuleNode> modules)
+    internal static TypeChecker ForModel(IEnumerable<ModuleNode> modules) => ForModel(modules, staticInference: false);
+
+    private static TypeChecker ForModel(IEnumerable<ModuleNode> modules, bool staticInference)
     {
-        TypeChecker checker = new TypeChecker();
+        TypeChecker checker = new TypeChecker { _staticInference = staticInference };
         List<ModuleNode> mods = modules.ToList();
         checker.BuildModel(mods, mods);
         return checker;
@@ -896,33 +900,9 @@ public sealed partial class TypeChecker
 
     /// <summary>Finds a property by name, walking base types/traits; returns its declaring type.</summary>
     internal PropertyInfo? FindProperty(string typeName, string member)
-    {
-        HashSet<string> seen = new HashSet<string>(StringComparer.Ordinal);
-        Stack<string> stack = new Stack<string>();
-        stack.Push(typeName);
-        while (stack.Count > 0)
-        {
-            string t = stack.Pop();
-            if (!seen.Add(t))
-            {
-                continue;
-            }
-
-            if (_props.TryGetValue(t, out Dictionary<string, TypeRef>? props) && props.TryGetValue(member, out TypeRef? pt))
-            {
-                return new PropertyInfo(member, pt.IsCollection ? $"[{pt.Name}]" : pt.Name, t);
-            }
-
-            if (_bases.TryGetValue(t, out HashSet<string>? bases))
-            {
-                foreach (string b in bases)
-                {
-                    stack.Push(b);
-                }
-            }
-        }
-        return null;
-    }
+        => FindDeclaredProperty(typeName, member) is { } found
+            ? new PropertyInfo(member, found.Type.IsCollection ? $"[{found.Type.Name}]" : found.Type.Name, found.DeclaringType)
+            : null;
 
     /// <summary>Enumerates all properties of a type, including inherited ones (deduped by name).</summary>
     internal IReadOnlyList<PropertyInfo> AllProperties(string typeName)

@@ -20,6 +20,7 @@ public sealed class ToolchainJsonWorker : IAsyncDisposable
     private Process? _process;
     private ToolchainProcessContainment? _containment;
     private Task? _stderrTask;
+    private bool _started;
     private ToolchainResult? _failure;
     private bool _disposed;
     private volatile bool _stderrOverflow;
@@ -180,6 +181,7 @@ public sealed class ToolchainJsonWorker : IAsyncDisposable
                 return Result(ToolchainStatus.Failed, $"Could not start worker '{_path}'.");
             }
 
+            _started = true;
             _containment.Attach(_process);
         }
         catch (Win32Exception ex)
@@ -279,13 +281,7 @@ public sealed class ToolchainJsonWorker : IAsyncDisposable
     }
 
     private ToolchainResult Result(ToolchainStatus status, string diagnostic) =>
-        new(status, _path, _process is { } p && HasExited(p) ? p.ExitCode : null, "", Stderr(), diagnostic);
-
-    private static bool HasExited(Process process)
-    {
-        try { return process.HasExited; }
-        catch (InvalidOperationException) { return false; }
-    }
+        new(status, _path, _started && _process!.HasExited ? _process.ExitCode : null, "", Stderr(), diagnostic);
 
     private async Task<ToolchainResult> FailAsync(ToolchainStatus status, string diagnostic)
     {
@@ -301,7 +297,7 @@ public sealed class ToolchainJsonWorker : IAsyncDisposable
     private async Task StopAsync()
     {
         _lifetime.Cancel();
-        if (_process is not null)
+        if (_started)
         {
             try
             {
@@ -309,7 +305,7 @@ public sealed class ToolchainJsonWorker : IAsyncDisposable
                 {
                     await _containment.TerminateAsync().ConfigureAwait(false);
                 }
-                if (!HasExited(_process))
+                if (!_process!.HasExited)
                 {
                     _process.Kill(entireProcessTree: true);
                 }
@@ -345,14 +341,11 @@ public sealed class ToolchainJsonWorker : IAsyncDisposable
             await _containment.DisposeAsync().ConfigureAwait(false);
         }
         _process?.Dispose();
-        try
+        // CaptureStderrAsync observes the disposed stream itself and completes normally.
+        if (_stderrTask is not null)
         {
-            if (_stderrTask is not null)
-            {
-                await _stderrTask.ConfigureAwait(false);
-            }
+            await _stderrTask.ConfigureAwait(false);
         }
-        catch (ObjectDisposedException) { }
         await _requests.WaitAsync().ConfigureAwait(false);
         _requests.Dispose();
         _lifetime.Dispose();

@@ -2,8 +2,26 @@ import ast
 import io
 import json
 import math
+import re
 import sys
 import tokenize
+
+
+_DIRECTIVES = [
+    (re.compile(r"#\s*type:\s*ignore(?:\[([^\]]*)\])?"), ["type", "ignore"]),
+    (re.compile(r"#\s*noqa(?::\s*([\w, ]+))?", re.IGNORECASE), ["noqa"]),
+    (re.compile(r"#\s*pylint:\s*disable\s*=\s*([\w,\- ]+)"), ["pylint", "disable"]),
+]
+
+
+def directive(token):
+    """Suppression comment as [line, keywords, ...codes]; codes are omitted for blanket suppressions."""
+    for pattern, keywords in _DIRECTIVES:
+        match = pattern.search(token.string)
+        if match:
+            codes = [c.strip() for c in (match.group(1) or "").split(",") if c.strip()]
+            return [token.start[0]] + keywords + codes
+    return None
 
 
 def main(request):
@@ -71,7 +89,7 @@ def main(request):
                     result["constant_type"] = type(node.value).__name__
                 if hasattr(node, "ctx"):
                     result["context"] = type(node.ctx).__name__
-                if hasattr(node, "lineno"):
+                if hasattr(node, "lineno") and hasattr(node, "col_offset"):
                     result["line"] = node.lineno
                     result["column"] = len(lines[node.lineno - 1].encode("utf-8")[:node.col_offset].decode("utf-8").encode("utf-16-le")) // 2 + 1
                 if getattr(node, "end_lineno", None) is not None:
@@ -91,9 +109,10 @@ def main(request):
                 return node
             return repr(node)
 
-        comments = [t.start[0] for t in tokenize.generate_tokens(io.StringIO(source).readline)
-                    if t.type == tokenize.COMMENT]
-        return {"tree": encode(tree), "comments": comments}
+        comment_tokens = [t for t in tokenize.generate_tokens(io.StringIO(source).readline)
+                          if t.type == tokenize.COMMENT]
+        return {"tree": encode(tree), "comments": [t.start[0] for t in comment_tokens],
+                "directives": [d for d in (directive(t) for t in comment_tokens) if d]}
     except SyntaxError as error:
         return {"error": error.msg, "line": error.lineno or 1, "column": error.offset or 1}
     except (ValueError, TypeError) as error:

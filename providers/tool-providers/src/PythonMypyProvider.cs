@@ -58,7 +58,17 @@ public class PythonMypyProvider : ToolProvider
                     Source = "mypy"
                 });
             }
-            catch (JsonException) { }
+            catch (JsonException ex)
+            {
+                violations.Add(new ToolViolation
+                {
+                    File = string.Empty,
+                    Line = 0,
+                    Severity = "warning",
+                    Message = $"Malformed mypy output: {ex.Message}",
+                    Source = "mypy"
+                });
+            }
         }
         return violations;
     }

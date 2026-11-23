@@ -78,9 +78,10 @@ public class PackageExtractor
                 ExtractCommands(scriptFile, entry, copFile);
                 allLets.AddRange(scriptFile.LetDeclarations.Select(l => (l, copFile)));
             }
-            catch (ParseException)
+            catch (ParseException ex)
             {
-                // Skip files that fail to parse; remaining package files still contribute docs.
+                // Remaining package files still contribute docs.
+                Console.Error.WriteLine($"Warning: skipping {copFile}: {ex.Message}");
             }
         }
 
