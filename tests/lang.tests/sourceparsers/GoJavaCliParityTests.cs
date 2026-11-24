@@ -42,7 +42,11 @@ public class GoJavaCliParityTests
                         other.System.exit(2);
                         service.println("not System");
                     }
+                    Sink service;
                 }
+                abstract class Sink { abstract void println(String value); }
+                abstract class ExitTarget { abstract void exit(int status); }
+                class other { static Sink out; static ExitTarget System; }
                 """);
             string? first = null;
             for (int attempt = 0; attempt < 2; attempt++)
