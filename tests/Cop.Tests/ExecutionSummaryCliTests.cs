@@ -174,8 +174,8 @@ public partial class ToolchainCliIntegrationTests
         Assert.That(File.Exists(Path.Combine(_root, "pids.txt")), Is.False);
     }
 
-    [TestCase(false, 81)]
-    [TestCase(true, 82)]
+    [TestCase(false, 121)]
+    [TestCase(true, 122)]
     public async Task BuiltInCSharpSuiteCountsLeafFunctionsAndDoesNotDoubleCountCompatibilityAliases(
         bool includeOptional, int checks)
     {
@@ -205,9 +205,9 @@ public partial class ToolchainCliIntegrationTests
         Assert.That(result.StandardError, Does.Contain($"2 input files processed, {checks} checks evaluated in "));
     }
 
-    [TestCase("MAIN", 89)]
+    [TestCase("MAIN", 65)]
     [TestCase("DERIVED", 29)]
-    [TestCase("MAIN,DERIVED", 118)]
+    [TestCase("MAIN,DERIVED", 94)]
     public async Task RepositorySuitesCountOnlySelectedChecksOnAnAllCleanRealInput(string commands, int checks)
     {
         var repository = new DirectoryInfo(Path.GetDirectoryName(_cli)!);

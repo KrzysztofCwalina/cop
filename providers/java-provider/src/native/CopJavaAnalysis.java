@@ -127,6 +127,10 @@ public class CopJavaAnalysis {
             return "{\"kind\":\"stringLiteral\",\"stringValue\":" + quote((String)((LiteralTree)tree).getValue()) + "}";
         if (tree instanceof LiteralTree && ((LiteralTree)tree).getValue() instanceof Boolean)
             return "{\"kind\":\"booleanLiteral\",\"booleanValue\":" + ((LiteralTree)tree).getValue() + "}";
+        if (tree instanceof LiteralTree && ((LiteralTree)tree).getValue() instanceof Number)
+            return "{\"kind\":\"numericLiteral\",\"name\":" + quote(tree.toString()) + "}";
+        if (tree instanceof LiteralTree && ((LiteralTree)tree).getValue() == null)
+            return "{\"kind\":\"nullLiteral\"}";
         if (tree instanceof ParenthesizedTree)
             return expression(((ParenthesizedTree)tree).getExpression());
         if (tree instanceof BinaryTree) {
@@ -334,7 +338,10 @@ public class CopJavaAnalysis {
                                 member = ((IdentifierTree)((AssignmentTree)node).getVariable()).getName().toString();
                                 value = expression(((AssignmentTree)node).getExpression());
                             }
-                            if (node instanceof ReturnTree && ((ReturnTree)node).getExpression() != null) expression = ((ReturnTree)node).getExpression().toString();
+                            if (node instanceof ReturnTree && ((ReturnTree)node).getExpression() != null) {
+                                expression = ((ReturnTree)node).getExpression().toString();
+                                value = expression(((ReturnTree)node).getExpression());
+                            }
                             if (node instanceof ThrowTree) {
                                 ExpressionTree thrown = ((ThrowTree)node).getExpression();
                                 if (thrown instanceof NewClassTree) type = ((NewClassTree)thrown).getIdentifier().toString();
@@ -526,6 +533,7 @@ public class CopJavaAnalysis {
                                 + ",\"signature\":" + quote(owner.toString() + "." + method.getSimpleName() + signature.toString())
                                 + ",\"declaringType\":" + quote(owner.toString()) + ",\"namespace\":" + quote(namespace)
                                 + ",\"returnType\":" + mirror(signature.getReturnType()) + ",\"parameters\":" + array(parameters)
+                                + ",\"isDeprecated\":" + task.getElements().isDeprecated(method)
                                 + location + "}";
                             if (!complete) callable = "null";
                         }

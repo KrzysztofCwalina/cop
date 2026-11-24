@@ -407,6 +407,52 @@ public class GoJavaParityRegressionTests
         Assert.That(file.Types[0].EndLine, Is.EqualTo(3));
     }
 
+    [Test]
+    public async Task GoNativeProtocol_PreservesNolintDirectives()
+    {
+        const string response = """
+            {"namespace":"fixture","imports":[],"errors":[],"calls":[],"statements":[],
+             "methods":[],"types":[]}
+            """;
+        ValueTask<ToolchainResult> Request(string input, CancellationToken cancellationToken) =>
+            ValueTask.FromResult(new ToolchainResult(ToolchainStatus.Success, "fixture", 0, response, "", null));
+        var parser = new GoSourceParser(nativeRequest: Request);
+        var file = (await parser.ParseAsync("fixture.go", """
+            package fixture
+            //nolint
+            //nolint:errcheck,staticcheck
+            //nolinting is not a directive
+            """, cancellationToken: CancellationToken.None))!;
+
+        var directives = file.Statements.Where(s => s.Kind == "directive").ToList();
+        Assert.That(directives.Select(s => s.Line), Is.EqualTo(new[] { 2, 3 }));
+        Assert.That(directives[0].Keywords, Is.EqualTo(new[] { "nolint" }));
+        Assert.That(directives[1].Keywords, Is.EqualTo(new[] { "nolint", "errcheck", "staticcheck" }));
+    }
+
+    [Test]
+    public async Task JavaNativeToolchain_PreservesLiteralReturnExpressions()
+    {
+        if (ToolchainProcess.FindExecutable("javac") is null) Assert.Ignore("javac is not installed.");
+        await using var scope = new ToolchainExecutionScope();
+        var parser = new JavaSourceParser();
+        Assert.That(parser.GetCacheIdentity("fixture"), Does.Contain("jdk-tree:"));
+        var file = (await parser.ParseAsync("Fixture.java", """
+            class Fixture {
+                Object value(Object input, int i) {
+                    if (i == 0) return 0;
+                    if (i == 1) return null;
+                    if (i == 2) return false;
+                    if (i == 3) return "text";
+                    return input;
+                }
+            }
+            """, cancellationToken: CancellationToken.None))!;
+        Assert.That(file.ParseErrors, Is.Empty);
+        Assert.That(file.Statements.Where(s => s.Kind == "return").Select(s => s.ValueExpression?.Kind),
+            Is.EqualTo(new[] { "numericLiteral", "nullLiteral", "booleanLiteral", "stringLiteral", "identifier" }));
+    }
+
     private static void AssertCalls(SourceFile file, MethodDeclaration method, string outerName, string innerName)
     {
         var outer = file.Statements.Single(s => s.MemberName == outerName);

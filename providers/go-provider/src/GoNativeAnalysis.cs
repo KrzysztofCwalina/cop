@@ -183,7 +183,9 @@ internal static class GoNativeAnalysis
             method.Statements = [];
         }
 
+        List<StatementInfo> directives = file.Statements.Where(s => s.Kind == "directive").ToList();
         file.Statements.Clear();
+        file.Statements.AddRange(directives);
         Dictionary<string, StatementInfo> nodes = new Dictionary<string, StatementInfo>();
         List<(StatementInfo Node, string? Parent)> parents = new List<(StatementInfo Node, string? Parent)>();
         void Add(string id, string? parent, int methodLine, int methodColumn, StatementInfo node)

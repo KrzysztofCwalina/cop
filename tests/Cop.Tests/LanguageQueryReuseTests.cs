@@ -115,7 +115,7 @@ public class LanguageQueryReuseTests
             "sample.js(7): warning: Use const or let instead of var [var-declarations]",
             "sample.js(12): warning: Do not swallow errors — " +
                 "rethrow or handle explicitly [swallowed-exceptions]"
-        ]);
+        ], "javascript-correctness-checks");
     }
 
     [Test]
@@ -153,7 +153,7 @@ public class LanguageQueryReuseTests
                 "instead of silencing it [empty-except-body]",
             "sample.py(18): warning: Raise a specific exception type " +
                 "instead of generic Exception [broad-exception-raise]"
-        ]);
+        ], "python-correctness-checks + python-quality-checks");
     }
 
     [Test]
@@ -325,21 +325,23 @@ public class LanguageQueryReuseTests
     [TestCase("java-checks", "Sample.java",
         "class Sample { void run() { system.out.println(\"safe\"); " +
         "System.Out.println(\"safe\"); System.out.Println(\"safe\"); " +
-        "system.exit(1); error.PrintStackTrace(); } }")]
+        "system.exit(1); error.PrintStackTrace(); } }",
+        "console-output + print-stack-trace + system-exit")]
     [TestCase("javascript-checks", "sample.js",
-        "function run() { Console.log('safe'); Alert('safe'); Eval('1'); }")]
-    [TestCase("python-checks", "sample.py", "Print('safe')\nEval('1')\n")]
+        "function run() { Console.log('safe'); Alert('safe'); Eval('1'); }", "javascript-correctness-checks")]
+    [TestCase("python-checks", "sample.py", "Print('safe')\nEval('1')\n", "python-correctness-checks")]
     [TestCase("go-checks", "sample.go",
         "package lib\nfunc run() { Os.Exit(1); os.exit(1); " +
-        "Fmt.Println(\"safe\"); fmt.println(\"safe\"); time.sleep(1) }\n")]
+        "Fmt.Println(\"safe\"); fmt.println(\"safe\"); time.sleep(1) }\n",
+        "go-correctness-checks + console-output")]
     [TestCase("rust-checks", "sample.rs",
         "fn run() { value.Unwrap(); value.Expect(\"safe\"); " +
-        "value.Clone(); Transmute(value); }")]
+        "value.Clone(); Transmute(value); }", "rust-correctness-checks + rust-perf-checks")]
     public async Task MemberAndReceiverQueries_PreserveCaseSensitivePolicy(
-        string package, string file, string source)
+        string package, string file, string source, string checks)
     {
         Write(file, source);
-        await AssertChecks(package, []);
+        await AssertChecks(package, [], checks);
     }
 
     private void Write(string path, string content)
