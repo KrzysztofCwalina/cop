@@ -6,12 +6,12 @@ description: Go coding conventions and correctness checks for coding agents
 authors: cop-team
 tags: go, golang, coding-standards, correctness
 language: Go
-dependencies: ['github.com/KrzysztofCwalina/cop/go: 2.0.0', 'github.com/KrzysztofCwalina/cop/code: 1.2.0', 'github.com/KrzysztofCwalina/cop/code-quality-checks: 1.0.0']
+dependencies: ['github.com/KrzysztofCwalina/cop/go: 2.0.0', 'github.com/KrzysztofCwalina/cop/code: 1.2.0', 'github.com/KrzysztofCwalina/cop/ai-slop-checks: 1.0.0']
 ---
 
 # Go Checks
 
-The standard suite includes `codeQualityChecks(cb)` from `code-quality-checks`,
+The standard suite includes `aiSlopChecks(cb)` from `ai-slop-checks`,
 including literal assertion and test-sleep review checks where the parsed
 Go facts support them. Catch/except rules do not apply to Go; see the shared
 package's coverage table rather than assuming every rule applies.

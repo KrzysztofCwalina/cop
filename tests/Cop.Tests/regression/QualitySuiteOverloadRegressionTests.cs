@@ -24,13 +24,17 @@ public class QualitySuiteOverloadRegressionTests
         Directory.CreateDirectory(target);
         try
         {
-            string original = Path.Combine(repo, "packages", "checks", "code-quality-checks");
+            string original = Path.Combine(repo, "packages", "checks", "ai-slop-checks");
             File.WriteAllText(Path.Combine(library, "cop.json"),
                 File.ReadAllText(Path.Combine(original, "cop.json"))
-                    .Replace("\"code-quality-checks\"", "\"quality-overload-regression\"", StringComparison.Ordinal));
-            string source = File.ReadAllText(Path.Combine(original, "src", "code-quality-checks.cop"))
+                    .Replace("\"ai-slop-checks\"", "\"quality-overload-regression\"", StringComparison.Ordinal));
+            string source = File.ReadAllText(Path.Combine(original, "src", "ai-slop-checks.cop"))
                 .Replace("scopedCodeQualityChecks", "codeQualityChecks", StringComparison.Ordinal);
+            source = source[..source.IndexOf("## Compatibility name for aiSlopChecks", StringComparison.Ordinal)];
+            source = source.Replace("aiSlopChecks", "codeQualityChecks", StringComparison.Ordinal);
             File.WriteAllText(Path.Combine(library, "src", "code-quality-checks.cop"), source);
+            File.Copy(Path.Combine(original, "src", "operational-safety.cop"),
+                Path.Combine(library, "src", "operational-safety.cop"));
             File.WriteAllText(Path.Combine(target, "Input.cs"), "class Input { void Run() { Assert.True(true); } }");
             File.WriteAllText(Path.Combine(project, "main.cop"), """
                 import code

@@ -114,6 +114,7 @@ public class IssueRegressionCoverageIndexTests
         new(128, CoverageKind.ImplementedHere, "SelfCheckStructureTests.Issue128_CodePackageSourcePassesStrictStructure; StructuralCheckPolicyTests.Issue128_AllowsDiagnosticFormattingWithoutAllowingMessageBasedSelection; StrictVerificationApiRegressionTests.Issue128_StrictVerificationAcceptsParsedNamesAndDiagnosticData"),
         new(132, CoverageKind.ImplementedHere, "QualitySuiteOverloadRegressionTests.Issue132_OverloadedSuiteCompositionExecutesItsSelectedArity (PendingFix)"),
         new(136, CoverageKind.ImplementedHere, "MethodShapeRegressionTests.Issue136_DuplicateShapesDoNotDemandDeferredBindingOrIgnoreLiteralDifferences"),
+        new(137, CoverageKind.ImplementedHere, "OperationalSafetyChecksTests.Issue137_AsyncAwaitChecksInspectOwnedNestedAndReturnedExpressions"),
     ];
 
     [Test]
@@ -123,8 +124,8 @@ public class IssueRegressionCoverageIndexTests
         Assert.That(duplicates, Is.Empty, "Each issue must appear exactly once in the regression coverage index.");
 
         var coveredIssues = Coverage.Select(c => c.Issue).OrderBy(i => i).ToArray();
-        Assert.That(coveredIssues, Is.EqualTo(Enumerable.Range(1, 55).Concat([60, 61, 62, 63, 65, 66, 70, 71, 72, 73, 75, 76, 78, 80, 83, 84, 85, 86, 87, 88, 89, 90, 91, 93, 94, 95, 96, 97, 101, 103, 107, 108, 111, 112, 113, 116, 117, 120, 124, 127, 128, 132, 136]).ToArray()),
-            "Regression coverage index must cover the listed tracked issues, including #136.");
+        Assert.That(coveredIssues, Is.EqualTo(Enumerable.Range(1, 55).Concat([60, 61, 62, 63, 65, 66, 70, 71, 72, 73, 75, 76, 78, 80, 83, 84, 85, 86, 87, 88, 89, 90, 91, 93, 94, 95, 96, 97, 101, 103, 107, 108, 111, 112, 113, 116, 117, 120, 124, 127, 128, 132, 136, 137]).ToArray()),
+            "Regression coverage index must cover the listed tracked issues, including #137.");
 
         var untracked = Coverage.Where(c => string.IsNullOrWhiteSpace(c.Detail)).Select(c => c.Issue).ToArray();
         Assert.That(untracked, Is.Empty, "Every issue must be ImplementedHere, CoveredBy(suiteName), or OutOfScope(reason).");

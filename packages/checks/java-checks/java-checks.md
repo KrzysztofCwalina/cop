@@ -6,12 +6,12 @@ description: Java coding conventions and correctness checks for coding agents
 authors: cop-team
 tags: java, coding-standards, correctness
 language: Java
-dependencies: ['github.com/KrzysztofCwalina/cop/java: 2.0.0', 'github.com/KrzysztofCwalina/cop/code: 1.2.0', 'github.com/KrzysztofCwalina/cop/code-quality-checks: 1.0.0']
+dependencies: ['github.com/KrzysztofCwalina/cop/java: 2.0.0', 'github.com/KrzysztofCwalina/cop/code: 1.2.0', 'github.com/KrzysztofCwalina/cop/ai-slop-checks: 1.0.0']
 ---
 
 # Java Checks
 
-The standard suite includes `codeQualityChecks(cb)` from `code-quality-checks`,
+The standard suite includes `aiSlopChecks(cb)` from `ai-slop-checks`,
 including empty handlers, literal-only error fallbacks and assertions.
 See the shared package's coverage table for supported APIs and exclusions.
 

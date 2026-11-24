@@ -6,7 +6,7 @@ description: JavaScript and TypeScript coding conventions, correctness checks, a
 authors: cop-team
 tags: javascript, typescript, coding-standards, async
 language: JavaScript
-dependencies: ['github.com/KrzysztofCwalina/cop/javascript: 2.0.0', 'github.com/KrzysztofCwalina/cop/code: 1.2.0', 'github.com/KrzysztofCwalina/cop/code-quality-checks: 1.0.0']
+dependencies: ['github.com/KrzysztofCwalina/cop/javascript: 2.0.0', 'github.com/KrzysztofCwalina/cop/code: 1.2.0', 'github.com/KrzysztofCwalina/cop/ai-slop-checks: 1.0.0']
 provider: clr
 providerEntry: Cop.Providers.JavaScriptProvider
 ---
@@ -15,6 +15,6 @@ providerEntry: Cop.Providers.JavaScriptProvider
 
 JavaScript and TypeScript coding conventions including correctness checks and TypeScript-specific async/await rules.
 
-The standard suite includes `codeQualityChecks(cb)` from `code-quality-checks`,
+The standard suite includes `aiSlopChecks(cb)` from `ai-slop-checks`,
 including parsed TypeScript `as any` casts, literal assertions and error
 fallbacks. See that package's coverage table for boundaries and exclusions.

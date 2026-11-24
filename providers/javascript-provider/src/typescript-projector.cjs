@@ -574,11 +574,21 @@ function project(request) {
             current = statement(node, kind, owner, parent, {
                 Keywords: ts.isForOfStatement(node) && node.awaitModifier ? ['for', 'await'] :
                     [kind.startsWith('for') ? 'for' : kind],
-                Condition: text(node.condition || node.expression), IsBraced: !!node.statement &&
+                Condition: text(node.condition || node.expression),
+                ConditionExpression: node.condition || ts.isIfStatement(node) || ts.isWhileStatement(node) || ts.isDoStatement(node)
+                    ? expression(node.condition || node.expression) : null,
+                IsBraced: !!node.statement &&
                     ts.isBlock(node.statement) || ts.isIfStatement(node) && ts.isBlock(node.thenStatement)
             });
         } else if (ts.isTryStatement(node)) {
             current = statement(node, 'try', owner, parent, { IsBraced: true });
+            visit(node.tryBlock, owner, current, container);
+            if (node.catchClause) visit(node.catchClause, owner, current, container);
+            if (node.finallyBlock) {
+                const cleanup = statement(node.finallyBlock, 'finally', owner, current, { IsBraced: true });
+                visit(node.finallyBlock, owner, cleanup, container);
+            }
+            return;
         } else if (ts.isCatchClause(node)) {
             current = statement(node, 'catch', owner, parent, {
                 IsErrorHandler: true, IsGenericErrorHandler: true, HasRethrow: containsThrow(node.block), IsBraced: true,
@@ -587,6 +597,11 @@ function project(request) {
             // The catch binding is a signature, not an executable declaration in the handler body.
             visit(node.block, owner, current, container);
             return;
+        } else if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
+            ts.isIdentifier(node.left)) {
+            current = statement(node, 'assignment', owner, parent, {
+                MemberName: node.left.text, ValueExpression: expression(node.right)
+            });
         } else if (ts.isReturnStatement(node) || ts.isThrowStatement(node)) {
             current = statement(node, ts.isReturnStatement(node) ? 'return' : 'throw', owner, parent, {
                 Expression: text(node.expression),

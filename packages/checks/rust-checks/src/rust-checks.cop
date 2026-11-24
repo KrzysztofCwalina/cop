@@ -4,7 +4,7 @@
 # target directory: `cop rust-checks -t .` (no -p flag required).
 
 import rust
-import code-quality-checks
+import ai-slop-checks
 import code
 import code
 
@@ -182,6 +182,6 @@ export let needless-clone = cb.Calls:isCloneCall:isProdStatement:isUnsuppressed
 export let rust-perf-checks = needless-clone
 
 ## All Rust checks combined
-export let rust-checks = rust-correctness-checks + rust-style-checks + rust-complexity-checks + rust-safety-checks + rust-perf-checks + rust-doc-checks + codeQualityChecks(cb)
+export let rust-checks = rust-correctness-checks + rust-style-checks + rust-complexity-checks + rust-safety-checks + rust-perf-checks + rust-doc-checks + aiSlopChecks(cb)
 
 command MAIN = CHECK(rust-checks)

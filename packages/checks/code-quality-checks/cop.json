@@ -1,9 +1,9 @@
 {
   "name": "code-quality-checks",
   "version": "1.0.0",
-  "description": "Shared deterministic quality checks for the standard source-language suites",
-  "title": "Code Quality Checks",
+  "description": "Compatibility forwarding API for ai-slop-checks",
+  "title": "Code Quality Checks (Compatibility)",
   "authors": "cop-team",
-  "tags": ["checks", "quality"],
-  "dependencies": ["github.com/KrzysztofCwalina/cop/code: 1.2.0"]
+  "tags": ["checks", "quality", "compatibility"],
+  "dependencies": ["github.com/KrzysztofCwalina/cop/code: 1.2.0", "github.com/KrzysztofCwalina/cop/ai-slop-checks: 1.0.0"]
 }

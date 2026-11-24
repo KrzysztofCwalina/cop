@@ -1,676 +1,291 @@
-# Shared, deterministic quality checks used by the standard language packages.
-# Every rule reads parsed model facts (kinds, names, decoded literal values, decorators, imports,
-# manifests); none reconstructs syntax from raw source text.
-
 import code
-import files
-
-let qualityDisk : Filesystem = provider('filesystem')
-
-# ---------------------------------------------------------------------------------------------
-# Scopes
-# ---------------------------------------------------------------------------------------------
-
-predicate qualityIsNonProductionFile(File) =>
-    File.Path:matches('(^|/)(tests?|samples?|examples?|fixtures|vendor|node_modules|generated)(/|$)') ||
-    File.Path:matches('(_test\\.(go|py)|\\.(test|spec)\\.[cm]?[jt]sx?)$') ||
-    File.Path:matches('(^|/)test_[^/]*\\.py$') ||
-    File.Path:matches('(^|/)[A-Z]\\w*Tests?\\.(cs|java)$')
-
-predicate qualityIsTestFile(File) =>
-    File.Path:matches('(^|/)(tests?|fixtures)(/|$)|(_test\\.(go|py)|\\.(test|spec)\\.[cm]?[jt]sx?)$|(^|/)test_[^/]*\\.py$') ||
-    File.Path:matches('(^|/)[A-Z]\\w*Tests?\\.(cs|java)$')
-
-predicate qualityIsTestMethod(Method) =>
-    Method.Decorators:containsAny(['Test', 'TestAttribute', 'TestMethod', 'DataTestMethod', 'Fact', 'Theory',
-        'TestCase', 'ParameterizedTest', 'RepeatedTest', 'test', 'tokio::test', 'org.junit.Test',
-        'org.junit.jupiter.api.Test']) ||
-    (Method.File != nic && Method.File.Language == python && Method.Name:startsWith('test_')) ||
-    (Method.File != nic && Method.File.Language == go && Method.File.Path:endsWith('_test.go') &&
-        Method.Name:matches('^Test[A-Z]'))
-
-predicate qualityIsProductionMethod(Method) =>
-    Method.File != nic && !qualityIsNonProductionFile(Method.File) && !qualityIsTestMethod(Method)
-
-predicate qualityIsProductionType(Type) =>
-    Type.File != nic && !qualityIsNonProductionFile(Type.File)
-
-predicate qualityIsProductionStatement(Statement) =>
-    !qualityIsNonProductionFile(Statement.File) &&
-    (Statement.Method == nic || !qualityIsTestMethod(Statement.Method))
-
-predicate qualityIsTestStatement(Statement) =>
-    (Statement.Method != nic && qualityIsTestMethod(Statement.Method)) || qualityIsTestFile(Statement.File)
-
-predicate qualityIsTestScopeMethod(Method) =>
-    qualityIsTestMethod(Method) || (Method.File != nic && qualityIsTestFile(Method.File))
+import ai-slop-checks
 
 ## Production source: no test, sample, example, fixture, vendored, or generated files and no test methods.
-export function qualityProductionScope(cb: Codebase) : Codebase => {
-    SourceScopes: cb.SourceScopes,
-    Files: cb.Files.Where(!qualityIsNonProductionFile(item)),
-    Types: cb.Types:qualityIsProductionType,
-    Statements: cb.Statements:qualityIsProductionStatement,
-    Methods: cb.Methods:qualityIsProductionMethod,
-    Calls: cb.Calls:qualityIsProductionStatement,
-    Lines: [],
-    Regions: [],
-    Projects: cb.Projects
-}
+export function qualityProductionScope(cb: Codebase) : Codebase =>
+    ai-slop-checks.qualityProductionScope(cb)
 
 ## Test source: recognized test files and test methods.
-export function qualityTestScope(cb: Codebase) : Codebase => {
-    SourceScopes: cb.SourceScopes,
-    Files: cb.Files.Where(qualityIsTestFile(item)),
-    Types: cb.Types.Where(item.File != nic && qualityIsTestFile(item.File)),
-    Statements: cb.Statements:qualityIsTestStatement,
-    Methods: cb.Methods:qualityIsTestScopeMethod,
-    Calls: cb.Calls:qualityIsTestStatement,
-    Lines: [],
-    Regions: [],
-    Projects: cb.Projects
-}
-
-# ---------------------------------------------------------------------------------------------
-# Error handling
-# ---------------------------------------------------------------------------------------------
-
-# Catch-alls that do not rethrow are reported by each suite's swallowed-exception rule,
-# and python-checks (empty-except-body) reports every empty Python handler.
-predicate qualityIsSuiteOwnedHandler(Statement) =>
-    Statement.Generic || Statement.File.Language == python
-
-predicate qualityIsEmptyHandler(Statement) =>
-    Statement.ErrorHandler && Statement.Children.Count == 0 && !qualityIsSuiteOwnedHandler(Statement)
-
-predicate qualityIsLiteralReturn(Statement) =>
-    Statement.Kind == return && Statement.ValueExpression != nic &&
-    Statement.ValueExpression.Kind:in([nullLiteral, booleanLiteral, numericLiteral, stringLiteral])
-
-# Try-pattern methods (TryParse, try_load, LoadOrDefault) declare the fallback as their contract.
-predicate qualityDeclaresFallback(Statement) =>
-    Statement.Method != nic &&
-    Statement.Method.Name:matches('^(?:[Tt]ry[A-Z_]|try_)|(?:OrDefault|OrNull|OrNone|_or_default|_or_none)$')
-
-predicate qualityIsSilentLiteralFallback(Statement) =>
-    Statement.ErrorHandler && !Statement.Generic && Statement.Children.Count == 1 &&
-    Statement.Children:all(qualityIsLiteralReturn) && !qualityDeclaresFallback(Statement)
-
-# ---------------------------------------------------------------------------------------------
-# Unfinished code and tests
-# ---------------------------------------------------------------------------------------------
-
-predicate qualityIsUnfinished(Statement) =>
-    Statement.Kind == throw &&
-    (Statement.TypeName:in(['NotImplementedException', 'System.NotImplementedException',
-        'NotImplementedError'])) &&
-    (Statement.Method == nic || Statement.Method.Modifiers:isClear(Abstract))
-
-predicate qualityIsConstantAssertion(Statement) =>
-    (Statement.Kind == 'assert' && Statement.ConditionExpression != nic &&
-        Statement.ConditionExpression.Kind == booleanLiteral &&
-        Statement.ConditionExpression.BooleanValue == true) ||
-    (Statement.ArgumentExpressions.Count > 0 &&
-        Statement.ArgumentExpressions[0].Kind == booleanLiteral &&
-        ((Statement.MemberName == 'assert!' && Statement.ArgumentExpressions[0].BooleanValue == true) ||
-        (Statement.TypeName:in(['Assert', 'Assertions', 'assert', 'org.junit.Assert',
-            'org.junit.jupiter.api.Assertions']) &&
-            ((Statement.MemberName:in(['True', 'IsTrue', 'assertTrue', 'ok']) &&
-                Statement.ArgumentExpressions[0].BooleanValue == true) ||
-            (Statement.MemberName:in(['False', 'IsFalse', 'assertFalse']) &&
-                Statement.ArgumentExpressions[0].BooleanValue == false))) ||
-        (Statement.TypeName == nic && Statement.MemberName:in(['assertTrue']) &&
-            Statement.ArgumentExpressions[0].BooleanValue == true))) ||
-    (Statement.File.Language == go && Statement.TypeName == 'assert' &&
-        Statement.ArgumentExpressions.Count > 1 &&
-        Statement.ArgumentExpressions[1].Kind == booleanLiteral &&
-        ((Statement.MemberName == 'True' && Statement.ArgumentExpressions[1].BooleanValue == true) ||
-        (Statement.MemberName == 'False' && Statement.ArgumentExpressions[1].BooleanValue == false)))
-
-predicate qualityIsDisabledTest(Method) =>
-    Method.Decorators:containsAny(['Ignore', 'IgnoreAttribute', 'Disabled', 'org.junit.jupiter.api.Disabled',
-        'ignore', 'skip', 'pytest.mark.skip', 'unittest.skip'])
-
-predicate qualityIsSkipCall(Statement) =>
-    Statement.Kind == call && (
-    (Statement.TypeName:in(['it', 'test', 'describe', 'context']) && Statement.MemberName == 'skip') ||
-    (Statement.TypeName == nic && Statement.MemberName:in(['xit', 'xtest', 'xdescribe', 'xcontext'])) ||
-    (Statement.Parent == nic && Statement.Method != nic && qualityIsTestMethod(Statement.Method) &&
-        ((Statement.File.Language == go && Statement.MemberName:in(['Skip', 'SkipNow', 'Skipf'])) ||
-        (Statement.File.Language == python && Statement.TypeName == 'pytest' && Statement.MemberName == 'skip'))))
-
-predicate qualityIsAssertion(Statement) =>
-    Statement.Kind == 'assert' ||
-    (Statement.Kind == call && Statement.MemberName != nic &&
-        (Statement.MemberName:matches('(?i)^(assert|expect|verify|should|must|fail|ensure|check|validate)') ||
-        Statement.MemberName:matches('^(Error|Errorf|Fatal|Fatalf|FailNow|Fail|Throws|ThrowsAsync|That)$') ||
-        Statement.MemberName:matches('^(assert\\w*|debug_assert\\w*|panic|unreachable)!$'))) ||
-    (Statement.Kind == call && Statement.TypeName != nic &&
-        Statement.TypeName:matches('(?i)^(assert|assertions|require|expect|pytest|verify|should|snapshot)$'))
-
-predicate qualityIsAssertionFreeTest(Method) =>
-    qualityIsTestMethod(Method) && !qualityIsDisabledTest(Method) &&
-    !Method.Decorators:containsAny(['ExpectedException', 'ExpectedExceptionAttribute', 'should_panic']) &&
-    Method.Statements:none(qualityIsAssertion) && Method.Statements:none(qualityIsSkipCall)
-
-predicate qualityIsJavaScriptTestCall(Statement) =>
-    Statement.File.Language == javascript && Statement.Kind == call && Statement.TypeName == nic &&
-    Statement.MemberName:in(['it', 'test']) && Statement.EndLine != nic
-
-predicate qualityIsAssertionFreeJavaScriptTest(Statement) =>
-    qualityIsJavaScriptTestCall(Statement) &&
-    Statement.File.Methods:any((m) => m.Line >= Statement.Line && m.Line <= Statement.EndLine) &&
-    Statement.File.Methods:none((m) => m.Line >= Statement.Line && m.Line <= Statement.EndLine &&
-        m.Statements:any(qualityIsAssertion))
-
-predicate qualityIsExistenceAssertion(Statement) =>
-    Statement.Kind == call && Statement.MemberName:in(['NotNull', 'IsNotNull', 'assertNotNull', 'NotBeNull',
-        'toBeDefined', 'toBeTruthy', 'assertIsNotNone', 'NotEmpty', 'IsNotEmpty'])
-
-predicate qualityHasOnlyExistenceAssertions(Method) =>
-    qualityIsTestMethod(Method) && Method.Statements:any(qualityIsExistenceAssertion) &&
-    Method.Statements:all((s) => !qualityIsAssertion(s) || qualityIsExistenceAssertion(s) ||
-        (s.MemberName == 'expect' && s.Parent != nic && qualityIsExistenceAssertion(s.Parent)))
-
-predicate qualityIsSubjectOfTest(File, name: string) =>
-    File.Types:any((t) => t.Name:in([name + 'Tests', name + 'Test', 'Test' + name, name + 'Spec'])) ||
-    File.Path:endsWith('test_' + name.Lower + '.py') ||
-    File.Path:endsWith('/' + name.Lower + '_test.py')
-
-# relativeModule is the './'-prefixed specifier passed to jest.mock.
-predicate qualityIsJavaScriptTestOf(File, relativeModule: string) =>
-    ['.test.js', '.test.ts', '.spec.js', '.spec.ts', '.test.jsx', '.test.tsx', '.test.mjs', '.spec.mjs']
-        :any((ext) => File.Path == relativeModule.Replace('./', '') + ext ||
-            File.Path:endsWith(relativeModule.Replace('./', '/') + ext))
-
-predicate qualityIsMockOfSubject(Statement) =>
-    Statement.TypeName != nic && Statement.TypeName:matches('^Mock<[A-Za-z_][\\w.]*>$') &&
-    Statement.File.Types:any((t) =>
-        Statement.TypeName.Replace('>', 'Tests>') == 'Mock<' + t.Name + '>' ||
-        Statement.TypeName.Replace('>', 'Test>') == 'Mock<' + t.Name + '>' ||
-        Statement.TypeName.Replace('>', 'Spec>') == 'Mock<' + t.Name + '>' ||
-        Statement.TypeName.Replace('Mock<', 'Mock<Test') == 'Mock<' + t.Name + '>')
-
-predicate qualityIsSubjectClassLiteral(CodeExpression, file: File) =>
-    CodeExpression.Kind == memberAccess && CodeExpression.Name == 'class' && CodeExpression.Target != nic &&
-    qualityIsSubjectOfTest(file, CodeExpression.Target.Name)
-
-predicate qualityNamesSubject(CodeExpression, file: File) =>
-    CodeExpression.Kind == identifier && qualityIsSubjectOfTest(file, CodeExpression.Name)
-
-predicate qualityIsRelativeTestModule(CodeExpression, file: File) =>
-    CodeExpression.StringValue != nic && CodeExpression.StringValue:startsWith('./') &&
-    qualityIsJavaScriptTestOf(file, CodeExpression.StringValue)
-
-predicate qualityMocksSubject(Statement) =>
-    (Statement.Kind == declaration && qualityIsMockOfSubject(Statement)) ||
-    (Statement.Kind == call && Statement.MemberName == 'mock' && Statement.TypeName:in(['Mockito', nic]) &&
-        Statement.ArgumentExpressions.Count > 0 &&
-        qualityIsSubjectClassLiteral(Statement.ArgumentExpressions[0], Statement.File)) ||
-    (Statement.Kind == call && Statement.File.Language == python &&
-        Statement.MemberName:in(['Mock', 'MagicMock', 'NonCallableMock', 'create_autospec']) &&
-        Statement.ArgumentExpressions:any((e) =>
-            (e.Kind == ExpressionKind('namedArgument') && e.Name:in(['spec', 'spec_set']) &&
-                e.Children.Count > 0 && qualityNamesSubject(e.Children[0], Statement.File)) ||
-            (Statement.MemberName == 'create_autospec' && e.Kind == identifier &&
-                qualityIsSubjectOfTest(Statement.File, e.Name)))) ||
-    (Statement.Kind == call && Statement.TypeName == 'jest' && Statement.MemberName == 'mock' &&
-        Statement.ArgumentExpressions.Count > 0 &&
-        qualityIsRelativeTestModule(Statement.ArgumentExpressions[0], Statement.File))
-
-# ---------------------------------------------------------------------------------------------
-# Type checking and suppressions
-# ---------------------------------------------------------------------------------------------
-
-predicate qualityIsTypeErasure(CodeExpression) =>
-    (CodeExpression.Kind == cast && CodeExpression.Name:in(['any', 'dynamic'])) ||
-    (CodeExpression.Kind == invocation && CodeExpression.Target != nic &&
-        CodeExpression.Target.Name == 'cast' && CodeExpression.Children.Count > 0 &&
-        CodeExpression.Children[0].Name == 'Any') ||
-    (CodeExpression.Target != nic && qualityIsTypeErasure(CodeExpression.Target)) ||
-    CodeExpression.Children:any(qualityIsTypeErasure)
-
-predicate qualityHasTypeErasure(Statement) =>
-    (Statement.ValueExpression != nic && qualityIsTypeErasure(Statement.ValueExpression)) ||
-    Statement.ArgumentExpressions:any(qualityIsTypeErasure) ||
-    (Statement.Kind == call && Statement.Parent == nic && Statement.File.Language == python && Statement.MemberName == 'cast' &&
-        Statement.ArgumentExpressions.Count > 0 && Statement.ArgumentExpressions[0].Name == 'Any')
-
-predicate qualityIsBlanketWarningDisable(Statement) =>
-    Statement.Kind == directive && (
-    (Statement.Keywords.Count == 3 && Statement.Keywords:contains('pragma') &&
-        Statement.Keywords:contains('warning') && Statement.Keywords:contains('disable')) ||
-    (Statement.File.Language == python && (
-        (Statement.Keywords.Count == 2 && Statement.Keywords:contains('type') && Statement.Keywords:contains('ignore')) ||
-        (Statement.Keywords.Count == 1 && Statement.Keywords:contains('noqa')) ||
-        (Statement.Keywords.Count == 3 && Statement.Keywords:contains('pylint') && Statement.Keywords:contains('all')))) ||
-    (Statement.Keywords.Count == 1 && Statement.Keywords:containsAny(['eslint-disable', 'eslint-disable-line',
-        'eslint-disable-next-line', '@ts-ignore', '@ts-nocheck', 'nolint'])))
-
-predicate qualityAllowsAllWarnings(Method) =>
-    Method.Decorators:containsAny(['allow(warnings)', 'allow(clippy::all)'])
-
-predicate qualityTypeAllowsAllWarnings(Type) =>
-    Type.Decorators:containsAny(['allow(warnings)', 'allow(clippy::all)'])
-
-# ---------------------------------------------------------------------------------------------
-# Security
-# ---------------------------------------------------------------------------------------------
-
-predicate qualityIsCredentialLiteral(Statement) =>
-    Statement.Kind:in([declaration, assignment]) &&
-    Statement.MemberName != nic &&
-    Statement.MemberName:matches('(?i)^_?(password|passwd|api_?key|secret_?key|access_?token|client_?secret)$') &&
-    Statement.ValueExpression != nic &&
-    Statement.ValueExpression.Kind == stringLiteral &&
-    Statement.ValueExpression.StringValue != nic &&
-    Statement.ValueExpression.StringValue.Length > 0
-
-predicate qualityStringValueMatches(CodeExpression, pattern: string) =>
-    CodeExpression.StringValue != nic && CodeExpression.StringValue:matches(pattern)
-
-predicate qualityFirstStringMatches(Statement, pattern: string) =>
-    Statement.ArgumentExpressions.Count > 0 && qualityStringValueMatches(Statement.ArgumentExpressions[0], pattern)
-
-predicate qualityIsWeakCrypto(Statement) =>
-    Statement.Kind == call && (
-    (Statement.TypeName:in(['MD5', 'SHA1', 'DES', 'TripleDES', 'RC2', 'System.Security.Cryptography.MD5',
-        'System.Security.Cryptography.SHA1', 'System.Security.Cryptography.DES']) &&
-        Statement.MemberName:in(['Create', 'HashData'])) ||
-    (Statement.MemberName == nic && Statement.TypeName:in(['MD5CryptoServiceProvider', 'SHA1CryptoServiceProvider',
-        'SHA1Managed', 'DESCryptoServiceProvider', 'TripleDESCryptoServiceProvider', 'RC2CryptoServiceProvider'])) ||
-    (Statement.TypeName == 'hashlib' && Statement.MemberName:in(['md5', 'sha1'])) ||
-    (Statement.TypeName == 'hashlib' && Statement.MemberName == 'new' && qualityFirstStringMatches(Statement, '(?i)^(md5|sha1)$')) ||
-    (Statement.TypeName:in(['DES', 'DES3', 'ARC4', 'ARC2', 'Blowfish']) && Statement.MemberName == 'new') ||
-    (Statement.MemberName == 'createHash' && qualityFirstStringMatches(Statement, '(?i)^(md5|sha1|md4)$')) ||
-    (Statement.MemberName:in(['createCipheriv', 'createDecipheriv']) &&
-        qualityFirstStringMatches(Statement, '(?i)^(des|rc2|rc4|bf|blowfish)|-ecb$')) ||
-    (Statement.TypeName == 'MessageDigest' && Statement.MemberName == 'getInstance' &&
-        qualityFirstStringMatches(Statement, '(?i)^(md2|md5|sha-?1)$')) ||
-    (Statement.TypeName == 'Cipher' && Statement.MemberName == 'getInstance' &&
-        qualityFirstStringMatches(Statement, '(?i)^(des|desede|tripledes|rc2|rc4|arcfour|blowfish)(/.*)?$|^aes$|/ecb/')) ||
-    (Statement.File.Language == go && Statement.TypeName:in(['md5', 'sha1', 'des', 'rc4']) &&
-        Statement.MemberName:in(['Sum', 'New', 'NewCipher', 'NewTripleDESCipher'])) ||
-    (Statement.File.Language == rust && Statement.TypeName:in(['md5', 'Md5', 'sha1', 'Sha1']) &&
-        Statement.MemberName:in(['compute', 'new', 'digest'])))
-
-predicate qualityHasStringPart(CodeExpression) =>
-    CodeExpression.Kind:in([stringLiteral, interpolation]) ||
-    (CodeExpression.Kind == binary && CodeExpression.Children:any(qualityHasStringPart))
-
-predicate qualityIsDynamicString(CodeExpression) =>
-    (CodeExpression.Kind == interpolation && CodeExpression.Children.Count > 0) ||
-    (CodeExpression.Kind == binary && CodeExpression.Name:in(['+', 'Add', 'AddExpression', 'Mod', '%']) &&
-        CodeExpression.Children:any(qualityHasStringPart) &&
-        CodeExpression.Children:any((c) => c.Kind != stringLiteral)) ||
-    (CodeExpression.Kind == invocation && CodeExpression.Target != nic &&
-        ((CodeExpression.Target.Name == 'format' && CodeExpression.Children.Count > 0) ||
-        (CodeExpression.Target.Name:in(['Sprintf', 'Format', 'Concat', 'concat']) && CodeExpression.Children.Count > 1))) ||
-    (CodeExpression.Kind == ExpressionKind('unary') && CodeExpression.Target != nic &&
-        qualityIsDynamicString(CodeExpression.Target))
-
-predicate qualityIsFormattingCall(Statement) =>
-    Statement.Kind == call &&
-    ((Statement.MemberName:in(['format!', 'Sprintf', 'Format']) && Statement.ArgumentExpressions.Count > 1) ||
-    (Statement.MemberName == 'format' && Statement.TypeName != nic && Statement.ArgumentExpressions.Count > 0))
-
-predicate qualityHasDynamicText(Statement) =>
-    Statement.ArgumentExpressions:any(qualityIsDynamicString) ||
-    Statement.Children:any(qualityIsFormattingCall)
-
-predicate qualityIsSqlSink(Statement) =>
-    (Statement.MemberName == nic && Statement.TypeName:in(['SqlCommand', 'NpgsqlCommand', 'MySqlCommand',
-        'SqliteCommand', 'SQLiteCommand', 'OracleCommand', 'OleDbCommand', 'OdbcCommand'])) ||
-    (Statement.Kind == call && Statement.MemberName:in(['ExecuteSqlRaw', 'ExecuteSqlRawAsync', 'FromSqlRaw',
-        'SqlQueryRaw', 'execute', 'executemany', 'executescript', 'query', 'executeQuery', 'executeUpdate',
-        'executeLargeUpdate', 'prepareStatement', 'prepareCall', 'addBatch', 'createQuery', 'createNativeQuery',
-        'createSQLQuery', 'Query', 'QueryRow', 'QueryContext', 'QueryRowContext', 'Exec', 'ExecContext',
-        'query_as', 'query_scalar', 'prepare', 'batch_execute', 'simple_query', '$queryRawUnsafe',
-        '$executeRawUnsafe', 'raw']))
-
-predicate qualityIsCommandSink(Statement) =>
-    Statement.Kind == call && (
-    (Statement.TypeName == 'os' && Statement.MemberName:in(['system', 'popen'])) ||
-    (Statement.TypeName == 'subprocess' && Statement.ArgumentExpressions:any((e) =>
-        e.Kind == ExpressionKind('namedArgument') && e.Name == 'shell' && e.Children.Count > 0 &&
-        e.Children[0].BooleanValue == true)) ||
-    (Statement.TypeName == nic && Statement.MemberName:in(['exec', 'execSync'])) ||
-    (Statement.TypeName:in(['child_process', 'childProcess', 'cp']) && Statement.MemberName:in(['exec', 'execSync'])) ||
-    (Statement.File.Language == go && Statement.TypeName == 'exec' && Statement.MemberName:in(['Command', 'CommandContext'])) ||
-    (Statement.TypeName:in(['Process', 'System.Diagnostics.Process']) && Statement.MemberName == 'Start'))
-
-predicate qualityIsMarkupSink(Statement) =>
-    (Statement.TypeName == 'Html' && Statement.MemberName == 'Raw') ||
-    (Statement.MemberName == nic && Statement.TypeName:in(['HtmlString', 'MarkupString'])) ||
-    (Statement.Kind == call && Statement.TypeName:in([nic, 'markupsafe']) && Statement.MemberName:in(['mark_safe', 'Markup'])) ||
-    (Statement.Kind == call && Statement.TypeName == 'document' && Statement.MemberName:in(['write', 'writeln'])) ||
-    (Statement.Kind == call && Statement.MemberName == 'insertAdjacentHTML')
-
-predicate qualityIsInjectionSink(Statement) =>
-    qualityIsSqlSink(Statement) || qualityIsCommandSink(Statement) || qualityIsMarkupSink(Statement)
-
-# ---------------------------------------------------------------------------------------------
-# Leftovers, timing, and dependencies
-# ---------------------------------------------------------------------------------------------
-
-predicate qualityIsDebuggerBreak(Statement) =>
-    Statement.Kind == call && (
-    (Statement.TypeName:in(['Debugger', 'System.Diagnostics.Debugger']) && Statement.MemberName:in(['Break', 'Launch'])) ||
-    (Statement.File.Language == python && Statement.TypeName == nic && Statement.MemberName == 'breakpoint') ||
-    (Statement.TypeName:in(['pdb', 'ipdb', 'pudb']) && Statement.MemberName == 'set_trace'))
-
-predicate qualityIsBlockingSleep(Statement) =>
-    Statement.Kind == call &&
-    Statement.TypeName:in(['Thread', 'System.Threading.Thread', 'time', 'thread', 'std.thread', 'std::thread']) &&
-    Statement.MemberName:in(['Sleep', 'sleep'])
-
-predicate qualityIsDelayCall(Statement) =>
-    qualityIsBlockingSleep(Statement) ||
-    (Statement.Kind == call && Statement.TypeName:in(['Task', 'System.Threading.Tasks.Task']) && Statement.MemberName == 'Delay') ||
-    (Statement.Kind == call && Statement.TypeName == 'asyncio' && Statement.MemberName == 'sleep')
-
-predicate qualityIsFixedDuration(CodeExpression) =>
-    CodeExpression.Kind == numericLiteral ||
-    (CodeExpression.Kind == memberAccess && CodeExpression.Target != nic && CodeExpression.Target.Name == 'time') ||
-    (CodeExpression.Kind == invocation && CodeExpression.Target != nic &&
-        CodeExpression.Target.Name:in(['from_secs', 'from_millis', 'FromSeconds', 'FromMilliseconds', 'ofSeconds', 'ofMillis']) &&
-        CodeExpression.Children:all((c) => c.Kind == numericLiteral)) ||
-    (CodeExpression.Kind == binary && CodeExpression.Children:all(qualityIsFixedDuration))
-
-# csharp-checks (thread-sleep-calls) and go-checks (time-sleep) already report these production sleeps.
-predicate qualityIsSuiteOwnedSleep(Statement) =>
-    (Statement.File.Language == csharp && Statement.TypeName:in(['Thread', 'System.Threading.Thread'])) ||
-    (Statement.File.Language == go && Statement.TypeName == 'time')
-
-predicate qualityHasFixedDelay(Statement) =>
-    Statement.ArgumentExpressions.Count > 0 && qualityIsFixedDuration(Statement.ArgumentExpressions[0])
-
-predicate qualityIsTestTimeout(Statement) =>
-    Statement.Kind == call && Statement.TypeName == nic && Statement.MemberName == 'setTimeout' &&
-    Statement.ArgumentExpressions.Count > 1 && qualityIsFixedDuration(Statement.ArgumentExpressions[1])
-
-predicate qualityIsDeprecatedDeclaration(Method) =>
-    Method.Decorators:any((d) => d:matches('^(System\\.)?Obsolete(Attribute)?(\\(|$)|^(java\\.lang\\.)?Deprecated$|^(typing_extensions\\.|warnings\\.)?deprecated(\\(|$)'))
-
-predicate qualityCallsDeprecated(Statement) =>
-    Statement.Kind == call && Statement.MemberName != nic &&
-    ((Statement.ReferencedCallable != nic && Statement.ReferencedCallable.IsDeprecated) ||
-    (Statement.ReferencedCallable == nic && Statement.TypeName == nic &&
-        (Statement.File.Methods + Statement.File.Types.Methods):any((m) =>
-            m.Name == Statement.MemberName && qualityIsDeprecatedDeclaration(m)))) &&
-    (Statement.Method == nic || !qualityIsDeprecatedDeclaration(Statement.Method))
-
-predicate qualityIsOverCommented(Method) =>
-    Method.LineCount != nic && Method.CommentLineCount != nic && Method.LineCount >= 10 &&
-    Method.CommentLineCount * 5 >= Method.LineCount * 2
-
-predicate qualityHasEmojiText(CodeExpression) =>
-    CodeExpression.StringValue != nic &&
-    CodeExpression.StringValue:matches('[\\u2600-\\u27BF\\u2B50\\u2B55]|\\uD83C[\\uDF00-\\uDFFF]|\\uD83D[\\uDC00-\\uDE4F\\uDE80-\\uDEFF]|\\uD83E[\\uDD00-\\uDEFF]')
-
-predicate qualityHasEmojiLiteral(Statement) =>
-    Statement.ArgumentExpressions:any(qualityHasEmojiText) ||
-    (Statement.ValueExpression != nic && qualityHasEmojiText(Statement.ValueExpression))
-
-predicate qualityTypeHasEmojiName(Type) =>
-    Type.Name:matches('[\\u2600-\\u27BF\\u2B50\\u2B55]|\\uD83C[\\uDF00-\\uDFFF]|\\uD83D[\\uDC00-\\uDE4F\\uDE80-\\uDEFF]|\\uD83E[\\uDD00-\\uDEFF]')
-
-predicate qualityHasEmojiName(Method) =>
-    Method.Name:matches('[\\u2600-\\u27BF\\u2B50\\u2B55]|\\uD83C[\\uDF00-\\uDFFF]|\\uD83D[\\uDC00-\\uDE4F\\uDE80-\\uDEFF]|\\uD83E[\\uDD00-\\uDEFF]')
-
-predicate qualityTypeIsClutterName(Type) =>
-    Type.Name:matches('^(?!(Is|Has|Can|Should|Get|Set|Try)[A-Z_]).+(Fixed|Enhanced|Improved|Refactored|Simplified|Optimized|Corrected|Backup)(V?\\d+)?$')
-
-predicate qualityIsClutterName(Method) =>
-    Method.Name:matches('^(?!(?i:is|has|can|should|get|set|try|add|remove)[A-Z_]).+(Fixed|Enhanced|Improved|Refactored|Simplified|Optimized|Corrected)(V?\\d+)?$') ||
-    Method.Name:matches('^(?!(is|has|can|should|get|set|try)_).+_(fixed|enhanced|improved|refactored|simplified|optimized|corrected)(_?v?\\d+)?$')
-
-predicate qualityIsBackupSource(File) =>
-    File.Path:matches('(_copy|\\.bak|\\.orig|\\.old)\\.(cs|py|[cm]?[jt]sx?|go|java|rs)$')
-
-predicate qualityIsPackageSpecifier(Import) =>
-    Import.RelativeLevel == 0 && Import.Module.Length > 0 &&
-    !Import.Module:matches('^(\\.|/|~|#|@/|[a-z]+:)')
-
-predicate qualityIsNodeBuiltin(Import) =>
-    ['assert', 'async_hooks', 'buffer', 'child_process', 'cluster', 'console', 'constants', 'crypto', 'dgram',
-        'diagnostics_channel', 'dns', 'domain', 'events', 'fs', 'http', 'http2', 'https', 'inspector', 'module',
-        'net', 'os', 'path', 'perf_hooks', 'process', 'punycode', 'querystring', 'readline', 'repl', 'stream',
-        'string_decoder', 'sys', 'timers', 'tls', 'trace_events', 'tty', 'url', 'util', 'v8', 'vm', 'wasi',
-        'worker_threads', 'zlib']:any((b) => Import.Module == b || Import.Module:startsWith(b + '/'))
-
-predicate qualityIsDeclaredIn(Import, packages: [string]) =>
-    packages:any((p) => Import.Module == p || Import.Module:startsWith(p + '/'))
-
-predicate qualityIsUndeclaredJavaScriptImport(Import, projects: [Project]) =>
-    Import.File != nic && Import.File.Language == javascript &&
-    projects:any((p) => p.Language == javascript) &&
-    qualityIsPackageSpecifier(Import) && !qualityIsNodeBuiltin(Import) &&
-    !qualityIsDeclaredIn(Import, projects.Where(item.Language == javascript).Packages)
-
-predicate qualityIsUndeclaredGoImport(Import, projects: [Project]) =>
-    Import.File != nic && Import.File.Language == go &&
-    projects:any((p) => p.Language == go) &&
-    Import.Module:matches('^[^/]+\\.[^/]*/') &&
-    !qualityIsDeclaredIn(Import, projects.Where(item.Language == go).Packages) &&
-    !qualityIsDeclaredIn(Import, projects.Where(item.Language == go).Properties.Where(item.Name == 'Module').Value)
-
-predicate qualityIsUndeclaredRustImport(Import, projects: [Project], sources: [File]) =>
-    Import.File != nic && Import.File.Language == rust &&
-    projects:any((p) => p.Language == rust) &&
-    Import.Module:matches('^[a-z_][a-z0-9_]*$') &&
-    !Import.Module:in(['std', 'core', 'alloc', 'crate', 'self', 'super', 'proc_macro', 'test']) &&
-    projects.Where(item.Language == rust):none((p) => p.Name.Replace('-', '_') == Import.Module) &&
-    projects.Where(item.Language == rust).Packages:none((c) => c.Replace('-', '_') == Import.Module || c.Replace('-', '') == Import.Module) &&
-    sources:none((f) => f.Path:endsWith('/' + Import.Module + '.rs') || f.Path:endsWith('/' + Import.Module + '/mod.rs'))
-
-predicate qualityIsUndeclaredPackageName(CodeExpression, projects: [Project]) =>
-    CodeExpression.Kind == stringLiteral && CodeExpression.StringValue != nic &&
-    !CodeExpression.StringValue:matches('^(\\.|/|~|#|@/|[a-z]+:)') &&
-    !['assert', 'buffer', 'child_process', 'cluster', 'crypto', 'dns', 'events', 'fs', 'http', 'http2', 'https',
-        'module', 'net', 'os', 'path', 'process', 'querystring', 'readline', 'stream', 'string_decoder', 'timers',
-        'tls', 'tty', 'url', 'util', 'v8', 'vm', 'worker_threads', 'zlib']
-        :any((b) => CodeExpression.StringValue == b || CodeExpression.StringValue:startsWith(b + '/')) &&
-    projects.Where(item.Language == javascript).Packages:none((p) =>
-        CodeExpression.StringValue == p || CodeExpression.StringValue:startsWith(p + '/'))
-predicate qualityIsUndeclaredRequire(Statement, projects: [Project]) =>
-    Statement.Kind == call && Statement.File.Language == javascript && Statement.TypeName == nic &&
-    Statement.MemberName == 'require' && projects:any((p) => p.Language == javascript) &&
-    Statement.ArgumentExpressions.Count == 1 &&
-    qualityIsUndeclaredPackageName(Statement.ArgumentExpressions[0], projects)
-
-# ---------------------------------------------------------------------------------------------
-# Checks
-# ---------------------------------------------------------------------------------------------
+export function qualityTestScope(cb: Codebase) : Codebase =>
+    ai-slop-checks.qualityTestScope(cb)
 
 ## Catch/except bodies with no parsed statements. Existing language-specific rules may overlap.
 export function emptyErrorHandlers(statements: [Statement]) : [Violation] =>
-    statements:qualityIsEmptyHandler:isUnsuppressed
-        :toWarning('Empty error handler silently discards the error', nameof(emptyErrorHandlers))
+    ai-slop-checks.emptyErrorHandlers(statements)
 
 ## Error handlers whose entire body is a literal return, with no handling or notification.
 export function silentLiteralFallbacks(statements: [Statement]) : [Violation] =>
-    statements:qualityIsSilentLiteralFallback:isUnsuppressed
-        :toWarning('Error handler returns a literal without reporting the failure', nameof(silentLiteralFallbacks))
+    ai-slop-checks.silentLiteralFallbacks(statements)
 
 ## Explicit unimplemented exceptions/macros in production. Constant returns are not treated as stubs.
 export function unfinishedImplementations(statements: [Statement]) : [Violation] =>
-    statements:qualityIsUnfinished:isUnsuppressed
-        :toWarning('Unimplemented code can fail on a real execution path', nameof(unfinishedImplementations))
+    ai-slop-checks.unfinishedImplementations(statements)
 
 ## Supported assertion APIs given an unconditional success literal.
 export function constantAssertions(statements: [Statement]) : [Violation] =>
-    statements:qualityIsConstantAssertion:isUnsuppressed
-        :toWarning('Assertion always succeeds; assert an independently expected result', nameof(constantAssertions))
+    ai-slop-checks.constantAssertions(statements)
 
 ## Unconditionally disabled tests: skip/ignore decorators, it.skip/xit, and unconditional t.Skip/pytest.skip.
 ## Conditional skips (skipIf, Explicit, skips inside a branch) are not flagged.
 export function disabledTests(methods: [Method], statements: [Statement]) : [Violation] =>
-    methods:qualityIsDisabledTest
-        :toInfo('Test {item.Name} is disabled; review whether its coverage should be restored', nameof(disabledTests)) +
-    statements:qualityIsSkipCall:isUnsuppressed
-        :toInfo('Test is skipped unconditionally; review whether its coverage should be restored', nameof(disabledTests))
+    ai-slop-checks.disabledTests(methods, statements)
 
 ## Tests with no recognized assertion, expectation, verification, or failure call.
 ## Custom assertion helpers named assert*/expect*/verify*/check*/should* are recognized.
 export function assertionFreeTests(methods: [Method], statements: [Statement]) : [Violation] =>
-    methods:qualityIsAssertionFreeTest
-        :toInfo('Test {item.Name} makes no assertion; it passes as long as nothing throws', nameof(assertionFreeTests)) +
-    statements:qualityIsAssertionFreeJavaScriptTest:isUnsuppressed
-        :toInfo('Test makes no assertion; it passes as long as nothing throws', nameof(assertionFreeTests))
+    ai-slop-checks.assertionFreeTests(methods, statements)
 
 ## Tests whose only assertions check that a value exists (NotNull, toBeDefined, toBeTruthy, ...).
 export function existenceOnlyAssertions(methods: [Method]) : [Violation] =>
-    methods:qualityHasOnlyExistenceAssertions
-        :toInfo('Test {item.Name} only asserts that a value exists; assert the expected value', nameof(existenceOnlyAssertions))
+    ai-slop-checks.existenceOnlyAssertions(methods)
 
 ## Tests that mock the type or module they are named after, so the real subject never runs.
 ## Supports Moq Mock<T>, Mockito mock(T.class), Python Mock/MagicMock(spec=T)/create_autospec(T), and jest.mock('./m').
 export function mockedTestSubjects(statements: [Statement]) : [Violation] =>
-    statements:qualityMocksSubject:isUnsuppressed
-        :toWarning('Test mocks its own subject; exercise the real implementation and mock only collaborators',
-            nameof(mockedTestSubjects))
+    ai-slop-checks.mockedTestSubjects(statements)
 
 ## Explicit any/dynamic casts and Python cast(Any, ...), including nested expressions.
 export function typeErasingCasts(statements: [Statement]) : [Violation] =>
-    statements:qualityHasTypeErasure:isUnsuppressed
-        :toWarning('Cast erases type checking; use a typed conversion or guard', nameof(typeErasingCasts))
+    ai-slop-checks.typeErasingCasts(statements)
 
 ## Suppressions that silence every diagnostic: bare #pragma warning disable, # type: ignore, # noqa,
 ## pylint disable=all, eslint-disable without rules, @ts-ignore/@ts-nocheck, //nolint, #[allow(warnings)].
 ## Suppressions that name specific diagnostics remain allowed.
 export function blanketWarningSuppressions(statements: [Statement], methods: [Method], types: [Type]) : [Violation] =>
-    statements:qualityIsBlanketWarningDisable:isUnsuppressed
-        :toWarning('Suppression silences every diagnostic; fix the issue or name the specific diagnostic',
-            nameof(blanketWarningSuppressions)) +
-    methods:qualityAllowsAllWarnings
-        :toWarning('#[allow] silences every warning on {item.Name}; allow only the specific lint',
-            nameof(blanketWarningSuppressions)) +
-    types:qualityTypeAllowsAllWarnings
-        :toWarning('#[allow] silences every warning on {item.Name}; allow only the specific lint',
-            nameof(blanketWarningSuppressions))
+    ai-slop-checks.blanketWarningSuppressions(statements, methods, types)
 
 ## Nonempty literal assignments to specific credential names. This is a review signal, not secret validation.
 export function credentialLiterals(statements: [Statement]) : [Violation] =>
-    statements:qualityIsCredentialLiteral:isUnsuppressed
-        :toWarning('Credential {item.MemberName} is a literal; obtain real credentials from secure configuration',
-            nameof(credentialLiterals))
+    ai-slop-checks.credentialLiterals(statements)
 
 ## Broken or weak cryptographic primitives (MD5, SHA-1, DES/3DES, RC2/RC4, Blowfish, ECB mode).
 export function weakCryptoCalls(statements: [Statement]) : [Violation] =>
-    statements:qualityIsWeakCrypto:isUnsuppressed
-        :toInfo('Weak cryptographic primitive; use SHA-256+ for hashing and an authenticated cipher mode',
-            nameof(weakCryptoCalls))
+    ai-slop-checks.weakCryptoCalls(statements)
 
 ## SQL, shell/eval, and raw-HTML sinks receiving text built by concatenation, interpolation, or formatting.
 export function injectionProneStrings(statements: [Statement]) : [Violation] =>
-    statements:qualityIsInjectionSink:qualityHasDynamicText:isUnsuppressed
-        :toWarning('Query, command, or markup text is built from runtime values; use parameters or encoding',
-            nameof(injectionProneStrings))
+    ai-slop-checks.injectionProneStrings(statements)
+
+## Log messages built by interpolation or concatenation lose structured fields and can permit log injection.
+export function interpolatedLogMessages(statements: [Statement]) : [Violation] =>
+    ai-slop-checks.interpolatedLogMessages(statements)
+
+## Sensitive identifiers passed to logging APIs may disclose credentials or personal data.
+export function sensitiveDataInLogs(statements: [Statement]) : [Violation] =>
+    ai-slop-checks.sensitiveDataInLogs(statements)
+
+## Deserializers that construct objects from untrusted input can execute code or instantiate unsafe types.
+export function unsafeDeserialization(statements: [Statement]) : [Violation] =>
+    ai-slop-checks.unsafeDeserialization(statements)
+
+## Non-cryptographic random values must not be used for authentication or session secrets.
+export function insecureRandomForSecrets(statements: [Statement]) : [Violation] =>
+    ai-slop-checks.insecureRandomForSecrets(statements)
+
+## Hard-coded loopback URLs often work locally but fail after deployment.
+export function hardcodedLocalUrls(statements: [Statement]) : [Violation] =>
+    ai-slop-checks.hardcodedLocalUrls(statements)
+
+## Database, network, or filesystem operations inside a loop can multiply I/O with collection size.
+export function ioInLoops(statements: [Statement]) : [Violation] =>
+    ai-slop-checks.ioInLoops(statements)
+
+## Async methods with no await usually hide synchronous work behind an async-shaped API.
+export function asyncWithoutAwait(methods: [Method]) : [Violation] =>
+    ai-slop-checks.asyncWithoutAwait(methods)
+
+## Blocking I/O and sleeps inside async methods can starve the event loop.
+export function blockingCallsInAsync(statements: [Statement]) : [Violation] =>
+    ai-slop-checks.blockingCallsInAsync(statements)
+
+## Test and mocking frameworks should not be imported by production code.
+export function testScaffoldingInProduction(sources: [File]) : [Violation] =>
+    ai-slop-checks.testScaffoldingInProduction(sources)
+
+## Flag pass-through wrappers and single-implementation interfaces as possible speculative abstractions.
+export function speculativeAbstractions(methods: [Method], types: [Type]) : [Violation] =>
+    ai-slop-checks.speculativeAbstractions(methods, types)
+
+## Security-focused subset, also included by codeQualityChecks.
+export function securityChecks(statements: [Statement]) : [Violation] =>
+    ai-slop-checks.securityChecks(statements)
 
 ## Imports of third-party packages that the project manifest (package.json, go.mod, Cargo.toml) does not declare.
 ## Evaluated only for languages with a parsed manifest.
 export function undeclaredDependencies(sources: [File], statements: [Statement], projects: [Project]) : [Violation] =>
-    sources.Imports.Where(qualityIsUndeclaredJavaScriptImport(item, projects) ||
-        qualityIsUndeclaredGoImport(item, projects) || qualityIsUndeclaredRustImport(item, projects, sources))
-        :toWarning('Import {item.Module} is not declared in the project manifest', nameof(undeclaredDependencies)) +
-    statements.Where(qualityIsUndeclaredRequire(item, projects)):isUnsuppressed
-        :toWarning('Required package is not declared in package.json', nameof(undeclaredDependencies))
+    ai-slop-checks.undeclaredDependencies(sources, statements, projects)
 
 ## Calls to declarations marked deprecated: compiler-resolved [Obsolete]/@deprecated, or same-file
 ## declarations decorated Obsolete/Deprecated/deprecated when the parser cannot resolve calls.
 export function deprecatedCalls(statements: [Statement]) : [Violation] =>
-    statements:qualityCallsDeprecated:isUnsuppressed
-        :toWarning('{item.MemberName} is deprecated; use its documented replacement', nameof(deprecatedCalls))
+    ai-slop-checks.deprecatedCalls(statements)
 
 ## Fixed sleeps and delays in tests; wait on a condition or use a controlled clock instead.
 export function blockingTestSleeps(statements: [Statement]) : [Violation] =>
-    statements.Where(qualityIsBlockingSleep(item) || (qualityIsDelayCall(item) && qualityHasFixedDelay(item)) ||
-        qualityIsTestTimeout(item)):isUnsuppressed
-        :toInfo('Fixed sleep in test code; prefer a condition-based wait or controlled clock',
-            nameof(blockingTestSleeps))
+    ai-slop-checks.blockingTestSleeps(statements)
 
 ## Hard-coded sleeps/delays in production code, often used to paper over races or ordering bugs.
 export function fixedDelays(statements: [Statement]) : [Violation] =>
-    statements:qualityIsDelayCall:qualityHasFixedDelay:!qualityIsSuiteOwnedSleep:isUnsuppressed
-        :toInfo('Hard-coded delay; synchronize on the awaited condition or make the interval configurable',
-            nameof(fixedDelays))
+    ai-slop-checks.fixedDelays(statements)
 
 ## Debugger breakpoints and stack dumps left in production code.
 export function debuggerLeftovers(statements: [Statement]) : [Violation] =>
-    statements:qualityIsDebuggerBreak:isUnsuppressed
-        :toWarning('Debugging leftover; remove it or use the logging framework', nameof(debuggerLeftovers))
+    ai-slop-checks.debuggerLeftovers(statements)
 
 ## Methods of 10+ lines where at least 40% of lines are comments, typically narration of obvious code.
 export function overCommentedMethods(methods: [Method]) : [Violation] =>
-    methods:qualityIsOverCommented
-        :toInfo('{item.Name} is {item.CommentLineCount} comment lines of {item.LineCount}; keep comments for intent, not narration',
-            nameof(overCommentedMethods))
+    ai-slop-checks.overCommentedMethods(methods)
 
 ## Emoji in identifiers and string literals. Comment emoji are not checked (comments are raw text).
 export function emojiInCode(statements: [Statement], types: [Type], methods: [Method]) : [Violation] =>
-    statements:qualityHasEmojiLiteral:isUnsuppressed
-        :toInfo('String literal contains emoji; prefer plain text in logs and messages', nameof(emojiInCode)) +
-    types:qualityTypeHasEmojiName:toInfo('Type name {item.Name} contains emoji', nameof(emojiInCode)) +
-    methods:qualityHasEmojiName:toInfo('Method name {item.Name} contains emoji', nameof(emojiInCode))
+    ai-slop-checks.emojiInCode(statements, types, methods)
 
 ## Types and methods named after an edit (FooFixed, BarEnhanced, run_improved, ParseV2Refactored).
 ## Predicate-like names (IsFixed, has_improved) are not flagged.
 export function clutterNames(types: [Type], methods: [Method]) : [Violation] =>
-    types:qualityTypeIsClutterName
-        :toInfo('Type {item.Name} is named after an edit; give it a name describing what it is', nameof(clutterNames)) +
-    methods:qualityIsClutterName
-        :toInfo('Method {item.Name} is named after an edit; replace the original instead of adding a variant',
-            nameof(clutterNames))
+    ai-slop-checks.clutterNames(types, methods)
 
 ## Source filenames explicitly marked as backup/copy artifacts. New/Old type names are not banned.
 export function backupSourceFiles(files: [File]) : [Violation] =>
-    files:qualityIsBackupSource
-        :toInfo('Source file {item.Path} looks like a backup copy; review whether it belongs in the build',
-            nameof(backupSourceFiles))
+    ai-slop-checks.backupSourceFiles(files)
 
 ## Agent work-report markdown files (IMPLEMENTATION_SUMMARY.md, FIX_NOTES.md, REFACTOR_COMPLETE.md, ...).
 export function agentReportFiles() : [Violation] =>
-    qualityDisk.Files.Where(item.Name:matches('^(?i:(implementation|fix|fixes|refactor|refactoring|migration|changes?|work|session|task|progress|cleanup)[_-]?(summary|notes|report|complete|completed|status))\\.md$') ||
-        item.Name:matches('^[A-Z0-9]+(_[A-Z0-9]+)*_(SUMMARY|COMPLETE|COMPLETED|STATUS|REPORT)\\.md$'))
-        :toInfo('{item.Path} looks like an agent work report; put durable information in real docs or the PR',
-            nameof(agentReportFiles))
+    ai-slop-checks.agentReportFiles()
 
 ## Production methods (6+ statements) whose parsed body structure duplicates another method.
 export function duplicateMethodBodies(methods: [Method]) : [Violation] =>
-    methods.Where(item.Statements.Count >= 6 && item.Shape != nic && item.Shape.Length > 0)
-        .GroupBy(item.Shape).Where(item.Count > 1).Items
-        :toInfo('{item.Name} has the same body structure as another method; reuse instead of duplicating',
-            nameof(duplicateMethodBodies))
+    ai-slop-checks.duplicateMethodBodies(methods)
 
 ## Compose quality checks from explicitly scoped codebases. Production rules read only production;
 ## test rules read only tests; whole-repository rules (suppressions, dependencies) read all.
 export function scopedCodeQualityChecks(production: Codebase, tests: Codebase, all: Codebase) : [Violation] =>
-    emptyErrorHandlers(production.Statements) +
-    silentLiteralFallbacks(production.Statements) +
-    unfinishedImplementations(production.Statements) +
-    constantAssertions(all.Statements) +
-    disabledTests(tests.Methods, tests.Statements) +
-    assertionFreeTests(tests.Methods, tests.Statements) +
-    existenceOnlyAssertions(tests.Methods) +
-    mockedTestSubjects(tests.Statements) +
-    typeErasingCasts(production.Statements) +
-    blanketWarningSuppressions(all.Statements, all.Methods, all.Types) +
-    credentialLiterals(production.Statements) +
-    weakCryptoCalls(production.Statements) +
-    injectionProneStrings(production.Statements) +
-    undeclaredDependencies(all.Files, all.Statements, all.Projects) +
-    deprecatedCalls(production.Statements) +
-    blockingTestSleeps(tests.Statements) +
-    fixedDelays(production.Statements) +
-    debuggerLeftovers(production.Statements) +
-    overCommentedMethods(production.Methods) +
-    emojiInCode(production.Statements, production.Types, production.Methods) +
-    clutterNames(production.Types, production.Methods) +
-    backupSourceFiles(production.Files) +
-    agentReportFiles() +
-    duplicateMethodBodies(production.Methods)
+    ai-slop-checks.scopedCodeQualityChecks(production, tests, all)
 
 ## Shared quality suite over the standard production/test scopes.
 export function codeQualityChecks(cb: Codebase) : [Violation] =>
-    scopedCodeQualityChecks(qualityProductionScope(cb), qualityTestScope(cb), cb)
+    ai-slop-checks.codeQualityChecks(cb)
+
+## Explicit certificate-validation bypasses on known HTTP clients and configuration properties.
+export function certificateValidationDisabled(statements: [Statement]) : [Violation] =>
+    ai-slop-checks.certificateValidationDisabled(statements)
+
+## Requests calls without timeouts, or explicit timeout=None on requests/httpx.
+export function missingRequestTimeout(statements: [Statement]) : [Violation] =>
+    ai-slop-checks.missingRequestTimeout(statements)
+
+## Tar extraction without a data filter or explicitly selected members requires review.
+export function unsafeArchiveExtraction(statements: [Statement]) : [Violation] =>
+    ai-slop-checks.unsafeArchiveExtraction(statements)
+
+## Temporary-name generators that do not atomically create the file have a race window.
+export function insecureTemporaryNames(statements: [Statement]) : [Violation] =>
+    ai-slop-checks.insecureTemporaryNames(statements)
+
+## Wildcard CORS is a review signal; public APIs may intentionally allow it.
+export function wildcardCorsOrigins(statements: [Statement]) : [Violation] =>
+    ai-slop-checks.wildcardCorsOrigins(statements)
+
+## Explicit development-server debugging in production-scoped source.
+export function developmentServerDebug(statements: [Statement]) : [Violation] =>
+    ai-slop-checks.developmentServerDebug(statements)
+
+## JWT parsing configured to bypass signature verification must not authorize requests.
+export function jwtSignatureBypass(statements: [Statement]) : [Violation] =>
+    ai-slop-checks.jwtSignatureBypass(statements)
+
+## Fast SHA-2 hashes of password-named inputs are not password derivation functions.
+export function fastPasswordHashes(statements: [Statement]) : [Violation] =>
+    ai-slop-checks.fastPasswordHashes(statements)
+
+## Explicitly disabling Secure or HttpOnly cookie flags exposes session values.
+export function insecureCookieFlags(statements: [Statement]) : [Violation] =>
+    ai-slop-checks.insecureCookieFlags(statements)
+
+## Literal 0666/0777 permission changes make files writable by other users.
+export function worldWritableModes(statements: [Statement]) : [Violation] =>
+    ai-slop-checks.worldWritableModes(statements)
+
+## Explicit external-entity or DTD processing can expose local files or exhaust resources.
+export function xmlEntityExpansion(statements: [Statement]) : [Violation] =>
+    ai-slop-checks.xmlEntityExpansion(statements)
+
+## Runtime execution APIs not already covered by the suites' eval rules.
+export function dynamicCodeLoading(statements: [Statement]) : [Violation] =>
+    ai-slop-checks.dynamicCodeLoading(statements)
+
+## Shell=True with non-dynamic input; dynamic strings are already covered by injectionProneStrings.
+export function literalShellCommands(statements: [Statement]) : [Violation] =>
+    ai-slop-checks.literalShellCommands(statements)
+
+## Static Regex calls without an explicit timeout may be vulnerable to pathological input.
+export function unboundedRegex(statements: [Statement]) : [Violation] =>
+    ai-slop-checks.unboundedRegex(statements)
+
+## Abrupt completion in finally can replace an active exception or return value.
+export function abruptFinally(statements: [Statement]) : [Violation] =>
+    ai-slop-checks.abruptFinally(statements)
+
+## A handler containing only a bare rethrow adds no handling behavior.
+export function redundantCatchRethrow(statements: [Statement]) : [Violation] =>
+    ai-slop-checks.redundantCatchRethrow(statements)
+
+## Literal boolean conditions leave one branch permanently unreachable.
+export function constantBranchConditions(statements: [Statement]) : [Violation] =>
+    ai-slop-checks.constantBranchConditions(statements)
+
+## Comparing one identifier to itself is suspicious; floating-point NaN tests can be intentional.
+export function selfComparisonConditions(statements: [Statement]) : [Violation] =>
+    ai-slop-checks.selfComparisonConditions(statements)
+
+## Assigning an identifier back to the same target is a no-op.
+export function selfAssignments(statements: [Statement]) : [Violation] =>
+    ai-slop-checks.selfAssignments(statements)
+
+## Repeated identical imports in the same file; distinct symbols or aliases remain allowed.
+export function duplicateSourceImports(sources: [File]) : [Violation] =>
+    ai-slop-checks.duplicateSourceImports(sources)
+
+## Report the first control-flow statement at nesting depth five, not each statement beneath it.
+export function excessiveControlNesting(statements: [Statement]) : [Violation] =>
+    ai-slop-checks.excessiveControlNesting(statements)
+
+## Equality assertions comparing the same identifier do not independently verify an expected value.
+export function sameValueAssertions(statements: [Statement]) : [Violation] =>
+    ai-slop-checks.sameValueAssertions(statements)
+
+## Python assert disappears under optimization and must not be used for production input validation.
+export function productionAssertValidation(statements: [Statement]) : [Violation] =>
+    ai-slop-checks.productionAssertValidation(statements)
+
+## Async void methods cannot be awaited; conventional EventArgs handlers are exempt.
+export function asyncVoidMethods(methods: [Method]) : [Violation] =>
+    ai-slop-checks.asyncVoidMethods(methods)
+
+## Abrupt thread termination can leave locks and shared state inconsistent.
+export function unsafeThreadStopping(statements: [Statement]) : [Violation] =>
+    ai-slop-checks.unsafeThreadStopping(statements)
+
+## Explicit full garbage collection usually hides an allocation or lifetime problem.
+export function forcedGarbageCollection(statements: [Statement]) : [Violation] =>
+    ai-slop-checks.forcedGarbageCollection(statements)
+
+## Parameterless subprocess waits have no caller-supplied deadline.
+export function unboundedProcessWait(statements: [Statement]) : [Violation] =>
+    ai-slop-checks.unboundedProcessWait(statements)
+
+## Binding every interface is a review signal, not proof that a public server is insecure.
+export function publicListenerBinding(statements: [Statement]) : [Violation] =>
+    ai-slop-checks.publicListenerBinding(statements)
+
+## Branching on exception message text is brittle across versions and localization.
+export function errorMessageControlFlow(statements: [Statement]) : [Violation] =>
+    ai-slop-checks.errorMessageControlFlow(statements)
+
+## Explicit SSL or TLS 1.0/1.1 selections preserve obsolete protocol defaults.
+export function legacyTlsProtocols(statements: [Statement]) : [Violation] =>
+    ai-slop-checks.legacyTlsProtocols(statements)
+
+## Operational safeguards for production; assertion checks additionally inspect the test scope.
+export function operationalSafetyChecks(production: Codebase, tests: Codebase) : [Violation] =>
+    ai-slop-checks.operationalSafetyChecks(production, tests)

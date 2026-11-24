@@ -933,6 +933,7 @@ public class JavaScriptSourceParser : ISourceParser
                         statement = new JavaScriptStatementInfo(new StatementInfo(kind, keywords, null, null, [], token.Line, isInMethod))
                         {
                             Condition = TokenText(open + 1, close),
+                            ConditionExpression = kind == "catch" ? null : ParseExpression(open + 1, close),
                             IsBraced = body < end && _tok[body].IsPunct("{"),
                             IsErrorHandler = kind == "catch", IsGenericErrorHandler = kind == "catch",
                             HasRethrow = kind == "catch" && ScanForRethrow(body, statementEnd),
@@ -949,12 +950,23 @@ public class JavaScriptSourceParser : ISourceParser
                         };
                     }
                 }
-                else if (token.IsWord("try"))
+                else if (token.IsWord("try") || token.IsWord("finally"))
                 {
                     statementEnd = idx + 1 < end && _tok[idx + 1].IsPunct("{")
                         ? FindMatchingBrace(idx + 1) + 1 : idx + 1;
-                    statement = new JavaScriptStatementInfo(new StatementInfo("try", [], null, null, [], token.Line, isInMethod))
+                    statement = new JavaScriptStatementInfo(new StatementInfo(token.Value, [], null, null, [], token.Line, isInMethod))
                     { IsBraced = true };
+                }
+                else if (token.IsIdent && idx + 1 < end && _tok[idx + 1].IsPunct("=") &&
+                    (idx == start || !(_tok[idx - 1].IsPunct(".") || _tok[idx - 1].IsWord("let") ||
+                        _tok[idx - 1].IsWord("const") || _tok[idx - 1].IsWord("var"))))
+                {
+                    int valueEnd = SkipToSemi(idx + 2, end);
+                    if (valueEnd > idx + 2 && _tok[valueEnd - 1].IsPunct(";")) { valueEnd--; }
+                    statement = new JavaScriptStatementInfo(new StatementInfo("assignment", [], null, token.Value, [], token.Line, isInMethod))
+                    {
+                        ValueExpression = ParseExpression(idx + 2, valueEnd)
+                    };
                 }
                 else if (token.IsWord("return") || token.IsWord("throw") || token.IsWord("yield") ||
                     token.IsWord("await") && (idx == start || !_tok[idx - 1].IsWord("for")))
@@ -1313,7 +1325,7 @@ public class JavaScriptSourceParser : ISourceParser
         }
 
         // Last binary '+' outside brackets; bails out on lower-precedence operators it cannot nest.
-        private int TopLevelPlus(int start, int end)
+        private int TopLevelBinary(int start, int end, string[] operators)
         {
             int found = -1;
             for (int index = start; index < end; index++)
@@ -1327,11 +1339,16 @@ public class JavaScriptSourceParser : ISourceParser
                     continue;
                 }
                 if (token.Kind != JsTok.Punct) { continue; }
-                if (token.Value is "?" or "=>" or "&&" or "||" or "??" or "==" or "===" or "!=" or "!==" or "=" or ":" or ",")
+                if (token.Value is "?" or "=>" or "&&" or "||" or "??" or "=" or ":" or ",")
                 {
                     return -1;
                 }
-                if (token.Value == "+" && index > start &&
+                if (token.Value is "==" or "===" or "!=" or "!==" or "<" or ">" or "<=" or ">=" &&
+                    !operators.Contains(token.Value))
+                {
+                    return -1;
+                }
+                if (operators.Contains(token.Value) && index > start &&
                     (_tok[index - 1].IsIdent || _tok[index - 1].IsStr || _tok[index - 1].Kind == JsTok.Number ||
                         _tok[index - 1].IsPunct(")") || _tok[index - 1].IsPunct("]")))
                 {
@@ -1419,12 +1436,16 @@ public class JavaScriptSourceParser : ISourceParser
                 }
             }
 
-            int plus = TopLevelPlus(start, end);
+            int plus = TopLevelBinary(start, end, ["==", "===", "!=", "!==", "<", ">", "<=", ">="]);
+            if (plus < 0)
+            {
+                plus = TopLevelBinary(start, end, ["+"]);
+            }
             if (plus > start)
             {
                 return new("binary")
                 {
-                    Name = "+", Children = [ParseExpression(start, plus), ParseExpression(plus + 1, end)]
+                    Name = _tok[plus].Value, Children = [ParseExpression(start, plus), ParseExpression(plus + 1, end)]
                 };
             }
 

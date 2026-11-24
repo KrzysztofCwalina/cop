@@ -34,14 +34,45 @@ internal sealed class GoStructuralFacts : TokenStructureWalker<GoToken>
         List<GoToken> tokens = Tokens;
         int start = Start, end = End;
         GoToken token = tokens[i];
+        if (token.Kind == GoTokenKind.Identifier && i + 2 < end && tokens[i + 1].Value == "=" &&
+            (i == start || tokens[i - 1].Value is not "." and not "var"))
+        {
+            int valueEnd = i + 2;
+            while (valueEnd < end && tokens[valueEnd].Line == token.Line &&
+                tokens[valueEnd].Value is not ";" and not "}")
+            {
+                valueEnd++;
+            }
+            GoStatementInfo assignment = new GoStatementInfo(new StatementInfo("assignment", [], null, token.Value, [],
+                token.Line, InMethod))
+            {
+                Column = token.Col, ValueExpression = Expression(i + 2, valueEnd)
+            };
+            Attach(assignment, Parent);
+            Statements.Add(assignment);
+        }
         StatementInfo? control = Statements.FirstOrDefault(s => s.Line == token.Line &&
             (s.Kind == token.Value || token.Value == "for" && s.Kind == "range"
                 || token.Value == "switch" && s.Kind == "type-switch"
                 || token.Value == "panic" && s.Kind == "throw"
-                || token.Value == "recover" && s.Kind == "catch"));
+                || token.Value == "recover" && s.Kind == "catch") &&
+            (s.Column is null || s.Column == token.Col));
         if (control is not null)
         {
+            control.Column = token.Col;
             Attach(control, Parent);
+            if (token.Value == "if")
+            {
+                int conditionEnd = i + 1;
+                while (conditionEnd < end && tokens[conditionEnd].Value != "{")
+                {
+                    conditionEnd++;
+                }
+                if (conditionEnd < end)
+                {
+                    control.ConditionExpression = Expression(i + 1, conditionEnd);
+                }
+            }
             if (token.Value is "if" or "for" or "switch" or "select")
             {
                 Pending = control;
@@ -143,7 +174,11 @@ internal sealed class GoStructuralFacts : TokenStructureWalker<GoToken>
             return Expression(start + 1, end - 1);
         }
 
-        int binary = TopLevelBinary(start, end, ["+", "-"]);
+        int binary = TopLevelBinary(start, end, ["==", "!=", "<", ">", "<=", ">="]);
+        if (binary < 0)
+        {
+            binary = TopLevelBinary(start, end, ["+", "-"]);
+        }
         if (binary < 0)
         {
             binary = TopLevelBinary(start, end, ["*", "/", "%"]);
@@ -191,7 +226,11 @@ internal sealed class GoStructuralFacts : TokenStructureWalker<GoToken>
             if (token.Kind != GoTokenKind.Punctuation) { continue; }
             if (token.Value is "(" or "[" or "{") { depth++; }
             else if (token.Value is ")" or "]" or "}") { depth--; }
-            else if (depth == 0 && token.Value is "&&" or "||" or "==" or "!=" or "=" or ":=" or ":" or "<-")
+            else if (depth == 0 && token.Value is "&&" or "||" or "=" or ":=" or ":" or "<-")
+            {
+                return -1;
+            }
+            else if (depth == 0 && token.Value is "==" or "!=" or "<" or ">" or "<=" or ">=" && !operators.Contains(token.Value))
             {
                 return -1;
             }

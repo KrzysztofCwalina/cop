@@ -417,6 +417,12 @@ internal sealed class PythonAstMapper(string path, string source)
 
             string? member = kind == "Call" ? Kind(target) == "Name" ? String(target, "id")
                 : Kind(target) == "Attribute" ? String(target, "attr") : null : null;
+            JsonElement assignmentTarget = kind == "Assign"
+                ? Items(Get(node, "targets")).FirstOrDefault() : Get(node, "target");
+            if (kind is "Assign" or "AnnAssign" && Kind(assignmentTarget) == "Name")
+            {
+                member = String(assignmentTarget, "id");
+            }
             PythonStatementInfo statement = new PythonStatementInfo(new StatementInfo(statementKind, [], typeName, member,
                 args.Select(LiteralArgument).Concat(kwargs.Select(k => LiteralArgument(Get(k, "value")))).ToList(),
                 Line(node), method is not null))
@@ -724,6 +730,9 @@ internal sealed class PythonAstMapper(string path, string source)
             "Starred" => new("spread") { Children = [Expression(Get(node, "value"))] },
             "BinOp" => new("binary") { Name = Kind(Get(node, "op")),
                 Children = [Expression(Get(node, "left")), Expression(Get(node, "right"))] },
+            "Compare" when Items(Get(node, "ops")).Count() == 1 =>
+                new("binary") { Name = Kind(Items(Get(node, "ops")).Single()),
+                    Children = [Expression(Get(node, "left")), Expression(Items(Get(node, "comparators")).Single())] },
             "JoinedStr" => new("interpolation") { Children = Items(Get(node, "values"))
                 .Where(v => Kind(v) == "FormattedValue").Select(v => Expression(Get(v, "value"))).ToList() },
             "Constant" => new("literal"),

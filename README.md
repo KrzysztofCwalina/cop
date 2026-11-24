@@ -142,7 +142,15 @@ Cop also supports **Rust**, **Go**, and **Java** — see the [Language Walkthrou
 Beyond source code, Cop ships native C# providers for common **config formats and scripts** — **YAML** (CI workflows, Kubernetes, compose), **Dockerfile**, **XML** (`.csproj`/`pom.xml`), **OpenAPI**, **Bash**, **PowerShell**, and **SQL** — so you can enforce rules on infrastructure and config too (e.g. pin GitHub Actions to a SHA, forbid `:latest` base images, flag `UPDATE`/`DELETE` without `WHERE`). See the [samples](docs/samples.md#formats-config--scripts).
 
 You can see all pre-built packages by executing `cop package list`.
-You can see details of packages, including usage samples, with `cop help <package_namwe>`.
+Browse documentation for all packages in the
+[Package Reference](https://krzysztofcwalina.github.io/cop/reference.html).
+It includes types, predicates, functions, checks, and package samples.
+For terminal help, including usage samples, run `cop help <package-name>`.
+
+The shared deterministic rules for common agentic-coding problems live in the
+**`ai-slop-checks`** package and namespace. Select it under **Checks** in the reference,
+or run `cop help ai-slop-checks`. All six standard language check suites include it.
+Existing `code-quality-checks` imports remain supported through a compatibility package.
 
 ## VS Code Extension
 
@@ -156,6 +164,7 @@ cop vscode
 
 - [Samples](docs/samples.md) — all runnable examples in this repo
 - [Package Reference](https://krzysztofcwalina.github.io/cop/reference.html) — types, predicates, and checks
+- [AI Slop Checks](packages/checks/ai-slop-checks/ai-slop-checks.md) — shared deterministic rule catalog, language coverage, and research
 - [Language Reference](docs/language-reference.md) — full DSL syntax
 - [CLI Reference](docs/cli-reference.md) — all commands and options
 - [Static Analysis with Cop](docs/static-analysis.md) — writing source code checks

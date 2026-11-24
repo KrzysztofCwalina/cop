@@ -6,12 +6,12 @@ description: Rust coding conventions and correctness checks for coding agents
 authors: cop-team
 tags: rust, coding-standards, correctness
 language: Rust
-dependencies: ['github.com/KrzysztofCwalina/cop/rust: 2.0.0', 'github.com/KrzysztofCwalina/cop/code: 1.2.0', 'github.com/KrzysztofCwalina/cop/code-quality-checks: 1.0.0']
+dependencies: ['github.com/KrzysztofCwalina/cop/rust: 2.0.0', 'github.com/KrzysztofCwalina/cop/code: 1.2.0', 'github.com/KrzysztofCwalina/cop/ai-slop-checks: 1.0.0']
 ---
 
 # Rust Checks
 
-The standard suite includes `codeQualityChecks(cb)` from `code-quality-checks`,
+The standard suite includes `aiSlopChecks(cb)` from `ai-slop-checks`,
 including unconditional `assert!(true)` and explicit unfinished-code review.
 Catch/except rules do not apply to Rust; see the shared package's coverage table.
 

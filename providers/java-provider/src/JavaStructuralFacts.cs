@@ -37,8 +37,24 @@ internal sealed class JavaStructuralFacts : TokenStructureWalker<JavaToken>
         int start = Start, end = End;
         JavaToken token = tokens[i];
         int column = token.Start - _source.LastIndexOf('\n', Math.Max(0, token.Start - 1));
+        if (token.Kind == JavaTokenKind.Identifier && i + 2 < end && tokens[i + 1].Value == "=" &&
+            (i == start || tokens[i - 1].Value is ";" or "{" or "}"))
+        {
+            int valueEnd = i + 2;
+            while (valueEnd < end && tokens[valueEnd].Value != ";")
+            {
+                valueEnd++;
+            }
+            JavaStatementInfo assignment = new JavaStatementInfo(new StatementInfo("assignment", [], null, token.Value, [],
+                token.Line, InMethod))
+            {
+                Column = column, SyntaxStart = token.Start, ValueExpression = Expression(i + 2, valueEnd)
+            };
+            Attach(assignment, Parent);
+            Statements.Add(assignment);
+        }
         if (token.Kind == JavaTokenKind.Keyword &&
-            token.Value is "if" or "while" or "return" or "switch" or "else" or "do" or "break" or "continue")
+            token.Value is "if" or "while" or "return" or "switch" or "else" or "do" or "break" or "continue" or "finally")
         {
             JavaStatementInfo statement = new JavaStatementInfo(new StatementInfo(token.Value, [], null, null, [], token.Line, InMethod))
             {
@@ -48,13 +64,22 @@ internal sealed class JavaStructuralFacts : TokenStructureWalker<JavaToken>
             };
             Attach(statement, Parent);
             Statements.Add(statement);
+            if (token.Value is "if" or "while" or "switch" &&
+                i + 1 < end && tokens[i + 1].Value == "(")
+            {
+                int conditionClose = Matching(i + 1, end);
+                if (conditionClose < end)
+                {
+                    statement.ConditionExpression = Expression(i + 2, conditionClose);
+                }
+            }
             if (token.Value == "return")
             {
                 int last = i + 1;
                 while (last < end && tokens[last].Value != ";") { last++; }
                 statement.ValueExpression = Expression(i + 1, last);
             }
-            if (token.Value is "if" or "while" or "switch" or "else" or "do")
+            if (token.Value is "if" or "while" or "switch" or "else" or "do" or "finally")
             {
                 Pending = statement;
             }
@@ -193,12 +218,16 @@ internal sealed class JavaStructuralFacts : TokenStructureWalker<JavaToken>
             return Expression(start + 1, end - 1);
         }
 
-        int plus = TopLevelPlus(start, end);
+        int plus = TopLevelBinary(start, end, ["==", "!=", "<", ">", "<=", ">="]);
+        if (plus < 0)
+        {
+            plus = TopLevelBinary(start, end, ["+"]);
+        }
         if (plus > start)
         {
             return new("binary")
             {
-                Name = "+", Children = [Expression(start, plus), Expression(plus + 1, end)]
+                Name = tokens[plus].Value, Children = [Expression(start, plus), Expression(plus + 1, end)]
             };
         }
 
@@ -228,7 +257,7 @@ internal sealed class JavaStructuralFacts : TokenStructureWalker<JavaToken>
     }
 
     // Last binary '+' outside brackets; bails out on lower-precedence operators it cannot nest.
-    private int TopLevelPlus(int start, int end)
+    private int TopLevelBinary(int start, int end, string[] operators)
     {
         List<JavaToken> tokens = Tokens;
         int depth = 0, found = -1;
@@ -238,11 +267,15 @@ internal sealed class JavaStructuralFacts : TokenStructureWalker<JavaToken>
             if (token.Kind != JavaTokenKind.Punctuation) { continue; }
             if (token.Value is "(" or "[" or "{") { depth++; }
             else if (token.Value is ")" or "]" or "}") { depth--; }
-            else if (depth == 0 && token.Value is "?" or "->" or "&&" or "||" or "==" or "!=" or "=" or ":")
+            else if (depth == 0 && token.Value is "?" or "->" or "&&" or "||" or "=" or ":")
             {
                 return -1;
             }
-            else if (depth == 0 && token.Value == "+" && i > start &&
+            else if (depth == 0 && token.Value is "==" or "!=" or "<" or ">" or "<=" or ">=" && !operators.Contains(token.Value))
+            {
+                return -1;
+            }
+            else if (depth == 0 && operators.Contains(token.Value) && i > start &&
                 (tokens[i - 1].Kind is JavaTokenKind.Identifier or JavaTokenKind.StringLiteral or JavaTokenKind.NumberLiteral
                     || tokens[i - 1].Value is ")" or "]"))
             {

@@ -377,6 +377,7 @@ internal sealed class TypeScriptProjection(string? searchPath)
         public string? Expression { get; set; }
         /// <summary>Gets or sets the structured value expression.</summary>
         public ExpressionInfo? ValueExpression { get; set; }
+        public ExpressionInfo? ConditionExpression { get; set; }
         /// <summary>Gets or sets interfaces of a constructed type.</summary>
         public List<string> ConstructedTypeInterfaces { get; set; } = [];
         /// <summary>Gets or sets the statement's starting column.</summary>
@@ -393,6 +394,7 @@ internal sealed class TypeScriptProjection(string? searchPath)
                 CallTarget = CallTarget, ArgumentExpressions = ArgumentExpressions, HasRethrow = HasRethrow,
                 IsErrorHandler = IsErrorHandler, IsGenericErrorHandler = IsGenericErrorHandler,
                 IsBraced = IsBraced, Condition = Condition, Expression = Expression, ValueExpression = ValueExpression,
+                ConditionExpression = ConditionExpression,
                 Column = Column, EndLine = EndLine, EndColumn = EndColumn,
                 ConstructedTypeInterfaces = ConstructedTypeInterfaces,
                 ReceiverType = ReceiverType, ValueType = ValueType, ReferencedCallable = ReferencedCallable,

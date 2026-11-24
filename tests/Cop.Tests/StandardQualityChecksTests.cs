@@ -23,6 +23,31 @@ public class StandardQualityChecksTests
     [TearDown]
     public void TearDown() => Directory.Delete(_root, recursive: true);
 
+    [TestCase("ai-slop-checks", "ai-slop-checks.aiSlopChecks", "ai-slop-checks.constantAssertions")]
+    [TestCase("code-quality-checks", "code-quality-checks.codeQualityChecks", "code-quality-checks.constantAssertions")]
+    [TestCase("ai-slop-checks\nimport code-quality-checks", "ai-slop-checks.aiSlopChecks", "code-quality-checks.constantAssertions")]
+    public async Task CanonicalAndCompatibilityNamespacesPreserveFindings(
+        string imports, string suite, string rule)
+    {
+        Write("Input.cs", "class Input { void Run(bool actual) { Assert.True(true); Assert.True(actual); } }");
+        File.WriteAllText(Path.Combine(_root, "main.cop"), $$"""
+            import code
+            import csharp
+            import {{imports}}
+            let cb = csharp.parse()
+            command MAIN = ({{suite}}(cb).Where(item.Check == 'constantAssertions') +
+                {{rule}}(cb.Statements)).Select(item.Check)
+            """);
+        var result = await Engine.RunAsync(_root, Path.Combine(_root, "target"), new EngineRunOptions
+        {
+            AdditionalFeedPaths = [Path.Combine(_repo, "packages")]
+        });
+        Assert.That(result.HasParseErrors, Is.False, string.Join("\n", result.ParseErrors));
+        Assert.That(result.HasFatalErrors, Is.False, string.Join("\n", result.Errors));
+        Assert.That(result.Outputs.Select(output => output.Message),
+            Is.EqualTo(new[] { "constantAssertions", "constantAssertions" }));
+    }
+
     [TestCase("csharp", "Input.cs", "class Input { void Run(bool actual) { Assert.True(true); Assert.True(actual); Assert.False(true); } }")]
     [TestCase("python", "input.py", "def run(actual):\n    assert True\n    assert actual\n    assert False\n")]
     [TestCase("javascript", "input.js", "function run(actual) { assert.ok(true); assert.ok(actual); assert.ok(false); }")]
@@ -134,6 +159,138 @@ public class StandardQualityChecksTests
         await AssertRule("csharp", "backupSourceFiles(cb.Files)", ["backupSourceFiles"]);
     }
 
+    [Test]
+    public async Task LoggingRulesDetectInterpolatedMessagesAndSensitiveArgumentsOnly()
+    {
+        Write("Input.cs", """
+            class Input {
+                ILogger logger;
+                void Run(string accessToken, string status) {
+                    logger.LogInformation($"Status {status}");
+                    logger.LogInformation("Token {Token}", accessToken);
+                    logger.LogInformation("Status {Status}", status);
+                }
+            }
+            """);
+        await AssertRule("csharp", "securityChecks(cb.Statements)",
+            ["interpolatedLogMessages", "sensitiveDataInLogs"]);
+    }
+
+    [TestCase("python", "input.py", "import pickle\nimport yaml\ndef run(data, stream):\n    pickle.load(stream)\n    yaml.load(data)\n    yaml.load(data, Loader=yaml.SafeLoader)\n")]
+    [TestCase("java", "Input.java", "class Input { Object run(ObjectInputStream input) { return input.readObject(); } }")]
+    public async Task UnsafeDeserializationFlagsKnownUnsafeReaders(string language, string filename, string source)
+    {
+        Write(filename, source);
+        await AssertRule(language, "unsafeDeserialization(cb.Statements)",
+            language == "python" ? ["unsafeDeserialization", "unsafeDeserialization"] : ["unsafeDeserialization"]);
+    }
+
+    [Test]
+    public async Task InsecureRandomRuleRequiresSecretLikeAssignment()
+    {
+        Write("Input.cs", """
+            class Input {
+                void Run() {
+                    var token = new Random().Next();
+                    var item = new Random().Next();
+                    var secureToken = RandomNumberGenerator.GetInt32(100000);
+                }
+            }
+            """);
+        await AssertRule("csharp", "insecureRandomForSecrets(cb.Statements)", ["insecureRandomForSecrets"]);
+    }
+
+    [TestCase("javascript", "input.js", "function run() { const token = Math.random(); }")]
+    [TestCase("rust", "input.rs", "fn run() { let token = rand::random::<u64>(); }\n")]
+    public async Task InsecureRandomRuleSupportsParsedAssignmentsAcrossLanguages(string language, string filename, string source)
+    {
+        Write(filename, source);
+        await AssertRule(language, "insecureRandomForSecrets(cb.Statements)", ["insecureRandomForSecrets"]);
+    }
+
+    [Test]
+    public async Task LocalhostUrlsAreDetectedOnlyAsUrlLiterals()
+    {
+        Write("Input.cs", """
+            class Input {
+                void Run() {
+                    Fetch("http://localhost:3000/api");
+                    Fetch("https://127.0.0.1/health");
+                    Fetch("https://service.example/api");
+                    Fetch("localhost is a useful hostname");
+                }
+            }
+            """);
+        await AssertRule("csharp", "hardcodedLocalUrls(cb.Statements)",
+            ["hardcodedLocalUrls", "hardcodedLocalUrls"]);
+    }
+
+    [Test]
+    public async Task IoInLoopsFlagsDatabaseCallsButNotCallsOutsideLoops()
+    {
+        Write("Input.cs", """
+            class Input {
+                void Run(int[] ids, Database db) {
+                    foreach (var id in ids) {
+                        db.Query(id);
+                    }
+                    db.Query(0);
+                }
+            }
+            """);
+        await AssertRule("csharp", "ioInLoops(cb.Statements)", ["ioInLoops"]);
+    }
+
+    [Test]
+    public async Task AsyncRulesFindMissingAwaitAndBlockingCalls()
+    {
+        Write("Input.cs", """
+        using System.Threading.Tasks;
+        class Input {
+            async Task MissingAwait() { Work(); }
+            async Task Good() { await Task.Delay(1); }
+            void Work() { }
+        }
+        """);
+        await AssertRule("csharp", "asyncWithoutAwait(cb.Methods)", ["asyncWithoutAwait"]);
+
+        Write("input.py", """
+            import time
+            async def blocking():
+                time.sleep(1)
+                await other()
+            """);
+        await AssertRule("python", "blockingCallsInAsync(cb.Statements)", ["blockingCallsInAsync"]);
+    }
+
+    [Test]
+    public async Task TestScaffoldingIsReportedOnlyInProductionScope()
+    {
+        Write("src\\service.py", "from unittest.mock import Mock\n");
+        Write("tests\\test_service.py", "from unittest.mock import Mock\n");
+        await AssertRule("python", "testScaffoldingInProduction(qualityProductionScope(cb).Files)",
+            ["testScaffoldingInProduction"]);
+    }
+
+    [Test]
+    public async Task SpeculativeAbstractionsFlagSingleImplementationInterfaces()
+    {
+        Write("Input.cs", """
+            interface IRunner { void Run(); }
+            class Runner : IRunner { public void Run() { } }
+            class OtherRunner : IRunner { public void Run() { } }
+            interface IStore { void Save(); }
+            class Store : IStore { public void Save() { } }
+            class Target { public void Run(int value) { } }
+            class Facade {
+                Target target;
+                public void Forward(int value) { target.Run(value); }
+            }
+            """);
+        await AssertRule("csharp", "speculativeAbstractions(cb.Methods, cb.Types)",
+            ["speculativeAbstractions", "speculativeAbstractions"]);
+    }
+
     [TestCase("csharp", "Input.cs", "class Input { void Run() { try { Work(); } catch (IOException error) { } } void Good() { try { Work(); } catch (IOException error) { throw; } } }")]
     [TestCase("java", "Input.java", "class Input { void run() { try { work(); } catch (RuntimeException error) {} } void good() { try { work(); } catch (RuntimeException error) { throw error; } } }")]
     public async Task EmptyHandlersDoNotCountCatchBindingsAsBodyStatements(string language, string filename, string source)
@@ -185,14 +342,17 @@ public class StandardQualityChecksTests
         File.WriteAllText(path, source);
     }
 
-    private async Task AssertRule(string language, string expression, string[] expected)
+    private Task AssertRule(string language, string expression, string[] expected) =>
+        AssertOutput(language, expression + ".Select(item.Check)", expected);
+
+    private async Task AssertOutput(string language, string command, string[] expected)
     {
         File.WriteAllText(Path.Combine(_root, "main.cop"), $$"""
             import code
             import code-quality-checks
             import {{language}}
             let cb = {{language}}.parse()
-            command MAIN = {{expression}}.Select(item.Check)
+            command MAIN = {{command}}
             """);
         for (int run = 0; run < 2; run++)
         {
@@ -202,7 +362,7 @@ public class StandardQualityChecksTests
             });
             Assert.That(result.HasParseErrors, Is.False, string.Join("\n", result.ParseErrors));
             Assert.That(result.HasFatalErrors, Is.False, string.Join("\n", result.Errors));
-            Assert.That(result.Outputs.Select(output => output.Message), Is.EqualTo(expected), $"Run {run}");
+            Assert.That(result.Outputs.Select(output => output.Message).ToArray(), Is.EqualTo(expected), $"Run {run}");
         }
     }
 }

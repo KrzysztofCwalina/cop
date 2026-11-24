@@ -2,7 +2,7 @@
 
 import code
 import csharp
-import code-quality-checks
+import ai-slop-checks
 
 let cb = codebase(csharp.parse())
 
@@ -1094,7 +1094,7 @@ export function csharpChecks(cb: Codebase) : [Violation] =>
     csharpCorrectnessChecks(cb) +
     csharpStyleChecks(cb) +
     fdgChecks(cb) +
-    codeQualityChecks(cb)
+    aiSlopChecks(cb)
 
 export let csharp-checks = csharpChecks(cb)
 

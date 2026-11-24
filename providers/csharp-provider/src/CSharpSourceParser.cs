@@ -1506,6 +1506,8 @@ public class CSharpSourceParser : ISourceParser
     private static ExpressionInfo ExtractExpression(ExpressionSyntax expression) => expression switch
     {
         ParenthesizedExpressionSyntax p => ExtractExpression(p.Expression),
+        AwaitExpressionSyntax awaited => new("await") { Target = ExtractExpression(awaited.Expression) },
+        AnonymousFunctionExpressionSyntax => new("lambda"),
         LiteralExpressionSyntax literal when literal.Token.Value is string value =>
             new("stringLiteral") { StringValue = value },
         LiteralExpressionSyntax literal when literal.Token.Value is bool value =>
@@ -1545,6 +1547,9 @@ public class CSharpSourceParser : ISourceParser
             Children = call.ArgumentList.Arguments.Select(a => ExtractExpression(a.Expression)).ToList()
         },
         _ => new("other")
+        {
+            Children = expression.ChildNodes().OfType<ExpressionSyntax>().Select(ExtractExpression).ToList()
+        }
     };
 
     private static ExpressionInfo? ExtractConditionalReceiver(MemberBindingExpressionSyntax member)
