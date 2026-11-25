@@ -16,12 +16,12 @@ public class LanguageCheckPackageTests
 {
     private static string RepoRoot => FindRepoRoot();
 
-    [TestCase("csharp-checks", 57)]
-    [TestCase("python-checks", 22)]
-    [TestCase("javascript-checks", 7)]
-    [TestCase("go-checks", 11)]
-    [TestCase("java-checks", 3)]
-    [TestCase("rust-checks", 17)]
+    [TestCase("csharp-checks", 121)]
+    [TestCase("python-checks", 86)]
+    [TestCase("javascript-checks", 71)]
+    [TestCase("go-checks", 75)]
+    [TestCase("java-checks", 68)]
+    [TestCase("rust-checks", 81)]
     public async Task CleanLanguageSuitesCountOnlyTheirExecutedLeafChecks(string package, int checks)
     {
         var target = Path.Combine(Path.GetTempPath(), "cop-clean-checks-" + Guid.NewGuid().ToString("N"));

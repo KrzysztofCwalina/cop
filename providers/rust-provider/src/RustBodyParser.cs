@@ -103,7 +103,20 @@ internal sealed class RustBodyParser(List<RustToken> tokens, string source, List
             }
             else
             {
-                Attach(parent, ReadExpression().Roots);
+                Expression expression = ReadExpression();
+                if (expression.Info is { Kind: "binary", Name: "=", Children.Count: 2 } &&
+                    expression.Info.Children[0].Kind == "identifier")
+                {
+                    StatementInfo assignment = Add(start, "assignment", parent, [],
+                        member: expression.Info.Children[0].Name);
+                    assignment.ValueExpression = expression.Info.Children[1];
+                    Attach(assignment, expression.Roots);
+                    Finish(assignment, start);
+                }
+                else
+                {
+                    Attach(parent, expression.Roots);
+                }
             }
 
             if (_pos == start)
@@ -202,6 +215,11 @@ internal sealed class RustBodyParser(List<RustToken> tokens, string source, List
             condition: Text(conditionStart, conditionEnd), braced: Value == "{");
         statement.ValueExpression = conditionExpressions.Count == 1 ? conditionExpressions[0]
             : conditionExpressions.Count > 1 ? new("other") { Children = conditionExpressions } : null;
+        if (keyword is "if" or "while")
+        {
+            statement.ConditionExpression = tokens[conditionStart].Value == "let"
+                ? null : statement.ValueExpression;
+        }
         Attach(statement, conditionRoots);
         if (keyword == "match")
         {
@@ -554,9 +572,13 @@ internal sealed class RustBodyParser(List<RustToken> tokens, string source, List
             return new(new(decoded is not null ? "stringLiteral" : "literal")
             { StringValue = decoded }, start, _pos, []);
         }
-        if (token.Kind == RustTokenKind.NumberLiteral || token.Value is "true" or "false")
+        if (token.Value is "true" or "false")
         {
-            return new(new("literal") { Name = token.Value }, start, _pos, []);
+            return new(new("booleanLiteral") { BooleanValue = token.Value == "true" }, start, _pos, []);
+        }
+        if (token.Kind == RustTokenKind.NumberLiteral)
+        {
+            return new(new("numericLiteral") { Name = token.Value }, start, _pos, []);
         }
 
         return new(new(token.Kind is RustTokenKind.Identifier || token.Value is "self" or "Self" or "crate" or "super"

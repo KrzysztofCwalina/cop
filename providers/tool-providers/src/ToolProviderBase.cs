@@ -208,6 +208,50 @@ public abstract class ToolProvider : DataProvider
         return false;
     }
 
+    /// <summary>
+    /// Runs a tool that writes a JSON array of findings to stdout and maps each finding in a
+    /// non-excluded file to a violation.
+    /// </summary>
+    /// <param name="invocation">The tool command to run.</param>
+    /// <param name="rootPath">The analysis root used to relativize reported paths.</param>
+    /// <param name="excluded">Directories whose findings are skipped.</param>
+    /// <param name="resultsProperty">The root property holding the findings array, or <c>null</c> when the root is the array.</param>
+    /// <param name="getPath">Reads the reported file path of a finding.</param>
+    /// <param name="createViolation">Creates the violation for a finding and its normalized file path.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>The violations, or an empty list when the tool reports nothing.</returns>
+    protected static async ValueTask<List<object>> RunJsonToolAsync(
+        ToolInvocation invocation, string rootPath, IReadOnlySet<string> excluded, string? resultsProperty,
+        Func<JsonElement, string> getPath, Func<JsonElement, string, ToolViolation> createViolation,
+        CancellationToken cancellationToken)
+    {
+        (string? stdout, string _, int _) = await RunProcessAsync(invocation, cancellationToken).ConfigureAwait(false);
+        if (string.IsNullOrWhiteSpace(stdout))
+        {
+            return [];
+        }
+
+        List<object> violations = new List<object>();
+        using JsonDocument doc = JsonDocument.Parse(stdout);
+        JsonElement results = doc.RootElement;
+        if (resultsProperty is not null && !doc.RootElement.TryGetProperty(resultsProperty, out results))
+        {
+            return [];
+        }
+
+        foreach (JsonElement item in results.EnumerateArray())
+        {
+            string filePath = NormalizePath(getPath(item), rootPath);
+            if (string.IsNullOrEmpty(filePath) || IsExcluded(filePath, excluded))
+            {
+                continue;
+            }
+
+            violations.Add(createViolation(item, filePath));
+        }
+        return violations;
+    }
+
     private static string GetShellExecutable() =>
         OperatingSystem.IsWindows() ? "cmd.exe" : "/bin/sh";
 

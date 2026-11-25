@@ -157,12 +157,16 @@ function project(request) {
     function expression(node, depth = 0) {
         if (!node || depth > 64) return { Kind: 'other' };
         const nested = n => expression(n, depth + 1);
-        if (ts.isParenthesizedExpression(node) || ts.isAsExpression(node) ||
-            ts.isTypeAssertionExpression(node) || ts.isNonNullExpression(node) ||
+        if (ts.isAsExpression(node) || ts.isTypeAssertionExpression(node))
+            return { Kind: 'cast', Name: node.type.kind === ts.SyntaxKind.AnyKeyword ? 'any' : text(node.type),
+                Target: nested(node.expression) };
+        if (ts.isParenthesizedExpression(node) || ts.isNonNullExpression(node) ||
             ts.isSatisfiesExpression(node)) return nested(node.expression);
         if (ts.isIdentifier(node) || node.kind === ts.SyntaxKind.ThisKeyword || node.kind === ts.SyntaxKind.SuperKeyword)
             return { Kind: 'identifier', Name: text(node) };
         if (ts.isStringLiteralLike(node)) return { Kind: 'stringLiteral', StringValue: node.text };
+        if (ts.isTemplateExpression(node))
+            return { Kind: 'interpolation', Children: node.templateSpans.map(s => nested(s.expression)) };
         if (ts.isPropertyAccessExpression(node))
             return { Kind: 'memberAccess', Name: node.name.text, Target: nested(node.expression) };
         if (ts.isElementAccessExpression(node))
@@ -172,10 +176,11 @@ function project(request) {
                 Children: (node.arguments || []).map(nested) };
         if (ts.isNumericLiteral(node)) return { Kind: 'numericLiteral', Name: node.text };
         if (node.kind === ts.SyntaxKind.TrueKeyword || node.kind === ts.SyntaxKind.FalseKeyword)
-            return { Kind: 'booleanLiteral', Name: text(node) };
+            return { Kind: 'booleanLiteral', Name: text(node),
+                BooleanValue: node.kind === ts.SyntaxKind.TrueKeyword };
         if (node.kind === ts.SyntaxKind.NullKeyword) return { Kind: 'nullLiteral' };
         if (ts.isBinaryExpression(node)) return {
-            Kind: 'other', Name: text(node.operatorToken), Children: [nested(node.left), nested(node.right)]
+            Kind: 'binary', Name: text(node.operatorToken), Children: [nested(node.left), nested(node.right)]
         };
         if (ts.isArrayLiteralExpression(node)) return { Kind: 'arrayLiteral', Children: node.elements.map(nested) };
         if (ts.isObjectLiteralExpression(node)) return {
@@ -231,7 +236,8 @@ function project(request) {
                 ReturnType: inferredType(checker.getReturnTypeOfSignature(signature)),
                 Parameters: signature.getParameters().map(p => inferredType(checker.getTypeOfSymbolAtLocation(p, node), true)),
                 SourceFile: file.fileName, Line: start.line + 1, Column: start.character + 1,
-                EndLine: end.line + 1, EndColumn: end.character + 1
+                EndLine: end.line + 1, EndColumn: end.character + 1,
+                IsDeprecated: ts.getJSDocTags(declaration).some(t => t.tagName.text === 'deprecated')
             };
             if (!callable.Name || callable.Parameters.some(p => !p)) callable = null;
         }
@@ -568,15 +574,33 @@ function project(request) {
             current = statement(node, kind, owner, parent, {
                 Keywords: ts.isForOfStatement(node) && node.awaitModifier ? ['for', 'await'] :
                     [kind.startsWith('for') ? 'for' : kind],
-                Condition: text(node.condition || node.expression), IsBraced: !!node.statement &&
+                Condition: text(node.condition || node.expression),
+                ConditionExpression: node.condition || ts.isIfStatement(node) || ts.isWhileStatement(node) || ts.isDoStatement(node)
+                    ? expression(node.condition || node.expression) : null,
+                IsBraced: !!node.statement &&
                     ts.isBlock(node.statement) || ts.isIfStatement(node) && ts.isBlock(node.thenStatement)
             });
         } else if (ts.isTryStatement(node)) {
             current = statement(node, 'try', owner, parent, { IsBraced: true });
+            visit(node.tryBlock, owner, current, container);
+            if (node.catchClause) visit(node.catchClause, owner, current, container);
+            if (node.finallyBlock) {
+                const cleanup = statement(node.finallyBlock, 'finally', owner, current, { IsBraced: true });
+                visit(node.finallyBlock, owner, cleanup, container);
+            }
+            return;
         } else if (ts.isCatchClause(node)) {
             current = statement(node, 'catch', owner, parent, {
                 IsErrorHandler: true, IsGenericErrorHandler: true, HasRethrow: containsThrow(node.block), IsBraced: true,
                 ...catchFacts(node)
+            });
+            // The catch binding is a signature, not an executable declaration in the handler body.
+            visit(node.block, owner, current, container);
+            return;
+        } else if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
+            ts.isIdentifier(node.left)) {
+            current = statement(node, 'assignment', owner, parent, {
+                MemberName: node.left.text, ValueExpression: expression(node.right)
             });
         } else if (ts.isReturnStatement(node) || ts.isThrowStatement(node)) {
             current = statement(node, ts.isReturnStatement(node) ? 'return' : 'throw', owner, parent, {

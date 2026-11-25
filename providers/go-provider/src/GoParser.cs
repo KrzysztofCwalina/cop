@@ -113,6 +113,7 @@ internal class GoParser(List<GoToken> tokens, string sourceText, string filePath
             CheckBracketBalance();
         }
 
+        statements.AddRange(ExtractDirectives());
         return new SourceFile(filePath, "go", types, statements, sourceText)
         {
             Namespace = ns,
@@ -561,7 +562,7 @@ internal class GoParser(List<GoToken> tokens, string sourceText, string filePath
         statements.AddRange(methodStatements);
 
         GoMethodDeclaration method = new MethodDeclaration(name, modifiers, [], returnType, parameters, line)
-        { Statements = methodStatements, HasDocComment = hasDoc, ReceiverType = receiverType }
+        { Statements = methodStatements, HasDocComment = hasDoc, ReceiverType = receiverType, EndLine = PreviousLine() }
             .AsGo(
                 isPointerReceiver: isPointerReceiver,
                 hasNamedReturns: hasNamedReturns,
@@ -1025,6 +1026,7 @@ internal class GoParser(List<GoToken> tokens, string sourceText, string filePath
     private GoToken Current() => _pos < tokens.Count ? tokens[_pos] : tokens[^1];
     private GoToken Peek() => _pos + 1 < tokens.Count ? tokens[_pos + 1] : tokens[^1];
     private int CurrentLine() => Current().Line;
+    private int PreviousLine() => _pos > 0 ? tokens[Math.Min(_pos, tokens.Count) - 1].Line : Current().Line;
     private bool IsAtEnd() => _pos >= tokens.Count || Current().Kind == GoTokenKind.Eof;
     private void Advance() { if (!IsAtEnd())
         {
@@ -1183,6 +1185,34 @@ internal class GoParser(List<GoToken> tokens, string sourceText, string filePath
             continue;
         }
         return false;
+    }
+
+    /// <summary>
+    /// Projects //nolint comments as directive statements: ["nolint", ...linters]; no linters means blanket.
+    /// </summary>
+    private IEnumerable<StatementInfo> ExtractDirectives()
+    {
+        foreach (GoToken t in tokens)
+        {
+            if (t.Kind != GoTokenKind.LineComment || !t.Value.StartsWith("//nolint", StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            string rest = t.Value["//nolint".Length..];
+            if (rest.Length > 0 && rest[0] != ':' && !char.IsWhiteSpace(rest[0]))
+            {
+                continue;
+            }
+
+            List<string> keywords = ["nolint"];
+            if (rest.StartsWith(':'))
+            {
+                string linters = rest[1..].Split([' ', '\t', '/'], 2)[0];
+                keywords.AddRange(linters.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+            }
+            yield return new StatementInfo("directive", keywords, null, null, [], t.Line, false);
+        }
     }
 
     private HashSet<int> ExtractCommentLines()

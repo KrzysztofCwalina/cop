@@ -15,6 +15,7 @@
   "language": "Python",
   "dependencies": [
     "github.com/KrzysztofCwalina/cop/python: 2.0.0",
-    "github.com/KrzysztofCwalina/cop/code: 1.2.0"
+    "github.com/KrzysztofCwalina/cop/code: 1.2.0",
+    "github.com/KrzysztofCwalina/cop/ai-slop-checks: 1.0.0"
   ]
 }

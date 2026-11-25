@@ -108,7 +108,7 @@ public static class FilterCompiler
                 StringOp.Contains => value.Contains(sf.Value, StringComparison.OrdinalIgnoreCase),
                 StringOp.Equals => value.Equals(sf.Value, StringComparison.OrdinalIgnoreCase),
                 StringOp.ExactEquals => value.Equals(sf.Value, StringComparison.Ordinal),
-                StringOp.Same => NormalizeIdentifier(value) == NormalizeIdentifier(sf.Value),
+                StringOp.Same => FilterEvaluator.NormalizeIdentifier(value) == FilterEvaluator.NormalizeIdentifier(sf.Value),
                 StringOp.Matches => RegexCache.IsMatch(
                     value, sf.Value, System.Text.RegularExpressions.RegexOptions.None),
                 _ => true
@@ -359,21 +359,5 @@ public static class FilterCompiler
                 _ => true
             };
         };
-    }
-
-    private static string NormalizeIdentifier(string s)
-    {
-        int len = s.Length;
-        Span<char> chars = len <= 128 ? stackalloc char[len] : new char[len];
-        int pos = 0;
-        for (int i = 0; i < len; i++)
-        {
-            char c = s[i];
-            if (c != '_' && c != '-')
-            {
-                chars[pos++] = char.ToLowerInvariant(c);
-            }
-        }
-        return new string(chars[..pos]);
     }
 }

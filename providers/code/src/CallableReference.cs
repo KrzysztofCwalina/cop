@@ -41,4 +41,8 @@ public record CallableReference(string Name, string Signature)
     /// The one-based exclusive ending source column, when available.
     /// </summary>
     public int? EndColumn { get; init; }
+    /// <summary>
+    /// True when the compiler reports the callable or its declaring type as deprecated.
+    /// </summary>
+    public bool IsDeprecated { get; init; }
 }

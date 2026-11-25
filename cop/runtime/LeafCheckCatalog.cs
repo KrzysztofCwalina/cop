@@ -60,6 +60,22 @@ internal sealed class LeafCheckCatalog
             }
         }
 
+        // Mapper overloads can prevent inferred types for intermediate suites.
+        // Recognize their aliases transitively before classifying an outer suite.
+        bool foundAlias;
+        do
+        {
+            foundAlias = false;
+            foreach (LetDecl let in modules.SelectMany(m => m.Module.Declarations).OfType<LetDecl>())
+            {
+                if (!checkLets.Contains(let.Name) && let.Value is { } value &&
+                    CombinesChecks(value, checkFunctions, checkLets))
+                {
+                    foundAlias |= checkLets.Add(let.Name);
+                }
+            }
+        } while (foundAlias);
+
         foreach ((Declaration declaration, Expression? value, string filePath) in candidates)
         {
             if (value is null || !CombinesChecks(value, checkFunctions, checkLets))

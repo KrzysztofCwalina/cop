@@ -206,6 +206,9 @@ public static class CodeBindings
                 ["Documentation"] = o => (object?)((MethodDeclaration)o).DocComment,
                 ["File"] = o => (object?)((MethodDeclaration)o).File,
                 ["Source"] = o => ((MethodDeclaration)o).Source,
+                ["Shape"] = o => ((MethodDeclaration)o).Shape,
+                ["LineCount"] = o => ((MethodDeclaration)o).LineCount,
+                ["CommentLineCount"] = o => ((MethodDeclaration)o).CommentLineCount,
             },
             ["Parameter"] = new()
             {
@@ -318,6 +321,7 @@ public static class CodeBindings
                 ["Column"] = o => ((CallableReference)o).Column,
                 ["EndLine"] = o => ((CallableReference)o).EndLine,
                 ["EndColumn"] = o => ((CallableReference)o).EndColumn,
+                ["IsDeprecated"] = o => (object)((CallableReference)o).IsDeprecated,
             },
             ["Line"] = new()
             {
@@ -345,7 +349,7 @@ public static class CodeBindings
                 ["Language"] = o => ((SourceFile)o).Language,
                 ["Namespace"] = o => ((SourceFile)o).Namespace,
                 ["Usings"] = o => (object)((SourceFile)o).Usings,
-                ["Imports"] = o => ((SourceFile)o).Imports,
+                ["Imports"] = o => CodeCollectionBuilder.LinkImports((SourceFile)o),
                 ["Types"] = o => (object)((SourceFile)o).Types,
                 ["Methods"] = o => (object)((SourceFile)o).Methods,
                 ["Projects"] = o => (object)((SourceFile)o).Projects,
@@ -407,6 +411,7 @@ public static class CodeBindings
                 ["Column"] = o => ((ImportInfo)o).Column,
                 ["EndLine"] = o => ((ImportInfo)o).EndLine,
                 ["EndColumn"] = o => ((ImportInfo)o).EndColumn,
+                ["File"] = o => ((ImportInfo)o).File,
             },
         };
     }

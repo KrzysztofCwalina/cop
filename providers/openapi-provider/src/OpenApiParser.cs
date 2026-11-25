@@ -50,7 +50,7 @@ public static class OpenApiParser
 
             int indent = raw.Length - contentTrim.Length;
             string work = StripInlineComment(contentTrim);
-            if (work.Length == 0 || !TrySplitKeyValue(work, out string? key, out _))
+            if (work.Length == 0 || !YamlMappingSyntax.TrySplitKeyValue(work, out string? key, out _))
             {
                 continue;
             }
@@ -133,7 +133,7 @@ public static class OpenApiParser
             int indent = raw.Length - contentTrim.Length;
             string work = StripInlineComment(contentTrim);
             if (indent == 0
-                && TrySplitKeyValue(work, out string? key, out _)
+                && YamlMappingSyntax.TrySplitKeyValue(work, out string? key, out _)
                 && (key.Equals("openapi", StringComparison.Ordinal) || key.Equals("swagger", StringComparison.Ordinal)))
             {
                 return true;
@@ -166,7 +166,7 @@ public static class OpenApiParser
             }
 
             string work = StripInlineComment(contentTrim);
-            if (!TrySplitKeyValue(work, out string? key, out string? value))
+            if (!YamlMappingSyntax.TrySplitKeyValue(work, out string? key, out string? value))
             {
                 continue;
             }
@@ -196,51 +196,6 @@ public static class OpenApiParser
 
     private static bool IsHttpMethod(string key) => s_httpMethods.Contains(key);
 
-    private static bool TrySplitKeyValue(string s, out string key, out string value)
-    {
-        key = string.Empty;
-        value = string.Empty;
-        int colon = FindMappingColon(s);
-        if (colon < 0)
-        {
-            return false;
-        }
-
-        key = Unquote(s[..colon].TrimEnd(' '));
-        if (key.Length == 0)
-        {
-            return false;
-        }
-
-        string rest = s[(colon + 1)..].Trim(' ');
-        value = Unquote(rest);
-        return true;
-    }
-
-    private static int FindMappingColon(string s)
-    {
-        char quote = '\0';
-        for (int i = 0; i < s.Length; i++)
-        {
-            char c = s[i];
-            if (quote != '\0')
-            {
-                if (c == quote)
-                {
-                    quote = '\0';
-                }
-
-                continue;
-            }
-            if (c == '\'' || c == '"') { quote = c; continue; }
-            if (c == ':' && (i + 1 == s.Length || s[i + 1] == ' '))
-            {
-                return i;
-            }
-        }
-        return -1;
-    }
-
     private static string StripInlineComment(string s)
     {
         char quote = '\0';
@@ -260,19 +215,6 @@ public static class OpenApiParser
             if (c == '#' && (i == 0 || s[i - 1] == ' ' || s[i - 1] == '\t'))
             {
                 return s[..i].TrimEnd(' ');
-            }
-        }
-        return s;
-    }
-
-    private static string Unquote(string s)
-    {
-        if (s.Length >= 2)
-        {
-            char a = s[0], b = s[^1];
-            if ((a == '"' && b == '"') || (a == '\'' && b == '\''))
-            {
-                return s[1..^1];
             }
         }
         return s;

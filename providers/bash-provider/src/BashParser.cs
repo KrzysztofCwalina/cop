@@ -115,7 +115,7 @@ public static class BashParser
 
             foreach (string segment in SplitSimpleCommands(trimmed))
             {
-                List<string> tokens = Tokenize(segment);
+                List<string> tokens = ShellWordTokenizer.Tokenize(segment, '\\');
                 if (tokens.Count == 0 || tokens[0] != "set")
                 {
                     continue;
@@ -241,7 +241,7 @@ public static class BashParser
 
     private static string GetCommandName(string segment)
     {
-        List<string> tokens = Tokenize(segment);
+        List<string> tokens = ShellWordTokenizer.Tokenize(segment, '\\');
         int i = 0;
 
         while (i < tokens.Count && tokens[i] is "if" or "elif" or "then" or "else" or "do" or "while" or "until" or "!" or "time" or "{")
@@ -280,69 +280,6 @@ public static class BashParser
         }
 
         return name;
-    }
-
-    private static List<string> Tokenize(string segment)
-    {
-        List<string> tokens = new List<string>();
-        StringBuilder current = new StringBuilder();
-        char quote = '\0';
-        bool escaped = false;
-
-        foreach (char c in segment)
-        {
-            if (escaped)
-            {
-                current.Append(c);
-                escaped = false;
-                continue;
-            }
-
-            if (c == '\\')
-            {
-                escaped = true;
-                continue;
-            }
-
-            if (quote != '\0')
-            {
-                if (c == quote)
-                {
-                    quote = '\0';
-                }
-                else
-                {
-                    current.Append(c);
-                }
-
-                continue;
-            }
-
-            if (c == '\'' || c == '"')
-            {
-                quote = c;
-                continue;
-            }
-
-            if (char.IsWhiteSpace(c))
-            {
-                if (current.Length > 0)
-                {
-                    tokens.Add(current.ToString());
-                    current.Clear();
-                }
-                continue;
-            }
-
-            current.Append(c);
-        }
-
-        if (current.Length > 0)
-        {
-            tokens.Add(current.ToString());
-        }
-
-        return tokens;
     }
 
     private static bool IsEnvironmentAssignment(string token)

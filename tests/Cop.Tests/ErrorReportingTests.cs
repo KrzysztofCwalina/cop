@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using Cop.Core;
 using Cop.Providers;
 using NUnit.Framework;
 
@@ -16,6 +17,26 @@ namespace Cop.Tests;
 [TestFixture]
 public class ErrorReportingTests
 {
+    [Test]
+    public void InvalidChecksumManifestIsNotReportedAsMissingOrClean()
+    {
+        string project = Path.Combine(TestContext.CurrentContext.WorkDirectory, Guid.NewGuid() + ".cop");
+        var manager = new ChecksumManager(project, TestContext.CurrentContext.WorkDirectory);
+        string manifest = manager.GetManifestPath();
+        manager.SaveManifest(new Dictionary<string, string>());
+        try
+        {
+            File.WriteAllText(manifest, "{");
+            var error = Assert.Throws<InvalidDataException>(() => manager.Verify());
+            Assert.That(error!.Message, Does.Contain(manifest).And.Contain("not valid JSON"));
+        }
+        finally
+        {
+            File.Delete(manifest);
+        }
+        Assert.That(manager.LoadManifest(), Is.Null);
+    }
+
     private static string RepoRoot => FindRepoRoot();
     private static string PackagesDir => Path.Combine(RepoRoot, "packages");
     private static string CopExe => Path.Combine(RepoRoot, "install", "win-x64", "cop.exe");

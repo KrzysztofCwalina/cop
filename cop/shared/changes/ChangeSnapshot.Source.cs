@@ -243,15 +243,12 @@ public sealed partial class ChangeSnapshot
         string? current = Path.GetFullPath(path);
         while (!string.IsNullOrEmpty(current))
         {
-            try
+            // FileInfo reports -1 for a missing path instead of throwing; links report their own attributes.
+            FileAttributes attributes = new FileInfo(current).Attributes;
+            if ((int)attributes != -1 && (attributes & FileAttributes.ReparsePoint) != 0)
             {
-                if ((File.GetAttributes(current) & FileAttributes.ReparsePoint) != 0)
-                {
-                    throw new InvalidOperationException("Source access through symbolic links, junctions, or other reparse points is prohibited.");
-                }
+                throw new InvalidOperationException("Source access through symbolic links, junctions, or other reparse points is prohibited.");
             }
-            catch (FileNotFoundException) { }
-            catch (DirectoryNotFoundException) { }
             current = Path.GetDirectoryName(current);
         }
     }

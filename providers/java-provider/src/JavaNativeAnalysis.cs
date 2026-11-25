@@ -376,12 +376,15 @@ internal static class JavaNativeAnalysis
         foreach (NativeStatement fact in response.Statements)
         {
             Add(fact.ID, fact.ParentID, fact.MethodLine, fact.MethodColumn,
-                new JavaStatementInfo(new StatementInfo(fact.Kind, [], string.IsNullOrEmpty(fact.TypeName) ? null : fact.TypeName, null, [], fact.Line, fact.MethodLine > 0))
+                new JavaStatementInfo(new StatementInfo(fact.Kind, [], string.IsNullOrEmpty(fact.TypeName) ? null : fact.TypeName,
+                    string.IsNullOrEmpty(fact.MemberName) ? null : fact.MemberName, [], fact.Line, fact.MethodLine > 0))
                 {
                     Column = fact.Column,
                     EndLine = fact.EndLine,
                     EndColumn = fact.EndColumn,
                     Condition = string.IsNullOrEmpty(fact.Condition) ? null : fact.Condition,
+                    ConditionExpression = fact.ConditionExpression,
+                    ValueExpression = fact.ValueExpression,
                     Expression = string.IsNullOrEmpty(fact.Expression) ? null : fact.Expression,
                     IsErrorHandler = fact.Kind == "catch",
                     IsGenericErrorHandler = fact.GenericError,
@@ -437,7 +440,8 @@ internal static class JavaNativeAnalysis
         bool UsingResource, bool OwnershipTransferred);
     private sealed record NativeStatement(string ID, string? ParentID, int MethodLine, int MethodColumn, string Kind, string? TypeName, string? Condition,
         string? Expression, bool GenericError, bool Rethrow, bool EnhancedFor, bool TryWithResources, bool OriginalAlwaysRethrown,
-        int Line, int Column, int EndLine, int EndColumn);
+        int Line, int Column, int EndLine, int EndColumn, ExpressionInfo? ConditionExpression,
+        string? MemberName, ExpressionInfo? ValueExpression);
     private record NativeSpan(int Line, int Column, int EndLine, int EndColumn);
     private sealed record NativeParameter(string Name, string Type, bool Variadic, int Line, int Column, int EndLine, int EndColumn)
         : NativeSpan(Line, Column, EndLine, EndColumn)

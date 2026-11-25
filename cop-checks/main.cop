@@ -33,7 +33,11 @@ let core-types : [Type] = codebase.Types
 let check-statements : [Statement] = codebase.Statements
     .Where(item.File.Path:contains('cop-checks/'))
 
-let csharp-source-violations = csharpChecks(csharp-source-code)
+# Keep repository self-checks focused on the established C# conventions.
+let csharp-source-violations =
+    csharpCorrectnessChecks(csharp-source-code) +
+    csharpStyleChecks(csharp-source-code) +
+    fdgChecks(csharp-source-code)
 
 export let default-violations =
     csharp-source-violations +

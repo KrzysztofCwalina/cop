@@ -281,25 +281,6 @@ public static class RunCommand
         // Discover user-global check files (~/.cop/checks/) to include alongside project checks
         string[] userCheckFiles = await GetUserCheckFilesAsync(diagLog);
 
-        // Try streaming mode (auto-detect or by command name)
-        try
-        {
-            using CancellationTokenSource cts = new CancellationTokenSource();
-            Console.CancelKeyPress += (_, e) => { e.Cancel = true; cts.Cancel(); };
-
-            await Engine.RunStreamingAsync(scriptsDir, commandName, cts.Token, diagLog,
-                additionalFeedPaths: FindFeedPathsFromCwd());
-            return 0;
-        }
-        catch (InvalidOperationException ex)
-        {
-            // No streaming command or setup failed — fall through to normal execution
-            diagLog?.Invoke($"[diag] Streaming mode skipped: {ex.Message}");
-        }
-        catch (NotImplementedException)
-        {
-            // Streaming not yet reimplemented — fall through to normal execution
-        }
 
         // Include user-global checks if present
         string[]? allScriptFiles = null;

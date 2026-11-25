@@ -353,7 +353,7 @@ public class TypeSpecRawProvider : DataProvider
     /// Lightweight filter check using FilterEvaluator for top-level record filtering.
     /// Checks Name and optionally Namespace against the pushdown filter.
     /// </summary>
-    private static bool MatchesFilter(FilterExpression? filter, string prop1, string? val1,
+    internal static bool MatchesFilter(FilterExpression? filter, string prop1, string? val1,
         string? prop2 = null, string? val2 = null)
     {
         if (filter is null)

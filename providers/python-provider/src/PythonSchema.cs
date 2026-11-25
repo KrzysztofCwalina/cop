@@ -15,67 +15,14 @@ public static class PythonSchema
     /// <summary>Serializes the Python provider schema as UTF-8 JSON.</summary>
     public static ReadOnlyMemory<byte> GetJson() => s_schema.ToJson();
 
-    private static ProviderSchema Build()
-    {
-        ProviderSchema baseSchema = CodeSchema.Get();
-
-        List<ProviderTypeSchema> types = new List<ProviderTypeSchema>(baseSchema.Types)
-        {
-            new()
-            {
-                Name = "PythonType",
-                Base = "Type",
-                Properties =
-                [
-                    new ProviderPropertySchema { Name = "IsDataclass", Type = "bool" },
-                    new ProviderPropertySchema { Name = "IsEnum", Type = "bool" },
-                    new ProviderPropertySchema { Name = "IsAbstract", Type = "bool" },
-                    new ProviderPropertySchema { Name = "IsNamedTuple", Type = "bool" },
-                    new ProviderPropertySchema { Name = "IsProtocol", Type = "bool" },
-                    new ProviderPropertySchema { Name = "IsException", Type = "bool" },
-                    new ProviderPropertySchema { Name = "HasSlots", Type = "bool" },
-                ],
-            },
-            new()
-            {
-                Name = "PythonMethod",
-                Base = "Method",
-                Properties =
-                [
-                    new ProviderPropertySchema { Name = "IsStaticmethod", Type = "bool" },
-                    new ProviderPropertySchema { Name = "IsClassmethod", Type = "bool" },
-                    new ProviderPropertySchema { Name = "IsProperty", Type = "bool" },
-                    new ProviderPropertySchema { Name = "IsGenerator", Type = "bool" },
-                    new ProviderPropertySchema { Name = "IsAbstractMethod", Type = "bool" },
-                    new ProviderPropertySchema { Name = "IsDunder", Type = "bool" },
-                ],
-            },
-            new()
-            {
-                Name = "PythonStatement",
-                Base = "Statement",
-                Properties =
-                [
-                    new ProviderPropertySchema { Name = "IsWith", Type = "bool" },
-                    new ProviderPropertySchema { Name = "IsAsyncWith", Type = "bool" },
-                    new ProviderPropertySchema { Name = "IsRaise", Type = "bool" },
-                    new ProviderPropertySchema { Name = "IsAssert", Type = "bool" },
-                    new ProviderPropertySchema { Name = "IsComprehension", Type = "bool" },
-                    new ProviderPropertySchema { Name = "IsGlobal", Type = "bool" },
-                    new ProviderPropertySchema { Name = "IsNonlocal", Type = "bool" },
-                    new ProviderPropertySchema { Name = "IsYield", Type = "bool" },
-                    new ProviderPropertySchema { Name = "IsAsyncFor", Type = "bool" },
-                    new ProviderPropertySchema { Name = "IsUsingResource", Type = "bool" },
-                    new ProviderPropertySchema { Name = "IsOwnershipTransferred", Type = "bool" },
-                    new ProviderPropertySchema { Name = "IsOriginalExceptionAlwaysRethrown", Type = "bool" },
-                    new ProviderPropertySchema { Name = "IsCancellationHandler", Type = "bool" },
-                    new ProviderPropertySchema { Name = "IsCallerCancellationPreserved", Type = "bool" },
-                    new ProviderPropertySchema { Name = "IsEnvironmentVariableAccess", Type = "bool" },
-                    new ProviderPropertySchema { Name = "IsEnvironmentVariableRead", Type = "bool" },
-                ],
-            },
-        };
-
-        return new ProviderSchema { Types = types, Collections = baseSchema.Collections };
-    }
+    private static ProviderSchema Build() => CodeSchema.Extend(
+        CodeSchema.BoolSubtype("PythonType", "Type",
+            "IsDataclass", "IsEnum", "IsAbstract", "IsNamedTuple", "IsProtocol", "IsException", "HasSlots"),
+        CodeSchema.BoolSubtype("PythonMethod", "Method",
+            "IsStaticmethod", "IsClassmethod", "IsProperty", "IsGenerator", "IsAbstractMethod", "IsDunder"),
+        CodeSchema.BoolSubtype("PythonStatement", "Statement",
+            "IsWith", "IsAsyncWith", "IsRaise", "IsAssert", "IsComprehension", "IsGlobal", "IsNonlocal",
+            "IsYield", "IsAsyncFor", "IsUsingResource", "IsOwnershipTransferred",
+            "IsOriginalExceptionAlwaysRethrown", "IsCancellationHandler", "IsCallerCancellationPreserved",
+            "IsEnvironmentVariableAccess", "IsEnvironmentVariableRead"));
 }

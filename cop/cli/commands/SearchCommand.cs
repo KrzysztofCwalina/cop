@@ -86,7 +86,16 @@ public static class SearchCommand
             string repo = feedParts[2];
 
             // List packages in this feed
-            List<string> packages = await packageSource.ListPackagesAsync(owner, repo);
+            List<string> packages;
+            try
+            {
+                packages = await packageSource.ListPackagesAsync(owner, repo);
+            }
+            catch (HttpRequestException ex)
+            {
+                Console.Error.WriteLine($"Warning: Could not list packages in feed '{feed}': {ex.Message}");
+                continue;
+            }
 
             // Filter packages by query
             List<PackageInfo> matchingPackages = new List<PackageInfo>();

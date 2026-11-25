@@ -12,42 +12,27 @@ public class PythonRuffProvider : ToolProvider
 {
     protected override string ToolName => "ruff";
 
-    protected override async ValueTask<List<object>> RunToolAsync(
+    protected override ValueTask<List<object>> RunToolAsync(
         string rootPath, IReadOnlySet<string> excluded, CancellationToken cancellationToken)
+        => RunJsonToolAsync(
+            new("ruff", "check --output-format=json .", rootPath) { Mode = ToolInvocationMode.Shell },
+            rootPath, excluded, null, item => item.GetProperty("filename").GetString() ?? string.Empty,
+            ToViolation, cancellationToken);
+
+    private static ToolViolation ToViolation(JsonElement item, string filePath)
     {
-        (string? stdout, string _, int _) = await RunProcessAsync(
-            new("ruff", "check --output-format=json .", rootPath)
-            { Mode = ToolInvocationMode.Shell }, cancellationToken).ConfigureAwait(false);
-        if (string.IsNullOrWhiteSpace(stdout))
+        int line = item.TryGetProperty("location", out JsonElement loc) && loc.TryGetProperty("row", out JsonElement row)
+            ? row.GetInt32() : 0;
+        string? code = item.TryGetProperty("code", out JsonElement c) ? c.GetString() : string.Empty;
+        string? message = item.TryGetProperty("message", out JsonElement m) ? m.GetString() : string.Empty;
+
+        return new ToolViolation
         {
-            return [];
-        }
-
-        List<object> violations = new List<object>();
-        using JsonDocument doc = JsonDocument.Parse(stdout);
-
-        foreach (JsonElement item in doc.RootElement.EnumerateArray())
-        {
-            string filePath = NormalizePath(item.GetProperty("filename").GetString() ?? string.Empty, rootPath);
-            if (string.IsNullOrEmpty(filePath) || IsExcluded(filePath, excluded))
-            {
-                continue;
-            }
-
-            int line = item.TryGetProperty("location", out JsonElement loc) && loc.TryGetProperty("row", out JsonElement row)
-                ? row.GetInt32() : 0;
-            string? code = item.TryGetProperty("code", out JsonElement c) ? c.GetString() : string.Empty;
-            string? message = item.TryGetProperty("message", out JsonElement m) ? m.GetString() : string.Empty;
-
-            violations.Add(new ToolViolation
-            {
-                File = filePath,
-                Line = line,
-                Severity = "warning",
-                Message = $"{code}: {message}",
-                Source = "ruff"
-            });
-        }
-        return violations;
+            File = filePath,
+            Line = line,
+            Severity = "warning",
+            Message = $"{code}: {message}",
+            Source = "ruff"
+        };
     }
 }

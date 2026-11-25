@@ -174,11 +174,13 @@ public partial class ToolchainCliIntegrationTests
         Assert.That(File.Exists(Path.Combine(_root, "pids.txt")), Is.False);
     }
 
-    [TestCase(false, 57)]
-    [TestCase(true, 58)]
+    [TestCase(false, 121)]
+    [TestCase(true, 122)]
     public async Task BuiltInCSharpSuiteCountsLeafFunctionsAndDoesNotDoubleCountCompatibilityAliases(
         bool includeOptional, int checks)
     {
+        var target = Path.Combine(_root, "empty-target");
+        Directory.CreateDirectory(target);
         var repository = new DirectoryInfo(Path.GetDirectoryName(_cli)!);
         while (!File.Exists(Path.Combine(repository.FullName, "cop.sln"))) repository = repository.Parent!;
         var feed = Path.Combine(repository.FullName, "packages").Replace("\\", "\\\\");
@@ -193,11 +195,14 @@ public partial class ToolchainCliIntegrationTests
                 : "")}})
             """);
 
-        var result = await Run(_script, "-t", _root, "--no-color");
+        var result = await Run(_script, "-t", target, "--no-color");
 
         Assert.That(result.ExitCode, Is.EqualTo(0), result.StandardError);
         Assert.That(result.StandardOutput, Is.Empty);
-        Assert.That(result.StandardError, Does.Contain($"0 input files processed, {checks} checks evaluated in "));
+        Assert.That(Directory.GetFiles(target, "*", SearchOption.AllDirectories)
+            .Select(path => Path.GetRelativePath(target, path).Replace('\\', '/')),
+            Is.EquivalentTo(new[] { ".github/instructions/code.instructions.md", ".github/instructions/csharp-checks.instructions.md" }));
+        Assert.That(result.StandardError, Does.Contain($"2 input files processed, {checks} checks evaluated in "));
     }
 
     [TestCase("MAIN", 65)]

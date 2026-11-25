@@ -23,6 +23,7 @@ type expression struct {
 	Kind        string        `json:"kind"`
 	Name        string        `json:"name,omitempty"`
 	StringValue *string       `json:"stringValue,omitempty"`
+	BooleanValue *bool        `json:"booleanValue,omitempty"`
 	Target      *expression   `json:"target,omitempty"`
 	Children    []*expression `json:"children,omitempty"`
 }
@@ -94,9 +95,11 @@ type statement struct {
 	MethodColumn int    `json:"methodColumn"`
 	Kind         string `json:"kind"`
 	Condition    string `json:"condition"`
+	ConditionExpression *expression `json:"conditionExpression"`
 	Expression   string `json:"expression"`
 	ErrorHandler bool   `json:"errorHandler"`
 	MemberName   string `json:"memberName"`
+	ValueExpression *expression `json:"valueExpression"`
 }
 
 func statementKind(node ast.Node) string {
@@ -243,6 +246,13 @@ func signature(files *token.FileSet, name string, function *ast.FuncType) method
 func expr(e ast.Expr) *expression {
 	switch n := e.(type) {
 	case *ast.Ident:
+		if n.Name == "true" || n.Name == "false" {
+			value := n.Name == "true"
+			return &expression{Kind: "booleanLiteral", BooleanValue: &value}
+		}
+		if n.Name == "nil" {
+			return &expression{Kind: "nullLiteral"}
+		}
 		return &expression{Kind: "identifier", Name: n.Name}
 	case *ast.SelectorExpr:
 		return &expression{Kind: "memberAccess", Name: n.Sel.Name, Target: expr(n.X)}
@@ -252,6 +262,11 @@ func expr(e ast.Expr) *expression {
 				return &expression{Kind: "stringLiteral", StringValue: &value}
 			}
 		}
+		if n.Kind == token.INT || n.Kind == token.FLOAT {
+			return &expression{Kind: "numericLiteral", Name: n.Value}
+		}
+	case *ast.BinaryExpr:
+		return &expression{Kind: "binary", Name: n.Op.String(), Children: []*expression{expr(n.X), expr(n.Y)}}
 	case *ast.ParenExpr:
 		return expr(n.X)
 	case *ast.CallExpr:
@@ -408,6 +423,7 @@ func analyze(req request) response {
 			switch control := node.(type) {
 			case *ast.IfStmt:
 				s.Condition = types.ExprString(control.Cond)
+				s.ConditionExpression = expr(control.Cond)
 				if comparison, ok := control.Cond.(*ast.BinaryExpr); ok && comparison.Op == token.NEQ {
 					left, lok := comparison.X.(*ast.Ident)
 					right, rok := comparison.Y.(*ast.Ident)
@@ -416,6 +432,7 @@ func analyze(req request) response {
 			case *ast.ForStmt:
 				if control.Cond != nil {
 					s.Condition = types.ExprString(control.Cond)
+					s.ConditionExpression = expr(control.Cond)
 				}
 			case *ast.ReturnStmt:
 				parts := []string{}
@@ -423,6 +440,14 @@ func analyze(req request) response {
 					parts = append(parts, types.ExprString(r))
 				}
 				s.Expression = strings.Join(parts, ", ")
+			case *ast.AssignStmt:
+				if control.Tok == token.ASSIGN && len(control.Lhs) == 1 && len(control.Rhs) == 1 {
+					if target, ok := control.Lhs[0].(*ast.Ident); ok {
+						s.Kind = "assignment"
+						s.MemberName = target.Name
+						s.ValueExpression = expr(control.Rhs[0])
+					}
+				}
 			}
 			result.Statements = append(result.Statements, s)
 		}

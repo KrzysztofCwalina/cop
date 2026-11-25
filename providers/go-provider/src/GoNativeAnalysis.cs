@@ -183,7 +183,9 @@ internal static class GoNativeAnalysis
             method.Statements = [];
         }
 
+        List<StatementInfo> directives = file.Statements.Where(s => s.Kind == "directive").ToList();
         file.Statements.Clear();
+        file.Statements.AddRange(directives);
         Dictionary<string, StatementInfo> nodes = new Dictionary<string, StatementInfo>();
         List<(StatementInfo Node, string? Parent)> parents = new List<(StatementInfo Node, string? Parent)>();
         void Add(string id, string? parent, int methodLine, int methodColumn, StatementInfo node)
@@ -207,6 +209,8 @@ internal static class GoNativeAnalysis
                     EndLine = fact.EndLine,
                     EndColumn = fact.EndColumn,
                     Condition = Null(fact.Condition),
+                    ConditionExpression = fact.ConditionExpression,
+                    ValueExpression = fact.ValueExpression,
                     Expression = Null(fact.Expression),
                     IsErrorHandler = fact.ErrorHandler,
                     IsGenericErrorHandler = fact.Kind == "catch"
@@ -358,5 +362,6 @@ internal static class GoNativeAnalysis
     private sealed record NativeCall(string ID, string? ParentID, int MethodLine, int MethodColumn, int Line, int Column, int EndLine, int EndColumn,
         string? TypeName, string? MemberName, List<string>? Arguments, ExpressionInfo? CallTarget, List<ExpressionInfo>? ArgumentExpressions);
     private sealed record NativeStatement(string ID, string? ParentID, int MethodLine, int MethodColumn, string Kind, string? Condition,
-        string? Expression, bool ErrorHandler, string? MemberName, int Line, int Column, int EndLine, int EndColumn);
+        string? Expression, bool ErrorHandler, string? MemberName, int Line, int Column, int EndLine, int EndColumn,
+        ExpressionInfo? ConditionExpression, ExpressionInfo? ValueExpression);
 }

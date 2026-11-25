@@ -208,6 +208,8 @@ internal sealed class RustAstProjection
                 "MACRO_EXPR" => MacroName(node), "LET_STMT" =>
                     node.Children.FirstOrDefault(n => n.Kind.EndsWith("_PAT", StringComparison.Ordinal)) is { Kind: "IDENT_PAT" } pattern
                         ? Name(pattern) : null,
+                "BIN_EXPR" when kind == "assignment" && expression?.Children.FirstOrDefault() is { Kind: "identifier" } target
+                    => target.Name,
                 _ => null
             };
             List<Node> args = node.Child("ARG_LIST")?.Children.Where(IsExpression).ToList() ?? [];
@@ -220,9 +222,12 @@ internal sealed class RustAstProjection
                 Column = span.Column, EndLine = span.EndLine, EndColumn = span.EndColumn,
                 CallTarget = kind is "call" or "throw" ? expression?.Target : null,
                 ArgumentExpressions = args.Select(n => Expression(n)).ToList(),
-                ValueExpression = node.Kind is "RETURN_EXPR" or "BREAK_EXPR" or "YIELD_EXPR"
+                ValueExpression = kind == "assignment" ? expression?.Children.ElementAtOrDefault(1)
+                    : node.Kind is "RETURN_EXPR" or "BREAK_EXPR" or "YIELD_EXPR"
                     ? expression?.Children.FirstOrDefault() : condition is not null ? Expression(condition) : expression,
                 Condition = condition is not null ? Text(condition) : null,
+                ConditionExpression = node.Kind is "IF_EXPR" or "WHILE_EXPR" && condition is not null
+                    ? Expression(condition) : null,
                 Expression = Text(node), IsBraced = node.Child("BLOCK_EXPR") is not null
             };
             _statements.Add(node, statement);
@@ -319,7 +324,9 @@ internal sealed class RustAstProjection
         string kind = node.Kind switch
         {
             "CALL_EXPR" or "METHOD_CALL_EXPR" => "invocation", "MACRO_EXPR" => "macroInvocation",
-            "PATH_EXPR" => "identifier", "FIELD_EXPR" => "memberAccess", "LITERAL" =>
+            "PATH_EXPR" => "identifier", "FIELD_EXPR" => "memberAccess",
+            "LITERAL" when node.Tokens.Any(t => t is "true" or "false") => "booleanLiteral",
+            "LITERAL" =>
                 node.Tokens.Any(t => t.StartsWith('"') || t.StartsWith("r\"", StringComparison.Ordinal)
                     || t.StartsWith("r#", StringComparison.Ordinal)) ? "stringLiteral" : "literal",
             "BIN_EXPR" => "binary", "PREFIX_EXPR" or "REF_EXPR" => "unary", "TUPLE_EXPR" => "tuple",
@@ -357,6 +364,7 @@ internal sealed class RustAstProjection
         return new(kind)
         {
             Name = name, Target = target, Children = children.Select(n => Expression(n, depth + 1)).ToList(),
+            BooleanValue = kind == "booleanLiteral" ? node.Tokens.Contains("true") : null,
             StringValue = kind == "stringLiteral" ? RustBodyParser.DecodeString(Text(node)) : null
         };
     }
@@ -389,6 +397,7 @@ internal sealed class RustAstProjection
             && name.Tokens.Any(t => t is "panic" or "todo" or "unreachable" or "unimplemented") ? "throw" : "call",
         "LET_STMT" => "declaration", "IF_EXPR" => "if", "WHILE_EXPR" or "LOOP_EXPR" => "while",
         "FOR_EXPR" => "for", "MATCH_EXPR" => "switch", "RETURN_EXPR" => "return",
+        "BIN_EXPR" when node.Tokens.SequenceEqual(["="]) => "assignment",
         "BREAK_EXPR" or "CONTINUE_EXPR" or "YIELD_EXPR" => "command", "AWAIT_EXPR" => "await",
         _ => null
     };

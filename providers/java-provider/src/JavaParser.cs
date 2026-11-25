@@ -384,7 +384,7 @@ internal class JavaParser(List<JavaToken> tokens, IReadOnlyList<(int line, int c
                 annotations,
                 null,
                 parameters,
-                memberLine))
+                memberLine) { EndLine = PreviousLine() })
             {
                 Statements = body, HasDocComment = hasDoc, TypeParameters = typeParameters,
                 IsSynchronized = isSynchronized, IsNative = isNative, IsDefault = isDefault,
@@ -439,7 +439,7 @@ internal class JavaParser(List<JavaToken> tokens, IReadOnlyList<(int line, int c
                 annotations,
                 returnType,
                 parameters,
-                memberLine))
+                memberLine) { EndLine = PreviousLine() })
             {
                 Statements = body, HasDocComment = hasDoc, TypeParameters = typeParameters,
                 IsSynchronized = isSynchronized, IsNative = isNative, IsDefault = isDefault,
@@ -814,6 +814,7 @@ internal class JavaParser(List<JavaToken> tokens, IReadOnlyList<(int line, int c
     private JavaToken Current() => _pos < tokens.Count ? tokens[_pos] : tokens[^1];
     private JavaToken Peek() => _pos + 1 < tokens.Count ? tokens[_pos + 1] : tokens[^1];
     private int CurrentLine() => Current().Line;
+    private int PreviousLine() => _pos > 0 ? tokens[Math.Min(_pos, tokens.Count) - 1].Line : Current().Line;
     private bool IsAtEnd() => _pos >= tokens.Count || Current().Kind == JavaTokenKind.Eof;
     private object? Advance() { if (!IsAtEnd()) { _pos++; } return null; }
 

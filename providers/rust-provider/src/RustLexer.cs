@@ -289,32 +289,34 @@ internal class RustLexer(string source)
         return new RustToken(RustTokenKind.Attribute, source[start.._pos], line, start, _pos);
     }
 
-    private RustToken ReadStringLiteral()
+    private RustToken ReadStringLiteral() => ReadQuoted('"', multiline: true, "unterminated string literal");
+
+    private RustToken ReadQuoted(char quote, bool multiline, string unterminatedMessage)
     {
         int start = _pos;
         int line = _line;
-        _pos++; // skip opening "
-        while (_pos < source.Length && source[_pos] != '"')
+        _pos++; // skip opening quote
+        while (_pos < source.Length && source[_pos] != quote && (multiline || source[_pos] != '\n'))
         {
             if (source[_pos] == '\\' && _pos + 1 < source.Length)
             {
                 _pos++; // skip escape
             }
 
-            if (_pos < source.Length && source[_pos] == '\n')
+            if (multiline && _pos < source.Length && source[_pos] == '\n')
             {
                 _line++;
             }
 
             _pos++;
         }
-        if (_pos < source.Length)
+        if (_pos < source.Length && source[_pos] == quote)
         {
-            _pos++; // skip closing "
+            _pos++; // skip closing quote
         }
         else
         {
-            _errors.Add((line, ColAt(start), "unterminated string literal"));
+            _errors.Add((line, ColAt(start), unterminatedMessage));
         }
 
         return new RustToken(RustTokenKind.StringLiteral, source[start.._pos], line, start, _pos);
@@ -360,31 +362,7 @@ internal class RustLexer(string source)
         return new RustToken(RustTokenKind.StringLiteral, source[start.._pos], line, start, _pos);
     }
 
-    private RustToken ReadCharLiteral()
-    {
-        int start = _pos;
-        int line = _line;
-        _pos++; // skip '
-        while (_pos < source.Length && source[_pos] != '\'' && source[_pos] != '\n')
-        {
-            if (source[_pos] == '\\' && _pos + 1 < source.Length)
-            {
-                _pos++;
-            }
-
-            _pos++;
-        }
-        if (_pos < source.Length && source[_pos] == '\'')
-        {
-            _pos++;
-        }
-        else
-        {
-            _errors.Add((line, ColAt(start), "unterminated character literal"));
-        }
-
-        return new RustToken(RustTokenKind.StringLiteral, source[start.._pos], line, start, _pos);
-    }
+    private RustToken ReadCharLiteral() => ReadQuoted('\'', multiline: false, "unterminated character literal");
 
     private RustToken ReadLifetime()
     {

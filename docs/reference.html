@@ -187,7 +187,9 @@ const categories = [
   {
     "name": "Checks",
     "packages": [
+      "ai-slop-checks",
       "code-metrics",
+      "code-quality-checks",
       "csharp-checks",
       "csharp-library-azure-checks",
       "csharp-library-checks",
@@ -248,6 +250,513 @@ const packages = {
         "params": "document: MarkdownContent, codebase: Codebase, ruleLevel: int",
         "returns": "[Violation]",
         "desc": "Reviews each section at ruleLevel (1-6) as one complete rule, including all\nparagraphs and nested content. Parent headings and prose supply context.\nSelected rules share one review and the existing source tools and budgets.\nAn invalid level, missing rule sections, or a rule without a body is an error.\nExample: CHECK(ai.judge(markdown.parse('architecture.md'), csharp.parse(), 2))"
+      }
+    ],
+    "checks": [],
+    "commands": []
+  },
+  "ai-slop-checks": {
+    "label": "ai-slop-checks",
+    "overview": "Deterministic AI-slop quality and operational safeguards for all standard source-language suites",
+    "samples": [
+      {
+        "title": "Csharp",
+        "code": "# Run: cop csharp.cop -t <source-directory>\nimport code\nimport csharp\nimport ai-slop-checks\n\nlet cb = csharp.parse()\ncommand MAIN = CHECK(ai-slop-checks.aiSlopChecks(cb))"
+      }
+    ],
+    "collections": [],
+    "types": {},
+    "predicates": [],
+    "functions": [
+      {
+        "name": "qualityProductionScope",
+        "params": "cb: Codebase",
+        "returns": "Codebase",
+        "desc": "Production source: no test, sample, example, fixture, vendored, or generated files and no test methods."
+      },
+      {
+        "name": "qualityTestScope",
+        "params": "cb: Codebase",
+        "returns": "Codebase",
+        "desc": "Test source: recognized test files and test methods."
+      },
+      {
+        "name": "emptyErrorHandlers",
+        "params": "statements: [Statement]",
+        "returns": "[Violation]",
+        "appliesTo": "[Statement]",
+        "desc": "Catch/except bodies with no parsed statements. Existing language-specific rules may overlap."
+      },
+      {
+        "name": "silentLiteralFallbacks",
+        "params": "statements: [Statement]",
+        "returns": "[Violation]",
+        "appliesTo": "[Statement]",
+        "desc": "Error handlers whose entire body is a literal return, with no handling or notification."
+      },
+      {
+        "name": "unfinishedImplementations",
+        "params": "statements: [Statement]",
+        "returns": "[Violation]",
+        "appliesTo": "[Statement]",
+        "desc": "Explicit unimplemented exceptions/macros in production. Constant returns are not treated as stubs."
+      },
+      {
+        "name": "constantAssertions",
+        "params": "statements: [Statement]",
+        "returns": "[Violation]",
+        "appliesTo": "[Statement]",
+        "desc": "Supported assertion APIs given an unconditional success literal."
+      },
+      {
+        "name": "disabledTests",
+        "params": "methods: [Method], statements: [Statement]",
+        "returns": "[Violation]",
+        "appliesTo": "[Method]",
+        "desc": "Unconditionally disabled tests: skip/ignore decorators, it.skip/xit, and unconditional t.Skip/pytest.skip.\nConditional skips (skipIf, Explicit, skips inside a branch) are not flagged."
+      },
+      {
+        "name": "assertionFreeTests",
+        "params": "methods: [Method], statements: [Statement]",
+        "returns": "[Violation]",
+        "appliesTo": "[Method]",
+        "desc": "Tests with no recognized assertion, expectation, verification, or failure call.\nCustom assertion helpers named assert*/expect*/verify*/check*/should* are recognized."
+      },
+      {
+        "name": "existenceOnlyAssertions",
+        "params": "methods: [Method]",
+        "returns": "[Violation]",
+        "appliesTo": "[Method]",
+        "desc": "Tests whose only assertions check that a value exists (NotNull, toBeDefined, toBeTruthy, ...)."
+      },
+      {
+        "name": "mockedTestSubjects",
+        "params": "statements: [Statement]",
+        "returns": "[Violation]",
+        "appliesTo": "[Statement]",
+        "desc": "Tests that mock the type or module they are named after, so the real subject never runs.\nSupports Moq Mock<T>, Mockito mock(T.class), Python Mock/MagicMock(spec=T)/create_autospec(T), and jest.mock('./m')."
+      },
+      {
+        "name": "typeErasingCasts",
+        "params": "statements: [Statement]",
+        "returns": "[Violation]",
+        "appliesTo": "[Statement]",
+        "desc": "Explicit any/dynamic casts and Python cast(Any, ...), including nested expressions."
+      },
+      {
+        "name": "blanketWarningSuppressions",
+        "params": "statements: [Statement], methods: [Method], types: [Type]",
+        "returns": "[Violation]",
+        "appliesTo": "[Statement]",
+        "desc": "Suppressions that silence every diagnostic: bare #pragma warning disable, # type: ignore, # noqa,\npylint disable=all, eslint-disable without rules, @ts-ignore/@ts-nocheck, //nolint, #[allow(warnings)].\nSuppressions that name specific diagnostics remain allowed."
+      },
+      {
+        "name": "credentialLiterals",
+        "params": "statements: [Statement]",
+        "returns": "[Violation]",
+        "appliesTo": "[Statement]",
+        "desc": "Nonempty literal assignments to specific credential names. This is a review signal, not secret validation."
+      },
+      {
+        "name": "weakCryptoCalls",
+        "params": "statements: [Statement]",
+        "returns": "[Violation]",
+        "appliesTo": "[Statement]",
+        "desc": "Broken or weak cryptographic primitives (MD5, SHA-1, DES/3DES, RC2/RC4, Blowfish, ECB mode)."
+      },
+      {
+        "name": "injectionProneStrings",
+        "params": "statements: [Statement]",
+        "returns": "[Violation]",
+        "appliesTo": "[Statement]",
+        "desc": "SQL, shell/eval, and raw-HTML sinks receiving text built by concatenation, interpolation, or formatting."
+      },
+      {
+        "name": "interpolatedLogMessages",
+        "params": "statements: [Statement]",
+        "returns": "[Violation]",
+        "appliesTo": "[Statement]",
+        "desc": "Log messages built by interpolation or concatenation lose structured fields and can permit log injection."
+      },
+      {
+        "name": "sensitiveDataInLogs",
+        "params": "statements: [Statement]",
+        "returns": "[Violation]",
+        "appliesTo": "[Statement]",
+        "desc": "Sensitive identifiers passed to logging APIs may disclose credentials or personal data."
+      },
+      {
+        "name": "unsafeDeserialization",
+        "params": "statements: [Statement]",
+        "returns": "[Violation]",
+        "appliesTo": "[Statement]",
+        "desc": "Deserializers that construct objects from untrusted input can execute code or instantiate unsafe types."
+      },
+      {
+        "name": "insecureRandomForSecrets",
+        "params": "statements: [Statement]",
+        "returns": "[Violation]",
+        "appliesTo": "[Statement]",
+        "desc": "Non-cryptographic random values must not be used for authentication or session secrets."
+      },
+      {
+        "name": "hardcodedLocalUrls",
+        "params": "statements: [Statement]",
+        "returns": "[Violation]",
+        "appliesTo": "[Statement]",
+        "desc": "Hard-coded loopback URLs often work locally but fail after deployment."
+      },
+      {
+        "name": "ioInLoops",
+        "params": "statements: [Statement]",
+        "returns": "[Violation]",
+        "appliesTo": "[Statement]",
+        "desc": "Database, network, or filesystem operations inside a loop can multiply I/O with collection size."
+      },
+      {
+        "name": "asyncWithoutAwait",
+        "params": "methods: [Method]",
+        "returns": "[Violation]",
+        "appliesTo": "[Method]",
+        "desc": "Async methods with no await usually hide synchronous work behind an async-shaped API."
+      },
+      {
+        "name": "blockingCallsInAsync",
+        "params": "statements: [Statement]",
+        "returns": "[Violation]",
+        "appliesTo": "[Statement]",
+        "desc": "Blocking I/O and sleeps inside async methods can starve the event loop."
+      },
+      {
+        "name": "testScaffoldingInProduction",
+        "params": "sources: [File]",
+        "returns": "[Violation]",
+        "appliesTo": "[File]",
+        "desc": "Test and mocking frameworks should not be imported by production code."
+      },
+      {
+        "name": "speculativeAbstractions",
+        "params": "methods: [Method], types: [Type]",
+        "returns": "[Violation]",
+        "appliesTo": "[Method]",
+        "desc": "Flag pass-through wrappers and single-implementation interfaces as possible speculative abstractions."
+      },
+      {
+        "name": "securityChecks",
+        "params": "statements: [Statement]",
+        "returns": "[Violation]",
+        "appliesTo": "[Statement]",
+        "desc": "Security-focused subset, also included by codeQualityChecks."
+      },
+      {
+        "name": "undeclaredDependencies",
+        "params": "sources: [File], statements: [Statement], projects: [Project]",
+        "returns": "[Violation]",
+        "appliesTo": "[File]",
+        "desc": "Imports of third-party packages that the project manifest (package.json, go.mod, Cargo.toml) does not declare.\nEvaluated only for languages with a parsed manifest."
+      },
+      {
+        "name": "deprecatedCalls",
+        "params": "statements: [Statement]",
+        "returns": "[Violation]",
+        "appliesTo": "[Statement]",
+        "desc": "Calls to declarations marked deprecated: compiler-resolved [Obsolete]/@deprecated, or same-file\ndeclarations decorated Obsolete/Deprecated/deprecated when the parser cannot resolve calls."
+      },
+      {
+        "name": "blockingTestSleeps",
+        "params": "statements: [Statement]",
+        "returns": "[Violation]",
+        "appliesTo": "[Statement]",
+        "desc": "Fixed sleeps and delays in tests; wait on a condition or use a controlled clock instead."
+      },
+      {
+        "name": "fixedDelays",
+        "params": "statements: [Statement]",
+        "returns": "[Violation]",
+        "appliesTo": "[Statement]",
+        "desc": "Hard-coded sleeps/delays in production code, often used to paper over races or ordering bugs."
+      },
+      {
+        "name": "debuggerLeftovers",
+        "params": "statements: [Statement]",
+        "returns": "[Violation]",
+        "appliesTo": "[Statement]",
+        "desc": "Debugger breakpoints and stack dumps left in production code."
+      },
+      {
+        "name": "overCommentedMethods",
+        "params": "methods: [Method]",
+        "returns": "[Violation]",
+        "appliesTo": "[Method]",
+        "desc": "Methods of 10+ lines where at least 40% of lines are comments, typically narration of obvious code."
+      },
+      {
+        "name": "emojiInCode",
+        "params": "statements: [Statement], types: [Type], methods: [Method]",
+        "returns": "[Violation]",
+        "appliesTo": "[Statement]",
+        "desc": "Emoji in identifiers and string literals. Comment emoji are not checked (comments are raw text)."
+      },
+      {
+        "name": "clutterNames",
+        "params": "types: [Type], methods: [Method]",
+        "returns": "[Violation]",
+        "appliesTo": "[Type]",
+        "desc": "Types and methods named after an edit (FooFixed, BarEnhanced, run_improved, ParseV2Refactored).\nPredicate-like names (IsFixed, has_improved) are not flagged."
+      },
+      {
+        "name": "backupSourceFiles",
+        "params": "files: [File]",
+        "returns": "[Violation]",
+        "appliesTo": "[File]",
+        "desc": "Source filenames explicitly marked as backup/copy artifacts. New/Old type names are not banned."
+      },
+      {
+        "name": "agentReportFiles",
+        "params": "",
+        "returns": "[Violation]",
+        "desc": "Agent work-report markdown files (IMPLEMENTATION_SUMMARY.md, FIX_NOTES.md, REFACTOR_COMPLETE.md, ...)."
+      },
+      {
+        "name": "duplicateMethodBodies",
+        "params": "methods: [Method]",
+        "returns": "[Violation]",
+        "appliesTo": "[Method]",
+        "desc": "Production methods (6+ statements) whose parsed body structure duplicates another method."
+      },
+      {
+        "name": "scopedCodeQualityChecks",
+        "params": "production: Codebase, tests: Codebase, all: Codebase",
+        "returns": "[Violation]",
+        "desc": "Compose quality checks from explicitly scoped codebases. Production rules read only production;\ntest rules read only tests; whole-repository rules (suppressions, dependencies) read all."
+      },
+      {
+        "name": "aiSlopChecks",
+        "params": "cb: Codebase",
+        "returns": "[Violation]",
+        "desc": "Deterministic AI-slop checks over the standard production/test scopes."
+      },
+      {
+        "name": "codeQualityChecks",
+        "params": "cb: Codebase",
+        "returns": "[Violation]",
+        "desc": "Compatibility name for aiSlopChecks; existing check identifiers and scoping are unchanged."
+      },
+      {
+        "name": "certificateValidationDisabled",
+        "params": "statements: [Statement]",
+        "returns": "[Violation]",
+        "appliesTo": "[Statement]",
+        "desc": "Explicit certificate-validation bypasses on known HTTP clients and configuration properties."
+      },
+      {
+        "name": "missingRequestTimeout",
+        "params": "statements: [Statement]",
+        "returns": "[Violation]",
+        "appliesTo": "[Statement]",
+        "desc": "Requests calls without timeouts, or explicit timeout=None on requests/httpx."
+      },
+      {
+        "name": "unsafeArchiveExtraction",
+        "params": "statements: [Statement]",
+        "returns": "[Violation]",
+        "appliesTo": "[Statement]",
+        "desc": "Tar extraction without a data filter or explicitly selected members requires review."
+      },
+      {
+        "name": "insecureTemporaryNames",
+        "params": "statements: [Statement]",
+        "returns": "[Violation]",
+        "appliesTo": "[Statement]",
+        "desc": "Temporary-name generators that do not atomically create the file have a race window."
+      },
+      {
+        "name": "wildcardCorsOrigins",
+        "params": "statements: [Statement]",
+        "returns": "[Violation]",
+        "appliesTo": "[Statement]",
+        "desc": "Wildcard CORS is a review signal; public APIs may intentionally allow it."
+      },
+      {
+        "name": "developmentServerDebug",
+        "params": "statements: [Statement]",
+        "returns": "[Violation]",
+        "appliesTo": "[Statement]",
+        "desc": "Explicit development-server debugging in production-scoped source."
+      },
+      {
+        "name": "jwtSignatureBypass",
+        "params": "statements: [Statement]",
+        "returns": "[Violation]",
+        "appliesTo": "[Statement]",
+        "desc": "JWT parsing configured to bypass signature verification must not authorize requests."
+      },
+      {
+        "name": "fastPasswordHashes",
+        "params": "statements: [Statement]",
+        "returns": "[Violation]",
+        "appliesTo": "[Statement]",
+        "desc": "Fast SHA-2 hashes of password-named inputs are not password derivation functions."
+      },
+      {
+        "name": "insecureCookieFlags",
+        "params": "statements: [Statement]",
+        "returns": "[Violation]",
+        "appliesTo": "[Statement]",
+        "desc": "Explicitly disabling Secure or HttpOnly cookie flags exposes session values."
+      },
+      {
+        "name": "worldWritableModes",
+        "params": "statements: [Statement]",
+        "returns": "[Violation]",
+        "appliesTo": "[Statement]",
+        "desc": "Literal 0666/0777 permission changes make files writable by other users."
+      },
+      {
+        "name": "xmlEntityExpansion",
+        "params": "statements: [Statement]",
+        "returns": "[Violation]",
+        "appliesTo": "[Statement]",
+        "desc": "Explicit external-entity or DTD processing can expose local files or exhaust resources."
+      },
+      {
+        "name": "dynamicCodeLoading",
+        "params": "statements: [Statement]",
+        "returns": "[Violation]",
+        "appliesTo": "[Statement]",
+        "desc": "Runtime execution APIs not already covered by the suites' eval rules."
+      },
+      {
+        "name": "literalShellCommands",
+        "params": "statements: [Statement]",
+        "returns": "[Violation]",
+        "appliesTo": "[Statement]",
+        "desc": "Shell=True with non-dynamic input; dynamic strings are already covered by injectionProneStrings."
+      },
+      {
+        "name": "unboundedRegex",
+        "params": "statements: [Statement]",
+        "returns": "[Violation]",
+        "appliesTo": "[Statement]",
+        "desc": "Static Regex calls without an explicit timeout may be vulnerable to pathological input."
+      },
+      {
+        "name": "abruptFinally",
+        "params": "statements: [Statement]",
+        "returns": "[Violation]",
+        "appliesTo": "[Statement]",
+        "desc": "Abrupt completion in finally can replace an active exception or return value."
+      },
+      {
+        "name": "redundantCatchRethrow",
+        "params": "statements: [Statement]",
+        "returns": "[Violation]",
+        "appliesTo": "[Statement]",
+        "desc": "A handler containing only a bare rethrow adds no handling behavior."
+      },
+      {
+        "name": "constantBranchConditions",
+        "params": "statements: [Statement]",
+        "returns": "[Violation]",
+        "appliesTo": "[Statement]",
+        "desc": "Literal boolean conditions leave one branch permanently unreachable."
+      },
+      {
+        "name": "selfComparisonConditions",
+        "params": "statements: [Statement]",
+        "returns": "[Violation]",
+        "appliesTo": "[Statement]",
+        "desc": "Comparing one identifier to itself is suspicious; floating-point NaN tests can be intentional."
+      },
+      {
+        "name": "selfAssignments",
+        "params": "statements: [Statement]",
+        "returns": "[Violation]",
+        "appliesTo": "[Statement]",
+        "desc": "Assigning an identifier back to the same target is a no-op."
+      },
+      {
+        "name": "duplicateSourceImports",
+        "params": "sources: [File]",
+        "returns": "[Violation]",
+        "appliesTo": "[File]",
+        "desc": "Repeated identical imports in the same file; distinct symbols or aliases remain allowed."
+      },
+      {
+        "name": "excessiveControlNesting",
+        "params": "statements: [Statement]",
+        "returns": "[Violation]",
+        "appliesTo": "[Statement]",
+        "desc": "Report the first control-flow statement at nesting depth five, not each statement beneath it."
+      },
+      {
+        "name": "sameValueAssertions",
+        "params": "statements: [Statement]",
+        "returns": "[Violation]",
+        "appliesTo": "[Statement]",
+        "desc": "Equality assertions comparing the same identifier do not independently verify an expected value."
+      },
+      {
+        "name": "productionAssertValidation",
+        "params": "statements: [Statement]",
+        "returns": "[Violation]",
+        "appliesTo": "[Statement]",
+        "desc": "Python assert disappears under optimization and must not be used for production input validation."
+      },
+      {
+        "name": "asyncVoidMethods",
+        "params": "methods: [Method]",
+        "returns": "[Violation]",
+        "appliesTo": "[Method]",
+        "desc": "Async void methods cannot be awaited; conventional EventArgs handlers are exempt."
+      },
+      {
+        "name": "unsafeThreadStopping",
+        "params": "statements: [Statement]",
+        "returns": "[Violation]",
+        "appliesTo": "[Statement]",
+        "desc": "Abrupt thread termination can leave locks and shared state inconsistent."
+      },
+      {
+        "name": "forcedGarbageCollection",
+        "params": "statements: [Statement]",
+        "returns": "[Violation]",
+        "appliesTo": "[Statement]",
+        "desc": "Explicit full garbage collection usually hides an allocation or lifetime problem."
+      },
+      {
+        "name": "unboundedProcessWait",
+        "params": "statements: [Statement]",
+        "returns": "[Violation]",
+        "appliesTo": "[Statement]",
+        "desc": "Parameterless subprocess waits have no caller-supplied deadline."
+      },
+      {
+        "name": "publicListenerBinding",
+        "params": "statements: [Statement]",
+        "returns": "[Violation]",
+        "appliesTo": "[Statement]",
+        "desc": "Binding every interface is a review signal, not proof that a public server is insecure."
+      },
+      {
+        "name": "errorMessageControlFlow",
+        "params": "statements: [Statement]",
+        "returns": "[Violation]",
+        "appliesTo": "[Statement]",
+        "desc": "Branching on exception message text is brittle across versions and localization."
+      },
+      {
+        "name": "legacyTlsProtocols",
+        "params": "statements: [Statement]",
+        "returns": "[Violation]",
+        "appliesTo": "[Statement]",
+        "desc": "Explicit SSL or TLS 1.0/1.1 selections preserve obsolete protocol defaults."
+      },
+      {
+        "name": "operationalSafetyChecks",
+        "params": "production: Codebase, tests: Codebase",
+        "returns": "[Violation]",
+        "desc": "Operational safeguards for production; assertion checks additionally inspect the test scope."
       }
     ],
     "checks": [],
@@ -597,7 +1106,7 @@ const packages = {
       },
       {
         "name": "ExpressionKind",
-        "values": "identifier|stringLiteral|numericLiteral|booleanLiteral|nullLiteral|arrayLiteral|objectLiteral|memberAccess|invocation|other|binary"
+        "values": "identifier|stringLiteral|numericLiteral|booleanLiteral|nullLiteral|arrayLiteral|objectLiteral|memberAccess|invocation|other|binary|cast|interpolation"
       },
       {
         "name": "ApiKind",
@@ -1059,6 +1568,21 @@ const packages = {
             "name": "Source",
             "type": "string",
             "desc": ""
+          },
+          {
+            "name": "Shape",
+            "type": "string",
+            "desc": ""
+          },
+          {
+            "name": "LineCount",
+            "type": "int?",
+            "desc": ""
+          },
+          {
+            "name": "CommentLineCount",
+            "type": "int?",
+            "desc": ""
           }
         ]
       },
@@ -1211,6 +1735,115 @@ const packages = {
           {
             "name": "fullPath",
             "type": "computed",
+            "desc": ""
+          }
+        ]
+      },
+      "File": {
+        "props": [
+          {
+            "name": "Path",
+            "type": "string",
+            "desc": ""
+          },
+          {
+            "name": "FullPath",
+            "type": "string?",
+            "desc": ""
+          },
+          {
+            "name": "SourceRoot",
+            "type": "string?",
+            "desc": ""
+          },
+          {
+            "name": "Language",
+            "type": "Language?",
+            "desc": ""
+          },
+          {
+            "name": "Namespace",
+            "type": "string?",
+            "desc": ""
+          },
+          {
+            "name": "Usings",
+            "type": "[string]",
+            "desc": ""
+          },
+          {
+            "name": "Imports",
+            "type": "[Import]",
+            "desc": ""
+          },
+          {
+            "name": "Types",
+            "type": "[Type]",
+            "desc": ""
+          },
+          {
+            "name": "Methods",
+            "type": "[Method]",
+            "desc": ""
+          }
+        ]
+      },
+      "Import": {
+        "desc": "Parsed import facts; these describe syntax, not resolved symbol bindings.",
+        "props": [
+          {
+            "name": "Module",
+            "type": "string",
+            "desc": ""
+          },
+          {
+            "name": "Name",
+            "type": "string?",
+            "desc": ""
+          },
+          {
+            "name": "Alias",
+            "type": "string?",
+            "desc": ""
+          },
+          {
+            "name": "IsWildcard",
+            "type": "bool",
+            "desc": ""
+          },
+          {
+            "name": "IsStatic",
+            "type": "bool",
+            "desc": ""
+          },
+          {
+            "name": "RelativeLevel",
+            "type": "int",
+            "desc": ""
+          },
+          {
+            "name": "Line",
+            "type": "int",
+            "desc": ""
+          },
+          {
+            "name": "Column",
+            "type": "int?",
+            "desc": ""
+          },
+          {
+            "name": "EndLine",
+            "type": "int?",
+            "desc": ""
+          },
+          {
+            "name": "EndColumn",
+            "type": "int?",
+            "desc": ""
+          },
+          {
+            "name": "File",
+            "type": "File?",
             "desc": ""
           }
         ]
@@ -1477,7 +2110,7 @@ const packages = {
         ]
       },
       "CodeExpression": {
-        "desc": "Parsed expression facts supplied by language parsers. StringValue is the decoded\nstring literal value, not source text. Target is a member receiver or invocation callee;\nChildren are invocation arguments. Unsupported expression forms have Kind = other.",
+        "desc": "Parsed expression facts supplied by language parsers. StringValue is the decoded\nstring literal value, not source text. Target is a member receiver or invocation callee;\nChildren are invocation arguments. Unsupported expression forms have Kind = other.\nCast nodes have the parsed destination type name in Name and operand in Target.",
         "props": [
           {
             "name": "Kind",
@@ -1568,6 +2201,11 @@ const packages = {
             "name": "EndColumn",
             "type": "int?",
             "desc": ""
+          },
+          {
+            "name": "IsDeprecated",
+            "type": "bool",
+            "desc": ""
           }
         ]
       },
@@ -1613,55 +2251,6 @@ const packages = {
           }
         ]
       },
-      "File": {
-        "props": [
-          {
-            "name": "Path",
-            "type": "string",
-            "desc": ""
-          },
-          {
-            "name": "FullPath",
-            "type": "string?",
-            "desc": ""
-          },
-          {
-            "name": "SourceRoot",
-            "type": "string?",
-            "desc": ""
-          },
-          {
-            "name": "Language",
-            "type": "Language?",
-            "desc": ""
-          },
-          {
-            "name": "Namespace",
-            "type": "string?",
-            "desc": ""
-          },
-          {
-            "name": "Usings",
-            "type": "[string]",
-            "desc": ""
-          },
-          {
-            "name": "Imports",
-            "type": "[Import]",
-            "desc": ""
-          },
-          {
-            "name": "Types",
-            "type": "[Type]",
-            "desc": ""
-          },
-          {
-            "name": "Methods",
-            "type": "[Method]",
-            "desc": ""
-          }
-        ]
-      },
       "ProjectProperty": {
         "props": [
           {
@@ -1672,61 +2261,6 @@ const packages = {
           {
             "name": "Value",
             "type": "string",
-            "desc": ""
-          }
-        ]
-      },
-      "Import": {
-        "desc": "Parsed import facts; these describe syntax, not resolved symbol bindings.",
-        "props": [
-          {
-            "name": "Module",
-            "type": "string",
-            "desc": ""
-          },
-          {
-            "name": "Name",
-            "type": "string?",
-            "desc": ""
-          },
-          {
-            "name": "Alias",
-            "type": "string?",
-            "desc": ""
-          },
-          {
-            "name": "IsWildcard",
-            "type": "bool",
-            "desc": ""
-          },
-          {
-            "name": "IsStatic",
-            "type": "bool",
-            "desc": ""
-          },
-          {
-            "name": "RelativeLevel",
-            "type": "int",
-            "desc": ""
-          },
-          {
-            "name": "Line",
-            "type": "int",
-            "desc": ""
-          },
-          {
-            "name": "Column",
-            "type": "int?",
-            "desc": ""
-          },
-          {
-            "name": "EndLine",
-            "type": "int?",
-            "desc": ""
-          },
-          {
-            "name": "EndColumn",
-            "type": "int?",
             "desc": ""
           }
         ]
@@ -2615,6 +3149,502 @@ const packages = {
         "desc": "Computes aggregate metrics from violations and lines, outputs as JSON.\nUsage: METRICS(violations, lines) where violations is [Violation] and lines is [Line].\nOutput is a JSON object with total counts, severity breakdown, LOC, and per-KLOC rates.\nweightedScore = sum of all violation severities. weightedSlopPerKloc = weightedScore * 1000 / LOC."
       }
     ]
+  },
+  "code-quality-checks": {
+    "label": "code-quality-checks",
+    "overview": "Compatibility forwarding API for ai-slop-checks",
+    "samples": [],
+    "collections": [],
+    "types": {},
+    "predicates": [],
+    "functions": [
+      {
+        "name": "qualityProductionScope",
+        "params": "cb: Codebase",
+        "returns": "Codebase",
+        "desc": "Production source: no test, sample, example, fixture, vendored, or generated files and no test methods."
+      },
+      {
+        "name": "qualityTestScope",
+        "params": "cb: Codebase",
+        "returns": "Codebase",
+        "desc": "Test source: recognized test files and test methods."
+      },
+      {
+        "name": "emptyErrorHandlers",
+        "params": "statements: [Statement]",
+        "returns": "[Violation]",
+        "appliesTo": "[Statement]",
+        "desc": "Catch/except bodies with no parsed statements. Existing language-specific rules may overlap."
+      },
+      {
+        "name": "silentLiteralFallbacks",
+        "params": "statements: [Statement]",
+        "returns": "[Violation]",
+        "appliesTo": "[Statement]",
+        "desc": "Error handlers whose entire body is a literal return, with no handling or notification."
+      },
+      {
+        "name": "unfinishedImplementations",
+        "params": "statements: [Statement]",
+        "returns": "[Violation]",
+        "appliesTo": "[Statement]",
+        "desc": "Explicit unimplemented exceptions/macros in production. Constant returns are not treated as stubs."
+      },
+      {
+        "name": "constantAssertions",
+        "params": "statements: [Statement]",
+        "returns": "[Violation]",
+        "appliesTo": "[Statement]",
+        "desc": "Supported assertion APIs given an unconditional success literal."
+      },
+      {
+        "name": "disabledTests",
+        "params": "methods: [Method], statements: [Statement]",
+        "returns": "[Violation]",
+        "appliesTo": "[Method]",
+        "desc": "Unconditionally disabled tests: skip/ignore decorators, it.skip/xit, and unconditional t.Skip/pytest.skip.\nConditional skips (skipIf, Explicit, skips inside a branch) are not flagged."
+      },
+      {
+        "name": "assertionFreeTests",
+        "params": "methods: [Method], statements: [Statement]",
+        "returns": "[Violation]",
+        "appliesTo": "[Method]",
+        "desc": "Tests with no recognized assertion, expectation, verification, or failure call.\nCustom assertion helpers named assert*/expect*/verify*/check*/should* are recognized."
+      },
+      {
+        "name": "existenceOnlyAssertions",
+        "params": "methods: [Method]",
+        "returns": "[Violation]",
+        "appliesTo": "[Method]",
+        "desc": "Tests whose only assertions check that a value exists (NotNull, toBeDefined, toBeTruthy, ...)."
+      },
+      {
+        "name": "mockedTestSubjects",
+        "params": "statements: [Statement]",
+        "returns": "[Violation]",
+        "appliesTo": "[Statement]",
+        "desc": "Tests that mock the type or module they are named after, so the real subject never runs.\nSupports Moq Mock<T>, Mockito mock(T.class), Python Mock/MagicMock(spec=T)/create_autospec(T), and jest.mock('./m')."
+      },
+      {
+        "name": "typeErasingCasts",
+        "params": "statements: [Statement]",
+        "returns": "[Violation]",
+        "appliesTo": "[Statement]",
+        "desc": "Explicit any/dynamic casts and Python cast(Any, ...), including nested expressions."
+      },
+      {
+        "name": "blanketWarningSuppressions",
+        "params": "statements: [Statement], methods: [Method], types: [Type]",
+        "returns": "[Violation]",
+        "appliesTo": "[Statement]",
+        "desc": "Suppressions that silence every diagnostic: bare #pragma warning disable, # type: ignore, # noqa,\npylint disable=all, eslint-disable without rules, @ts-ignore/@ts-nocheck, //nolint, #[allow(warnings)].\nSuppressions that name specific diagnostics remain allowed."
+      },
+      {
+        "name": "credentialLiterals",
+        "params": "statements: [Statement]",
+        "returns": "[Violation]",
+        "appliesTo": "[Statement]",
+        "desc": "Nonempty literal assignments to specific credential names. This is a review signal, not secret validation."
+      },
+      {
+        "name": "weakCryptoCalls",
+        "params": "statements: [Statement]",
+        "returns": "[Violation]",
+        "appliesTo": "[Statement]",
+        "desc": "Broken or weak cryptographic primitives (MD5, SHA-1, DES/3DES, RC2/RC4, Blowfish, ECB mode)."
+      },
+      {
+        "name": "injectionProneStrings",
+        "params": "statements: [Statement]",
+        "returns": "[Violation]",
+        "appliesTo": "[Statement]",
+        "desc": "SQL, shell/eval, and raw-HTML sinks receiving text built by concatenation, interpolation, or formatting."
+      },
+      {
+        "name": "interpolatedLogMessages",
+        "params": "statements: [Statement]",
+        "returns": "[Violation]",
+        "appliesTo": "[Statement]",
+        "desc": "Log messages built by interpolation or concatenation lose structured fields and can permit log injection."
+      },
+      {
+        "name": "sensitiveDataInLogs",
+        "params": "statements: [Statement]",
+        "returns": "[Violation]",
+        "appliesTo": "[Statement]",
+        "desc": "Sensitive identifiers passed to logging APIs may disclose credentials or personal data."
+      },
+      {
+        "name": "unsafeDeserialization",
+        "params": "statements: [Statement]",
+        "returns": "[Violation]",
+        "appliesTo": "[Statement]",
+        "desc": "Deserializers that construct objects from untrusted input can execute code or instantiate unsafe types."
+      },
+      {
+        "name": "insecureRandomForSecrets",
+        "params": "statements: [Statement]",
+        "returns": "[Violation]",
+        "appliesTo": "[Statement]",
+        "desc": "Non-cryptographic random values must not be used for authentication or session secrets."
+      },
+      {
+        "name": "hardcodedLocalUrls",
+        "params": "statements: [Statement]",
+        "returns": "[Violation]",
+        "appliesTo": "[Statement]",
+        "desc": "Hard-coded loopback URLs often work locally but fail after deployment."
+      },
+      {
+        "name": "ioInLoops",
+        "params": "statements: [Statement]",
+        "returns": "[Violation]",
+        "appliesTo": "[Statement]",
+        "desc": "Database, network, or filesystem operations inside a loop can multiply I/O with collection size."
+      },
+      {
+        "name": "asyncWithoutAwait",
+        "params": "methods: [Method]",
+        "returns": "[Violation]",
+        "appliesTo": "[Method]",
+        "desc": "Async methods with no await usually hide synchronous work behind an async-shaped API."
+      },
+      {
+        "name": "blockingCallsInAsync",
+        "params": "statements: [Statement]",
+        "returns": "[Violation]",
+        "appliesTo": "[Statement]",
+        "desc": "Blocking I/O and sleeps inside async methods can starve the event loop."
+      },
+      {
+        "name": "testScaffoldingInProduction",
+        "params": "sources: [File]",
+        "returns": "[Violation]",
+        "appliesTo": "[File]",
+        "desc": "Test and mocking frameworks should not be imported by production code."
+      },
+      {
+        "name": "speculativeAbstractions",
+        "params": "methods: [Method], types: [Type]",
+        "returns": "[Violation]",
+        "appliesTo": "[Method]",
+        "desc": "Flag pass-through wrappers and single-implementation interfaces as possible speculative abstractions."
+      },
+      {
+        "name": "securityChecks",
+        "params": "statements: [Statement]",
+        "returns": "[Violation]",
+        "appliesTo": "[Statement]",
+        "desc": "Security-focused subset, also included by codeQualityChecks."
+      },
+      {
+        "name": "undeclaredDependencies",
+        "params": "sources: [File], statements: [Statement], projects: [Project]",
+        "returns": "[Violation]",
+        "appliesTo": "[File]",
+        "desc": "Imports of third-party packages that the project manifest (package.json, go.mod, Cargo.toml) does not declare.\nEvaluated only for languages with a parsed manifest."
+      },
+      {
+        "name": "deprecatedCalls",
+        "params": "statements: [Statement]",
+        "returns": "[Violation]",
+        "appliesTo": "[Statement]",
+        "desc": "Calls to declarations marked deprecated: compiler-resolved [Obsolete]/@deprecated, or same-file\ndeclarations decorated Obsolete/Deprecated/deprecated when the parser cannot resolve calls."
+      },
+      {
+        "name": "blockingTestSleeps",
+        "params": "statements: [Statement]",
+        "returns": "[Violation]",
+        "appliesTo": "[Statement]",
+        "desc": "Fixed sleeps and delays in tests; wait on a condition or use a controlled clock instead."
+      },
+      {
+        "name": "fixedDelays",
+        "params": "statements: [Statement]",
+        "returns": "[Violation]",
+        "appliesTo": "[Statement]",
+        "desc": "Hard-coded sleeps/delays in production code, often used to paper over races or ordering bugs."
+      },
+      {
+        "name": "debuggerLeftovers",
+        "params": "statements: [Statement]",
+        "returns": "[Violation]",
+        "appliesTo": "[Statement]",
+        "desc": "Debugger breakpoints and stack dumps left in production code."
+      },
+      {
+        "name": "overCommentedMethods",
+        "params": "methods: [Method]",
+        "returns": "[Violation]",
+        "appliesTo": "[Method]",
+        "desc": "Methods of 10+ lines where at least 40% of lines are comments, typically narration of obvious code."
+      },
+      {
+        "name": "emojiInCode",
+        "params": "statements: [Statement], types: [Type], methods: [Method]",
+        "returns": "[Violation]",
+        "appliesTo": "[Statement]",
+        "desc": "Emoji in identifiers and string literals. Comment emoji are not checked (comments are raw text)."
+      },
+      {
+        "name": "clutterNames",
+        "params": "types: [Type], methods: [Method]",
+        "returns": "[Violation]",
+        "appliesTo": "[Type]",
+        "desc": "Types and methods named after an edit (FooFixed, BarEnhanced, run_improved, ParseV2Refactored).\nPredicate-like names (IsFixed, has_improved) are not flagged."
+      },
+      {
+        "name": "backupSourceFiles",
+        "params": "files: [File]",
+        "returns": "[Violation]",
+        "appliesTo": "[File]",
+        "desc": "Source filenames explicitly marked as backup/copy artifacts. New/Old type names are not banned."
+      },
+      {
+        "name": "agentReportFiles",
+        "params": "",
+        "returns": "[Violation]",
+        "desc": "Agent work-report markdown files (IMPLEMENTATION_SUMMARY.md, FIX_NOTES.md, REFACTOR_COMPLETE.md, ...)."
+      },
+      {
+        "name": "duplicateMethodBodies",
+        "params": "methods: [Method]",
+        "returns": "[Violation]",
+        "appliesTo": "[Method]",
+        "desc": "Production methods (6+ statements) whose parsed body structure duplicates another method."
+      },
+      {
+        "name": "scopedCodeQualityChecks",
+        "params": "production: Codebase, tests: Codebase, all: Codebase",
+        "returns": "[Violation]",
+        "desc": "Compose quality checks from explicitly scoped codebases. Production rules read only production;\ntest rules read only tests; whole-repository rules (suppressions, dependencies) read all."
+      },
+      {
+        "name": "codeQualityChecks",
+        "params": "cb: Codebase",
+        "returns": "[Violation]",
+        "desc": "Shared quality suite over the standard production/test scopes."
+      },
+      {
+        "name": "certificateValidationDisabled",
+        "params": "statements: [Statement]",
+        "returns": "[Violation]",
+        "appliesTo": "[Statement]",
+        "desc": "Explicit certificate-validation bypasses on known HTTP clients and configuration properties."
+      },
+      {
+        "name": "missingRequestTimeout",
+        "params": "statements: [Statement]",
+        "returns": "[Violation]",
+        "appliesTo": "[Statement]",
+        "desc": "Requests calls without timeouts, or explicit timeout=None on requests/httpx."
+      },
+      {
+        "name": "unsafeArchiveExtraction",
+        "params": "statements: [Statement]",
+        "returns": "[Violation]",
+        "appliesTo": "[Statement]",
+        "desc": "Tar extraction without a data filter or explicitly selected members requires review."
+      },
+      {
+        "name": "insecureTemporaryNames",
+        "params": "statements: [Statement]",
+        "returns": "[Violation]",
+        "appliesTo": "[Statement]",
+        "desc": "Temporary-name generators that do not atomically create the file have a race window."
+      },
+      {
+        "name": "wildcardCorsOrigins",
+        "params": "statements: [Statement]",
+        "returns": "[Violation]",
+        "appliesTo": "[Statement]",
+        "desc": "Wildcard CORS is a review signal; public APIs may intentionally allow it."
+      },
+      {
+        "name": "developmentServerDebug",
+        "params": "statements: [Statement]",
+        "returns": "[Violation]",
+        "appliesTo": "[Statement]",
+        "desc": "Explicit development-server debugging in production-scoped source."
+      },
+      {
+        "name": "jwtSignatureBypass",
+        "params": "statements: [Statement]",
+        "returns": "[Violation]",
+        "appliesTo": "[Statement]",
+        "desc": "JWT parsing configured to bypass signature verification must not authorize requests."
+      },
+      {
+        "name": "fastPasswordHashes",
+        "params": "statements: [Statement]",
+        "returns": "[Violation]",
+        "appliesTo": "[Statement]",
+        "desc": "Fast SHA-2 hashes of password-named inputs are not password derivation functions."
+      },
+      {
+        "name": "insecureCookieFlags",
+        "params": "statements: [Statement]",
+        "returns": "[Violation]",
+        "appliesTo": "[Statement]",
+        "desc": "Explicitly disabling Secure or HttpOnly cookie flags exposes session values."
+      },
+      {
+        "name": "worldWritableModes",
+        "params": "statements: [Statement]",
+        "returns": "[Violation]",
+        "appliesTo": "[Statement]",
+        "desc": "Literal 0666/0777 permission changes make files writable by other users."
+      },
+      {
+        "name": "xmlEntityExpansion",
+        "params": "statements: [Statement]",
+        "returns": "[Violation]",
+        "appliesTo": "[Statement]",
+        "desc": "Explicit external-entity or DTD processing can expose local files or exhaust resources."
+      },
+      {
+        "name": "dynamicCodeLoading",
+        "params": "statements: [Statement]",
+        "returns": "[Violation]",
+        "appliesTo": "[Statement]",
+        "desc": "Runtime execution APIs not already covered by the suites' eval rules."
+      },
+      {
+        "name": "literalShellCommands",
+        "params": "statements: [Statement]",
+        "returns": "[Violation]",
+        "appliesTo": "[Statement]",
+        "desc": "Shell=True with non-dynamic input; dynamic strings are already covered by injectionProneStrings."
+      },
+      {
+        "name": "unboundedRegex",
+        "params": "statements: [Statement]",
+        "returns": "[Violation]",
+        "appliesTo": "[Statement]",
+        "desc": "Static Regex calls without an explicit timeout may be vulnerable to pathological input."
+      },
+      {
+        "name": "abruptFinally",
+        "params": "statements: [Statement]",
+        "returns": "[Violation]",
+        "appliesTo": "[Statement]",
+        "desc": "Abrupt completion in finally can replace an active exception or return value."
+      },
+      {
+        "name": "redundantCatchRethrow",
+        "params": "statements: [Statement]",
+        "returns": "[Violation]",
+        "appliesTo": "[Statement]",
+        "desc": "A handler containing only a bare rethrow adds no handling behavior."
+      },
+      {
+        "name": "constantBranchConditions",
+        "params": "statements: [Statement]",
+        "returns": "[Violation]",
+        "appliesTo": "[Statement]",
+        "desc": "Literal boolean conditions leave one branch permanently unreachable."
+      },
+      {
+        "name": "selfComparisonConditions",
+        "params": "statements: [Statement]",
+        "returns": "[Violation]",
+        "appliesTo": "[Statement]",
+        "desc": "Comparing one identifier to itself is suspicious; floating-point NaN tests can be intentional."
+      },
+      {
+        "name": "selfAssignments",
+        "params": "statements: [Statement]",
+        "returns": "[Violation]",
+        "appliesTo": "[Statement]",
+        "desc": "Assigning an identifier back to the same target is a no-op."
+      },
+      {
+        "name": "duplicateSourceImports",
+        "params": "sources: [File]",
+        "returns": "[Violation]",
+        "appliesTo": "[File]",
+        "desc": "Repeated identical imports in the same file; distinct symbols or aliases remain allowed."
+      },
+      {
+        "name": "excessiveControlNesting",
+        "params": "statements: [Statement]",
+        "returns": "[Violation]",
+        "appliesTo": "[Statement]",
+        "desc": "Report the first control-flow statement at nesting depth five, not each statement beneath it."
+      },
+      {
+        "name": "sameValueAssertions",
+        "params": "statements: [Statement]",
+        "returns": "[Violation]",
+        "appliesTo": "[Statement]",
+        "desc": "Equality assertions comparing the same identifier do not independently verify an expected value."
+      },
+      {
+        "name": "productionAssertValidation",
+        "params": "statements: [Statement]",
+        "returns": "[Violation]",
+        "appliesTo": "[Statement]",
+        "desc": "Python assert disappears under optimization and must not be used for production input validation."
+      },
+      {
+        "name": "asyncVoidMethods",
+        "params": "methods: [Method]",
+        "returns": "[Violation]",
+        "appliesTo": "[Method]",
+        "desc": "Async void methods cannot be awaited; conventional EventArgs handlers are exempt."
+      },
+      {
+        "name": "unsafeThreadStopping",
+        "params": "statements: [Statement]",
+        "returns": "[Violation]",
+        "appliesTo": "[Statement]",
+        "desc": "Abrupt thread termination can leave locks and shared state inconsistent."
+      },
+      {
+        "name": "forcedGarbageCollection",
+        "params": "statements: [Statement]",
+        "returns": "[Violation]",
+        "appliesTo": "[Statement]",
+        "desc": "Explicit full garbage collection usually hides an allocation or lifetime problem."
+      },
+      {
+        "name": "unboundedProcessWait",
+        "params": "statements: [Statement]",
+        "returns": "[Violation]",
+        "appliesTo": "[Statement]",
+        "desc": "Parameterless subprocess waits have no caller-supplied deadline."
+      },
+      {
+        "name": "publicListenerBinding",
+        "params": "statements: [Statement]",
+        "returns": "[Violation]",
+        "appliesTo": "[Statement]",
+        "desc": "Binding every interface is a review signal, not proof that a public server is insecure."
+      },
+      {
+        "name": "errorMessageControlFlow",
+        "params": "statements: [Statement]",
+        "returns": "[Violation]",
+        "appliesTo": "[Statement]",
+        "desc": "Branching on exception message text is brittle across versions and localization."
+      },
+      {
+        "name": "legacyTlsProtocols",
+        "params": "statements: [Statement]",
+        "returns": "[Violation]",
+        "appliesTo": "[Statement]",
+        "desc": "Explicit SSL or TLS 1.0/1.1 selections preserve obsolete protocol defaults."
+      },
+      {
+        "name": "operationalSafetyChecks",
+        "params": "production: Codebase, tests: Codebase",
+        "returns": "[Violation]",
+        "desc": "Operational safeguards for production; assertion checks additionally inspect the test scope."
+      }
+    ],
+    "checks": [],
+    "commands": []
   },
   "cop": {
     "label": "cop",
@@ -5866,6 +6896,10 @@ const packages = {
       {
         "name": "system-exit",
         "desc": ""
+      },
+      {
+        "name": "swallowed-exceptions",
+        "desc": "Do not catch Exception/Throwable without throwing — the failure silently disappears"
       },
       {
         "name": "java-checks",

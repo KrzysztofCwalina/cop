@@ -463,6 +463,12 @@ for setup, path selection, and actions. The standalone
 
 ## cop help
 
+Browse documentation for all standard packages in the
+[Package Reference](https://krzysztofcwalina.github.io/cop/reference.html).
+Its package tree includes APIs, check descriptions, and samples. The shared
+deterministic agentic-code rules are grouped under **ai-slop-checks**; the older
+**code-quality-checks** package forwards to it for compatibility.
+
 Show help for the Cop language or a package.
 
 ```bash

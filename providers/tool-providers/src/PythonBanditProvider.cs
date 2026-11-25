@@ -12,48 +12,28 @@ public class PythonBanditProvider : ToolProvider
 {
     protected override string ToolName => "bandit";
 
-    protected override async ValueTask<List<object>> RunToolAsync(
+    protected override ValueTask<List<object>> RunToolAsync(
         string rootPath, IReadOnlySet<string> excluded, CancellationToken cancellationToken)
+        => RunJsonToolAsync(
+            new("bandit", "-r . -f json --quiet", rootPath) { Mode = ToolInvocationMode.Shell },
+            rootPath, excluded, "results", item => item.GetProperty("filename").GetString() ?? string.Empty,
+            ToViolation, cancellationToken);
+
+    private static ToolViolation ToViolation(JsonElement item, string filePath)
     {
-        (string? stdout, string _, int _) = await RunProcessAsync(
-            new("bandit", "-r . -f json --quiet", rootPath)
-            { Mode = ToolInvocationMode.Shell }, cancellationToken).ConfigureAwait(false);
-        if (string.IsNullOrWhiteSpace(stdout))
+        int line = item.TryGetProperty("line_number", out JsonElement ln) ? ln.GetInt32() : 0;
+        string? testId = item.TryGetProperty("test_id", out JsonElement tid) ? tid.GetString() : string.Empty;
+        string? message = item.TryGetProperty("issue_text", out JsonElement m) ? m.GetString() : string.Empty;
+        string severity = MapBanditSeverity(item.TryGetProperty("issue_severity", out JsonElement s) ? s.GetString() : string.Empty);
+
+        return new ToolViolation
         {
-            return [];
-        }
-
-        List<object> violations = new List<object>();
-        using JsonDocument doc = JsonDocument.Parse(stdout);
-
-        if (!doc.RootElement.TryGetProperty("results", out JsonElement results))
-        {
-            return [];
-        }
-
-        foreach (JsonElement item in results.EnumerateArray())
-        {
-            string filePath = NormalizePath(item.GetProperty("filename").GetString() ?? string.Empty, rootPath);
-            if (string.IsNullOrEmpty(filePath) || IsExcluded(filePath, excluded))
-            {
-                continue;
-            }
-
-            int line = item.TryGetProperty("line_number", out JsonElement ln) ? ln.GetInt32() : 0;
-            string? testId = item.TryGetProperty("test_id", out JsonElement tid) ? tid.GetString() : string.Empty;
-            string? message = item.TryGetProperty("issue_text", out JsonElement m) ? m.GetString() : string.Empty;
-            string severity = MapBanditSeverity(item.TryGetProperty("issue_severity", out JsonElement s) ? s.GetString() : string.Empty);
-
-            violations.Add(new ToolViolation
-            {
-                File = filePath,
-                Line = line,
-                Severity = severity,
-                Message = $"{testId}: {message}",
-                Source = "bandit"
-            });
-        }
-        return violations;
+            File = filePath,
+            Line = line,
+            Severity = severity,
+            Message = $"{testId}: {message}",
+            Source = "bandit"
+        };
     }
 
     private static string MapBanditSeverity(string? severity) => severity?.ToUpperInvariant() switch

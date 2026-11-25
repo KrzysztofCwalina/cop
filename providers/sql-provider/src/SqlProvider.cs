@@ -74,38 +74,21 @@ public sealed class SqlProvider : DataProvider
             .ConfigureAwait(false);
     }
 
-    private readonly Dictionary<string, DeferredFormatSnapshot> _snapshots = new(StringComparer.Ordinal);
+    private readonly DeferredFormatFiles _files = new("sql", s_schema, CollectSqlFiles, ParseFile);
 
     /// <inheritdoc />
     public override ValueTask<object?> QueryDeferredAsync(
         ProviderQuery query, CancellationToken cancellationToken = default)
-    {
-        if (query.RootPath is null)
-        {
-            return ValueTask.FromResult<object?>(new DeferredProviderResult(
-                new Dictionary<string, IAsyncEnumerable<object>>()));
-        }
+        => _files.QueryAsync(query, GetRuntimeBindings(), cancellationToken);
 
-        string key = DeferredFormatSnapshot.Key(query);
-        string root = Path.GetFullPath(query.RootPath);
-        if (!_snapshots.TryGetValue(key, out DeferredFormatSnapshot? snapshot))
+    private static ValueTask<Dictionary<string, List<object>>> ParseFile(
+        SourceModel.SourceFile file, string path, CancellationToken token)
+    {
+        SqlParser.SqlParseResult doc = SqlParser.Parse(file.RawText);
+        return ValueTask.FromResult(new Dictionary<string, List<object>>
         {
-            snapshot = new(() =>
-            {
-                List<string> paths = new List<string>();
-                CollectSqlFiles(root, query.ExcludedDirectories, paths);
-                return paths;
-            }, async (path, token) =>
-            {
-                string text = await File.ReadAllTextAsync(path, token).ConfigureAwait(false);
-                SourceFile file = new SourceFile(Path.GetRelativePath(root, path).Replace('\\', '/'), "sql", [], [], text);
-                SqlParser.SqlParseResult doc = SqlParser.Parse(text);
-                return new() { ["Statements"] = doc.Statements.Select(s => (object)(s with { File = file })).ToList() };
-            });
-            _snapshots.Add(key, snapshot);
-        }
-        cancellationToken.ThrowIfCancellationRequested();
-        return ValueTask.FromResult<object?>(snapshot.Query(query, s_schema, GetRuntimeBindings()));
+            ["Statements"] = doc.Statements.Select(s => (object)(s with { File = file })).ToList()
+        });
     }
 
     private static void CollectSqlFiles(string dir, IReadOnlySet<string>? excluded, List<string> result)

@@ -17,50 +17,11 @@ public static class RustSchema
     /// <summary>Serializes the Rust provider schema as UTF-8 JSON.</summary>
     public static ReadOnlyMemory<byte> GetJson() => s_schema.ToJson();
 
-    private static ProviderSchema Build()
-    {
-        ProviderSchema baseSchema = CodeSchema.Get();
-
-        List<ProviderTypeSchema> types = new List<ProviderTypeSchema>(baseSchema.Types)
-        {
-            new()
-            {
-                Name = "RustType",
-                Base = "Type",
-                Properties =
-                [
-                    new ProviderPropertySchema { Name = "IsTrait", Type = "bool" },
-                    new ProviderPropertySchema { Name = "IsImpl", Type = "bool" },
-                    new ProviderPropertySchema { Name = "IsUnsafe", Type = "bool" },
-                    new ProviderPropertySchema { Name = "IsUnion", Type = "bool" },
-                    new ProviderPropertySchema { Name = "IsTupleStruct", Type = "bool" },
-                    new ProviderPropertySchema { Name = "IsUnitStruct", Type = "bool" },
-                    new ProviderPropertySchema { Name = "IsNegativeImpl", Type = "bool" },
-                ],
-            },
-            new()
-            {
-                Name = "RustMethod",
-                Base = "Method",
-                Properties =
-                [
-                    new ProviderPropertySchema { Name = "IsUnsafe", Type = "bool" },
-                    new ProviderPropertySchema { Name = "IsConst", Type = "bool" },
-                    new ProviderPropertySchema { Name = "IsExtern", Type = "bool" },
-                ],
-            },
-            new()
-            {
-                Name = "RustStatement",
-                Base = "Statement",
-                Properties =
-                [
-                    new ProviderPropertySchema { Name = "IsMacroCall", Type = "bool" },
-                    new ProviderPropertySchema { Name = "IsPanic", Type = "bool" },
-                ],
-            },
-        };
-
-        return new ProviderSchema { Types = types, Collections = baseSchema.Collections };
-    }
+    private static ProviderSchema Build() => CodeSchema.Extend(
+        CodeSchema.BoolSubtype("RustType", "Type",
+            "IsTrait", "IsImpl", "IsUnsafe", "IsUnion", "IsTupleStruct", "IsUnitStruct", "IsNegativeImpl"),
+        CodeSchema.BoolSubtype("RustMethod", "Method",
+            "IsUnsafe", "IsConst", "IsExtern"),
+        CodeSchema.BoolSubtype("RustStatement", "Statement",
+            "IsMacroCall", "IsPanic"));
 }

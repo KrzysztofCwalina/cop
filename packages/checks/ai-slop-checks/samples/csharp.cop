@@ -1,0 +1,7 @@
+# Run: cop csharp.cop -t <source-directory>
+import code
+import csharp
+import ai-slop-checks
+
+let cb = csharp.parse()
+command MAIN = CHECK(ai-slop-checks.aiSlopChecks(cb))

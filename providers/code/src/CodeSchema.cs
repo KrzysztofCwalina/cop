@@ -30,6 +30,27 @@ public static class CodeSchema
     /// </summary>
     public static ReadOnlyMemory<byte> GetTypesOnlyJson() => s_typesOnly.ToJson();
 
+    /// <summary>
+    /// Builds a language provider schema: the shared types and collections followed by the given language subtypes.
+    /// </summary>
+    /// <param name="languageTypes">The language-specific subtypes to append.</param>
+    /// <returns>A new schema; the shared schema is left untouched.</returns>
+    public static ProviderSchema Extend(params ProviderTypeSchema[] languageTypes) => new()
+    {
+        Types = [.. s_schema.Types, .. languageTypes],
+        Collections = s_schema.Collections
+    };
+
+    /// <summary>
+    /// Defines a language subtype of a shared type whose added properties are all booleans.
+    /// </summary>
+    /// <param name="name">The subtype name, such as <c>GoType</c>.</param>
+    /// <param name="baseType">The shared base type, such as <c>Type</c>.</param>
+    /// <param name="boolProperties">The names of the boolean properties added by the subtype.</param>
+    /// <returns>The subtype schema.</returns>
+    public static ProviderTypeSchema BoolSubtype(string name, string baseType, params string[] boolProperties)
+        => TypeDef(name, baseType, [.. boolProperties.Select(Bool)]);
+
     private static ProviderSchema BuildTypesOnlySchema() => new()
     {
         Types = s_schema.Types,
@@ -64,7 +85,8 @@ public static class CodeSchema
                     Opt("ReturnType", "TypeReference"),
                     Coll("Parameters", "Parameter"), Coll("Statements", "Statement"), Coll("Decorators"),
                     Prop("Line", "int"), Bool("Documented"), Opt("Documentation"),
-                    Opt("File", "File"), Prop("Source")),
+                    Opt("File", "File"), Prop("Source"),
+                    Prop("Shape"), Opt("LineCount", "int"), Opt("CommentLineCount", "int")),
 
                 TypeDef("Constructor", "Method"),
 
@@ -123,7 +145,7 @@ public static class CodeSchema
                     Prop("Name"), Prop("Signature"), Opt("DeclaringType"), Opt("Namespace"),
                     Opt("ReturnType", "TypeReference"), Coll("Parameters", "TypeReference"),
                     Opt("SourceFile"), Opt("Line", "int"), Opt("Column", "int"),
-                    Opt("EndLine", "int"), Opt("EndColumn", "int")),
+                    Opt("EndLine", "int"), Opt("EndColumn", "int"), Bool("IsDeprecated")),
 
                 TypeDef("Line", null,
                     Prop("Text"), Prop("Number", "int"), Prop("Kind"), Opt("File", "File"), Prop("Source"),
@@ -139,7 +161,7 @@ public static class CodeSchema
                 TypeDef("Import", null,
                     Prop("Module"), Opt("Name"), Opt("Alias"), Bool("IsWildcard"), Bool("IsStatic"),
                     Prop("RelativeLevel", "int"), Prop("Line", "int"),
-                    Opt("Column", "int"), Opt("EndLine", "int"), Opt("EndColumn", "int")),
+                    Opt("Column", "int"), Opt("EndLine", "int"), Opt("EndColumn", "int"), Opt("File", "File")),
 
                 TypeDef("Api", null,
                     Prop("Kind"), Prop("TypeName"), Prop("MemberName"),

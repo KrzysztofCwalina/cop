@@ -6,13 +6,18 @@ description: Java coding conventions and correctness checks for coding agents
 authors: cop-team
 tags: java, coding-standards, correctness
 language: Java
-dependencies: ['github.com/KrzysztofCwalina/cop/java: 2.0.0', 'github.com/KrzysztofCwalina/cop/code: 1.2.0']
+dependencies: ['github.com/KrzysztofCwalina/cop/java: 2.0.0', 'github.com/KrzysztofCwalina/cop/code: 1.2.0', 'github.com/KrzysztofCwalina/cop/ai-slop-checks: 1.0.0']
 ---
 
 # Java Checks
 
+The standard suite includes `aiSlopChecks(cb)` from `ai-slop-checks`,
+including empty handlers, literal-only error fallbacks and assertions.
+See the shared package's coverage table for supported APIs and exclusions.
+
 Java coding conventions and correctness checks for coding agents, covering console
-output, exception handling, and process-control anti-patterns.
+output, exception handling (`swallowed-exceptions` flags `Exception`/`Throwable`
+handlers that never rethrow), and process-control anti-patterns.
 
 These checks hardcode the Java provider via `codebase(java.parse())`, so they run with
 just a target directory — no `-p` flag required:

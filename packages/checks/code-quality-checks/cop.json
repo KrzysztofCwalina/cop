@@ -1,0 +1,9 @@
+{
+  "name": "code-quality-checks",
+  "version": "1.0.0",
+  "description": "Compatibility forwarding API for ai-slop-checks",
+  "title": "Code Quality Checks (Compatibility)",
+  "authors": "cop-team",
+  "tags": ["checks", "quality", "compatibility"],
+  "dependencies": ["github.com/KrzysztofCwalina/cop/code: 1.2.0", "github.com/KrzysztofCwalina/cop/ai-slop-checks: 1.0.0"]
+}

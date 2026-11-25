@@ -402,6 +402,22 @@ public static class CodeCollectionBuilder
                 file.Regions[i] = file.Regions[i] with { File = file };
             }
         }
+
+        LinkImports(file);
+    }
+
+    // Links in place so File.Imports keeps a stable identity across accessor calls.
+    internal static List<ImportInfo> LinkImports(SourceFile file)
+    {
+        for (int i = 0; i < file.Imports.Count; i++)
+        {
+            if (file.Imports[i].File is null)
+            {
+                file.Imports[i] = file.Imports[i] with { File = file };
+            }
+        }
+
+        return file.Imports;
     }
 
     internal static List<MethodDeclaration> ResolveReceiverMembers(

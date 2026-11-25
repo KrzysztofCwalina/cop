@@ -125,8 +125,30 @@ public class CopJavaAnalysis {
         }
         if (tree instanceof LiteralTree && ((LiteralTree)tree).getValue() instanceof String)
             return "{\"kind\":\"stringLiteral\",\"stringValue\":" + quote((String)((LiteralTree)tree).getValue()) + "}";
+        if (tree instanceof LiteralTree && ((LiteralTree)tree).getValue() instanceof Boolean)
+            return "{\"kind\":\"booleanLiteral\",\"booleanValue\":" + ((LiteralTree)tree).getValue() + "}";
+        if (tree instanceof LiteralTree && ((LiteralTree)tree).getValue() instanceof Number)
+            return "{\"kind\":\"numericLiteral\",\"name\":" + quote(tree.toString()) + "}";
+        if (tree instanceof LiteralTree && ((LiteralTree)tree).getValue() == null)
+            return "{\"kind\":\"nullLiteral\"}";
         if (tree instanceof ParenthesizedTree)
             return expression(((ParenthesizedTree)tree).getExpression());
+        if (tree instanceof BinaryTree) {
+            BinaryTree binary = (BinaryTree)tree;
+            String operator;
+            switch (tree.getKind()) {
+                case EQUAL_TO: operator = "=="; break;
+                case NOT_EQUAL_TO: operator = "!="; break;
+                case LESS_THAN: operator = "<"; break;
+                case GREATER_THAN: operator = ">"; break;
+                case LESS_THAN_EQUAL: operator = "<="; break;
+                case GREATER_THAN_EQUAL: operator = ">="; break;
+                case PLUS: operator = "+"; break;
+                default: operator = tree.getKind().name(); break;
+            }
+            return "{\"kind\":\"binary\",\"name\":" + quote(operator) + ",\"children\":["
+                + expression(binary.getLeftOperand()) + "," + expression(binary.getRightOperand()) + "]}";
+        }
         if (tree instanceof MethodInvocationTree) {
             MethodInvocationTree call = (MethodInvocationTree)tree;
             List<String> children = new ArrayList<>();
@@ -293,6 +315,7 @@ public class CopJavaAnalysis {
                             case ASSERT: return "assert";
                             case BREAK: return "break";
                             case CONTINUE: return "continue";
+                            case ASSIGNMENT: return "assignment";
                             default: return "";
                         }
                     }
@@ -305,11 +328,20 @@ public class CopJavaAnalysis {
                         if (node instanceof MethodTree) { methodLine = unit.getLineMap().getLineNumber(positions(node)); methodColumn = unit.getLineMap().getColumnNumber(positions(node)); parent = ""; }
                         String kind = kind(node);
                         if (!kind.isEmpty()) {
-                            String type = "", condition = "", expression = "";
+                            String type = "", condition = "", expression = "", member = "", value = "null";
+                            ExpressionTree conditionTree = node instanceof IfTree ? ((IfTree)node).getCondition()
+                                : node instanceof WhileLoopTree ? ((WhileLoopTree)node).getCondition() : null;
                             boolean generic = false, rethrow = false;
                             if (node instanceof IfTree) condition = ((IfTree)node).getCondition().toString();
                             if (node instanceof WhileLoopTree) condition = ((WhileLoopTree)node).getCondition().toString();
-                            if (node instanceof ReturnTree && ((ReturnTree)node).getExpression() != null) expression = ((ReturnTree)node).getExpression().toString();
+                            if (node instanceof AssignmentTree && ((AssignmentTree)node).getVariable() instanceof IdentifierTree) {
+                                member = ((IdentifierTree)((AssignmentTree)node).getVariable()).getName().toString();
+                                value = expression(((AssignmentTree)node).getExpression());
+                            }
+                            if (node instanceof ReturnTree && ((ReturnTree)node).getExpression() != null) {
+                                expression = ((ReturnTree)node).getExpression().toString();
+                                value = expression(((ReturnTree)node).getExpression());
+                            }
                             if (node instanceof ThrowTree) {
                                 ExpressionTree thrown = ((ThrowTree)node).getExpression();
                                 if (thrown instanceof NewClassTree) type = ((NewClassTree)thrown).getIdentifier().toString();
@@ -333,6 +365,8 @@ public class CopJavaAnalysis {
                                 + ",\"methodColumn\":" + methodColumn
                                 + ",\"kind\":" + quote(kind) + ",\"typeName\":" + quote(type)
                                 + ",\"condition\":" + quote(condition) + ",\"expression\":" + quote(expression)
+                                + ",\"conditionExpression\":" + (conditionTree == null ? "null" : expression(conditionTree))
+                                + ",\"memberName\":" + quote(member) + ",\"valueExpression\":" + value
                                 + ",\"genericError\":" + generic + ",\"rethrow\":" + rethrow
                                 + ",\"originalAlwaysRethrown\":" + (node instanceof CatchTree && !hasFinally(ancestry)
                                     && rethrows(((CatchTree)node).getBlock(), ((CatchTree)node).getParameter().getName().toString()))
@@ -499,6 +533,7 @@ public class CopJavaAnalysis {
                                 + ",\"signature\":" + quote(owner.toString() + "." + method.getSimpleName() + signature.toString())
                                 + ",\"declaringType\":" + quote(owner.toString()) + ",\"namespace\":" + quote(namespace)
                                 + ",\"returnType\":" + mirror(signature.getReturnType()) + ",\"parameters\":" + array(parameters)
+                                + ",\"isDeprecated\":" + task.getElements().isDeprecated(method)
                                 + location + "}";
                             if (!complete) callable = "null";
                         }

@@ -143,6 +143,7 @@ public static class ToolchainProcess
         }
 
         await using ToolchainProcessContainment containment = new ToolchainProcessContainment();
+        bool started = false;
         try
         {
             if (!process.Start())
@@ -150,16 +151,15 @@ public static class ToolchainProcess
                 return new(ToolchainStatus.Failed, path, null, "", "", $"Could not start toolchain '{path}'.");
             }
 
+            started = true;
             containment.Attach(process);
         }
         catch (Win32Exception ex)
         {
-            try { if (!process.HasExited)
-                {
-                    process.Kill(entireProcessTree: true);
-                }
+            if (started && !process.HasExited)
+            {
+                process.Kill(entireProcessTree: true);
             }
-            catch (InvalidOperationException) { }
             return new(ex.NativeErrorCode is 2 or 3 ? ToolchainStatus.Unavailable : ToolchainStatus.Failed,
                 path, null, "", "", $"Cannot start toolchain '{path}': {ex.Message}");
         }

@@ -236,17 +236,9 @@ internal static class CopLanguageService
         return buffer;
     }
 
-    private static bool Parses(string text)
-    {
-        try { CopParser.Parse(text, "probe.cop"); return true; }
-        catch (ParseException) { return false; }
-    }
+    private static bool Parses(string text) => CopParser.ParseOrNull(text, "probe.cop") is not null;
 
-    private static ModuleNode? TryParse(string text, string path)
-    {
-        try { return CopParser.Parse(text, path); }
-        catch (ParseException) { return null; }
-    }
+    private static ModuleNode? TryParse(string text, string path) => CopParser.ParseOrNull(text, path);
 
     private static string SafeRead(string file)
     {

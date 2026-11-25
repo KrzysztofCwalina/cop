@@ -85,6 +85,7 @@ Each package includes samples in its `samples/` directory showing real-world usa
 | [exclude-generated](../packages/code-metrics/samples/exclude-generated.cop) | Compute metrics excluding generated code |
 | [custom-slop](../packages/code-metrics/samples/custom-slop.cop) | Customize slop rules and weights |
 | [enforce-layering-rules](../packages/code-layering/samples/enforce-layering-rules.cop) | Enforce dependency layering rules |
+| [ai-slop-checks](../packages/checks/ai-slop-checks/samples/csharp.cop) | Run shared AI-slop checks on C# source |
 
 ### C# (.NET)
 

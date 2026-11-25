@@ -14,6 +14,11 @@ Defines the type system for source code structural analysis. Import with `import
 Provides types for: Type, Method, Constructor, Parameter, TypeReference, Statement, Argument, Line, File.
 Provides collections for: Types, Statements, Lines, Files.
 
+`File` now supports the `TextFilePosition` trait, with line zero for file-level
+findings. Parsed `CodeExpression` cast nodes expose destination type `Name`
+and operand `Target`; scalar Boolean literals expose `BooleanValue`.
+These are parser facts, not instructions to forbid all casts.
+
 ## Project-independent queries
 
 The query helpers inspect only caller-supplied parsed facts. They do not parse source,

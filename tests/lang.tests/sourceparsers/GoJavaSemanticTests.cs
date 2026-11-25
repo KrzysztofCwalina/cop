@@ -42,6 +42,29 @@ public class GoJavaSemanticTests
     }
 
     [Test]
+    public async Task Java_AttributionDistinguishesDeprecatedCalls()
+    {
+        Native("java");
+        string source = """
+            class Caller {
+                @Deprecated void oldMethod() {}
+                void currentMethod() {}
+                void run() { oldMethod(); currentMethod(); }
+            }
+            """;
+        string path = Write("Caller.java", source);
+        await using var scope = new ToolchainExecutionScope();
+        var file = (await new JavaSourceParser().ParseAsync(path, source, cancellationToken: CancellationToken.None))!;
+        var calls = file.Statements.Where(s => s.MemberName is "oldMethod" or "currentMethod").ToList();
+        Assert.That(calls.Select(s => s.MemberName), Is.EqualTo(new[] { "oldMethod", "currentMethod" }));
+        var old = await AsyncSourceFacts.SemanticAsync(calls[0], CancellationToken.None);
+        var current = await AsyncSourceFacts.SemanticAsync(calls[1], CancellationToken.None);
+        Assert.That(old.ReferencedCallable?.IsDeprecated, Is.True);
+        Assert.That(current.ReferencedCallable?.IsDeprecated, Is.False);
+        Assert.That(ProviderErrors.Drain(), Is.Empty);
+    }
+
+    [Test]
     public async System.Threading.Tasks.Task Java_AttributionSelectsImportedTypeFactoryAndOverload()
     {
         Native("java");

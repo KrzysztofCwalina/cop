@@ -42,7 +42,11 @@ public class GoJavaCliParityTests
                         other.System.exit(2);
                         service.println("not System");
                     }
+                    Sink service;
                 }
+                abstract class Sink { abstract void println(String value); }
+                abstract class ExitTarget { abstract void exit(int status); }
+                class other { static Sink out; static ExitTarget System; }
                 """);
             string? first = null;
             for (int attempt = 0; attempt < 2; attempt++)
@@ -59,7 +63,7 @@ public class GoJavaCliParityTests
                         "Sample.java(7): error: Avoid System.exit() - throw an exception or return an error instead [system-exit]"
                     }), output);
                 Assert.That(output.Contains("using simpler"), Is.EqualTo(!native), output);
-                string stableOutput = CliSummaryAssertions.NormalizeElapsedTime(output, 1, 3, 30, checks: true);
+                string stableOutput = CliSummaryAssertions.NormalizeElapsedTime(output, 2, 68, 30, checks: true);
                 if (first is not null) Assert.That(stableOutput, Is.EqualTo(first));
                 first = stableOutput;
             }

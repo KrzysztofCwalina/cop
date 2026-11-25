@@ -1,0 +1,291 @@
+import code
+import ai-slop-checks
+
+## Production source: no test, sample, example, fixture, vendored, or generated files and no test methods.
+export function qualityProductionScope(cb: Codebase) : Codebase =>
+    ai-slop-checks.qualityProductionScope(cb)
+
+## Test source: recognized test files and test methods.
+export function qualityTestScope(cb: Codebase) : Codebase =>
+    ai-slop-checks.qualityTestScope(cb)
+
+## Catch/except bodies with no parsed statements. Existing language-specific rules may overlap.
+export function emptyErrorHandlers(statements: [Statement]) : [Violation] =>
+    ai-slop-checks.emptyErrorHandlers(statements)
+
+## Error handlers whose entire body is a literal return, with no handling or notification.
+export function silentLiteralFallbacks(statements: [Statement]) : [Violation] =>
+    ai-slop-checks.silentLiteralFallbacks(statements)
+
+## Explicit unimplemented exceptions/macros in production. Constant returns are not treated as stubs.
+export function unfinishedImplementations(statements: [Statement]) : [Violation] =>
+    ai-slop-checks.unfinishedImplementations(statements)
+
+## Supported assertion APIs given an unconditional success literal.
+export function constantAssertions(statements: [Statement]) : [Violation] =>
+    ai-slop-checks.constantAssertions(statements)
+
+## Unconditionally disabled tests: skip/ignore decorators, it.skip/xit, and unconditional t.Skip/pytest.skip.
+## Conditional skips (skipIf, Explicit, skips inside a branch) are not flagged.
+export function disabledTests(methods: [Method], statements: [Statement]) : [Violation] =>
+    ai-slop-checks.disabledTests(methods, statements)
+
+## Tests with no recognized assertion, expectation, verification, or failure call.
+## Custom assertion helpers named assert*/expect*/verify*/check*/should* are recognized.
+export function assertionFreeTests(methods: [Method], statements: [Statement]) : [Violation] =>
+    ai-slop-checks.assertionFreeTests(methods, statements)
+
+## Tests whose only assertions check that a value exists (NotNull, toBeDefined, toBeTruthy, ...).
+export function existenceOnlyAssertions(methods: [Method]) : [Violation] =>
+    ai-slop-checks.existenceOnlyAssertions(methods)
+
+## Tests that mock the type or module they are named after, so the real subject never runs.
+## Supports Moq Mock<T>, Mockito mock(T.class), Python Mock/MagicMock(spec=T)/create_autospec(T), and jest.mock('./m').
+export function mockedTestSubjects(statements: [Statement]) : [Violation] =>
+    ai-slop-checks.mockedTestSubjects(statements)
+
+## Explicit any/dynamic casts and Python cast(Any, ...), including nested expressions.
+export function typeErasingCasts(statements: [Statement]) : [Violation] =>
+    ai-slop-checks.typeErasingCasts(statements)
+
+## Suppressions that silence every diagnostic: bare #pragma warning disable, # type: ignore, # noqa,
+## pylint disable=all, eslint-disable without rules, @ts-ignore/@ts-nocheck, //nolint, #[allow(warnings)].
+## Suppressions that name specific diagnostics remain allowed.
+export function blanketWarningSuppressions(statements: [Statement], methods: [Method], types: [Type]) : [Violation] =>
+    ai-slop-checks.blanketWarningSuppressions(statements, methods, types)
+
+## Nonempty literal assignments to specific credential names. This is a review signal, not secret validation.
+export function credentialLiterals(statements: [Statement]) : [Violation] =>
+    ai-slop-checks.credentialLiterals(statements)
+
+## Broken or weak cryptographic primitives (MD5, SHA-1, DES/3DES, RC2/RC4, Blowfish, ECB mode).
+export function weakCryptoCalls(statements: [Statement]) : [Violation] =>
+    ai-slop-checks.weakCryptoCalls(statements)
+
+## SQL, shell/eval, and raw-HTML sinks receiving text built by concatenation, interpolation, or formatting.
+export function injectionProneStrings(statements: [Statement]) : [Violation] =>
+    ai-slop-checks.injectionProneStrings(statements)
+
+## Log messages built by interpolation or concatenation lose structured fields and can permit log injection.
+export function interpolatedLogMessages(statements: [Statement]) : [Violation] =>
+    ai-slop-checks.interpolatedLogMessages(statements)
+
+## Sensitive identifiers passed to logging APIs may disclose credentials or personal data.
+export function sensitiveDataInLogs(statements: [Statement]) : [Violation] =>
+    ai-slop-checks.sensitiveDataInLogs(statements)
+
+## Deserializers that construct objects from untrusted input can execute code or instantiate unsafe types.
+export function unsafeDeserialization(statements: [Statement]) : [Violation] =>
+    ai-slop-checks.unsafeDeserialization(statements)
+
+## Non-cryptographic random values must not be used for authentication or session secrets.
+export function insecureRandomForSecrets(statements: [Statement]) : [Violation] =>
+    ai-slop-checks.insecureRandomForSecrets(statements)
+
+## Hard-coded loopback URLs often work locally but fail after deployment.
+export function hardcodedLocalUrls(statements: [Statement]) : [Violation] =>
+    ai-slop-checks.hardcodedLocalUrls(statements)
+
+## Database, network, or filesystem operations inside a loop can multiply I/O with collection size.
+export function ioInLoops(statements: [Statement]) : [Violation] =>
+    ai-slop-checks.ioInLoops(statements)
+
+## Async methods with no await usually hide synchronous work behind an async-shaped API.
+export function asyncWithoutAwait(methods: [Method]) : [Violation] =>
+    ai-slop-checks.asyncWithoutAwait(methods)
+
+## Blocking I/O and sleeps inside async methods can starve the event loop.
+export function blockingCallsInAsync(statements: [Statement]) : [Violation] =>
+    ai-slop-checks.blockingCallsInAsync(statements)
+
+## Test and mocking frameworks should not be imported by production code.
+export function testScaffoldingInProduction(sources: [File]) : [Violation] =>
+    ai-slop-checks.testScaffoldingInProduction(sources)
+
+## Flag pass-through wrappers and single-implementation interfaces as possible speculative abstractions.
+export function speculativeAbstractions(methods: [Method], types: [Type]) : [Violation] =>
+    ai-slop-checks.speculativeAbstractions(methods, types)
+
+## Security-focused subset, also included by codeQualityChecks.
+export function securityChecks(statements: [Statement]) : [Violation] =>
+    ai-slop-checks.securityChecks(statements)
+
+## Imports of third-party packages that the project manifest (package.json, go.mod, Cargo.toml) does not declare.
+## Evaluated only for languages with a parsed manifest.
+export function undeclaredDependencies(sources: [File], statements: [Statement], projects: [Project]) : [Violation] =>
+    ai-slop-checks.undeclaredDependencies(sources, statements, projects)
+
+## Calls to declarations marked deprecated: compiler-resolved [Obsolete]/@deprecated, or same-file
+## declarations decorated Obsolete/Deprecated/deprecated when the parser cannot resolve calls.
+export function deprecatedCalls(statements: [Statement]) : [Violation] =>
+    ai-slop-checks.deprecatedCalls(statements)
+
+## Fixed sleeps and delays in tests; wait on a condition or use a controlled clock instead.
+export function blockingTestSleeps(statements: [Statement]) : [Violation] =>
+    ai-slop-checks.blockingTestSleeps(statements)
+
+## Hard-coded sleeps/delays in production code, often used to paper over races or ordering bugs.
+export function fixedDelays(statements: [Statement]) : [Violation] =>
+    ai-slop-checks.fixedDelays(statements)
+
+## Debugger breakpoints and stack dumps left in production code.
+export function debuggerLeftovers(statements: [Statement]) : [Violation] =>
+    ai-slop-checks.debuggerLeftovers(statements)
+
+## Methods of 10+ lines where at least 40% of lines are comments, typically narration of obvious code.
+export function overCommentedMethods(methods: [Method]) : [Violation] =>
+    ai-slop-checks.overCommentedMethods(methods)
+
+## Emoji in identifiers and string literals. Comment emoji are not checked (comments are raw text).
+export function emojiInCode(statements: [Statement], types: [Type], methods: [Method]) : [Violation] =>
+    ai-slop-checks.emojiInCode(statements, types, methods)
+
+## Types and methods named after an edit (FooFixed, BarEnhanced, run_improved, ParseV2Refactored).
+## Predicate-like names (IsFixed, has_improved) are not flagged.
+export function clutterNames(types: [Type], methods: [Method]) : [Violation] =>
+    ai-slop-checks.clutterNames(types, methods)
+
+## Source filenames explicitly marked as backup/copy artifacts. New/Old type names are not banned.
+export function backupSourceFiles(files: [File]) : [Violation] =>
+    ai-slop-checks.backupSourceFiles(files)
+
+## Agent work-report markdown files (IMPLEMENTATION_SUMMARY.md, FIX_NOTES.md, REFACTOR_COMPLETE.md, ...).
+export function agentReportFiles() : [Violation] =>
+    ai-slop-checks.agentReportFiles()
+
+## Production methods (6+ statements) whose parsed body structure duplicates another method.
+export function duplicateMethodBodies(methods: [Method]) : [Violation] =>
+    ai-slop-checks.duplicateMethodBodies(methods)
+
+## Compose quality checks from explicitly scoped codebases. Production rules read only production;
+## test rules read only tests; whole-repository rules (suppressions, dependencies) read all.
+export function scopedCodeQualityChecks(production: Codebase, tests: Codebase, all: Codebase) : [Violation] =>
+    ai-slop-checks.scopedCodeQualityChecks(production, tests, all)
+
+## Shared quality suite over the standard production/test scopes.
+export function codeQualityChecks(cb: Codebase) : [Violation] =>
+    ai-slop-checks.codeQualityChecks(cb)
+
+## Explicit certificate-validation bypasses on known HTTP clients and configuration properties.
+export function certificateValidationDisabled(statements: [Statement]) : [Violation] =>
+    ai-slop-checks.certificateValidationDisabled(statements)
+
+## Requests calls without timeouts, or explicit timeout=None on requests/httpx.
+export function missingRequestTimeout(statements: [Statement]) : [Violation] =>
+    ai-slop-checks.missingRequestTimeout(statements)
+
+## Tar extraction without a data filter or explicitly selected members requires review.
+export function unsafeArchiveExtraction(statements: [Statement]) : [Violation] =>
+    ai-slop-checks.unsafeArchiveExtraction(statements)
+
+## Temporary-name generators that do not atomically create the file have a race window.
+export function insecureTemporaryNames(statements: [Statement]) : [Violation] =>
+    ai-slop-checks.insecureTemporaryNames(statements)
+
+## Wildcard CORS is a review signal; public APIs may intentionally allow it.
+export function wildcardCorsOrigins(statements: [Statement]) : [Violation] =>
+    ai-slop-checks.wildcardCorsOrigins(statements)
+
+## Explicit development-server debugging in production-scoped source.
+export function developmentServerDebug(statements: [Statement]) : [Violation] =>
+    ai-slop-checks.developmentServerDebug(statements)
+
+## JWT parsing configured to bypass signature verification must not authorize requests.
+export function jwtSignatureBypass(statements: [Statement]) : [Violation] =>
+    ai-slop-checks.jwtSignatureBypass(statements)
+
+## Fast SHA-2 hashes of password-named inputs are not password derivation functions.
+export function fastPasswordHashes(statements: [Statement]) : [Violation] =>
+    ai-slop-checks.fastPasswordHashes(statements)
+
+## Explicitly disabling Secure or HttpOnly cookie flags exposes session values.
+export function insecureCookieFlags(statements: [Statement]) : [Violation] =>
+    ai-slop-checks.insecureCookieFlags(statements)
+
+## Literal 0666/0777 permission changes make files writable by other users.
+export function worldWritableModes(statements: [Statement]) : [Violation] =>
+    ai-slop-checks.worldWritableModes(statements)
+
+## Explicit external-entity or DTD processing can expose local files or exhaust resources.
+export function xmlEntityExpansion(statements: [Statement]) : [Violation] =>
+    ai-slop-checks.xmlEntityExpansion(statements)
+
+## Runtime execution APIs not already covered by the suites' eval rules.
+export function dynamicCodeLoading(statements: [Statement]) : [Violation] =>
+    ai-slop-checks.dynamicCodeLoading(statements)
+
+## Shell=True with non-dynamic input; dynamic strings are already covered by injectionProneStrings.
+export function literalShellCommands(statements: [Statement]) : [Violation] =>
+    ai-slop-checks.literalShellCommands(statements)
+
+## Static Regex calls without an explicit timeout may be vulnerable to pathological input.
+export function unboundedRegex(statements: [Statement]) : [Violation] =>
+    ai-slop-checks.unboundedRegex(statements)
+
+## Abrupt completion in finally can replace an active exception or return value.
+export function abruptFinally(statements: [Statement]) : [Violation] =>
+    ai-slop-checks.abruptFinally(statements)
+
+## A handler containing only a bare rethrow adds no handling behavior.
+export function redundantCatchRethrow(statements: [Statement]) : [Violation] =>
+    ai-slop-checks.redundantCatchRethrow(statements)
+
+## Literal boolean conditions leave one branch permanently unreachable.
+export function constantBranchConditions(statements: [Statement]) : [Violation] =>
+    ai-slop-checks.constantBranchConditions(statements)
+
+## Comparing one identifier to itself is suspicious; floating-point NaN tests can be intentional.
+export function selfComparisonConditions(statements: [Statement]) : [Violation] =>
+    ai-slop-checks.selfComparisonConditions(statements)
+
+## Assigning an identifier back to the same target is a no-op.
+export function selfAssignments(statements: [Statement]) : [Violation] =>
+    ai-slop-checks.selfAssignments(statements)
+
+## Repeated identical imports in the same file; distinct symbols or aliases remain allowed.
+export function duplicateSourceImports(sources: [File]) : [Violation] =>
+    ai-slop-checks.duplicateSourceImports(sources)
+
+## Report the first control-flow statement at nesting depth five, not each statement beneath it.
+export function excessiveControlNesting(statements: [Statement]) : [Violation] =>
+    ai-slop-checks.excessiveControlNesting(statements)
+
+## Equality assertions comparing the same identifier do not independently verify an expected value.
+export function sameValueAssertions(statements: [Statement]) : [Violation] =>
+    ai-slop-checks.sameValueAssertions(statements)
+
+## Python assert disappears under optimization and must not be used for production input validation.
+export function productionAssertValidation(statements: [Statement]) : [Violation] =>
+    ai-slop-checks.productionAssertValidation(statements)
+
+## Async void methods cannot be awaited; conventional EventArgs handlers are exempt.
+export function asyncVoidMethods(methods: [Method]) : [Violation] =>
+    ai-slop-checks.asyncVoidMethods(methods)
+
+## Abrupt thread termination can leave locks and shared state inconsistent.
+export function unsafeThreadStopping(statements: [Statement]) : [Violation] =>
+    ai-slop-checks.unsafeThreadStopping(statements)
+
+## Explicit full garbage collection usually hides an allocation or lifetime problem.
+export function forcedGarbageCollection(statements: [Statement]) : [Violation] =>
+    ai-slop-checks.forcedGarbageCollection(statements)
+
+## Parameterless subprocess waits have no caller-supplied deadline.
+export function unboundedProcessWait(statements: [Statement]) : [Violation] =>
+    ai-slop-checks.unboundedProcessWait(statements)
+
+## Binding every interface is a review signal, not proof that a public server is insecure.
+export function publicListenerBinding(statements: [Statement]) : [Violation] =>
+    ai-slop-checks.publicListenerBinding(statements)
+
+## Branching on exception message text is brittle across versions and localization.
+export function errorMessageControlFlow(statements: [Statement]) : [Violation] =>
+    ai-slop-checks.errorMessageControlFlow(statements)
+
+## Explicit SSL or TLS 1.0/1.1 selections preserve obsolete protocol defaults.
+export function legacyTlsProtocols(statements: [Statement]) : [Violation] =>
+    ai-slop-checks.legacyTlsProtocols(statements)
+
+## Operational safeguards for production; assertion checks additionally inspect the test scope.
+export function operationalSafetyChecks(production: Codebase, tests: Codebase) : [Violation] =>
+    ai-slop-checks.operationalSafetyChecks(production, tests)

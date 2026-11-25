@@ -95,7 +95,7 @@ public static class YamlParser
                 }
 
                 // "- key: value" — the element's first mapping key, sitting after the dash.
-                if (TrySplitKeyValue(itemContent, out string? seqKey, out string? seqValue))
+                if (YamlMappingSyntax.TrySplitKeyValue(itemContent, out string? seqKey, out string? seqValue))
                 {
                     int keyIndent = indent + (work.Length - itemContent.Length);
                     string keyPath = seqPath + "." + seqKey;
@@ -106,13 +106,13 @@ public static class YamlParser
                 else
                 {
                     // Scalar sequence item.
-                    entries.Add(new YamlEntryInfo(seqPath, string.Empty, Unquote(itemContent), lineNo, docIndex));
+                    entries.Add(new YamlEntryInfo(seqPath, string.Empty, YamlMappingSyntax.Unquote(itemContent), lineNo, docIndex));
                 }
                 continue;
             }
 
             // Mapping entry: "key: value" or "key:".
-            if (TrySplitKeyValue(work, out string? key, out string? value))
+            if (YamlMappingSyntax.TrySplitKeyValue(work, out string? key, out string? value))
             {
                 PopTo(stack, indent, inclusive: true);
                 string mapPrefix = PathOf(stack);
@@ -164,55 +164,6 @@ public static class YamlParser
             }
         }
         return sb.ToString();
-    }
-
-    // Splits "key: value" into key and (unquoted) value. Returns false if there is no
-    // mapping colon (a colon followed by a space, or a trailing colon).
-    private static bool TrySplitKeyValue(string s, out string key, out string value)
-    {
-        key = string.Empty;
-        value = string.Empty;
-        int colon = FindMappingColon(s);
-        if (colon < 0)
-        {
-            return false;
-        }
-
-        key = Unquote(s[..colon].TrimEnd(' '));
-        if (key.Length == 0)
-        {
-            return false;
-        }
-
-        string rest = s[(colon + 1)..].Trim(' ');
-        value = Unquote(rest);
-        return true;
-    }
-
-    // Finds the index of the colon that separates a mapping key from its value:
-    // a ':' that is at end-of-string or followed by whitespace, ignoring colons inside quotes.
-    private static int FindMappingColon(string s)
-    {
-        char quote = '\0';
-        for (int i = 0; i < s.Length; i++)
-        {
-            char c = s[i];
-            if (quote != '\0')
-            {
-                if (c == quote)
-                {
-                    quote = '\0';
-                }
-
-                continue;
-            }
-            if (c == '\'' || c == '"') { quote = c; continue; }
-            if (c == ':' && (i + 1 == s.Length || s[i + 1] == ' '))
-            {
-                return i;
-            }
-        }
-        return -1;
     }
 
     // If the value introduces a block scalar ("|" or ">"), skip its indented content lines
@@ -282,17 +233,4 @@ public static class YamlParser
         return s;
     }
 
-    // Removes surrounding single/double quotes from a scalar, if present.
-    private static string Unquote(string s)
-    {
-        if (s.Length >= 2)
-        {
-            char a = s[0], b = s[^1];
-            if ((a == '"' && b == '"') || (a == '\'' && b == '\''))
-            {
-                return s[1..^1];
-            }
-        }
-        return s;
-    }
 }

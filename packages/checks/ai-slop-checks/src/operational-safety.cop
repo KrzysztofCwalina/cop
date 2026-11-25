@@ -1,0 +1,446 @@
+# Additional production safeguards using parsed expressions, imports, and control flow.
+
+predicate qualityOption(CodeExpression, name: string, enabled: bool) =>
+    CodeExpression.Kind == ExpressionKind('namedArgument') && CodeExpression.Name == name &&
+    CodeExpression.Children:any((value) =>
+        value.Kind == booleanLiteral && value.BooleanValue == enabled)
+
+predicate qualityHasOption(Statement, name: string, enabled: bool) =>
+    Statement.ArgumentExpressions:any((argument) => qualityOption(argument, name, enabled))
+
+predicate qualityHasNamedArgument(Statement, name: string) =>
+    Statement.ArgumentExpressions:any((argument) =>
+        argument.Kind == ExpressionKind('namedArgument') && argument.Name == name)
+
+predicate qualityPropertyIsBool(Statement, names: [string], enabled: bool) =>
+    Statement.Kind == assignment && Statement.MemberName:in(names) &&
+    Statement.ValueExpression != nic && Statement.ValueExpression.Kind == booleanLiteral &&
+    Statement.ValueExpression.BooleanValue == enabled
+
+predicate qualityIsHttpRequest(Statement) =>
+    Statement.Kind == call && Statement.TypeName:in(['requests', 'httpx']) &&
+    Statement.MemberName:in(['get', 'post', 'put', 'patch', 'delete', 'head', 'options', 'request'])
+
+predicate qualityCertificateBypass(Statement) =>
+    (qualityIsHttpRequest(Statement) && qualityHasOption(Statement, 'verify', false)) ||
+    qualityPropertyIsBool(Statement, ['rejectUnauthorized'], false) ||
+    qualityPropertyIsBool(Statement, ['InsecureSkipVerify'], true) ||
+    (Statement.Kind == call && Statement.MemberName:in(['danger_accept_invalid_certs',
+        'danger_accept_invalid_hostnames']) && Statement.ArgumentExpressions.Count > 0 &&
+        Statement.ArgumentExpressions[0].BooleanValue == true) ||
+    (Statement.ValueExpression != nic &&
+        Statement.ValueExpression.Kind == memberAccess &&
+        Statement.ValueExpression.Name == 'DangerousAcceptAnyServerCertificateValidator')
+
+predicate qualityRequestWithoutTimeout(Statement) =>
+    qualityIsHttpRequest(Statement) &&
+    ((Statement.TypeName == 'requests' && !qualityHasNamedArgument(Statement, 'timeout') &&
+        Statement.ArgumentExpressions:none((argument) => argument.Kind == ExpressionKind('unary'))) ||
+    Statement.ArgumentExpressions:any((argument) =>
+        argument.Kind == ExpressionKind('namedArgument') && argument.Name == 'timeout' &&
+        argument.Children:any((value) => value.Kind == nullLiteral)))
+
+predicate qualityUnsafeArchive(Statement) =>
+    Statement.Kind == call && Statement.MemberName == 'extractall' &&
+    Statement.File.Imports:any((entry) => entry.Module == 'tarfile') &&
+    Statement.ArgumentExpressions:none((argument) =>
+        argument.Kind == ExpressionKind('namedArgument') &&
+        ((argument.Name == 'filter' && argument.Children:any((value) =>
+            value.Kind == stringLiteral && value.StringValue == 'data')) ||
+        argument.Name == 'members'))
+
+predicate qualityUnsafeTemporaryName(Statement) =>
+    Statement.Kind == call &&
+    ((Statement.TypeName == 'tempfile' && Statement.MemberName == 'mktemp') ||
+    (Statement.TypeName == 'tempnam' && Statement.MemberName == nic))
+
+predicate qualityWildcardCors(Statement) =>
+    (Statement.Kind == call && Statement.MemberName == 'AllowAnyOrigin') ||
+    (Statement.Kind == call && Statement.MemberName:in(['setHeader', 'Set', 'Add']) &&
+        Statement.ArgumentExpressions.Count >= 2 &&
+        Statement.ArgumentExpressions[0].StringValue == 'Access-Control-Allow-Origin' &&
+        Statement.ArgumentExpressions[1].StringValue == '*') ||
+    (Statement.Kind == call && Statement.MemberName:in(['CORS', 'CORSMiddleware', 'add_middleware']) &&
+        Statement.ArgumentExpressions:any((argument) =>
+            argument.Kind == ExpressionKind('namedArgument') &&
+            argument.Name:in(['origins', 'allow_origins']) &&
+            argument.Children:any((value) => value.Children:any((entry) => entry.StringValue == '*'))))
+
+predicate qualityDebugServer(Statement) =>
+    (Statement.Kind == call && Statement.MemberName == 'run' && qualityHasOption(Statement, 'debug', true)) ||
+    qualityPropertyIsBool(Statement, ['DEBUG'], true)
+
+predicate qualityJwtBypass(Statement) =>
+    Statement.Kind == call && Statement.TypeName:in(['jwt', 'jsonwebtoken']) &&
+    ((Statement.MemberName == 'decode' && qualityHasOption(Statement, 'verify', false)) ||
+    (Statement.MemberName == 'decode' && Statement.TypeName == 'jsonwebtoken'))
+
+predicate qualityHasPasswordArgument(Statement) =>
+    Statement.ArgumentExpressions:any((argument) =>
+        argument.Kind:in([identifier, memberAccess]) &&
+        argument.Name:matches('(?i)^_?(password|passwd|passphrase)$'))
+
+predicate qualityFastPasswordHash(Statement) =>
+    Statement.Kind == call && qualityHasPasswordArgument(Statement) &&
+    ((Statement.TypeName:in(['hashlib', 'SHA256', 'SHA512', 'System.Security.Cryptography.SHA256']) &&
+        Statement.MemberName:in(['sha256', 'sha512', 'HashData'])) ||
+    (Statement.TypeName:in(['sha256', 'sha512']) && Statement.MemberName:in(['Sum256', 'Sum512'])) ||
+    (Statement.TypeName:in(['DigestUtils', 'org.apache.commons.codec.digest.DigestUtils']) &&
+        Statement.MemberName:in(['sha256Hex', 'sha512Hex'])))
+
+predicate qualityUnsafeCookie(Statement) =>
+    (Statement.Kind == call && Statement.MemberName:in(['set_cookie', 'setCookie']) &&
+        (qualityHasOption(Statement, 'secure', false) || qualityHasOption(Statement, 'httponly', false))) ||
+    qualityPropertyIsBool(Statement, ['HttpOnly', 'Secure'], false)
+
+predicate qualityWorldWritable(Statement) =>
+    Statement.Kind == call && Statement.MemberName:in(['chmod', 'Chmod', 'SetUnixFileMode']) &&
+    Statement.ArgumentExpressions.Count > 1 &&
+    Statement.ArgumentExpressions[1].Kind == numericLiteral &&
+    Statement.ArgumentExpressions[1].Name:in(['511', '438', '0o777', '0o666', '0777', '0666'])
+
+predicate qualityUnsafeXml(Statement) =>
+    (Statement.Kind == assignment && Statement.MemberName == 'DtdProcessing' &&
+        Statement.ValueExpression != nic && Statement.ValueExpression.Kind == memberAccess &&
+        Statement.ValueExpression.Name == 'Parse') ||
+    (Statement.Kind == call && Statement.MemberName == 'XMLParser' &&
+        qualityHasOption(Statement, 'resolve_entities', true)) ||
+    (Statement.Kind == call && Statement.MemberName == 'setFeature' &&
+        Statement.ArgumentExpressions.Count > 1 &&
+        Statement.ArgumentExpressions[0].StringValue:in([
+            'http://xml.org/sax/features/external-general-entities',
+            'http://xml.org/sax/features/external-parameter-entities']) &&
+        Statement.ArgumentExpressions[1].BooleanValue == true)
+
+predicate qualityDynamicExecution(Statement) =>
+    Statement.Kind == call &&
+    ((Statement.File.Language == python && Statement.TypeName == nic && Statement.MemberName == 'exec') ||
+    (Statement.File.Language == javascript && Statement.TypeName == 'Function' && Statement.MemberName == nic) ||
+    (Statement.TypeName:in(['vm', 'node:vm']) &&
+        Statement.MemberName:in(['runInThisContext', 'runInNewContext', 'runInContext'])) ||
+    (Statement.TypeName == 'CSharpScript' && Statement.MemberName:in(['EvaluateAsync', 'RunAsync'])))
+
+predicate qualityLiteralShell(Statement) =>
+    Statement.Kind == call && Statement.TypeName == 'subprocess' &&
+    qualityHasOption(Statement, 'shell', true) &&
+    Statement.ArgumentExpressions.Count > 0 &&
+    Statement.ArgumentExpressions[0].Kind == stringLiteral
+
+predicate qualityUnboundedRegex(Statement) =>
+    Statement.Kind == call && Statement.TypeName:in(['Regex', 'System.Text.RegularExpressions.Regex']) &&
+    Statement.MemberName:in(['Match', 'Matches', 'IsMatch', 'Replace', 'Split']) &&
+    Statement.ArgumentExpressions.Count >= 2 && Statement.ArgumentExpressions.Count <= 3 &&
+    !qualityHasNamedArgument(Statement, 'matchTimeout')
+
+predicate qualityAbruptFinally(Statement) =>
+    Statement.Kind:in([return, throw, break, continue]) &&
+    Statement.Ancestors:any((ancestor) => ancestor.Kind == finally) &&
+    (Statement.Kind:in([return, throw]) ||
+        Statement.Ancestors:none((ancestor) => ancestor.Kind:in([for, foreach, while, do])))
+
+predicate qualityRethrowOnly(Statement) =>
+    Statement.ErrorHandler && Statement.Children.Count == 1 &&
+    Statement.Children[0].Kind == throw && Statement.Rethrows
+
+predicate qualityConstantBranch(Statement) =>
+    Statement.Kind == if && Statement.ConditionExpression != nic &&
+    Statement.ConditionExpression.Kind == booleanLiteral
+
+predicate qualitySameIdentifier(left: CodeExpression, right: CodeExpression) =>
+    left.Kind == identifier && right.Kind == identifier && left.Name != nic &&
+    left.Name == right.Name
+
+predicate qualitySelfComparison(CodeExpression) =>
+    CodeExpression.Kind == binary &&
+    CodeExpression.Name:in(['==', '!=', '<', '>', '<=', '>=', 'Eq', 'NotEq', 'Lt', 'Gt', 'LtE', 'GtE',
+        'EqualsExpression', 'NotEqualsExpression', 'LessThanExpression', 'GreaterThanExpression',
+        'LessThanOrEqualExpression', 'GreaterThanOrEqualExpression', '===', '!==']) &&
+    CodeExpression.Children.Count == 2 &&
+    qualitySameIdentifier(CodeExpression.Children[0], CodeExpression.Children[1])
+
+predicate qualitySelfComparisonCondition(Statement) =>
+    Statement.ConditionExpression != nic && qualitySelfComparison(Statement.ConditionExpression)
+
+predicate qualitySelfAssignment(Statement) =>
+    Statement.Kind == assignment && Statement.ValueExpression != nic &&
+    Statement.ValueExpression.Kind == identifier &&
+    Statement.MemberName == Statement.ValueExpression.Name
+
+predicate qualityDeepControl(Statement) =>
+    Statement.Kind:in([if, for, foreach, while, do, switch, try]) &&
+    Statement.Ancestors.Where(item.Kind:in([if, for, foreach, while, do, switch, try])).Count == 4
+
+predicate qualitySameAssertion(Statement) =>
+    (Statement.File.Language == go && Statement.Kind == call &&
+    Statement.TypeName:in(['assert', 'require']) &&
+    Statement.MemberName:in(['Equal', 'NotEqual']) &&
+    Statement.ArgumentExpressions.Count >= 3 &&
+    qualitySameIdentifier(Statement.ArgumentExpressions[1], Statement.ArgumentExpressions[2])) ||
+    (Statement.File.Language != go &&
+    Statement.Kind == call && Statement.ArgumentExpressions.Count >= 2 &&
+    ((Statement.TypeName:in(['Assert', 'Assertions', 'assert', 'require', 'org.junit.Assert',
+        'org.junit.jupiter.api.Assertions']) &&
+        Statement.MemberName:in(['AreEqual', 'Equal', 'NotEqual', 'AreNotEqual', 'assertEquals', 'assertNotEquals',
+            'equal', 'strictEqual', 'notEqual', 'notStrictEqual'])) ||
+    Statement.MemberName:in(['assert_eq!', 'assert_ne!', 'assertEqual', 'assertNotEqual'])) &&
+    qualitySameIdentifier(Statement.ArgumentExpressions[0], Statement.ArgumentExpressions[1]))
+
+predicate qualityProductionAssert(Statement) =>
+    Statement.File.Language == python && Statement.Kind == StatementKind('assert')
+
+predicate qualityEventArgsType(TypeReference) => TypeReference.Name:endsWith('EventArgs')
+
+predicate qualityAsyncVoid(Method) =>
+    Method.File.Language == csharp && Method.Modifiers:isSet(Async) &&
+    Method.ReturnType != nic && Method.ReturnType.Name == 'void' &&
+    !(Method.Parameters.Count == 2 && Method.Parameters[1].Type != nic &&
+        qualityEventArgsType(Method.Parameters[1].Type))
+
+predicate qualityUnsafeThreadStop(Statement) =>
+    Statement.Kind == call && Statement.MemberName:in(['Abort', 'stop', 'Suspend']) &&
+    (Statement.TypeName:in(['Thread', 'System.Threading.Thread', 'java.lang.Thread']) ||
+    (Statement.ReceiverType != nic && Statement.ReceiverType.Name == 'Thread'))
+
+predicate qualityForcedGc(Statement) =>
+    Statement.Kind == call &&
+    ((Statement.TypeName:in(['GC', 'System.GC']) && Statement.MemberName == 'Collect') ||
+    (Statement.TypeName:in(['System', 'Runtime']) && Statement.MemberName == 'gc') ||
+    (Statement.TypeName == 'gc' && Statement.MemberName == 'collect') ||
+    (Statement.TypeName == 'runtime' && Statement.MemberName == 'GC'))
+
+predicate qualityUnboundedProcessWait(Statement) =>
+    Statement.Kind == call && Statement.ArgumentExpressions.Count == 0 &&
+    (Statement.MemberName == 'WaitForExit' ||
+    (Statement.MemberName == 'waitFor' &&
+        (Statement.TypeName == 'Process' ||
+        (Statement.ReceiverType != nic && Statement.ReceiverType.Name == 'Process'))) ||
+    (Statement.MemberName == 'wait' && Statement.TypeName == 'process'))
+
+predicate qualityPublicBinding(Statement) =>
+    Statement.Kind == call && Statement.MemberName:in(['bind', 'listen', 'Listen', 'ListenAndServe', 'run']) &&
+    (Statement.ArgumentExpressions:any((argument) => argument.StringValue:in(['0.0.0.0', '::', ':8080', ':80'])) ||
+    Statement.ArgumentExpressions:any((argument) =>
+        argument.Kind == ExpressionKind('namedArgument') && argument.Name == 'host' &&
+        argument.Children:any((value) => value.StringValue:in(['0.0.0.0', '::']))))
+
+predicate qualityErrorMessageComparison(CodeExpression) =>
+    CodeExpression.Kind == binary && CodeExpression.Children.Count == 2 &&
+    CodeExpression.Name:in(['==', '!=', '===', '!==', 'Eq', 'NotEq', 'EqualsExpression', 'NotEqualsExpression']) &&
+    CodeExpression.Children:any((child) => child.Kind == memberAccess &&
+        child.Name:in(['Message', 'message'])) &&
+    CodeExpression.Children:any((child) => child.Kind == stringLiteral)
+
+predicate qualityErrorMessageBranch(Statement) =>
+    Statement.Kind == if && Statement.ConditionExpression != nic &&
+    qualityErrorMessageComparison(Statement.ConditionExpression)
+
+predicate qualityLegacyTlsValue(CodeExpression) =>
+    CodeExpression.Kind == memberAccess && CodeExpression.Name:in([
+        'Ssl2', 'Ssl3', 'Tls', 'Tls11', 'PROTOCOL_SSLv2', 'PROTOCOL_SSLv3', 'PROTOCOL_TLSv1',
+        'PROTOCOL_TLSv1_1', 'VersionSSL30', 'VersionTLS10', 'VersionTLS11'])
+
+predicate qualityLegacyTls(Statement) =>
+    (Statement.ValueExpression != nic && qualityLegacyTlsValue(Statement.ValueExpression)) ||
+    Statement.ArgumentExpressions:any(qualityLegacyTlsValue)
+
+## Explicit certificate-validation bypasses on known HTTP clients and configuration properties.
+export function certificateValidationDisabled(statements: [Statement]) : [Violation] =>
+    statements:qualityCertificateBypass:isUnsuppressed
+        :toWarning('Certificate validation is disabled; fix trust configuration instead',
+            nameof(certificateValidationDisabled))
+
+## Requests calls without timeouts, or explicit timeout=None on requests/httpx.
+export function missingRequestTimeout(statements: [Statement]) : [Violation] =>
+    statements:qualityRequestWithoutTimeout:isUnsuppressed
+        :toWarning('HTTP request has no effective timeout; set a finite deadline', nameof(missingRequestTimeout))
+
+## Tar extraction without a data filter or explicitly selected members requires review.
+export function unsafeArchiveExtraction(statements: [Statement]) : [Violation] =>
+    statements:qualityUnsafeArchive:isUnsuppressed
+        :toInfo('Review archive extraction: use a data filter or validated member list',
+            nameof(unsafeArchiveExtraction))
+
+## Temporary-name generators that do not atomically create the file have a race window.
+export function insecureTemporaryNames(statements: [Statement]) : [Violation] =>
+    statements:qualityUnsafeTemporaryName:isUnsuppressed
+        :toWarning('Temporary name is not reserved atomically; create the temporary file securely',
+            nameof(insecureTemporaryNames))
+
+## Wildcard CORS is a review signal; public APIs may intentionally allow it.
+export function wildcardCorsOrigins(statements: [Statement]) : [Violation] =>
+    statements:qualityWildcardCors:isUnsuppressed
+        :toInfo('Wildcard CORS origin; confirm every origin should be trusted', nameof(wildcardCorsOrigins))
+
+## Explicit development-server debugging in production-scoped source.
+export function developmentServerDebug(statements: [Statement]) : [Violation] =>
+    statements:qualityDebugServer:isUnsuppressed
+        :toWarning('Development debugging is enabled in production source', nameof(developmentServerDebug))
+
+## JWT parsing configured to bypass signature verification must not authorize requests.
+export function jwtSignatureBypass(statements: [Statement]) : [Violation] =>
+    statements:qualityJwtBypass:isUnsuppressed
+        :toWarning('JWT is decoded without signature verification; do not trust these claims',
+            nameof(jwtSignatureBypass))
+
+## Fast SHA-2 hashes of password-named inputs are not password derivation functions.
+export function fastPasswordHashes(statements: [Statement]) : [Violation] =>
+    statements:qualityFastPasswordHash:isUnsuppressed
+        :toWarning('Fast hash used for a password; use a salted password derivation function',
+            nameof(fastPasswordHashes))
+
+## Explicitly disabling Secure or HttpOnly cookie flags exposes session values.
+export function insecureCookieFlags(statements: [Statement]) : [Violation] =>
+    statements:qualityUnsafeCookie:isUnsuppressed
+        :toWarning('Cookie security flag is explicitly disabled', nameof(insecureCookieFlags))
+
+## Literal 0666/0777 permission changes make files writable by other users.
+export function worldWritableModes(statements: [Statement]) : [Violation] =>
+    statements:qualityWorldWritable:isUnsuppressed
+        :toWarning('File permissions grant write access to everyone', nameof(worldWritableModes))
+
+## Explicit external-entity or DTD processing can expose local files or exhaust resources.
+export function xmlEntityExpansion(statements: [Statement]) : [Violation] =>
+    statements:qualityUnsafeXml:isUnsuppressed
+        :toWarning('XML entity or DTD processing is enabled; restrict untrusted XML', nameof(xmlEntityExpansion))
+
+## Runtime execution APIs not already covered by the suites' eval rules.
+export function dynamicCodeLoading(statements: [Statement]) : [Violation] =>
+    statements:qualityDynamicExecution:isUnsuppressed
+        :toInfo('Runtime code execution requires a trusted input boundary', nameof(dynamicCodeLoading))
+
+## Shell=True with non-dynamic input; dynamic strings are already covered by injectionProneStrings.
+export function literalShellCommands(statements: [Statement]) : [Violation] =>
+    statements:qualityLiteralShell:isUnsuppressed
+        :toInfo('Shell execution is enabled; prefer an argument vector without a shell', nameof(literalShellCommands))
+
+## Static Regex calls without an explicit timeout may be vulnerable to pathological input.
+export function unboundedRegex(statements: [Statement]) : [Violation] =>
+    statements:qualityUnboundedRegex:isUnsuppressed
+        :toInfo('Regex call has no explicit timeout; confirm an application-wide timeout or pass one',
+            nameof(unboundedRegex))
+
+## Abrupt completion in finally can replace an active exception or return value.
+export function abruptFinally(statements: [Statement]) : [Violation] =>
+    statements:qualityAbruptFinally:isUnsuppressed
+        :toWarning('Abrupt completion in finally can mask the original outcome', nameof(abruptFinally))
+
+## A handler containing only a bare rethrow adds no handling behavior.
+export function redundantCatchRethrow(statements: [Statement]) : [Violation] =>
+    statements:qualityRethrowOnly:isUnsuppressed
+        :toInfo('Handler only rethrows; remove it unless it documents an intentional boundary',
+            nameof(redundantCatchRethrow))
+
+## Literal boolean conditions leave one branch permanently unreachable.
+export function constantBranchConditions(statements: [Statement]) : [Violation] =>
+    statements:qualityConstantBranch:isUnsuppressed
+        :toWarning('Branch condition is a constant boolean', nameof(constantBranchConditions))
+
+## Comparing one identifier to itself is suspicious; floating-point NaN tests can be intentional.
+export function selfComparisonConditions(statements: [Statement]) : [Violation] =>
+    statements:qualitySelfComparisonCondition:isUnsuppressed
+        :toInfo('Condition compares a value with itself; review the intended operands',
+            nameof(selfComparisonConditions))
+
+## Assigning an identifier back to the same target is a no-op.
+export function selfAssignments(statements: [Statement]) : [Violation] =>
+    statements:qualitySelfAssignment:isUnsuppressed
+        :toInfo('Assignment writes a value back to itself', nameof(selfAssignments))
+
+## Repeated identical imports in the same file; distinct symbols or aliases remain allowed.
+export function duplicateSourceImports(sources: [File]) : [Violation] =>
+    sources.Imports.Where((entry) => entry.File != nic &&
+        entry.File.Imports:any((other) => other.Line < entry.Line && other.Module == entry.Module &&
+            other.Name == entry.Name && other.Alias == entry.Alias &&
+            other.RelativeLevel == entry.RelativeLevel && other.IsStatic == entry.IsStatic &&
+            other.IsWildcard == entry.IsWildcard))
+        :toInfo('Identical import is repeated in this file', nameof(duplicateSourceImports))
+
+## Report the first control-flow statement at nesting depth five, not each statement beneath it.
+export function excessiveControlNesting(statements: [Statement]) : [Violation] =>
+    statements:qualityDeepControl:isUnsuppressed
+        :toInfo('Control-flow nesting reaches five levels; simplify the branching',
+            nameof(excessiveControlNesting))
+
+## Equality assertions comparing the same identifier do not independently verify an expected value.
+export function sameValueAssertions(statements: [Statement]) : [Violation] =>
+    statements:qualitySameAssertion:isUnsuppressed
+        :toWarning('Assertion compares the same value twice; use an independent expected value',
+            nameof(sameValueAssertions))
+
+## Python assert disappears under optimization and must not be used for production input validation.
+export function productionAssertValidation(statements: [Statement]) : [Violation] =>
+    statements:qualityProductionAssert:isUnsuppressed
+        :toInfo('Production assert is removed by Python optimization; use an explicit validation check',
+            nameof(productionAssertValidation))
+
+## Async void methods cannot be awaited; conventional EventArgs handlers are exempt.
+export function asyncVoidMethods(methods: [Method]) : [Violation] =>
+    methods:qualityAsyncVoid
+        :toWarning('Async void method {item.Name} cannot be awaited; return Task unless it is an event handler',
+            nameof(asyncVoidMethods))
+
+## Abrupt thread termination can leave locks and shared state inconsistent.
+export function unsafeThreadStopping(statements: [Statement]) : [Violation] =>
+    statements:qualityUnsafeThreadStop:isUnsuppressed
+        :toWarning('Unsafe thread termination; use cooperative cancellation', nameof(unsafeThreadStopping))
+
+## Explicit full garbage collection usually hides an allocation or lifetime problem.
+export function forcedGarbageCollection(statements: [Statement]) : [Violation] =>
+    statements:qualityForcedGc:isUnsuppressed
+        :toInfo('Forced garbage collection; confirm a measured need rather than treating it as cleanup',
+            nameof(forcedGarbageCollection))
+
+## Parameterless subprocess waits have no caller-supplied deadline.
+export function unboundedProcessWait(statements: [Statement]) : [Violation] =>
+    statements:qualityUnboundedProcessWait:isUnsuppressed
+        :toInfo('Process wait has no explicit deadline; handle hung child processes', nameof(unboundedProcessWait))
+
+## Binding every interface is a review signal, not proof that a public server is insecure.
+export function publicListenerBinding(statements: [Statement]) : [Violation] =>
+    statements:qualityPublicBinding:isUnsuppressed
+        :toInfo('Listener binds all interfaces; confirm this service should be publicly reachable',
+            nameof(publicListenerBinding))
+
+## Branching on exception message text is brittle across versions and localization.
+export function errorMessageControlFlow(statements: [Statement]) : [Violation] =>
+    statements:qualityErrorMessageBranch:isUnsuppressed
+        :toInfo('Control flow depends on error message text; prefer a typed error or stable code',
+            nameof(errorMessageControlFlow))
+
+## Explicit SSL or TLS 1.0/1.1 selections preserve obsolete protocol defaults.
+export function legacyTlsProtocols(statements: [Statement]) : [Violation] =>
+    statements:qualityLegacyTls:isUnsuppressed
+        :toWarning('Obsolete SSL/TLS protocol is explicitly selected', nameof(legacyTlsProtocols))
+
+## Operational safeguards for production; assertion checks additionally inspect the test scope.
+export function operationalSafetyChecks(production: Codebase, tests: Codebase) : [Violation] =>
+    certificateValidationDisabled(production.Statements) +
+    missingRequestTimeout(production.Statements) +
+    unsafeArchiveExtraction(production.Statements) +
+    insecureTemporaryNames(production.Statements) +
+    wildcardCorsOrigins(production.Statements) +
+    developmentServerDebug(production.Statements) +
+    jwtSignatureBypass(production.Statements) +
+    fastPasswordHashes(production.Statements) +
+    insecureCookieFlags(production.Statements) +
+    worldWritableModes(production.Statements) +
+    xmlEntityExpansion(production.Statements) +
+    dynamicCodeLoading(production.Statements) +
+    literalShellCommands(production.Statements) +
+    unboundedRegex(production.Statements) +
+    abruptFinally(production.Statements) +
+    redundantCatchRethrow(production.Statements) +
+    constantBranchConditions(production.Statements) +
+    selfComparisonConditions(production.Statements) +
+    selfAssignments(production.Statements) +
+    duplicateSourceImports(production.Files) +
+    excessiveControlNesting(production.Statements) +
+    sameValueAssertions(production.Statements + tests.Statements) +
+    productionAssertValidation(production.Statements) +
+    asyncVoidMethods(production.Methods) +
+    unsafeThreadStopping(production.Statements) +
+    forcedGarbageCollection(production.Statements) +
+    unboundedProcessWait(production.Statements) +
+    publicListenerBinding(production.Statements) +
+    errorMessageControlFlow(production.Statements) +
+    legacyTlsProtocols(production.Statements)

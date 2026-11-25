@@ -23,6 +23,7 @@ public sealed class ProcessObjectProvider : DataProvider, IAsyncDisposable
     private readonly string _runtime;     // e.g., "node", "python"
     private readonly string _entryScript; // e.g., "src/index.js"
     private readonly string _workingDir;  // package directory
+    private static readonly TimeSpan s_shutdownTimeout = TimeSpan.FromSeconds(3);
     private Process? _process;
     private readonly SemaphoreSlim _requests = new(1, 1);
     private readonly CancellationTokenSource _lifetime = new();
@@ -391,7 +392,7 @@ public sealed class ProcessObjectProvider : DataProvider, IAsyncDisposable
             {
                 process.StandardInput.Close();
                 Task exit = process.WaitForExitAsync();
-                if (await Task.WhenAny(exit, Task.Delay(TimeSpan.FromSeconds(3))) == exit)
+                if (await Task.WhenAny(exit, Task.Delay(s_shutdownTimeout)) == exit)
                 {
                     await exit;
                 }

@@ -1,0 +1,9 @@
+{
+  "name": "ai-slop-checks",
+  "version": "1.0.0",
+  "description": "Deterministic AI-slop quality and operational safeguards for all standard source-language suites",
+  "title": "AI Slop Checks",
+  "authors": "cop-team",
+  "tags": ["checks", "quality", "ai-slop", "agentic-coding"],
+  "dependencies": ["github.com/KrzysztofCwalina/cop/code: 1.2.0"]
+}

@@ -586,23 +586,9 @@ public class TspParser
 
     private string? ParseDecoratorArgument()
     {
-        if (Current.Kind == TspTokenKind.StringLiteral || Current.Kind == TspTokenKind.TripleQuoteString)
+        if (TryConsumeLiteral(out string literal))
         {
-            string val = Current.Value;
-            Advance();
-            return val;
-        }
-        if (Current.Kind == TspTokenKind.NumericLiteral)
-        {
-            string val = Current.Value;
-            Advance();
-            return val;
-        }
-        if (Current.Kind == TspTokenKind.True || Current.Kind == TspTokenKind.False)
-        {
-            string val = Current.Value;
-            Advance();
-            return val;
+            return literal;
         }
 
         // Object literal: #{ ... }
@@ -897,26 +883,22 @@ public class TspParser
 
     private string ParseValueLiteral()
     {
-        if (Current.Kind == TspTokenKind.StringLiteral || Current.Kind == TspTokenKind.TripleQuoteString)
-        {
-            string val = Current.Value;
-            Advance();
-            return val;
-        }
-        if (Current.Kind == TspTokenKind.NumericLiteral)
-        {
-            string val = Current.Value;
-            Advance();
-            return val;
-        }
-        if (Current.Kind == TspTokenKind.True || Current.Kind == TspTokenKind.False)
-        {
-            string val = Current.Value;
-            Advance();
-            return val;
-        }
         // identifier or type ref as default
-        return ParseTypeReference();
+        return TryConsumeLiteral(out string literal) ? literal : ParseTypeReference();
+    }
+
+    private bool TryConsumeLiteral(out string value)
+    {
+        if (Current.Kind is TspTokenKind.StringLiteral or TspTokenKind.TripleQuoteString
+            or TspTokenKind.NumericLiteral or TspTokenKind.True or TspTokenKind.False)
+        {
+            value = Current.Value;
+            Advance();
+            return true;
+        }
+
+        value = string.Empty;
+        return false;
     }
 
     private string? CurrentNamespace => _currentNamespace.Count > 0 ? string.Join(".", _currentNamespace) : null;
